@@ -1,9 +1,8 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   BookOpen,
   Save,
   FolderOpen,
-  FileText,
   Users,
   Sliders,
   Check,
@@ -23,7 +22,6 @@ import {
 import { toast } from 'sonner';
 import { Campaign, Scene } from '../lib/firebase';
 import { CampaignMode } from '../types';
-import { CampaignPdfImporterModal } from './CampaignPdfImporterModal';
 
 interface MainCampaignBarProps {
   activeSceneInfo: {
@@ -35,8 +33,8 @@ interface MainCampaignBarProps {
     mapHeight?: number;
     mapUrl?: string;
   } | null;
-  activeDmNotes: string;
-  onUpdateDmNotes: (notes: string) => void;
+  activeDmNotes?: string;
+  onUpdateDmNotes?: (notes: string) => void;
   campaigns: Campaign[];
   tokenCount: number;
   onQuickSave: () => void;
@@ -86,9 +84,6 @@ export const MainCampaignBar: React.FC<MainCampaignBarProps> = ({
   activeMapId,
   onMapSwitch
 }) => {
-  const [showNotesPopover, setShowNotesPopover] = useState(false);
-  const [isPdfImporterOpen, setIsPdfImporterOpen] = useState(false);
-
   // Find active campaign name
   const activeCampaign = campaigns.find(c => c.campaignId === activeSceneInfo?.campaignId);
   const activeChapter = activeCampaign?.chapters.find(ch => ch.chapterId === activeSceneInfo?.chapterId);
@@ -295,17 +290,6 @@ export const MainCampaignBar: React.FC<MainCampaignBarProps> = ({
           <span>Load Scene</span>
         </button>
 
-        {/* Import from Adventure PDF */}
-        <button
-          id="btn-main-import-adventure-pdf"
-          onClick={() => setIsPdfImporterOpen(true)}
-          className="px-2.5 py-1 rounded-xl bg-gradient-to-r from-blue-600/30 to-indigo-600/30 hover:from-blue-600/50 hover:to-indigo-600/50 text-blue-200 border border-blue-500/40 text-[11px] font-bold flex items-center gap-1.5 transition-all shadow-md active:scale-95 cursor-pointer"
-          title="Import from Adventure PDF: Automatically extract battlemaps, room annotations, and dynamic lighting walls from official D&D adventure PDFs"
-        >
-          <Sparkles className="w-3.5 h-3.5 text-blue-400" />
-          <span>Import from Adventure PDF</span>
-        </button>
-
         {/* Replace / Re-link Battlemap */}
         {onRelinkMap && (
           <button
@@ -348,56 +332,6 @@ export const MainCampaignBar: React.FC<MainCampaignBarProps> = ({
           <Share2 className="w-3.5 h-3.5 text-emerald-400" />
           <span>Share Player View</span>
         </button>
-
-        {/* DM Notes Toggle */}
-        <div className="relative">
-          <button
-            id="btn-main-dm-notes"
-            onClick={() => setShowNotesPopover(!showNotesPopover)}
-            className={`px-2 py-1 rounded-xl text-[11px] flex items-center gap-1 transition-all border ${
-              showNotesPopover
-                ? 'bg-amber-500/20 border-amber-500/50 text-amber-300'
-                : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border-zinc-700/80'
-            }`}
-            title="View or edit DM Notes for this encounter"
-          >
-            <FileText className="w-3 h-3 text-amber-400" />
-            <span>Notes</span>
-          </button>
-
-          {showNotesPopover && (
-            <div className="absolute top-8 left-0 z-50 w-80 bg-zinc-950 border border-zinc-800 rounded-2xl p-4 shadow-2xl text-xs flex flex-col space-y-2 animate-in fade-in">
-              <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
-                <span className="font-bold text-zinc-200 font-mono">DM Notes & Secret Lore</span>
-                <button
-                  onClick={() => setShowNotesPopover(false)}
-                  className="text-zinc-500 hover:text-zinc-300"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <textarea
-                rows={5}
-                value={activeDmNotes}
-                onChange={(e) => onUpdateDmNotes(e.target.value)}
-                placeholder="Traps, perception checks, monster tactics, read-aloud text..."
-                className="w-full p-2 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-200 text-xs focus:outline-none focus:border-amber-500 leading-relaxed font-sans"
-              />
-              <div className="flex justify-between items-center pt-1">
-                <span className="text-[10px] text-zinc-500">Saved with scene</span>
-                <button
-                  onClick={() => {
-                    onQuickSave();
-                    setShowNotesPopover(false);
-                  }}
-                  className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold rounded-lg text-[10px] font-mono transition-all"
-                >
-                  Save Notes
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
 
         {/* Monster Compendium Link */}
         {onOpenMonsterCompendium && (
@@ -475,15 +409,6 @@ export const MainCampaignBar: React.FC<MainCampaignBarProps> = ({
           </button>
         )}
       </div>
-
-      {/* Campaign PDF Importer Modal */}
-      <CampaignPdfImporterModal
-        isOpen={isPdfImporterOpen}
-        onClose={() => setIsPdfImporterOpen(false)}
-        campaigns={campaigns}
-        activeCampaignId={activeSceneInfo?.campaignId}
-        activeChapterId={activeSceneInfo?.chapterId}
-      />
     </div>
   );
 };

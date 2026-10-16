@@ -8233,22 +8233,6 @@ export default function App() {
         }}
       />
 
-      {/* Floating D&D Chatbot Quick-Summon Button */}
-      {!showDndChatbot && (
-        <button
-          id="btn-floating-dnd-chatbot"
-          onClick={() => setShowDndChatbot(true)}
-          className="fixed bottom-5 right-5 z-40 px-4 py-2.5 rounded-full bg-gradient-to-r from-amber-600 via-orange-600 to-red-600 hover:from-amber-500 hover:to-red-500 text-white font-bold text-xs shadow-[0_0_20px_rgba(245,158,11,0.45)] border border-amber-400/50 flex items-center gap-2 transition-all hover:scale-105 active:scale-95 group select-none cursor-pointer"
-          title="Open D&D AI Chatbot (Golden Vault & Vecna Expert)"
-        >
-          <Sparkles className="w-4 h-4 text-amber-200 animate-pulse" />
-          <span className="tracking-wide">D&D AI Chatbot</span>
-          <span className="text-[10px] bg-black/30 px-2 py-0.5 rounded-full border border-white/20 font-mono text-amber-200">
-            Oracle
-          </span>
-        </button>
-      )}
-
       {/* Monster Compendium Modal */}
       <MonsterCompendiumModal
         isOpen={showMonsterCompendium}
