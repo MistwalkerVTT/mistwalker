@@ -5562,8 +5562,6 @@ export default function App() {
             )}
             <MainCampaignBar
                 activeSceneInfo={activeSceneInfo}
-                activeDmNotes={activeDmNotes}
-                onUpdateDmNotes={setActiveDmNotes}
                 campaigns={campaignsList}
                 tokenCount={tokens.length}
                 onQuickSave={handleQuickSaveScene}

@@ -33,8 +33,6 @@ interface MainCampaignBarProps {
     mapHeight?: number;
     mapUrl?: string;
   } | null;
-  activeDmNotes?: string;
-  onUpdateDmNotes?: (notes: string) => void;
   campaigns: Campaign[];
   tokenCount: number;
   onQuickSave: () => void;
@@ -60,8 +58,6 @@ interface MainCampaignBarProps {
 
 export const MainCampaignBar: React.FC<MainCampaignBarProps> = ({
   activeSceneInfo,
-  activeDmNotes,
-  onUpdateDmNotes,
   campaigns,
   tokenCount,
   onQuickSave,
