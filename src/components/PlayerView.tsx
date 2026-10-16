@@ -19,6 +19,7 @@ import {
   MessageSquare,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   Check,
   X,
   Move,
@@ -1139,6 +1140,10 @@ export default function PlayerView() {
   // Minimize All Display Menus State (Cinematic / Fullscreen Map View)
   const [isUiMinimized, setIsUiMinimized] = useState(false);
 
+  // Player View Side Menu States
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
+  const [showCharacterFlyout, setShowCharacterFlyout] = useState(false);
+
   // Effects Tab and Interactive Placement State
   const [showEffectsPanel, setShowEffectsPanel] = useState(false);
   const [effectsTab, setEffectsTab] = useState<'instant' | 'persistent' | 'tactical' | 'active'>('instant');
@@ -2086,6 +2091,29 @@ export default function PlayerView() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [claimedTokenId, tokens, gridSize, handleMoveToken, activePlayerTool]);
 
+  // Quick 3D Physics Dice Roll (d20)
+  const handleQuickRollDice = useCallback(() => {
+    if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+      const rollVal = Math.floor(Math.random() * 20) + 1;
+      (window as any).__mistwalkerRoll3d({
+        id: `local-${Date.now()}`,
+        characterName: claimedToken?.name || 'Local Player',
+        action: 'd20 Check',
+        rollType: 'roll',
+        formula: `1d20 (${rollVal})`,
+        diceNotation: '1d20',
+        dice: [{ sides: 20, result: rollVal, type: 'd20' }],
+        total: rollVal,
+        isCritical: rollVal === 20,
+        isFumble: rollVal === 1,
+        theme: selectedDicePreset.id,
+        themeColor: selectedDicePreset.theme.primaryColor,
+        timestamp: Date.now(),
+        source: 'player'
+      });
+    }
+  }, [claimedToken?.name, selectedDicePreset]);
+
   // Door interaction in dynamic lighting layer
   const handleToggleDoor = useCallback((doorId: string) => {
     setWalls(prev => {
@@ -2550,192 +2578,340 @@ export default function PlayerView() {
       </div>
 
       {/* ========================================================= */}
-      {/* Top Floating Player HUD & Control Bar                     */}
+      {/* Left Side Menu (Unified Player View Tools & HUD)          */}
       {/* ========================================================= */}
       {!isUiMinimized && (
-        <div className="absolute top-4 left-4 z-50 flex items-center gap-3 bg-zinc-900/90 backdrop-blur-md border border-zinc-800 rounded-2xl px-4 py-2.5 shadow-2xl pointer-events-auto">
-          {/* Live Session Status Indicator */}
-          <div className="flex items-center gap-2">
-            <div className={`w-2.5 h-2.5 rounded-full ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
-            <span className="text-xs font-mono font-bold text-zinc-200">
-              {isConnected ? 'LIVE SESSION' : 'CONNECTING...'}
-            </span>
-          </div>
-
-          {/* Scene Title */}
-          {activeSceneInfo?.sceneTitle && (
-            <div className="border-l border-zinc-700 pl-3">
-              <span className="text-xs font-bold text-emerald-400 font-mono">
-                {activeSceneInfo.sceneTitle}
-              </span>
-            </div>
-          )}
-
-          {/* Character Claim Button / Seized Character Info */}
-          <div className="border-l border-zinc-700 pl-3 flex items-center gap-2">
-            {claimedToken && claimedStats ? (
-              <div className="flex items-center gap-2.5 bg-zinc-950/90 border border-emerald-500/50 rounded-xl px-3 py-1.5 shadow-lg shadow-black/50">
-                <div className="w-7 h-7 rounded-full overflow-hidden bg-zinc-800 border-2 border-emerald-500 flex items-center justify-center shrink-0">
-                  {(() => {
-                    const avatarSrc = claimedToken.url || claimedToken.avatarUrl || getCharacterTokenUrl(claimedToken.name);
-                    return avatarSrc ? (
-                      <img src={avatarSrc} alt={claimedToken.name} className="w-full h-full object-cover" />
-                    ) : (
-                      <User className="w-3.5 h-3.5 text-emerald-400" />
-                    );
-                  })()}
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-xs font-bold text-white leading-tight">
-                    {claimedToken.name}
+        <aside
+          className={`fixed top-3 left-3 bottom-3 z-40 flex flex-col bg-zinc-950/92 backdrop-blur-xl border border-zinc-800/90 rounded-2xl shadow-2xl transition-all duration-300 pointer-events-auto select-none ${
+            isSidebarExpanded ? 'w-60' : 'w-16'
+          }`}
+        >
+          {/* 1. Header: Session Status & Expand/Collapse Toggle */}
+          <div className="p-3 border-b border-zinc-800/80 flex items-center justify-between gap-2 shrink-0">
+            {isSidebarExpanded ? (
+              <div className="flex items-center gap-2 min-w-0">
+                <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+                <div className="flex flex-col min-w-0">
+                  <span className="text-[11px] font-mono font-bold tracking-wider text-zinc-200 uppercase truncate">
+                    {isConnected ? 'LIVE SESSION' : 'CONNECTING...'}
                   </span>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    {/* HP Badge */}
-                    <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-emerald-300 bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-700/60">
-                      <span className={`w-1.5 h-1.5 rounded-full ${
-                        claimedStats.currentHp / claimedStats.maxHp > 0.5
-                          ? 'bg-emerald-400'
-                          : claimedStats.currentHp / claimedStats.maxHp > 0.25
-                          ? 'bg-amber-400'
-                          : 'bg-red-500'
-                      }`} />
-                      HP {claimedStats.currentHp}/{claimedStats.maxHp}
+                  {activeSceneInfo?.sceneTitle && (
+                    <span className="text-[10px] font-mono text-emerald-400 font-bold truncate" title={activeSceneInfo.sceneTitle}>
+                      {activeSceneInfo.sceneTitle}
                     </span>
-                    {/* AC Badge */}
-                    <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-sky-300 bg-sky-950/80 px-1.5 py-0.5 rounded border border-sky-700/60">
-                      <Shield className="w-2.5 h-2.5 text-sky-400" />
-                      AC {claimedStats.ac}
-                    </span>
-                  </div>
+                  )}
                 </div>
-                <button
-                  onClick={() => setShowClaimMenu(true)}
-                  className="ml-1 text-zinc-400 hover:text-white p-1 hover:bg-zinc-800 rounded transition-colors"
-                  title="Switch Character"
-                >
-                  <ChevronDown className="w-3.5 h-3.5" />
-                </button>
               </div>
             ) : (
-              <button
-                onClick={() => setShowClaimMenu(true)}
-                className="flex items-center gap-1.5 bg-indigo-600/80 hover:bg-indigo-600 text-white text-xs font-medium px-3 py-1.5 rounded-xl shadow-sm transition-colors border border-indigo-500/40"
-              >
-                <Shield className="w-3.5 h-3.5" />
-                <span>Claim Character</span>
-              </button>
+              <div className="mx-auto" title={isConnected ? `Live Session: ${activeSceneInfo?.sceneTitle || 'Online'}` : 'Connecting...'}>
+                <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-emerald-500 animate-pulse ring-2 ring-emerald-500/20' : 'bg-amber-500'}`} />
+              </div>
             )}
+
+            <button
+              onClick={() => setIsSidebarExpanded(prev => !prev)}
+              className="p-1 text-zinc-400 hover:text-white hover:bg-zinc-800/80 rounded-lg transition-colors cursor-pointer shrink-0"
+              title={isSidebarExpanded ? 'Collapse Menu' : 'Expand Menu'}
+            >
+              {isSidebarExpanded ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+            </button>
           </div>
 
-          {/* Audio Mute/Unmute Toggle */}
-          <button
-            onClick={() => setIsAudioMuted(prev => !prev)}
-            className={`p-1.5 rounded-lg border transition-colors ${
-              isAudioMuted
-                ? 'text-zinc-500 border-zinc-800 hover:text-zinc-300'
-                : 'text-emerald-400 border-emerald-800/40 bg-emerald-950/30 hover:text-emerald-300'
-            }`}
-            title={isAudioMuted ? 'Unmute Audio' : 'Mute Audio'}
-          >
-            {isAudioMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-          </button>
+          {/* Scrollable Center Body */}
+          <div className="flex-1 overflow-y-auto overflow-x-hidden p-2.5 space-y-3.5 sidebar-scrollbar">
+            
+            {/* 2. Character Section */}
+            <div className="space-y-1.5">
+              {isSidebarExpanded && (
+                <div className="px-1 text-[9px] font-mono uppercase tracking-wider text-zinc-400 font-bold">
+                  Character
+                </div>
+              )}
+              {claimedToken && claimedStats ? (
+                <div className={`bg-zinc-900/90 border border-emerald-500/40 rounded-xl p-2 shadow-inner ${isSidebarExpanded ? '' : 'flex flex-col items-center gap-1.5'}`}>
+                  <div className={`flex items-center gap-2 ${isSidebarExpanded ? 'justify-between' : 'flex-col'}`}>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-8 h-8 rounded-full overflow-hidden bg-zinc-800 border-2 border-emerald-500 shrink-0 flex items-center justify-center">
+                        {(() => {
+                          const avatarSrc = claimedToken.url || claimedToken.avatarUrl || getCharacterTokenUrl(claimedToken.name);
+                          return avatarSrc ? (
+                            <img src={avatarSrc} alt={claimedToken.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <User className="w-4 h-4 text-emerald-400" />
+                          );
+                        })()}
+                      </div>
+                      {isSidebarExpanded && (
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs font-bold text-white truncate" title={claimedToken.name}>
+                            {claimedToken.name}
+                          </div>
+                          <div className="text-[10px] text-zinc-400 font-mono">Claimed</div>
+                        </div>
+                      )}
+                    </div>
 
-          {/* Effects Tab Toggle Button */}
-          <div className="border-l border-zinc-700 pl-2">
+                    <button
+                      onClick={() => setShowClaimMenu(true)}
+                      className="p-1 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+                      title="Switch / Manage Character"
+                    >
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Badges: HP & AC */}
+                  {isSidebarExpanded ? (
+                    <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-zinc-800/80">
+                      <span className="flex-1 inline-flex items-center justify-center gap-1 text-[10px] font-mono font-bold text-emerald-300 bg-emerald-950/70 py-0.5 rounded border border-emerald-700/50">
+                        <span className={`w-1.5 h-1.5 rounded-full ${
+                          claimedStats.currentHp / claimedStats.maxHp > 0.5
+                            ? 'bg-emerald-400'
+                            : claimedStats.currentHp / claimedStats.maxHp > 0.25
+                            ? 'bg-amber-400'
+                            : 'bg-red-500'
+                        }`} />
+                        HP {claimedStats.currentHp}/{claimedStats.maxHp}
+                      </span>
+                      <span className="inline-flex items-center justify-center gap-1 text-[10px] font-mono font-bold text-sky-300 bg-sky-950/70 px-2 py-0.5 rounded border border-sky-700/50">
+                        <Shield className="w-2.5 h-2.5 text-sky-400" />
+                        AC {claimedStats.ac}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-950/80 px-1 py-0.5 rounded border border-emerald-700/50 text-center w-full">
+                      {claimedStats.currentHp}HP
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowClaimMenu(true)}
+                  className={`w-full flex items-center justify-center gap-2 bg-indigo-600/80 hover:bg-indigo-600 text-white rounded-xl py-2 px-2.5 shadow-sm transition-all border border-indigo-500/50 group cursor-pointer ${
+                    isSidebarExpanded ? 'text-xs font-semibold' : 'p-2'
+                  }`}
+                  title="Claim Character"
+                >
+                  <Shield className="w-4 h-4 text-indigo-200 group-hover:scale-110 transition-transform" />
+                  {isSidebarExpanded && <span>Claim Character</span>}
+                </button>
+              )}
+            </div>
+
+            {/* 3. Actions & Features */}
+            <div className="space-y-1.5">
+              {isSidebarExpanded && (
+                <div className="px-1 text-[9px] font-mono uppercase tracking-wider text-zinc-400 font-bold">
+                  Player Tools
+                </div>
+              )}
+
+              {/* Combat Turn Order */}
+              {combatState.showCombatTracker && combatState.combatants.length > 0 && (
+                <button
+                  onClick={togglePlayerCombatTracker}
+                  className={`w-full flex items-center rounded-xl transition-all cursor-pointer border ${
+                    showPlayerCombatTracker
+                      ? 'bg-amber-500/20 border-amber-500/60 text-amber-200 shadow-sm'
+                      : 'bg-zinc-900/80 hover:bg-zinc-900 border-zinc-800 text-zinc-300 hover:text-white'
+                  } ${isSidebarExpanded ? 'px-2.5 py-2 justify-between text-xs font-medium' : 'p-2.5 justify-center'}`}
+                  title={`Combat Turn Order (Round ${combatState.round})`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Swords className={`w-4 h-4 ${showPlayerCombatTracker ? 'text-amber-400' : 'text-zinc-400'}`} />
+                    {isSidebarExpanded && <span>Turn Order</span>}
+                  </div>
+                  {isSidebarExpanded ? (
+                    <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full bg-amber-950 text-amber-300 border border-amber-700/60">
+                      R{combatState.round}
+                    </span>
+                  ) : (
+                    <span className="sr-only">R{combatState.round}</span>
+                  )}
+                </button>
+              )}
+
+              {/* Spell & AoE Effects Panel */}
+              <button
+                onClick={() => setShowEffectsPanel(prev => !prev)}
+                className={`w-full flex items-center rounded-xl transition-all cursor-pointer border ${
+                  showEffectsPanel || activePlayerTool
+                    ? 'bg-purple-600/80 hover:bg-purple-600 text-white border-purple-500/70 shadow-lg shadow-purple-950/50'
+                    : 'bg-zinc-900/80 hover:bg-zinc-900 border-zinc-800 text-zinc-300 hover:text-white'
+                } ${isSidebarExpanded ? 'px-2.5 py-2 justify-between text-xs font-medium' : 'p-2.5 justify-center'}`}
+                title="Spell & AoE Effects Library"
+              >
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-purple-400" />
+                  {isSidebarExpanded && <span>Spells & FX</span>}
+                </div>
+                {effects.length > 0 && (
+                  <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full bg-purple-950 text-purple-300 border border-purple-700/50">
+                    {effects.length}
+                  </span>
+                )}
+              </button>
+
+              {/* Quick 3D Physics Dice Roller */}
+              <button
+                onClick={handleQuickRollDice}
+                className={`w-full flex items-center rounded-xl transition-all cursor-pointer border bg-zinc-900/80 hover:bg-zinc-900 hover:border-amber-500/50 text-zinc-300 hover:text-amber-300 border-zinc-800 group ${
+                  isSidebarExpanded ? 'px-2.5 py-2 gap-2 text-xs font-medium' : 'p-2.5 justify-center'
+                }`}
+                title="Roll 3D Physics d20"
+              >
+                <Dices className="w-4 h-4 text-amber-400 group-hover:rotate-12 transition-transform shrink-0" />
+                {isSidebarExpanded && <span>Roll 3D Dice</span>}
+              </button>
+
+              {/* 3D Dice Style & Material Palette */}
+              <button
+                onClick={() => setShowDicePaletteModal(prev => !prev)}
+                className={`w-full flex items-center rounded-xl transition-all cursor-pointer border ${
+                  showDicePaletteModal
+                    ? 'bg-zinc-800 border-zinc-500 text-white ring-1 ring-zinc-400/30'
+                    : 'bg-zinc-900/80 hover:bg-zinc-900 border-zinc-800 text-zinc-300 hover:text-white'
+                } ${isSidebarExpanded ? 'px-2.5 py-2 gap-2 text-xs font-medium' : 'p-2.5 justify-center'}`}
+                title="Change 3D Dice Style & Materials"
+              >
+                <div
+                  className="w-3.5 h-3.5 rounded-full border border-white/40 shadow-sm shrink-0"
+                  style={{ backgroundColor: selectedDicePreset.theme.primaryColor }}
+                />
+                {isSidebarExpanded && (
+                  <div className="flex items-center justify-between flex-1 min-w-0">
+                    <span className="truncate">{selectedDicePreset.name}</span>
+                    <Palette className="w-3 h-3 text-zinc-400 ml-1 shrink-0" />
+                  </div>
+                )}
+              </button>
+
+              {/* Audio Mute/Unmute */}
+              <button
+                onClick={() => setIsAudioMuted(prev => !prev)}
+                className={`w-full flex items-center rounded-xl transition-all cursor-pointer border ${
+                  isAudioMuted
+                    ? 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-zinc-300'
+                    : 'bg-emerald-950/30 border-emerald-800/40 text-emerald-400 hover:text-emerald-300'
+                } ${isSidebarExpanded ? 'px-2.5 py-2 gap-2 text-xs font-medium' : 'p-2.5 justify-center'}`}
+                title={isAudioMuted ? 'Unmute Audio Narration' : 'Mute Audio Narration'}
+              >
+                {isAudioMuted ? <VolumeX className="w-4 h-4 shrink-0" /> : <Volume2 className="w-4 h-4 shrink-0" />}
+                {isSidebarExpanded && <span>{isAudioMuted ? 'Audio Muted' : 'Audio Active'}</span>}
+              </button>
+            </div>
+
+            {/* 4. Map & Viewport Controls */}
+            <div className="space-y-1.5 pt-1 border-t border-zinc-800/80">
+              {isSidebarExpanded && (
+                <div className="px-1 text-[9px] font-mono uppercase tracking-wider text-zinc-400 font-bold">
+                  Map View
+                </div>
+              )}
+
+              {isSidebarExpanded ? (
+                <div className="grid grid-cols-3 gap-1">
+                  <button
+                    onClick={() => handleZoom(1.2)}
+                    className="flex flex-col items-center justify-center py-2 px-1 bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 rounded-lg text-zinc-300 hover:text-white transition-colors cursor-pointer"
+                    title="Zoom In"
+                  >
+                    <ZoomIn className="w-3.5 h-3.5" />
+                    <span className="text-[9px] font-mono mt-0.5">In</span>
+                  </button>
+                  <button
+                    onClick={() => handleZoom(0.8)}
+                    className="flex flex-col items-center justify-center py-2 px-1 bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 rounded-lg text-zinc-300 hover:text-white transition-colors cursor-pointer"
+                    title="Zoom Out"
+                  >
+                    <ZoomOut className="w-3.5 h-3.5" />
+                    <span className="text-[9px] font-mono mt-0.5">Out</span>
+                  </button>
+                  <button
+                    onClick={handleResetZoom}
+                    className="flex flex-col items-center justify-center py-2 px-1 bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 rounded-lg text-zinc-300 hover:text-white transition-colors cursor-pointer"
+                    title="Reset to 1x1 Scale"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span className="text-[9px] font-mono mt-0.5">Reset</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <button
+                    onClick={() => handleZoom(1.2)}
+                    className="w-full p-2 flex items-center justify-center bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 rounded-lg text-zinc-300 hover:text-white transition-colors cursor-pointer"
+                    title="Zoom In"
+                  >
+                    <ZoomIn className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleZoom(0.8)}
+                    className="w-full p-2 flex items-center justify-center bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 rounded-lg text-zinc-300 hover:text-white transition-colors cursor-pointer"
+                    title="Zoom Out"
+                  >
+                    <ZoomOut className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={handleResetZoom}
+                    className="w-full p-2 flex items-center justify-center bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 rounded-lg text-zinc-300 hover:text-white transition-colors cursor-pointer"
+                    title="Reset to 1x1 Scale"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+
+              {/* 1" TV Grid Scale */}
+              <button
+                onClick={() => {
+                  applyTvScale();
+                  toast.info('Calibrated to 1" grid for 32" TV');
+                }}
+                className={`w-full flex items-center rounded-xl bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 text-amber-400 hover:text-amber-200 transition-colors cursor-pointer ${
+                  isSidebarExpanded ? 'px-2.5 py-2 gap-2 text-xs font-semibold' : 'p-2.5 justify-center'
+                }`}
+                title="Calibrate 1x1 Grid for 32-inch TV Tabletop"
+              >
+                <Tv className="w-4 h-4 shrink-0" />
+                {isSidebarExpanded && <span>1" TV Grid Scale</span>}
+              </button>
+            </div>
+          </div>
+
+          {/* 5. Footer: Minimize All Menus Toggle */}
+          <div className="p-2 border-t border-zinc-800/80 shrink-0">
             <button
-              onClick={() => setShowEffectsPanel(prev => !prev)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition-all shadow-sm cursor-pointer ${
-                showEffectsPanel || activePlayerTool
-                  ? 'bg-purple-600/90 hover:bg-purple-600 text-white border-purple-500/60 shadow-purple-900/30 ring-1 ring-purple-400/40'
-                  : 'bg-zinc-800/80 hover:bg-zinc-800 text-zinc-300 hover:text-white border-zinc-700/60'
+              onClick={() => setIsUiMinimized(true)}
+              className={`w-full flex items-center rounded-xl border border-zinc-800/80 text-zinc-400 hover:text-white hover:bg-zinc-900 transition-colors cursor-pointer ${
+                isSidebarExpanded ? 'px-2.5 py-1.5 justify-between text-xs font-mono' : 'p-2 justify-center'
               }`}
-              title="Toggle Spell & AoE Effects Panel"
+              title="Minimize all menus (Press H)"
             >
-              <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-              <span>Effects</span>
-              {effects.length > 0 && (
-                <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold bg-purple-950/80 text-purple-300 border border-purple-700/50">
-                  {effects.length}
+              <div className="flex items-center gap-2">
+                <EyeOff className="w-3.5 h-3.5 text-zinc-400" />
+                {isSidebarExpanded && <span>Hide Menu</span>}
+              </div>
+              {isSidebarExpanded && (
+                <span className="text-[9px] text-zinc-400 font-mono bg-zinc-800 px-1 py-0.2 rounded border border-zinc-700">
+                  H
                 </span>
               )}
             </button>
           </div>
-
-          {/* Quick 3D Dice Roller / Test Roll Button & Dice Color Customizer */}
-          <div className="border-l border-zinc-700 pl-2 flex items-center gap-1.5">
-            <button
-              onClick={() => {
-                if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
-                  const rollVal = Math.floor(Math.random() * 20) + 1;
-                  (window as any).__mistwalkerRoll3d({
-                    id: `local-${Date.now()}`,
-                    characterName: claimedToken?.name || 'Local Player',
-                    action: 'd20 Check',
-                    rollType: 'roll',
-                    formula: `1d20 (${rollVal})`,
-                    diceNotation: '1d20',
-                    dice: [{ sides: 20, result: rollVal, type: 'd20' }],
-                    total: rollVal,
-                    isCritical: rollVal === 20,
-                    isFumble: rollVal === 1,
-                    theme: selectedDicePreset.id,
-                    themeColor: selectedDicePreset.theme.primaryColor,
-                    timestamp: Date.now(),
-                    source: 'player'
-                  });
-                }
-              }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-zinc-700/60 bg-zinc-800/80 hover:bg-zinc-800 text-zinc-300 hover:text-amber-400 transition-all text-xs font-medium cursor-pointer shadow-sm group"
-              title="Roll 3D Dice (Syncs with D&D Beyond live rolls)"
-            >
-              <Dices className="w-3.5 h-3.5 text-amber-400 group-hover:rotate-12 transition-transform" />
-              <span>Roll Dice</span>
-            </button>
-
-            {/* Dice Color Palette Button */}
-            <button
-              onClick={() => setShowDicePaletteModal(prev => !prev)}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border transition-all text-xs font-medium cursor-pointer shadow-sm ${
-                showDicePaletteModal
-                  ? 'bg-zinc-800 text-white border-zinc-500 ring-1 ring-zinc-400/40 shadow-lg'
-                  : 'bg-zinc-800/80 hover:bg-zinc-800 text-zinc-300 hover:text-white border-zinc-700/60'
-              }`}
-              title="Change 3D Dice Colors & Style"
-            >
-              <div
-                className="w-3.5 h-3.5 rounded-full border border-white/40 shadow-sm flex-shrink-0"
-                style={{ backgroundColor: selectedDicePreset.theme.primaryColor }}
-              />
-              <Palette className="w-3.5 h-3.5 text-zinc-400 group-hover:text-white" />
-              <span className="hidden md:inline">{selectedDicePreset.name}</span>
-            </button>
-          </div>
-
-          {/* Minimize All Menus Toggle */}
-          <div className="border-l border-zinc-700 pl-2">
-            <button
-              onClick={() => setIsUiMinimized(true)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-zinc-700/60 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors text-xs font-mono cursor-pointer"
-              title="Minimize all menus (Press H)"
-            >
-              <EyeOff className="w-3.5 h-3.5 text-zinc-400" />
-              <span className="hidden sm:inline">Minimize</span>
-              <span className="text-[9px] text-zinc-500 font-mono bg-zinc-800 px-1 py-0.2 rounded border border-zinc-700 ml-0.5">H</span>
-            </button>
-          </div>
-        </div>
+        </aside>
       )}
 
       {/* Floating Restore UI Pill when Minimized */}
       {isUiMinimized && (
-        <div className="absolute top-4 right-4 z-50 pointer-events-auto animate-in fade-in duration-200">
+        <div className="fixed top-3 left-3 z-50 pointer-events-auto animate-in fade-in duration-200">
           <button
             onClick={() => setIsUiMinimized(false)}
-            className="flex items-center gap-2 bg-zinc-900/85 hover:bg-zinc-900 text-zinc-300 hover:text-white border border-zinc-700/70 hover:border-emerald-500/50 px-3.5 py-2 rounded-2xl shadow-2xl backdrop-blur-md transition-all group font-mono text-xs cursor-pointer"
-            title="Restore all menus (Press H)"
+            className="flex items-center gap-2 bg-zinc-900/90 hover:bg-zinc-900 text-zinc-300 hover:text-white border border-zinc-700/80 hover:border-emerald-500/60 px-3.5 py-2 rounded-2xl shadow-2xl backdrop-blur-md transition-all group font-mono text-xs cursor-pointer"
+            title="Restore Player Menu (Press H)"
           >
             <Eye className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform" />
-            <span className="font-semibold">Show Menus</span>
+            <span className="font-semibold">Show Menu</span>
             <span className="text-[10px] text-zinc-400 font-mono bg-zinc-800 px-1.5 py-0.5 rounded border border-zinc-700">H</span>
           </button>
         </div>
@@ -2743,9 +2919,12 @@ export default function PlayerView() {
 
       {/* Movement hint if token is claimed */}
       {!isUiMinimized && claimedToken && (
-        <div className="absolute top-20 left-4 z-40 bg-zinc-900/80 backdrop-blur-sm border border-zinc-800/60 rounded-xl px-3 py-1.5 text-[11px] font-mono text-zinc-400 flex items-center gap-2 pointer-events-none">
+        <div 
+          style={{ left: isSidebarExpanded ? 256 : 80 }}
+          className="fixed bottom-3 z-40 bg-zinc-900/85 backdrop-blur-sm border border-zinc-800/80 rounded-xl px-3 py-1.5 text-[11px] font-mono text-zinc-400 flex items-center gap-2 pointer-events-none transition-all duration-300 shadow-lg"
+        >
           <Move className="w-3.5 h-3.5 text-emerald-400" />
-          <span>Use <b>Arrow Keys</b> or <b>Drag</b> on map to move {claimedToken.name}</span>
+          <span>Use <b>Arrow Keys</b> or <b>Drag</b> to move {claimedToken.name}</span>
         </div>
       )}
 
@@ -3008,53 +3187,6 @@ export default function PlayerView() {
         </div>
       )}
 
-      {/* ========================================================= */}
-      {/* Floating Zoom Controls                                    */}
-      {/* ========================================================= */}
-      {!isUiMinimized && (
-        <div className="absolute bottom-6 right-6 z-50 flex items-center gap-1.5 bg-zinc-900/90 backdrop-blur-md border border-zinc-800 rounded-xl p-1.5 shadow-xl pointer-events-auto">
-          <button
-            onClick={() => handleZoom(1.2)}
-            className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
-            title="Zoom In"
-          >
-            <ZoomIn className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => handleZoom(0.8)}
-            className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
-            title="Zoom Out"
-          >
-            <ZoomOut className="w-4 h-4" />
-          </button>
-          <button
-            onClick={handleResetZoom}
-            className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
-            title="Reset to 1x1 32-inch TV Scale"
-          >
-            <RotateCcw className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => {
-              applyTvScale();
-              toast.info('Calibrated to 1" grid for 32" TV');
-            }}
-            className="px-2 py-1.5 rounded-lg text-amber-400 hover:text-amber-200 hover:bg-zinc-800 transition-colors flex items-center gap-1.5 text-xs font-semibold"
-            title="Calibrate 1x1 Grid for 32-inch TV Tabletop"
-          >
-            <Tv className="w-4 h-4" />
-            <span className="text-[10px] hidden sm:inline">1" TV</span>
-          </button>
-          <div className="w-[1px] h-4 bg-zinc-700/60 mx-0.5" />
-          <button
-            onClick={() => setIsUiMinimized(true)}
-            className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
-            title="Minimize all menus (Press H)"
-          >
-            <EyeOff className="w-4 h-4" />
-          </button>
-        </div>
-      )}
 
       {/* Loading Overlay */}
       {(!image || imageStatus === 'loading') && imageFile && !isVideo && (
@@ -3725,8 +3857,8 @@ export default function PlayerView() {
       {showEffectsPanel && !isUiMinimized && (
         <div
           style={{
-            left: pinnedEffectsPanel ? 16 : panelPos.x,
-            top: pinnedEffectsPanel ? 72 : panelPos.y
+            left: pinnedEffectsPanel ? (isSidebarExpanded ? 256 : 80) : panelPos.x,
+            top: pinnedEffectsPanel ? 16 : panelPos.y
           }}
           className="fixed z-50 w-88 sm:w-96 max-h-[calc(100vh-90px)] flex flex-col bg-zinc-950/95 backdrop-blur-xl border border-zinc-800/90 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.85)] ring-1 ring-white/10 animate-in fade-in zoom-in-95 pointer-events-auto select-none"
         >
