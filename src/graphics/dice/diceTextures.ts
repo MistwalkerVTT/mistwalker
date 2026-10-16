@@ -10,12 +10,123 @@ export interface DiceThemeOptions {
   borderColor?: string; // e.g. '#fbbf24' (burnished gold)
 }
 
-const DEFAULT_THEME: Required<DiceThemeOptions> = {
-  primaryColor: '#b45309',
-  secondaryColor: '#451a03',
-  numberColor: '#ffffff',
-  borderColor: '#fbbf24'
-};
+export interface DiceColorPreset {
+  id: string;
+  name: string;
+  description: string;
+  theme: Required<DiceThemeOptions>;
+  previewColor: string;
+  previewGradient: string;
+}
+
+export const DICE_COLOR_PRESETS: DiceColorPreset[] = [
+  {
+    id: 'amber_gold',
+    name: 'Gilded Amber',
+    description: 'Classic D&D warm amber resin with burnished gold trim.',
+    theme: {
+      primaryColor: '#b45309',
+      secondaryColor: '#451a03',
+      borderColor: '#fbbf24',
+      numberColor: '#ffffff'
+    },
+    previewColor: '#f59e0b',
+    previewGradient: 'from-amber-600 to-amber-950'
+  },
+  {
+    id: 'arcane_amethyst',
+    name: 'Arcane Amethyst',
+    description: 'Deep violet arcane crystal with glowing lilac edges.',
+    theme: {
+      primaryColor: '#7c3aed',
+      secondaryColor: '#2e1065',
+      borderColor: '#c084fc',
+      numberColor: '#ffffff'
+    },
+    previewColor: '#a855f7',
+    previewGradient: 'from-purple-600 to-indigo-950'
+  },
+  {
+    id: 'ruby_magma',
+    name: 'Hellfire Magma',
+    description: 'Fiery crimson volcanic stone with incandescent gold numbers.',
+    theme: {
+      primaryColor: '#dc2626',
+      secondaryColor: '#450a0a',
+      borderColor: '#f87171',
+      numberColor: '#fef08a'
+    },
+    previewColor: '#ef4444',
+    previewGradient: 'from-red-600 to-zinc-950'
+  },
+  {
+    id: 'emerald_dragon',
+    name: 'Emerald Dragon',
+    description: 'Polished jade scales with mint-gold border trim.',
+    theme: {
+      primaryColor: '#059669',
+      secondaryColor: '#022c22',
+      borderColor: '#34d399',
+      numberColor: '#ffffff'
+    },
+    previewColor: '#10b981',
+    previewGradient: 'from-emerald-600 to-teal-950'
+  },
+  {
+    id: 'sapphire_frost',
+    name: 'Frostmaiden Ice',
+    description: 'Glacial blue sapphire with frosty crystalline gleam.',
+    theme: {
+      primaryColor: '#0284c7',
+      secondaryColor: '#082f49',
+      borderColor: '#38bdf8',
+      numberColor: '#ffffff'
+    },
+    previewColor: '#38bdf8',
+    previewGradient: 'from-sky-500 to-cyan-950'
+  },
+  {
+    id: 'shadow_obsidian',
+    name: 'Shadow Obsidian',
+    description: 'Dark obsidian glass with blood-crimson bevel accents.',
+    theme: {
+      primaryColor: '#18181b',
+      secondaryColor: '#09090b',
+      borderColor: '#ef4444',
+      numberColor: '#fecaca'
+    },
+    previewColor: '#dc2626',
+    previewGradient: 'from-zinc-800 to-black'
+  },
+  {
+    id: 'celestial_ivory',
+    name: 'Celestial Ivory',
+    description: 'Polished divine ivory marble with antique bronze numerals.',
+    theme: {
+      primaryColor: '#fef3c7',
+      secondaryColor: '#b45309',
+      borderColor: '#d97706',
+      numberColor: '#451a03'
+    },
+    previewColor: '#fde68a',
+    previewGradient: 'from-amber-200 to-amber-700'
+  },
+  {
+    id: 'eldritch_teal',
+    name: 'Eldritch Void',
+    description: 'Bioluminescent deep-sea abyss with electric cyan runes.',
+    theme: {
+      primaryColor: '#0d9488',
+      secondaryColor: '#042f2e',
+      borderColor: '#2dd4bf',
+      numberColor: '#f0fdfa'
+    },
+    previewColor: '#2dd4bf',
+    previewGradient: 'from-teal-600 to-slate-950'
+  }
+];
+
+export const DEFAULT_THEME: Required<DiceThemeOptions> = DICE_COLOR_PRESETS[0].theme;
 
 /**
  * Generic high-resolution procedural canvas texture atlas generator
@@ -29,7 +140,7 @@ export function createPolyhedralAtlas(
   options: DiceThemeOptions = {}
 ): THREE.CanvasTexture {
   const theme = { ...DEFAULT_THEME, ...options };
-  const cacheKey = `${cachePrefix}_${theme.primaryColor}_${theme.numberColor}`;
+  const cacheKey = `${cachePrefix}_${theme.primaryColor}_${theme.secondaryColor}_${theme.borderColor}_${theme.numberColor}`;
   if (textureCache.has(cacheKey)) {
     return textureCache.get(cacheKey)!;
   }
@@ -97,7 +208,6 @@ export function createPolyhedralAtlas(
       grad.addColorStop(1, '#450a0a');
     } else {
       grad.addColorStop(0, theme.primaryColor);
-      grad.addColorStop(0.7, '#92400e');
       grad.addColorStop(1, theme.secondaryColor);
     }
     ctx.fillStyle = grad;
@@ -110,7 +220,7 @@ export function createPolyhedralAtlas(
 
     ctx.restore();
 
-    // Inner gold border accent
+    // Inner border accent
     ctx.save();
     ctx.beginPath();
     if (shape === 'triangle') {
@@ -133,7 +243,8 @@ export function createPolyhedralAtlas(
       ctx.lineTo(x + 44, cy + 36);
     }
     ctx.closePath();
-    ctx.strokeStyle = label === '20' ? 'rgba(253, 224, 71, 0.85)' : 'rgba(251, 191, 36, 0.45)';
+    ctx.strokeStyle = label === '20' ? 'rgba(253, 224, 71, 0.85)' : theme.borderColor;
+    ctx.globalAlpha = label === '20' ? 0.85 : 0.45;
     ctx.lineWidth = 4;
     ctx.stroke();
     ctx.restore();
@@ -236,22 +347,24 @@ export function createD6Materials(options: DiceThemeOptions = {}): THREE.MeshSta
     // Resin gradient
     const grad = ctx.createRadialGradient(size / 2, size / 2, 30, size / 2, size / 2, size / 1.5);
     grad.addColorStop(0, theme.primaryColor);
-    grad.addColorStop(0.7, '#92400e');
     grad.addColorStop(1, theme.secondaryColor);
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, size, size);
 
-    // Gold border
+    // Border
     ctx.strokeStyle = theme.borderColor;
     ctx.lineWidth = 14;
     ctx.stroke();
 
     // Inner bevel
-    ctx.strokeStyle = 'rgba(251, 191, 36, 0.4)';
+    ctx.save();
+    ctx.strokeStyle = theme.borderColor;
+    ctx.globalAlpha = 0.45;
     ctx.lineWidth = 4;
     ctx.beginPath();
     ctx.roundRect(28, 28, size - 56, size - 56, radius - 8);
     ctx.stroke();
+    ctx.restore();
 
     // Number
     ctx.textAlign = 'center';

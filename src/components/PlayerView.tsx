@@ -47,7 +47,8 @@ import {
   Wand2,
   Target,
   Info,
-  Dices
+  Dices,
+  Palette
 } from 'lucide-react';
 import { toast, Toaster } from 'sonner';
 import { DynamicLightingLayer } from './DynamicLightingLayer';
@@ -55,6 +56,7 @@ import { GridLayer } from './GridLayer';
 import { AnimatedFeaturesKonvaImage, AnimatedFeature, WeatherEffectType } from './AnimatedMapOverlay';
 import { ProceduralSpellEffect } from './ProceduralSpellEffect';
 import { DiceTableOverlay } from './DiceTableOverlay';
+import { DICE_COLOR_PRESETS, DiceColorPreset } from '../graphics/dice/diceTextures';
 import { WallSegment, VisionConfig, RoomAnnotation, Combatant, isMonsterToken } from '../types';
 import homeBackgroundImage from '../assets/images/home_background.jpg';
 import sceneBackdropImage from '../assets/images/scene_backdrop.jpg';
@@ -2181,6 +2183,50 @@ export default function PlayerView() {
     return resolveTokenCharacterStats(claimedToken, compendiumCharacters);
   }, [claimedToken, compendiumCharacters]);
 
+  // 3D Dice Customization State (persisted in localStorage)
+  const [dicePresetId, setDicePresetId] = useState<string>(() => {
+    if (typeof window === 'undefined') return 'amber_gold';
+    return localStorage.getItem('mistwalker_player_dice_preset') || 'amber_gold';
+  });
+  const [showDicePaletteModal, setShowDicePaletteModal] = useState<boolean>(false);
+
+  const selectedDicePreset = useMemo<DiceColorPreset>(() => {
+    return DICE_COLOR_PRESETS.find(p => p.id === dicePresetId) || DICE_COLOR_PRESETS[0];
+  }, [dicePresetId]);
+
+  const handleSelectDicePreset = useCallback((preset: DiceColorPreset) => {
+    setDicePresetId(preset.id);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('mistwalker_player_dice_preset', preset.id);
+    }
+    toast.success(`Equipped ${preset.name} 3D dice!`, {
+      description: preset.description,
+      duration: 2500
+    });
+
+    // Trigger an immediate satisfying test roll so the player sees their new dice in action
+    if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+      setTimeout(() => {
+        (window as any).__mistwalkerRoll3d({
+          id: `preview-${Date.now()}`,
+          characterName: claimedToken?.name || 'Local Player',
+          action: 'Dice Preview',
+          rollType: 'roll',
+          formula: '1d20 (20)',
+          diceNotation: '1d20',
+          dice: [{ sides: 20, result: 20, type: 'd20' }],
+          total: 20,
+          isCritical: true,
+          isFumble: false,
+          theme: preset.id,
+          themeColor: preset.theme.primaryColor,
+          timestamp: Date.now(),
+          source: 'player'
+        });
+      }, 100);
+    }
+  }, [claimedToken?.name]);
+
   // Vision Sources for Player Characters (active vision providers)
   const playerVisionSources = useMemo<VisionSource[]>(() => {
     if (!visionConfig.enabled) return [];
@@ -2615,8 +2661,8 @@ export default function PlayerView() {
             </button>
           </div>
 
-          {/* Quick 3D Dice Roller / Test Roll Button */}
-          <div className="border-l border-zinc-700 pl-2">
+          {/* Quick 3D Dice Roller / Test Roll Button & Dice Color Customizer */}
+          <div className="border-l border-zinc-700 pl-2 flex items-center gap-1.5">
             <button
               onClick={() => {
                 if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
@@ -2632,8 +2678,8 @@ export default function PlayerView() {
                     total: rollVal,
                     isCritical: rollVal === 20,
                     isFumble: rollVal === 1,
-                    theme: 'default',
-                    themeColor: '#d97706',
+                    theme: selectedDicePreset.id,
+                    themeColor: selectedDicePreset.theme.primaryColor,
                     timestamp: Date.now(),
                     source: 'player'
                   });
@@ -2644,6 +2690,24 @@ export default function PlayerView() {
             >
               <Dices className="w-3.5 h-3.5 text-amber-400 group-hover:rotate-12 transition-transform" />
               <span>Roll Dice</span>
+            </button>
+
+            {/* Dice Color Palette Button */}
+            <button
+              onClick={() => setShowDicePaletteModal(prev => !prev)}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border transition-all text-xs font-medium cursor-pointer shadow-sm ${
+                showDicePaletteModal
+                  ? 'bg-amber-600/90 text-white border-amber-500 ring-1 ring-amber-400/40 shadow-amber-950/40'
+                  : 'bg-zinc-800/80 hover:bg-zinc-800 text-zinc-300 hover:text-white border-zinc-700/60'
+              }`}
+              title="Change 3D Dice Colors & Style"
+            >
+              <div
+                className="w-3.5 h-3.5 rounded-full border border-white/40 shadow-sm flex-shrink-0"
+                style={{ backgroundColor: selectedDicePreset.theme.primaryColor }}
+              />
+              <Palette className="w-3.5 h-3.5 text-zinc-400 group-hover:text-white" />
+              <span className="hidden md:inline">{selectedDicePreset.name}</span>
             </button>
           </div>
 
@@ -3997,9 +4061,155 @@ export default function PlayerView() {
         </div>
       )}
 
+      {/* 3D Dice Color Customization Modal */}
+      {showDicePaletteModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => setShowDicePaletteModal(false)}
+        >
+          <div
+            className="relative w-full max-w-xl bg-zinc-950/95 border border-zinc-700/80 rounded-2xl shadow-2xl overflow-hidden p-6 text-zinc-100 flex flex-col gap-5 ring-1 ring-zinc-700/50"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center border shadow-md transition-colors"
+                  style={{
+                    backgroundColor: selectedDicePreset.theme.secondaryColor,
+                    borderColor: selectedDicePreset.theme.borderColor
+                  }}
+                >
+                  <Dices className="w-5 h-5" style={{ color: selectedDicePreset.theme.borderColor }} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+                    3D Dice Collection
+                    <span className="text-xs px-2 py-0.5 rounded-full font-mono bg-zinc-800 border border-zinc-700 text-zinc-300">
+                      8 Styles
+                    </span>
+                  </h3>
+                  <p className="text-xs text-zinc-400 mt-0.5">
+                    Select your preferred dice material. Applies immediately to all 3D physics rolls.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowDicePaletteModal(false)}
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800/80 transition-colors cursor-pointer"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Presets Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[55vh] overflow-y-auto pr-1">
+              {DICE_COLOR_PRESETS.map((preset) => {
+                const isSelected = preset.id === selectedDicePreset.id;
+                return (
+                  <button
+                    key={preset.id}
+                    onClick={() => handleSelectDicePreset(preset)}
+                    className={`relative text-left p-3.5 rounded-xl border transition-all flex items-start gap-3 group cursor-pointer ${
+                      isSelected
+                        ? 'bg-zinc-900 border-amber-500 shadow-lg ring-2 ring-amber-500/30'
+                        : 'bg-zinc-900/60 border-zinc-800 hover:bg-zinc-900 hover:border-zinc-700'
+                    }`}
+                  >
+                    {/* Visual 3D Die Swatch / Badge */}
+                    <div
+                      className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-md border-2 shrink-0 transition-transform group-hover:scale-105 bg-gradient-to-br ${preset.previewGradient}`}
+                      style={{
+                        borderColor: preset.theme.borderColor,
+                        boxShadow: `0 4px 12px ${preset.theme.primaryColor}40`
+                      }}
+                    >
+                      <span
+                        className="font-serif font-black text-lg select-none drop-shadow"
+                        style={{ color: preset.theme.numberColor }}
+                      >
+                        20
+                      </span>
+                    </div>
+
+                    {/* Details */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-1.5">
+                        <span className={`text-sm font-semibold truncate ${isSelected ? 'text-amber-400 font-bold' : 'text-zinc-200 group-hover:text-white'}`}>
+                          {preset.name}
+                        </span>
+                        {isSelected && (
+                          <span className="flex items-center gap-1 text-[10px] font-mono font-bold text-amber-400 bg-amber-950/70 border border-amber-800/80 px-1.5 py-0.5 rounded-md">
+                            <Check className="w-3 h-3" />
+                            Equipped
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-zinc-400 line-clamp-2 mt-1 leading-snug">
+                        {preset.description}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Footer with Test Roll & Done */}
+            <div className="pt-3 border-t border-zinc-800/80 flex items-center justify-between">
+              <span className="text-xs text-zinc-500 font-mono">
+                Active: <span className="text-zinc-300 font-medium">{selectedDicePreset.name}</span>
+              </span>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+                      const rollVal = Math.floor(Math.random() * 20) + 1;
+                      (window as any).__mistwalkerRoll3d({
+                        id: `test-${Date.now()}`,
+                        characterName: claimedToken?.name || 'Local Player',
+                        action: 'Test Roll',
+                        rollType: 'roll',
+                        formula: `1d20 (${rollVal})`,
+                        diceNotation: '1d20',
+                        dice: [{ sides: 20, result: rollVal, type: 'd20' }],
+                        total: rollVal,
+                        isCritical: rollVal === 20,
+                        isFumble: rollVal === 1,
+                        theme: selectedDicePreset.id,
+                        themeColor: selectedDicePreset.theme.primaryColor,
+                        timestamp: Date.now(),
+                        source: 'player'
+                      });
+                    }
+                  }}
+                  className="px-3 py-1.5 rounded-xl border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Dices className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Test Roll</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowDicePaletteModal(false)}
+                  className="px-4 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold shadow-md transition-colors cursor-pointer"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 3D Physics Dice Table Overlay */}
       <DiceTableOverlay
         socket={socketInstance || socketRef.current}
+        theme={selectedDicePreset.theme}
         onCriticalHit={() => {
           setIsShaking(true);
           playCriticalHitSound();

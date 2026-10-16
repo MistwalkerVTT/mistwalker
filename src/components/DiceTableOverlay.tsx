@@ -3,17 +3,20 @@ import { io, Socket } from 'socket.io-client';
 import { DdbDiceRollEvent } from '../types/dice';
 import { RollSummaryToast } from './RollSummaryToast';
 import { ThreeDiceEngine, DieRollRequest } from '../graphics/dice/diceEngine';
+import { DiceThemeOptions } from '../graphics/dice/diceTextures';
 
 interface Props {
   socket?: Socket | null;
   onCriticalHit?: () => void;
   enabled?: boolean;
+  theme?: DiceThemeOptions;
 }
 
 export const DiceTableOverlay: React.FC<Props> = ({
   socket,
   onCriticalHit,
-  enabled = true
+  enabled = true,
+  theme
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<ThreeDiceEngine | null>(null);
@@ -23,7 +26,7 @@ export const DiceTableOverlay: React.FC<Props> = ({
   useEffect(() => {
     if (!enabled || !containerRef.current) return;
 
-    const engine = new ThreeDiceEngine(containerRef.current);
+    const engine = new ThreeDiceEngine(containerRef.current, theme);
     engineRef.current = engine;
 
     return () => {
@@ -31,6 +34,13 @@ export const DiceTableOverlay: React.FC<Props> = ({
       engineRef.current = null;
     };
   }, [enabled]);
+
+  // Dynamically update materials when theme options change
+  useEffect(() => {
+    if (engineRef.current && theme) {
+      engineRef.current.setTheme(theme);
+    }
+  }, [theme]);
 
   // Execute 3D physical dice roll animation with predetermined results
   const roll3d = useCallback(async (rollData: DdbDiceRollEvent) => {

@@ -6,7 +6,9 @@ import {
   createD10TextureAtlas,
   createD8TextureAtlas,
   createD6Materials,
-  createD4TextureAtlas
+  createD4TextureAtlas,
+  DiceThemeOptions,
+  DEFAULT_THEME
 } from './diceTextures';
 import {
   createD20Bundle,
@@ -77,9 +79,11 @@ export class ThreeDiceEngine {
   private isFadingOut = false;
   private fadeOpacity = 1.0;
   private onRollFinishedCallback?: () => void;
+  private currentTheme: DiceThemeOptions;
 
-  constructor(container: HTMLElement) {
+  constructor(container: HTMLElement, initialTheme?: DiceThemeOptions) {
     this.container = container;
+    this.currentTheme = initialTheme || DEFAULT_THEME;
     const width = container.clientWidth || window.innerWidth;
     const height = container.clientHeight || window.innerHeight;
 
@@ -162,7 +166,22 @@ export class ThreeDiceEngine {
       d4: createD4Bundle(1.5)
     };
 
-    // Preload materials
+    // Preload materials for active theme
+    this.buildMaterials(this.currentTheme);
+
+    window.addEventListener('resize', this.handleResize);
+  }
+
+  public setTheme(theme: DiceThemeOptions) {
+    this.currentTheme = theme;
+    this.buildMaterials(theme);
+  }
+
+  public getTheme(): DiceThemeOptions {
+    return this.currentTheme;
+  }
+
+  private buildMaterials(theme: DiceThemeOptions) {
     const makeStdMat = (tex: THREE.CanvasTexture) =>
       new THREE.MeshStandardMaterial({
         map: tex,
@@ -173,15 +192,13 @@ export class ThreeDiceEngine {
       });
 
     this.materials = {
-      d20: makeStdMat(createD20TextureAtlas()),
-      d12: makeStdMat(createD12TextureAtlas()),
-      d10: makeStdMat(createD10TextureAtlas(false)),
-      d100: makeStdMat(createD10TextureAtlas(true)),
-      d8: makeStdMat(createD8TextureAtlas()),
-      d4: makeStdMat(createD4TextureAtlas())
+      d20: makeStdMat(createD20TextureAtlas(theme)),
+      d12: makeStdMat(createD12TextureAtlas(theme)),
+      d10: makeStdMat(createD10TextureAtlas(false, theme)),
+      d100: makeStdMat(createD10TextureAtlas(true, theme)),
+      d8: makeStdMat(createD8TextureAtlas(theme)),
+      d4: makeStdMat(createD4TextureAtlas(theme))
     };
-
-    window.addEventListener('resize', this.handleResize);
   }
 
   private handleResize = () => {
@@ -243,7 +260,7 @@ export class ThreeDiceEngine {
     // Create Mesh
     let mesh: THREE.Mesh;
     if (key === 'd6') {
-      const d6Mats = createD6Materials();
+      const d6Mats = createD6Materials(this.currentTheme);
       d6Mats.forEach(m => { m.transparent = true; m.opacity = 1.0; });
       mesh = new THREE.Mesh(bundle.geometry, d6Mats);
     } else {
