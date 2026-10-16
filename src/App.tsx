@@ -1711,11 +1711,28 @@ export default function App() {
   useEffect(() => {
     if (imageStatus === 'failed' && imageFile && mapType === 'image') {
       console.warn('[VTT] Active battlemap failed to load:', imageFile);
+      // Auto-recovery for known Guildhouse maps
+      if (activeSceneInfo?.sceneId === 'scene-muimqdr3' || activeSceneInfo?.sceneTitle?.toLowerCase().includes('2nd floor')) {
+        const fallbackUrl = '/uploads/file-1792161971576-460009101.jpg';
+        if (imageFile !== fallbackUrl) {
+          console.log('[VTT] Auto-recovering Guildhouse 2nd Floor map with static file:', fallbackUrl);
+          setImageFile(fallbackUrl);
+          return;
+        }
+      }
+      if (activeSceneInfo?.sceneId === DEMO_GV_SCENE.sceneId || activeSceneInfo?.sceneTitle?.toLowerCase().includes('main level')) {
+        const fallbackUrl = '/uploads/file-1792161909096-684999544.jpg';
+        if (imageFile !== fallbackUrl) {
+          console.log('[VTT] Auto-recovering Guildhouse Main Level map with static file:', fallbackUrl);
+          setImageFile(fallbackUrl);
+          return;
+        }
+      }
       toast.error('Failed to load map image asset. Please re-link or upload the file.', {
         id: 'map-load-error'
       });
     }
-  }, [imageStatus, imageFile, mapType]);
+  }, [imageStatus, imageFile, mapType, activeSceneInfo]);
 
   // Dynamic Narrator States
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);

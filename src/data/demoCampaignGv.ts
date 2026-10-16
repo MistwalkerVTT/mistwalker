@@ -1,4 +1,5 @@
 import guildhouseMainLevelImg from '../assets/images/guildhouse_main_level.jpg';
+import guildhouse2ndFloorImg from '../assets/images/guildhouse_2nd_floor.jpg';
 import { Campaign, Scene, Chapter, SceneToken } from '../lib/firebase';
 import { RoomAnnotation, WallSegment, ChapterPdfDigest } from '../types';
 
@@ -2152,13 +2153,1825 @@ export const DEMO_GV_SCENE: Scene = {
   roomAnnotations: DEMO_GV_ROOM_ZONES
 };
 
+
+export const DEMO_GV_WALLS_2ND_FLOOR: WallSegment[] = [
+  {
+    "wallType": "normal",
+    "p2": {
+      "y": 1053.19738589125,
+      "x": 3207.2782397749033
+    },
+    "id": "wall_1792020249299_iuds",
+    "p1": {
+      "y": 1161.26260689125,
+      "x": 3207.2782397749033
+    }
+  },
+  {
+    "p1": {
+      "x": 3207.2782397749033,
+      "y": 1053.19738589125
+    },
+    "id": "wall_1792020251262_8nke",
+    "wallType": "normal",
+    "p2": {
+      "x": 3203.7351177749033,
+      "y": 1164.80572889125
+    }
+  },
+  {
+    "wallType": "normal",
+    "p2": {
+      "y": 1157.71948489125,
+      "x": 2829.9357467749032
+    },
+    "id": "wall_1792020252584_ufzt",
+    "p1": {
+      "y": 1164.80572889125,
+      "x": 3203.7351177749033
+    }
+  },
+  {
+    "p2": {
+      "x": 2833.4788687749033,
+      "y": 1738.7914928912505
+    },
+    "wallType": "normal",
+    "id": "wall_1792020253942_jvwd",
+    "p1": {
+      "y": 1157.71948489125,
+      "x": 2829.9357467749032
+    }
+  },
+  {
+    "id": "wall_1792020255533_zyhz",
+    "p1": {
+      "x": 2833.4788687749033,
+      "y": 1738.7914928912505
+    },
+    "p2": {
+      "x": 3568.6766837749037,
+      "y": 1735.2483708912505
+    },
+    "wallType": "normal"
+  },
+  {
+    "p2": {
+      "y": 946.9037258912498,
+      "x": 3565.1335617749037
+    },
+    "p1": {
+      "x": 3568.6766837749037,
+      "y": 1735.2483708912505
+    },
+    "wallType": "normal",
+    "id": "wall_1792020256769_nlkw"
+  },
+  {
+    "p1": {
+      "x": 3565.1335617749037,
+      "y": 946.9037258912498
+    },
+    "id": "wall_1792020258384_edyh",
+    "wallType": "normal",
+    "p2": {
+      "y": 1039.0248978912498,
+      "x": 3570.4482447749037
+    }
+  },
+  {
+    "p2": {
+      "x": 4011.5669337749046,
+      "y": 1033.71021489125
+    },
+    "id": "wall_1792020260246_lpfp",
+    "wallType": "normal",
+    "p1": {
+      "x": 3570.4482447749037,
+      "y": 1039.0248978912498
+    }
+  },
+  {
+    "p1": {
+      "x": 4011.5669337749046,
+      "y": 1033.71021489125
+    },
+    "id": "wall_1792020262336_18qw",
+    "p2": {
+      "y": 1380.9361708912502,
+      "x": 4004.4806897749045
+    },
+    "wallType": "normal"
+  },
+  {
+    "doorState": "closed",
+    "id": "wall_1792020279432_dkto",
+    "p2": {
+      "x": 4004.4806897749045,
+      "y": 1535.0619778912503
+    },
+    "p1": {
+      "x": 4004.4806897749045,
+      "y": 1380.9361708912502
+    },
+    "wallType": "door"
+  },
+  {
+    "wallType": "normal",
+    "p2": {
+      "y": 1729.9336878912504,
+      "x": 4006.2522507749045
+    },
+    "id": "wall_1792020291747_l6rb",
+    "p1": {
+      "x": 3566.9051227749037,
+      "y": 1728.1621268912504
+    }
+  },
+  {
+    "wallType": "normal",
+    "p1": {
+      "x": 4006.2522507749045,
+      "y": 1729.9336878912504
+    },
+    "id": "wall_1792020292675_miku",
+    "p2": {
+      "y": 1540.3766608912504,
+      "x": 4004.4806897749045
+    }
+  },
+  {
+    "p2": {
+      "x": 4008.0238117749045,
+      "y": 1738.7914928912505
+    },
+    "id": "wall_1792020293652_bly4",
+    "wallType": "normal",
+    "p1": {
+      "y": 1540.3766608912504,
+      "x": 4004.4806897749045
+    }
+  },
+  {
+    "wallType": "normal",
+    "p2": {
+      "y": 1731.7052488912504,
+      "x": 4564.293965774905
+    },
+    "id": "wall_1792020297911_awcq",
+    "p1": {
+      "x": 4008.0238117749045,
+      "y": 1738.7914928912505
+    }
+  },
+  {
+    "p2": {
+      "y": 1044.3395808912499,
+      "x": 4566.065526774905
+    },
+    "p1": {
+      "x": 4564.293965774905,
+      "y": 1731.7052488912504
+    },
+    "wallType": "normal",
+    "id": "wall_1792020299153_qde9"
+  },
+  {
+    "wallType": "normal",
+    "id": "wall_1792020300919_cqlw",
+    "p1": {
+      "x": 4566.065526774905,
+      "y": 1044.3395808912499
+    },
+    "p2": {
+      "y": 1044.3395808912499,
+      "x": 4117.860593774904
+    }
+  },
+  {
+    "p2": {
+      "y": 1239.21129089125,
+      "x": 4119.632154774905
+    },
+    "wallType": "normal",
+    "id": "wall_1792020302886_h481",
+    "p1": {
+      "x": 4117.860593774904,
+      "y": 1044.3395808912499
+    }
+  },
+  {
+    "wallType": "door",
+    "p1": {
+      "y": 1239.21129089125,
+      "x": 4119.632154774905
+    },
+    "p2": {
+      "y": 1372.07836589125,
+      "x": 4119.632154774905
+    },
+    "doorState": "closed",
+    "id": "wall_1792020305730_4z8d"
+  },
+  {
+    "wallType": "normal",
+    "p2": {
+      "y": 1735.2483708912505,
+      "x": 4124.946837774904
+    },
+    "id": "wall_1792020308913_u4tx",
+    "p1": {
+      "x": 4119.632154774905,
+      "y": 1372.07836589125
+    }
+  },
+  {
+    "p1": {
+      "x": 4569.608648774905,
+      "y": 1053.19738589125
+    },
+    "wallType": "normal",
+    "id": "wall_1792020314561_k8ub",
+    "p2": {
+      "x": 4564.293965774905,
+      "y": 473.8969388912494
+    }
+  },
+  {
+    "wallType": "normal",
+    "p1": {
+      "y": 473.8969388912494,
+      "x": 4564.293965774905
+    },
+    "id": "wall_1792020317073_gzwx",
+    "p2": {
+      "y": 466.81069489124945,
+      "x": 5365.0395377749055
+    }
+  },
+  {
+    "p1": {
+      "y": 466.81069489124945,
+      "x": 5365.0395377749055
+    },
+    "wallType": "normal",
+    "id": "wall_1792020319906_wl3j",
+    "p2": {
+      "y": 2539.5370648912512,
+      "x": 5377.440464774905
+    }
+  },
+  {
+    "p2": {
+      "x": 4562.522404774905,
+      "y": 2541.3086258912513
+    },
+    "wallType": "normal",
+    "p1": {
+      "y": 2539.5370648912512,
+      "x": 5377.440464774905
+    },
+    "id": "wall_1792020321401_asqg"
+  },
+  {
+    "p1": {
+      "y": 2541.3086258912513,
+      "x": 4562.522404774905
+    },
+    "id": "wall_1792020322949_0ebm",
+    "wallType": "normal",
+    "p2": {
+      "x": 4562.522404774905,
+      "y": 1735.2483708912505
+    }
+  },
+  {
+    "p1": {
+      "x": 4557.207721774905,
+      "y": 688.2558198912496
+    },
+    "id": "wall_1792020328082_ft0r",
+    "p2": {
+      "y": 700.6567468912497,
+      "x": 3669.6556607749044
+    },
+    "wallType": "normal"
+  },
+  {
+    "p2": {
+      "x": 3669.655660774904,
+      "y": 824.6660168912497
+    },
+    "wallType": "normal",
+    "p1": {
+      "y": 700.6567468912497,
+      "x": 3669.6556607749044
+    },
+    "id": "wall_1792020328970_2xz1"
+  },
+  {
+    "p1": {
+      "x": 4124.946837774904,
+      "y": 904.3862618912498
+    },
+    "wallType": "door",
+    "id": "wall_1792020354942_fk2w",
+    "doorState": "closed",
+    "p2": {
+      "x": 4121.403715774904,
+      "y": 1046.1111418912499
+    }
+  },
+  {
+    "p1": {
+      "x": 3666.1125387749044,
+      "y": 814.0366508912497
+    },
+    "id": "wall_1792020375502_a60t",
+    "wallType": "normal",
+    "p2": {
+      "x": 3566.905122774904,
+      "y": 808.7219678912497
+    }
+  },
+  {
+    "p2": {
+      "y": 904.3862618912498,
+      "x": 4126.718398774905
+    },
+    "p1": {
+      "y": 695.3420638912496,
+      "x": 4124.946837774904
+    },
+    "wallType": "normal",
+    "id": "wall_1792020379655_l7x5"
+  },
+  {
+    "wallType": "normal",
+    "p2": {
+      "y": 826.4375778912497,
+      "x": 3308.257216774904
+    },
+    "id": "wall_1792020383409_4phv",
+    "p1": {
+      "y": 822.8944558912497,
+      "x": 3428.723364774904
+    }
+  },
+  {
+    "p2": {
+      "x": 3302.942533774904,
+      "y": 675.8548928912496
+    },
+    "id": "wall_1792020384545_q35c",
+    "p1": {
+      "y": 826.4375778912497,
+      "x": 3308.257216774904
+    },
+    "wallType": "normal"
+  },
+  {
+    "p2": {
+      "y": 674.0833318912496,
+      "x": 3047.837749774904
+    },
+    "p1": {
+      "x": 3302.942533774904,
+      "y": 675.8548928912496
+    },
+    "id": "wall_1792020385864_w98o",
+    "wallType": "normal"
+  },
+  {
+    "p1": {
+      "x": 3047.837749774904,
+      "y": 674.0833318912496
+    },
+    "id": "wall_1792020387051_lizx",
+    "p2": {
+      "y": 674.0833318912496,
+      "x": 2835.2504297749038
+    },
+    "wallType": "normal"
+  },
+  {
+    "p2": {
+      "x": 2828.1641857749037,
+      "y": 1184.29289989125
+    },
+    "wallType": "normal",
+    "p1": {
+      "x": 2835.2504297749038,
+      "y": 674.0833318912496
+    },
+    "id": "wall_1792020388095_gg5j"
+  },
+  {
+    "p1": {
+      "x": 3205.506678774904,
+      "y": 675.8548928912496
+    },
+    "id": "wall_1792020392081_nzj1",
+    "p2": {
+      "x": 3205.506678774904,
+      "y": 918.5587498912498
+    },
+    "wallType": "normal"
+  },
+  {
+    "p2": {
+      "x": 3201.9635567749037,
+      "y": 1065.5983128912499
+    },
+    "doorState": "closed",
+    "id": "wall_1792020397102_ugx7",
+    "p1": {
+      "y": 913.2440668912498,
+      "x": 3207.278239774904
+    },
+    "wallType": "door"
+  },
+  {
+    "p1": {
+      "y": 819.3513338912497,
+      "x": 3418.093998774904
+    },
+    "wallType": "door",
+    "id": "wall_1792020399653_n5s1",
+    "doorState": "closed",
+    "p2": {
+      "y": 812.2650898912497,
+      "x": 3584.6207327749044
+    }
+  },
+  {
+    "p1": {
+      "x": 3558.047317774904,
+      "y": 968.1624578912498
+    },
+    "id": "wall_1792020402688_gljt",
+    "doorState": "closed",
+    "p2": {
+      "y": 814.0366508912497,
+      "x": 3558.047317774904
+    },
+    "wallType": "door"
+  },
+  {
+    "p2": {
+      "x": 2381.2772048722286,
+      "y": 1875.8826309932847
+    },
+    "id": "wall_1792020435749_vfx5",
+    "wallType": "normal",
+    "p1": {
+      "x": 2695.433885382001,
+      "y": 1672.1986293440914
+    }
+  },
+  {
+    "id": "wall_1792020436510_mjtx",
+    "p1": {
+      "y": 1875.8826309932847,
+      "x": 2381.2772048722286
+    },
+    "wallType": "normal",
+    "p2": {
+      "x": 2315.6840517987594,
+      "y": 1772.3144945614915
+    }
+  },
+  {
+    "p2": {
+      "y": 805.6785545314223,
+      "x": 2229.377271438932
+    },
+    "p1": {
+      "y": 1658.389544486519,
+      "x": 2691.981614167608
+    },
+    "wallType": "normal",
+    "id": "wall_1792020439280_2lhk"
+  },
+  {
+    "p2": {
+      "x": 1846.1751666412972,
+      "y": 1026.623912252581
+    },
+    "id": "wall_1792020440373_y6yt",
+    "wallType": "normal",
+    "p1": {
+      "x": 2229.377271438932,
+      "y": 805.6785545314223
+    }
+  },
+  {
+    "p2": {
+      "x": 1932.4819470011248,
+      "y": 1154.3579471851258
+    },
+    "id": "wall_1792020441537_5uvm",
+    "wallType": "normal",
+    "p1": {
+      "x": 1846.1751666412972,
+      "y": 1026.623912252581
+    }
+  },
+  {
+    "wallType": "normal",
+    "p2": {
+      "y": 1713.6258839168088,
+      "x": 2129.2614062215316
+    },
+    "id": "wall_1792020444872_27qj",
+    "p1": {
+      "y": 1382.2078473350707,
+      "x": 1925.5774045723385
+    }
+  },
+  {
+    "p2": {
+      "x": 1984.2660152170213,
+      "y": 1786.1235794190638
+    },
+    "wallType": "normal",
+    "p1": {
+      "x": 2129.2614062215316,
+      "y": 1713.6258839168088
+    },
+    "id": "wall_1792020445928_vhat"
+  },
+  {
+    "p2": {
+      "y": 2017.425750783402,
+      "x": 2118.9045925783525
+    },
+    "wallType": "normal",
+    "p1": {
+      "x": 1984.2660152170213,
+      "y": 1786.1235794190638
+    },
+    "id": "wall_1792020448107_hqzd"
+  },
+  {
+    "wallType": "normal",
+    "p2": {
+      "y": 2117.541616000802,
+      "x": 1949.7433030730904
+    },
+    "id": "wall_1792020449189_1rxg",
+    "p1": {
+      "x": 2118.9045925783525,
+      "y": 2017.425750783402
+    }
+  },
+  {
+    "p1": {
+      "x": 1752.9638438526833,
+      "y": 2234.9188372901676
+    },
+    "id": "wall_1792020451859_9ht0",
+    "p2": {
+      "y": 2352.296058579533,
+      "x": 1604.5161816337798
+    },
+    "wallType": "normal"
+  },
+  {
+    "p1": {
+      "x": 1604.5161816337798,
+      "y": 2352.296058579533
+    },
+    "wallType": "normal",
+    "id": "wall_1792020455036_priz",
+    "p2": {
+      "y": 2369.5574146514987,
+      "x": 1611.420724062566
+    }
+  },
+  {
+    "id": "wall_1792020455419_gib2",
+    "p1": {
+      "y": 2369.5574146514987,
+      "x": 1611.420724062566
+    },
+    "p2": {
+      "y": 2459.3164662257195,
+      "x": 1607.968452848173
+    },
+    "wallType": "normal"
+  },
+  {
+    "wallType": "normal",
+    "p2": {
+      "x": 1110.841397975566,
+      "y": 1454.705542837326
+    },
+    "p1": {
+      "y": 2172.777955431092,
+      "x": 1521.6616724883454
+    },
+    "id": "wall_1792020459870_apix"
+  },
+  {
+    "id": "wall_1792020461733_pe9m",
+    "p1": {
+      "x": 1110.841397975566,
+      "y": 1454.705542837326
+    },
+    "wallType": "normal",
+    "p2": {
+      "x": 1694.2752332080006,
+      "y": 1109.4784213980154
+    }
+  },
+  {
+    "p1": {
+      "x": 1625.2298089201386,
+      "y": 1150.9056759707328
+    },
+    "id": "wall_1792020465334_lhie",
+    "p2": {
+      "x": 1714.9888604943592,
+      "y": 1285.5442533320638
+    },
+    "wallType": "normal"
+  },
+  {
+    "p2": {
+      "x": 2001.5273712889868,
+      "y": 1810.2894779198157
+    },
+    "wallType": "normal",
+    "p1": {
+      "y": 1423.6351019077879,
+      "x": 1780.5820135678282
+    },
+    "id": "wall_1792020467740_s3ux"
+  },
+  {
+    "p2": {
+      "y": 1872.4303597788914,
+      "x": 1349.0481117686902
+    },
+    "wallType": "normal",
+    "p1": {
+      "y": 1603.1532050562294,
+      "x": 1856.5319802844765
+    },
+    "id": "wall_1792020470580_a8ig"
+  },
+  {
+    "p2": {
+      "y": 2550.4379560970046,
+      "x": 1566.7262282554764
+    },
+    "wallType": "normal",
+    "p1": {
+      "x": 1606.9889782554765,
+      "y": 2457.0283760970046
+    },
+    "id": "wall_1792020475290_ke4a"
+  },
+  {
+    "p2": {
+      "y": 2618.0793760970046,
+      "x": 1524.8529682554765
+    },
+    "wallType": "normal",
+    "p1": {
+      "y": 2550.4379560970046,
+      "x": 1566.7262282554764
+    },
+    "id": "wall_1792020475918_6sbz"
+  },
+  {
+    "wallType": "normal",
+    "p2": {
+      "x": 1433.0538982554763,
+      "y": 2703.4364060970047
+    },
+    "id": "wall_1792020476635_nm7i",
+    "p1": {
+      "x": 1524.8529682554765,
+      "y": 2618.0793760970046
+    }
+  },
+  {
+    "p2": {
+      "x": 1367.0229882554763,
+      "y": 2748.530686097005
+    },
+    "id": "wall_1792020477127_vwh3",
+    "wallType": "normal",
+    "p1": {
+      "x": 1433.0538982554763,
+      "y": 2703.4364060970047
+    }
+  },
+  {
+    "id": "wall_1792020477492_9cic",
+    "p1": {
+      "x": 1367.0229882554763,
+      "y": 2748.530686097005
+    },
+    "wallType": "normal",
+    "p2": {
+      "y": 2777.519866097005,
+      "x": 1255.8977982554761
+    }
+  },
+  {
+    "wallType": "normal",
+    "p1": {
+      "y": 2777.519866097005,
+      "x": 1255.8977982554761
+    },
+    "id": "wall_1792020477892_i39l",
+    "p2": {
+      "y": 2779.130376097005,
+      "x": 1141.5515882554762
+    }
+  },
+  {
+    "p2": {
+      "y": 2751.751706097005,
+      "x": 1007.8792582554761
+    },
+    "wallType": "normal",
+    "p1": {
+      "y": 2779.130376097005,
+      "x": 1141.5515882554762
+    },
+    "id": "wall_1792020478281_lejd"
+  },
+  {
+    "id": "wall_1792020478688_fak2",
+    "p1": {
+      "y": 2751.751706097005,
+      "x": 1007.8792582554761
+    },
+    "p2": {
+      "x": 967.616508255476,
+      "y": 2700.2153860970047
+    },
+    "wallType": "normal"
+  },
+  {
+    "p1": {
+      "x": 967.616508255476,
+      "y": 2700.2153860970047
+    },
+    "id": "wall_1792020479142_4b4s",
+    "wallType": "normal",
+    "p2": {
+      "x": 880.6489682554759,
+      "y": 2626.131926097005
+    }
+  },
+  {
+    "id": "wall_1792020479539_bp6b",
+    "p1": {
+      "y": 2626.131926097005,
+      "x": 880.6489682554759
+    },
+    "wallType": "normal",
+    "p2": {
+      "y": 2545.6064260970047,
+      "x": 833.9441782554759
+    }
+  },
+  {
+    "id": "wall_1792020480426_x2uk",
+    "p1": {
+      "x": 833.9441782554759,
+      "y": 2545.6064260970047
+    },
+    "wallType": "normal",
+    "p2": {
+      "y": 2402.2710360970045,
+      "x": 779.1868382554759
+    }
+  },
+  {
+    "id": "wall_1792020481003_95j7",
+    "p1": {
+      "x": 779.1868382554759,
+      "y": 2402.2710360970045
+    },
+    "wallType": "normal",
+    "p2": {
+      "y": 2287.9248260970044,
+      "x": 787.2393882554759
+    }
+  },
+  {
+    "wallType": "normal",
+    "p2": {
+      "x": 827.5021382554759,
+      "y": 2133.3158660970043
+    },
+    "id": "wall_1792020481643_owce",
+    "p1": {
+      "y": 2287.9248260970044,
+      "x": 787.2393882554759
+    }
+  },
+  {
+    "wallType": "normal",
+    "p2": {
+      "y": 2036.6852660970044,
+      "x": 935.406308255476
+    },
+    "id": "wall_1792020482304_kznz",
+    "p1": {
+      "x": 827.5021382554759,
+      "y": 2133.3158660970043
+    }
+  },
+  {
+    "p2": {
+      "y": 1948.1072160970043,
+      "x": 1141.5515882554762
+    },
+    "id": "wall_1792020483329_15jy",
+    "p1": {
+      "y": 2036.6852660970044,
+      "x": 935.406308255476
+    },
+    "wallType": "normal"
+  },
+  {
+    "p1": {
+      "x": 1141.5515882554762,
+      "y": 1948.1072160970043
+    },
+    "id": "wall_1792020484161_uhh0",
+    "wallType": "normal",
+    "p2": {
+      "y": 1941.6651760970042,
+      "x": 1263.9503482554762
+    }
+  },
+  {
+    "p2": {
+      "y": 1803.1613160970041,
+      "x": 1313.8761582554762
+    },
+    "wallType": "normal",
+    "p1": {
+      "y": 1941.6651760970042,
+      "x": 1263.9503482554762
+    },
+    "id": "wall_1792020486490_gme4"
+  },
+  {
+    "wallType": "door",
+    "p1": {
+      "y": 2299.1983960970047,
+      "x": 1586.0523482554768
+    },
+    "p2": {
+      "y": 2147.8104560970046,
+      "x": 1507.1373582554766
+    },
+    "doorState": "closed",
+    "id": "wall_1792020498241_5qk8"
+  },
+  {
+    "wallType": "normal",
+    "p2": {
+      "x": 1584.4418382554766,
+      "y": 2300.8089060970046
+    },
+    "p1": {
+      "x": 1608.5994882554767,
+      "y": 2347.5136960970044
+    },
+    "id": "wall_1792020504315_h1gm"
+  },
+  {
+    "p1": {
+      "y": 2115.600256097004,
+      "x": 1946.806588255477
+    },
+    "wallType": "door",
+    "id": "wall_1792020513367_idwo",
+    "doorState": "closed",
+    "p2": {
+      "y": 2236.3885060970047,
+      "x": 1748.7138582554767
+    }
+  },
+  {
+    "wallType": "door",
+    "doorState": "closed",
+    "p1": {
+      "y": 2014.1381260970043,
+      "x": 2114.2996282554773
+    },
+    "p2": {
+      "y": 1869.192226097004,
+      "x": 2383.2547982554775
+    },
+    "id": "wall_1792020519143_ud3t"
+  },
+  {
+    "id": "wall_1792020523380_iw7s",
+    "p2": {
+      "y": 1431.1335060970039,
+      "x": 1785.7555882554768
+    },
+    "p1": {
+      "x": 1714.8931482554767,
+      "y": 1282.9665860970038
+    },
+    "wallType": "door",
+    "doorState": "closed"
+  },
+  {
+    "wallType": "door",
+    "p1": {
+      "y": 1107.4209960970036,
+      "x": 1693.9565182554768
+    },
+    "p2": {
+      "x": 1851.7864982554768,
+      "y": 1025.2849860970036
+    },
+    "id": "wall_1792020526045_g3k9",
+    "doorState": "closed"
+  },
+  {
+    "wallType": "normal",
+    "id": "wall_1792020539909_u991",
+    "p1": {
+      "x": 3292.970710759558,
+      "y": 1926.7844212302246
+    },
+    "p2": {
+      "x": 3127.489941805178,
+      "y": 1978.1405219402045
+    }
+  },
+  {
+    "p1": {
+      "x": 3127.489941805178,
+      "y": 1978.1405219402045
+    },
+    "wallType": "normal",
+    "id": "wall_1792020540618_ic7b",
+    "p2": {
+      "y": 2060.8809064173947,
+      "x": 3047.602674034098
+    }
+  },
+  {
+    "id": "wall_1792020541095_euaq",
+    "p1": {
+      "x": 3047.602674034098,
+      "y": 2060.8809064173947
+    },
+    "wallType": "normal",
+    "p2": {
+      "y": 2135.0619407762547,
+      "x": 2993.3934566180083
+    }
+  },
+  {
+    "wallType": "normal",
+    "p2": {
+      "y": 2209.2429751351146,
+      "x": 2962.009172850798
+    },
+    "id": "wall_1792020541468_cb2c",
+    "p1": {
+      "y": 2135.0619407762547,
+      "x": 2993.3934566180083
+    }
+  },
+  {
+    "p2": {
+      "y": 2331.926993497845,
+      "x": 2922.065538965258
+    },
+    "wallType": "normal",
+    "p1": {
+      "y": 2209.2429751351146,
+      "x": 2962.009172850798
+    },
+    "id": "wall_1792020542054_3qv7"
+  },
+  {
+    "wallType": "normal",
+    "p2": {
+      "y": 2443.198545036135,
+      "x": 2916.3593055530378
+    },
+    "id": "wall_1792020542605_no2j",
+    "p1": {
+      "x": 2922.065538965258,
+      "y": 2331.926993497845
+    }
+  },
+  {
+    "p2": {
+      "x": 2993.3934566180083,
+      "y": 2597.2668471660754
+    },
+    "id": "wall_1792020543229_x8yi",
+    "wallType": "normal",
+    "p1": {
+      "x": 2916.3593055530378,
+      "y": 2443.198545036135
+    }
+  },
+  {
+    "p2": {
+      "y": 2682.8603483493753,
+      "x": 3061.868257564648
+    },
+    "p1": {
+      "y": 2597.2668471660754,
+      "x": 2993.3934566180083
+    },
+    "id": "wall_1792020543758_xyjj",
+    "wallType": "normal"
+  },
+  {
+    "wallType": "normal",
+    "id": "wall_1792020544564_geen",
+    "p1": {
+      "y": 2682.8603483493753,
+      "x": 3061.868257564648
+    },
+    "p2": {
+      "y": 2794.1318998876654,
+      "x": 3258.7333102862385
+    }
+  },
+  {
+    "p1": {
+      "y": 2794.1318998876654,
+      "x": 3258.7333102862385
+    },
+    "wallType": "normal",
+    "id": "wall_1792020545207_1vzq",
+    "p2": {
+      "y": 2805.5443667121053,
+      "x": 3535.4856307789087
+    }
+  },
+  {
+    "wallType": "normal",
+    "p2": {
+      "y": 2711.391515410475,
+      "x": 3669.5821159660786
+    },
+    "id": "wall_1792020545996_za3y",
+    "p1": {
+      "y": 2805.5443667121053,
+      "x": 3535.4856307789087
+    }
+  },
+  {
+    "id": "wall_1792020546581_gy1q",
+    "p1": {
+      "x": 3669.5821159660786,
+      "y": 2711.391515410475
+    },
+    "wallType": "normal",
+    "p2": {
+      "y": 2594.4137304599653,
+      "x": 3763.7349672677087
+    }
+  },
+  {
+    "p1": {
+      "y": 2594.4137304599653,
+      "x": 3763.7349672677087
+    },
+    "wallType": "normal",
+    "id": "wall_1792020547419_3uzz",
+    "p2": {
+      "x": 3832.209768214349,
+      "y": 2360.458160558945
+    }
+  },
+  {
+    "p1": {
+      "x": 3832.209768214349,
+      "y": 2360.458160558945
+    },
+    "id": "wall_1792020548385_i4z1",
+    "p2": {
+      "y": 2183.564924780125,
+      "x": 3803.678601153249
+    },
+    "wallType": "normal"
+  },
+  {
+    "id": "wall_1792020549128_booh",
+    "p1": {
+      "y": 2183.564924780125,
+      "x": 3803.678601153249
+    },
+    "wallType": "normal",
+    "p2": {
+      "x": 3629.638482080539,
+      "y": 2003.8185722951946
+    }
+  },
+  {
+    "p2": {
+      "x": 3469.8639465383785,
+      "y": 1921.0781878180044
+    },
+    "p1": {
+      "x": 3629.638482080539,
+      "y": 2003.8185722951946
+    },
+    "wallType": "normal",
+    "id": "wall_1792020549739_srz6"
+  },
+  {
+    "wallType": "normal",
+    "id": "wall_1792020550835_0enh",
+    "p1": {
+      "x": 3469.8639465383785,
+      "y": 1921.0781878180044
+    },
+    "p2": {
+      "x": 3281.5582439351183,
+      "y": 1926.7844212302246
+    }
+  },
+  {
+    "p2": {
+      "y": 1159.1868152288573,
+      "x": 3430.1120656492635
+    },
+    "id": "wall_1792020700016_pgxs",
+    "wallType": "normal",
+    "p1": {
+      "x": 3341.9248220058635,
+      "y": 1156.5930727687573
+    }
+  },
+  {
+    "wallType": "normal",
+    "p2": {
+      "x": 3430.1120656492635,
+      "y": 1607.904260826158
+    },
+    "id": "wall_1792020701403_6945",
+    "p1": {
+      "x": 3430.1120656492635,
+      "y": 1159.1868152288573
+    }
+  },
+  {
+    "wallType": "normal",
+    "p2": {
+      "x": 3572.7679009547637,
+      "y": 1607.904260826158
+    },
+    "id": "wall_1792020703139_qtm7",
+    "p1": {
+      "x": 3430.1120656492635,
+      "y": 1607.904260826158
+    }
+  },
+  {
+    "p1": {
+      "x": 3339.3310795457633,
+      "y": 1151.4055878485574
+    },
+    "wallType": "door",
+    "id": "wall_1792020708469_3y4p",
+    "doorState": "closed",
+    "p2": {
+      "x": 3201.8627291604635,
+      "y": 1153.9993303086574
+    }
+  }
+];
+
+export const DEMO_GV_ROOM_ZONES_2ND_FLOOR: RoomAnnotation[] = [
+  {
+    "hiddenMonsterNames": [],
+    "boxedText": "The room contains a large bed, a sturdy trunk, a wooden nightstand, and a darkened fireplace. The windows here aren't boarded, and the window in the west wall is open slightly. In the middle of the room, an old man in an oversized black robe carefully removes a strip of parchment coiled around the leg of a raven while muttering kind words to the bird. Two more ravens watch from the rafters.",
+    "polygonPoints": [
+      59.319568711534586,
+      53.22928776982876,
+      57.070361708217874,
+      53.0212381591744,
+      57.122668847829885,
+      38.353740608042095,
+      47.60276943844284,
+      38.56179021869645,
+      47.49815515921881,
+      58.11845362020619,
+      59.424182990758624,
+      57.598329593570284
+    ],
+    "bounds": {
+      "x": 47.49815515921881,
+      "y": 38.353740608042095,
+      "height": 19.764713012164094,
+      "width": 11.926027831539812
+    },
+    "pdfSection": "Guild House - 2nd Floor",
+    "campaignId": "camp-mtouse1g",
+    "color": "#f59e0b",
+    "monsters": [
+      "1x Oni (Gwish)",
+      "3x Raven"
+    ],
+    "roomName": "Gwish's Room",
+    "sceneId": "scene-muimqdr3",
+    "dmNotes": "The man is an oni named Gwish. Guildmaster Dusk is the only other guild member who knows Gwish's true nature.\n\nGwish is reclusive and rarely interacts with the other guild members. The oni has three ravens that act as messengers, and it uses a ring of animal influence to speak with them. These ravens deliver secret messages to the guildmaster's spies abroad and receive similar messages from those spies.\n\nIf one or more characters interrupt the oni, it politely asks them to leave. If they refuse, it shoos away the ravens and attacks the characters. The oni's glaive leans in the northeast corner behind the door.\n\nGwish's Trunk. When the oni is hungry, it sneaks from the guildhouse and invisibly preys on the city, feeding primarily on anyone sleeping outside. The trunk at the foot of Gwish's bed is filled with gnawed bones mixed with small bundles of torn clothing.\n\nMaster Key. One of the deep pockets on Gwish's robe contains a master key that unlocks all doors in the guildhouse.\n\nRaven's Note. Gwish has received a note from one of Guildmaster Dusk's spies. The note is written in code on a slip of parchment, and only Guildmaster Dusk is authorized to read it. Gwish plans to deliver the message to Dusk once her guest leaves (see area G26).\n\nA comprehend languages spell can decipher the note, as can a character who succeeds on a DC 20 Intelligence (Investigation) check after studying the note for 1 minute. It reads, \"Constantori in danger. Cognoscenti retaliation imminent. Be on high alert.\"",
+    "roomNumber": "G21",
+    "id": "zone_1792019892989_61fhc",
+    "label": "G21 - Gwish's Room"
+  },
+  {
+    "sceneId": "scene-muimqdr3",
+    "label": "G20: Private Room",
+    "bounds": {
+      "height": 15.302822601849542,
+      "x": 47.35554212010938,
+      "width": 5.792691494223341,
+      "y": 22.689159596637616
+    },
+    "hiddenMonsterNames": [],
+    "updatedAt": 1792020583586,
+    "roomNumber": "G20",
+    "id": "zone_1792020583544_aqpqx",
+    "boxedText": "This private room contains a bed, a nightstand, a footlocker, and a small fireplace. A small oil lamp, a pewter water pitcher, and two mugs rest on the nightstand. Sitting on the edge of the bed is a heavy man in a nightgown.",
+    "campaignId": "camp-mtouse1g",
+    "color": "#f59e0b",
+    "dmNotes": "A traveling merchant named Thyval Horne (neutral, human commoner) rents this room. On the nightstand rests a key that unlocks the door to this room. Beneath the bed is a copper chamber pot.\n\nRoleplaying Thyval. The merchant hasn't had a good night's sleep in days and quickly angers if disturbed. Characters who threaten Thyval or use magic to coerce him can pry the following information out of him:\n\n• Guildmaster Dusk is hosting an unscrupulous, well-connected noble named Dartinal Livereth. (Thyval suspects the two are lovers.)\n• Jaymont the Sinner, the guild's resident spy, is a master of disguise.\n• Thyval can't sleep because of the squawking birds in the room next door (area G21).",
+    "roomName": "Private Room",
+    "monsters": [
+      "3x Thug",
+      "1x Gladiator"
+    ],
+    "pdfSection": "Guild House - 2nd Floor",
+    "polygonPoints": [
+      53.14823361433272,
+      22.77513051013115,
+      53.06177553232939,
+      37.734069458006545,
+      47.48522924311438,
+      37.99198219848716,
+      47.35554212010938,
+      22.689159596637616
+    ]
+  },
+  {
+    "sceneId": "scene-muimqdr3",
+    "roomNumber": "G19",
+    "dmNotes": "A bandit stationed atop this balcony watches for trouble coming from the north and west. If she sees anything suspicious or threatening, she shouts loud enough to put the rest of the guildhouse on high alert. This bandit carries a key that unlocks the door to area G14.\n\nSpyglass. The spyglass attached to the balcony is missing one of its lenses and is nonfunctional.",
+    "campaignId": "camp-mtouse1g",
+    "boxedText": "A wooden railing encloses this balcony. Mounted on one corner of the railing is a copper spyglass.",
+    "pdfSection": "Guild House - 2nd Floor",
+    "hiddenMonsterNames": [],
+    "label": "G19: North Balcony",
+    "polygonPoints": [
+      55.30968566441605,
+      15.983428344141748,
+      55.39614374641939,
+      26.6438216173403,
+      60.62685770762106,
+      26.38590887685969,
+      60.75654483062607,
+      15.983428344141748
+    ],
+    "bounds": {
+      "y": 15.983428344141748,
+      "height": 10.660393273198553,
+      "width": 5.446859166210018,
+      "x": 55.30968566441605
+    },
+    "roomName": "North Balcony",
+    "id": "zone_1792020609883_ni4n6",
+    "monsters": [
+      "1x Doppelganger (Jaymont the Sinner)"
+    ],
+    "color": "#f59e0b",
+    "updatedAt": 1792020609915
+  },
+  {
+    "boxedText": "Wooden doors line the walls of this L-shaped hallway.",
+    "bounds": {
+      "width": 8.602579159331668,
+      "y": 23.720810558560053,
+      "height": 10.57442235970501,
+      "x": 59.76227688758773
+    },
+    "polygonPoints": [
+      61.361751404649404,
+      23.720810558560053,
+      68.3648560469194,
+      23.720810558560053,
+      68.27839796491607,
+      34.295232918265064,
+      59.89196401059272,
+      33.69343652381032,
+      59.76227688758773,
+      27.761443492756282,
+      61.88049989666939,
+      27.675472579262745
+    ],
+    "dmNotes": "Closets. The two small rooms to the north are closets behind unlocked doors. One stores a mop and broom, a few buckets, and a stack of copper chamber pots. The other has shelves holding linens, blankets, soap, and candles.",
+    "sceneId": "scene-muimqdr3",
+    "updatedAt": 1792020642586,
+    "pdfSection": "Guild House - 2nd Floor",
+    "campaignId": "camp-mtouse1g",
+    "color": "#f59e0b",
+    "id": "zone_1792020642548_0sebi",
+    "roomNumber": "G15",
+    "monsters": [],
+    "roomName": "L-Shaped Hall",
+    "label": "G15 - L-Shaped Hall",
+    "hiddenMonsterNames": []
+  },
+  {
+    "bounds": {
+      "x": 59.6758188055844,
+      "y": 34.89702931271983,
+      "height": 22.0085538543454,
+      "width": 6.873417519265004
+    },
+    "sceneId": "scene-muimqdr3",
+    "campaignId": "camp-mtouse1g",
+    "label": "G16: Stablemaster's Quarters",
+    "roomName": "Stablemaster's Quarters",
+    "roomNumber": "G16",
+    "monsters": [
+      "1x Spider"
+    ],
+    "color": "#f59e0b",
+    "dmNotes": "This room belongs to the stablemaster, Laris Drot (neutral, human commoner), who is a stout woman in her fifties. Laris carries two keys on her person: one unlocks the door to this room, and the other unlocks the doors to area G7.\n\nA wooden trunk at the foot of Laris's bed contains folded clothing and personal effects.\n\nTreasure. On a nightstand, next to a set of keys to the stables, is a coin pouch containing 5 gp, 13 sp, and 25 cp.\n\nDevelopment. If Laris is here when the stable hand in area G2b bangs his pail, Laris heads to the stables to find out what's going on. It takes her 1 minute to get there.",
+    "hiddenMonsterNames": [],
+    "boxedText": "",
+    "updatedAt": 1792020673169,
+    "id": "zone_1792020673124_f5vux",
+    "pdfSection": "Guild House - 2nd Floor",
+    "polygonPoints": [
+      66.5492363248494,
+      34.89702931271983,
+      59.8055059285894,
+      35.154942053200436,
+      59.6758188055844,
+      56.90558316706523,
+      66.2898620788394,
+      56.64767042658462
+    ]
+  },
+  {
+    "dmNotes": "The north door leading to area G19 is locked; the other doors are unlocked.",
+    "polygonPoints": [
+      58.89769606755439,
+      27.331588925288596,
+      58.940925108556065,
+      38.42183676595483,
+      53.66698210635272,
+      37.30421489053886,
+      53.926356352362724,
+      28.449210800704577
+    ],
+    "color": "#f59e0b",
+    "boxedText": "This rectangular room has a door on every wall. A plaque on the west door says, \"Private Rooms.\"",
+    "campaignId": "camp-mtouse1g",
+    "label": "G14: Upstairs Foyer",
+    "updatedAt": 1792020722515,
+    "hiddenMonsterNames": [],
+    "roomNumber": "G14",
+    "sceneId": "scene-muimqdr3",
+    "id": "zone_1792020722474_677oo",
+    "monsters": [
+      "1x Doppelganger (Jaymont the Sinner)"
+    ],
+    "roomName": "Upstairs Foyer",
+    "pdfSection": "Guild House - 2nd Floor",
+    "bounds": {
+      "y": 27.331588925288596,
+      "width": 5.273943002203346,
+      "height": 11.090247840666233,
+      "x": 53.66698210635272
+    }
+  },
+  {
+    "bounds": {
+      "y": 35.364147011070614,
+      "x": 68.97946117981671,
+      "width": 6.602253534799999,
+      "height": 21.023796117964878
+    },
+    "dmNotes": "This room stinks of horse manure due to its proximity to the stables. It contains four neatly made beds, each with its own nightstand and empty footlocker. An oil-filled lantern rests atop each nightstand. Beneath each bed is a copper chamber pot.\n\nTreasure. One of the lanterns is a lantern of revealing. No one in the guild is aware the lantern is magical.",
+    "pdfSection": "Guild House - 2nd Floor",
+    "sceneId": "scene-muimqdr3",
+    "monsters": [],
+    "roomName": "Large Common Room",
+    "polygonPoints": [
+      68.97946117981671,
+      35.364147011070614,
+      69.0973585643667,
+      55.99716624951942,
+      75.54241558643338,
+      56.38794312903549,
+      75.58171471461671,
+      35.59861313878026
+    ],
+    "color": "#f59e0b",
+    "hiddenMonsterNames": [],
+    "campaignId": "camp-mtouse1g",
+    "id": "zone_1792021804842_g2wmi",
+    "roomNumber": "g18",
+    "boxedText": "Nailed to this lengthy porch are short planks that bear the words \"Private Property. No Trespassing!\" in Common. A lookout is stationed on a second-floor balcony above the western end of the porch.",
+    "label": "g18 - Large Common Room"
+  },
+  {
+    "color": "#f59e0b",
+    "pdfSection": "Guild House - 2nd Floor",
+    "polygonPoints": [
+      69.01876030800004,
+      23.71899600149155,
+      69.05805943618337,
+      33.2539518616838,
+      75.58171471461671,
+      33.48841798939344,
+      75.58171471461671,
+      23.71899600149155
+    ],
+    "label": "g17 - Small Common Room",
+    "monsters": [],
+    "boxedText": "Nailed to this lengthy porch are short planks that bear the words \"Private Property. No Trespassing!\" in Common. A lookout is stationed on a second-floor balcony above the western end of the porch.",
+    "roomNumber": "g17",
+    "roomName": "Small Common Room",
+    "id": "zone_1792021825663_una1r",
+    "hiddenMonsterNames": [],
+    "sceneId": "scene-muimqdr3",
+    "campaignId": "camp-mtouse1g",
+    "dmNotes": "This room stinks of horse manure due to its proximity to the stables. It contains two neatly made beds, two empty footlockers, and a nightstand with an oil-filled lantern hanging above it. Beneath each bed is a copper chamber pot.",
+    "bounds": {
+      "x": 69.01876030800004,
+      "width": 6.562954406616669,
+      "height": 9.76942198790189,
+      "y": 23.71899600149155
+    }
+  },
+  {
+    "hiddenMonsterNames": [],
+    "pdfSection": "The Guild House - Main Level",
+    "boxedText": "",
+    "color": "#f59e0b",
+    "id": "zone_1792021841155_jnbyg",
+    "monsters": [
+      "1x Commoner (Needly Pitts)"
+    ],
+    "campaignId": "camp-mtouse1g",
+    "polygonPoints": [
+      88.86482004058337,
+      82.80446018432222,
+      76.52489379101671,
+      82.88261556022543,
+      76.7606885601167,
+      17.310255177427905,
+      88.62902527148339,
+      17.38841055333112
+    ],
+    "dmNotes": "The hayloft is 10 feet above the stables and consists of a 5-foot-wide wooden walkway that runs the perimeter of the building. Broad, square loading doors open in the north and south walls, each fitted with block-and-tackle rigs for hoisting hay bales and other supplies into the loft. Hay bales and burlap sacks stuffed with feed grains take up most of the space. A few pitchforks, ropes, and feed buckets lie scattered about the bales.\n\nStable Hand. A young stable hand named Needly Pitts (neutral, human commoner) lazes in the loft, supposedly guarding against horse thieves. He has nodded off but wakes if characters disturb the horses, make too much noise in the barn, or start a fire. In the event of trouble, Needly bangs a metal pail and yells for the stablemaster (see area G16), who takes 1 minute to arrive.",
+    "bounds": {
+      "y": 17.310255177427905,
+      "height": 65.57236038279753,
+      "x": 76.52489379101671,
+      "width": 12.339926249566659
+    },
+    "roomName": "Hayloft",
+    "sceneId": "scene-muimqdr3",
+    "label": "g2b - Hayloft",
+    "roomNumber": "g2b"
+  },
+  {
+    "label": "g23 - Stolen Goods",
+    "updatedAt": 1792163888302,
+    "pdfSection": "Guild House - 2nd Floor",
+    "boxedText": "Deep scrapes crisscross the floor of this spacious room, and wood shavings scatter the perimeter. A string of oil lanterns dangles from the ceiling, suspended on block and tackle above several containers—mostly small casks and crates, although there's an earth-encrusted coffin here as well.",
+    "id": "zone_1792021855996_xdbg2",
+    "hiddenMonsterNames": [
+      "Elix The Saint, During Day"
+    ],
+    "color": "#f59e0b",
+    "sceneId": "scene-muimqdr3",
+    "bounds": {
+      "height": 31.965548744414995,
+      "x": 31.330896380183344,
+      "width": 12.850814915950007,
+      "y": 28.0956970520716
+    },
+    "polygonPoints": [
+      44.18171129613335,
+      54.43405873145512,
+      39.898106324150014,
+      60.061245796486595,
+      31.330896380183344,
+      34.191816372522375,
+      36.91137258221668,
+      28.0956970520716
+    ],
+    "campaignId": "camp-mtouse1g",
+    "roomName": "Stolen Goods",
+    "monsters": [
+      "1x Bandit Captain (Elix the Saint, during day)"
+    ],
+    "roomNumber": "g23",
+    "dmNotes": "Elix the Saint (lawful evil, human bandit captain; see the \"Elix the Saint\" section earlier in the adventure) works here during the day. Armed with a crowbar, he examines containers stolen by the Agile Hand. He then records their contents (and the estimated value of those contents) in a leather-bound ledger.\n\nMaster Key. Elix carries a master key that unlocks all doors in the guildhouse complex.\n\nTreasure. The following stolen goods are stored here:\n\n• Six casks of exquisite elven wine (250 gp each)\n• Wooden chest containing six poisoner's kits\n• Wooden crate containing eight sets of thieves' tools\n• Wooden crate containing two spyglasses (1,000 gp each) packed in beds of straw\n• Dirty wooden coffin containing the moldy corpse of a human priest wearing a copper holy symbol shaped like the sun (25 gp), a sun-shaped death mask made of gold (250 gp), and a necklace of prayer beads"
+  },
+  {
+    "color": "#f59e0b",
+    "boxedText": "This office contains a plain wooden desk, a simple chair, and a fireplace. A door in the south corner sports a plaque that says, \"Private! Enter at your own risk.\"",
+    "pdfSection": "Guild House - 2nd Floor",
+    "sceneId": "scene-muimqdr3",
+    "dmNotes": "A bandit stands guard outside the door to Guildmaster Dusk's quarters (area G26). The bandit's job is to shout at the first sign of trouble, thus alerting the guildmaster.\n\nDesk. If the characters search the desk at night, they find a leather-bound ledger in an unlocked drawer, along with a writing quill and a jar of ink. The ledger provides an account of stolen goods acquired by the Agile Hand, but Constantori's Portrait is not among the items listed.",
+    "label": "g24 - Elix's Office",
+    "id": "zone_1792021866488_8evv9",
+    "roomNumber": "g24",
+    "hiddenMonsterNames": [],
+    "polygonPoints": [
+      30.662811201066674,
+      52.011242078455446,
+      22.8029855644,
+      60.53017805190589,
+      19.226764899716663,
+      48.02531790739147,
+      27.12588966456667,
+      39.506381933941014
+    ],
+    "campaignId": "camp-mtouse1g",
+    "monsters": [
+      "1x Bandit"
+    ],
+    "roomName": "Elix's Office",
+    "bounds": {
+      "y": 39.506381933941014,
+      "width": 11.43604630135001,
+      "x": 19.226764899716663,
+      "height": 21.023796117964878
+    }
+  },
+  {
+    "roomNumber": "g24",
+    "dmNotes": "A bandit stands guard outside the door to Guildmaster Dusk's quarters (area G26). The bandit's job is to shout at the first sign of trouble, thus alerting the guildmaster.\n\nDesk. If the characters search the desk at night, they find a leather-bound ledger in an unlocked drawer, along with a writing quill and a jar of ink. The ledger provides an account of stolen goods acquired by the Agile Hand, but Constantori's Portrait is not among the items listed.",
+    "boxedText": "This office contains a plain wooden desk, a simple chair, and a fireplace. A door in the south corner sports a plaque that says, \"Private! Enter at your own risk.\"",
+    "hiddenMonsterNames": [],
+    "id": "zone_1792021878692_yb75g",
+    "polygonPoints": [
+      31.016503354716672,
+      53.80881572422938,
+      23.667566384433332,
+      62.249596321776636,
+      27.086590536383337,
+      75.77047635303285,
+      34.55342489121667,
+      65.84474361332452
+    ],
+    "campaignId": "camp-mtouse1g",
+    "sceneId": "scene-muimqdr3",
+    "color": "#f59e0b",
+    "pdfSection": "Guild House - 2nd Floor",
+    "monsters": [
+      "1x Bandit"
+    ],
+    "roomName": "Elix's Office",
+    "label": "g24 - Elix's Office",
+    "bounds": {
+      "y": 53.80881572422938,
+      "x": 23.667566384433332,
+      "height": 21.961660628803465,
+      "width": 10.88585850678334
+    }
+  },
+  {
+    "roomNumber": "g22",
+    "campaignId": "camp-mtouse1g",
+    "boxedText": "A wooden railing encloses this balcony. Mounted on one corner of the railing is a copper spyglass.",
+    "polygonPoints": [
+      39.54441417050001,
+      63.03115008080877,
+      27.47958181821667,
+      77.95882687832287,
+      28.972948689183337,
+      84.6801892059994,
+      41.352174066933344,
+      68.97095864945314
+    ],
+    "pdfSection": "Guild House - 2nd Floor",
+    "sceneId": "scene-muimqdr3",
+    "color": "#f59e0b",
+    "id": "zone_1792021888546_frqyy",
+    "hiddenMonsterNames": [],
+    "dmNotes": "A bandit stationed atop this balcony watches for trouble coming from the south and east. If she sees anything suspicious or threatening, she shouts loud enough to put the rest of the guildhouse on high alert. This bandit carries keys that unlock the doors to areas G23, G24, and G25.\n\nSpyglass. The spyglass, which is damaged but functional, is worth 250 gp.",
+    "monsters": [
+      "1x Bandit"
+    ],
+    "roomName": "South Balcony",
+    "label": "g22 - South Balcony",
+    "bounds": {
+      "width": 13.872592248716675,
+      "x": 27.47958181821667,
+      "height": 21.649039125190626,
+      "y": 63.03115008080877
+    }
+  },
+  {
+    "label": "g26 - Dusk's Quarters",
+    "dmNotes": "Unless she has been lured elsewhere, Guildmaster Dusk (lawful evil, half-elf assassin) is asleep in bed with her lover, a politically influential noble named Dartinal Livereth (lawful evil, human noble). Neither is wearing armor, but they keep their weapons within reach.\n\nIf the guildhouse is on high alert, Dusk leaves the room to find out what's happening. Meanwhile, Dartinal smokes a pipe in bed and waits for Dusk to return.\n\nFireplace. Resting on the fireplace mantel are a wedge of soap, a brush, a clay pipe, and an ivory tobacco jar carved in the shape of a skull. Buried in the ashes of the hearth is a spare shortsword covered with soot.\n\nLeather Trunk. This trunk holds a spare, loaded light crossbow under some linens, bedding, and neatly folded outfits.\n\nMaster Key. Guildmaster Dusk keeps a master key on a nightstand next to her bed, and she takes it with her when she leaves the room. The key unlocks all doors in the guildhouse complex.",
+    "id": "zone_1792021904392_nwi8y",
+    "campaignId": "camp-mtouse1g",
+    "boxedText": "This circular room contains a canopied bed with a leather trunk at the foot of it and a fireplace. Wooden staircases hug the walls—one leading up, the other down. The scent of tobacco hangs in the air.",
+    "sceneId": "scene-muimqdr3",
+    "color": "#f59e0b",
+    "polygonPoints": [
+      24.021258538083334,
+      70.377755415711,
+      19.934149207016663,
+      66.31367586874381,
+      16.98671459326666,
+      69.36173552896922,
+      14.943159927733326,
+      73.66028120364604,
+      14.471570389533325,
+      80.53795428312898,
+      16.12213377323333,
+      86.94669510719264,
+      18.755175361516667,
+      89.4476671360955,
+      22.48859253893333,
+      87.80640424212798,
+      24.9251384863,
+      83.27339243974153,
+      25.632522793600003,
+      76.9428069915811
+    ],
+    "roomNumber": "g26",
+    "roomName": "Dusk's Quarters",
+    "monsters": [
+      "1x Assassin (Guildmaster Dusk)",
+      "1x Noble (Dartinal Livereth)"
+    ],
+    "hiddenMonsterNames": [],
+    "bounds": {
+      "x": 14.471570389533325,
+      "height": 23.13399126735169,
+      "y": 66.31367586874381,
+      "width": 11.160952404066679
+    },
+    "pdfSection": "Guild House - 2nd Floor"
+  },
+  {
+    "color": "#f59e0b",
+    "campaignId": "camp-mtouse1g",
+    "sceneId": "scene-muimqdr3",
+    "bounds": {
+      "x": 20.562935257949995,
+      "height": 7.424760710805458,
+      "width": 4.873091894733339,
+      "y": 83.1952370638383
+    },
+    "roomNumber": "up to g27",
+    "dmNotes": "The north door leading to area G19 is locked; the other doors are unlocked.",
+    "id": "zone_1792021917185_a449o",
+    "label": "up to g27 - Upstairs Foyer",
+    "boxedText": "This rectangular room has a door on every wall. A plaque on the west door says, \"Private Rooms.\"",
+    "monsters": [],
+    "roomName": "Upstairs Foyer",
+    "polygonPoints": [
+      23.9819594099,
+      83.1952370638383,
+      20.562935257949995,
+      87.65009349032157,
+      21.859806488,
+      90.61999777464376,
+      25.436027152683334,
+      84.28941232648332
+    ],
+    "pdfSection": "Guild House - 2nd Floor",
+    "pdfPage": 1,
+    "hiddenMonsterNames": []
+  },
+  {
+    "id": "zone_1792021930364_uicb9",
+    "monsters": [
+      "1x Thug"
+    ],
+    "roomName": "Tower Rotunda",
+    "dmNotes": "A thug sits near the bottom of the stairs, engrossed in a saucy novella. If this guard detects intruders, he tries to run up the stairs to wake Guildmaster Dusk in area G26.",
+    "bounds": {
+      "y": 69.12726940125957,
+      "height": 12.583015520417646,
+      "width": 2.868836357383337,
+      "x": 13.960681723149992
+    },
+    "sceneId": "scene-muimqdr3",
+    "pdfSection": "The Guild House - Main Level",
+    "hiddenMonsterNames": [],
+    "campaignId": "camp-mtouse1g",
+    "color": "#f59e0b",
+    "polygonPoints": [
+      16.82951808053333,
+      70.9248430470335,
+      15.218253825016658,
+      69.12726940125957,
+      13.960681723149992,
+      81.71028492167721,
+      15.886339004133326,
+      81.24135266625792
+    ],
+    "boxedText": "A lit fireplace warms this mostly empty tower chamber. A wooden staircase hugs the west wall.",
+    "label": "down to g13 - Tower Rotunda",
+    "roomNumber": "down to g13"
+  },
+  {
+    "polygonPoints": [
+      56.60023580206669,
+      65.45396673380844,
+      51.80574216370002,
+      68.89280327354993,
+      50.43027267728335,
+      74.83261184219427,
+      50.23377703636669,
+      82.41368330480616,
+      52.27733170190002,
+      88.74426875296658,
+      56.63953493025002,
+      90.69815315054697,
+      60.09785821038336,
+      87.49378273851515,
+      63.438284105966694,
+      78.42775913374217,
+      62.49510502956669,
+      72.9568828205171,
+      59.86206344128336,
+      67.48600650729205
+    ],
+    "campaignId": "camp-mtouse1g",
+    "id": "zone_1792021959579_kqfkp",
+    "boxedText": "This tower chamber is lit by a pewter chandelier suspended from beams that support a conical roof. A cluttered writing desk and a padded chair are positioned opposite the descending staircase. A gold-framed painting of a beautiful, well-dressed man hangs in a shallow alcove near the top of the stairs.",
+    "monsters": [
+      "Constantori's Portrait (Guardian Portrait)"
+    ],
+    "roomName": "Tower Peak",
+    "roomNumber": "g27",
+    "color": "#f59e0b",
+    "dmNotes": "This room is situated at the top of the tower and is off limits to everyone except Guildmaster Dusk, who comes here to reflect, doodle in her diary, and gaze upon her latest acquisition: Constantori's Portrait.\n\nCharacters who search the guildmaster's cluttered desk find sketches and descriptions of deadly mechanical traps, including a rough sketch of the trap in this room (see \"Trap\" below).\n\nConstantori's Portrait. The painting that hangs in the alcove is Constantori's Portrait (described at the end of the adventure). Guildmaster Dusk is attuned to the painting and has commanded it to defend itself against all creatures except her. As an action, a character can throw a sheet over the painting, making it unable to cast spells.\n\nThe Cognoscenti Esoterica was wrong about one thing: Guildmaster Dusk has no intention of selling the painting. By learning its secrets, she hopes to become as notorious and wealthy as the late Daiyani Grysthorn, the crime lord who commissioned the painting in the first place.\n\nTrap. Canisters of poisonous gas are hidden in the wall behind the painting. Removing the painting from its hooks without first disabling the trap causes the gas to spew from tiny holes previously concealed by the painting. Each creature in the room when the gas is released must make a DC 14 Constitution saving throw, taking 36 (8d8) poison damage on a failed save, or half as much damage on a successful one.\n\nA character who searches the alcove for traps spots the holes behind the painting with a successful DC 12 Wisdom (Perception) check. This check is made with advantage if the character saw the trap's sketch in Dusk's diary. Once the trap is detected, a character can spend 1 minute trying to disable it, either by plugging the holes or by placing counterweights on the hooks as someone else carefully lifts the painting. The character trying to disable the trap must make a DC 15 Dexterity (Sleight of Hand) check, disabling the trap on a success and triggering the trap on a failure.",
+    "bounds": {
+      "width": 13.204507069600005,
+      "height": 25.24418641673853,
+      "x": 50.23377703636669,
+      "y": 65.45396673380844
+    },
+    "hiddenMonsterNames": [],
+    "label": "g27 - Tower Peak",
+    "sceneId": "scene-muimqdr3",
+    "pdfSection": "Guild House - 2nd Floor"
+  }
+];
+
+export const DEMO_GV_SCENE_2ND_FLOOR: Scene = {
+  sceneId: "scene-muimqdr3",
+  sceneTitle: "Guild House - 2nd Floor",
+  mapUrl: guildhouse2ndFloorImg,
+  mapThumbnailUrl: guildhouse2ndFloorImg,
+  mapWidth: 6000,
+  mapHeight: 3017,
+  dmNotes: "ADVENTURE: Masterpiece Imbroglio (Keys from the Golden Vault)\nLOCATION: Guildhouse Upper Level - Guest quarters, common rooms, loot processing, offices, Dusk's private quarters, and high tower peak with Constantori's Portrait.",
+  tokens: [],
+  gridSize: 50,
+  gridOpacity: 0.3,
+  isFogVisible: true,
+  walls: DEMO_GV_WALLS_2ND_FLOOR,
+  visionConfig: {
+    enabled: true,
+    explorationMemory: true,
+    darknessOpacity: 0.85,
+    dimVisionOpacity: 0.4,
+    ambientLight: false,
+    dmPreviewMode: true,
+    showDoorBadges: true
+  },
+  roomAnnotations: DEMO_GV_ROOM_ZONES_2ND_FLOOR
+};
+
 export const DEMO_GV_CHAPTER: Chapter = {
   chapterId: "chap-mtoussuc",
   chapterTitle: "Masterpiece Imbroglio",
   orderIndex: 0,
   pdfFilename: 'Keys_from_the_Golden_Vault_Masterpiece_Imbroglio.pdf',
   pdfDigest: DEMO_GV_PDF_DIGEST,
-  scenes: [DEMO_GV_SCENE]
+  scenes: [DEMO_GV_SCENE, DEMO_GV_SCENE_2ND_FLOOR]
 };
 
 export const DEMO_GV_CAMPAIGN: Campaign = {

@@ -1029,7 +1029,13 @@ export async function createCampaignWithScene(
 export function testMediaAccessible(url: string, timeoutMs = 6000): Promise<boolean> {
   return new Promise((resolve) => {
     if (!url) return resolve(false);
-    if (url.startsWith('data:') || url.startsWith('blob:')) return resolve(true);
+    if (url.startsWith('data:')) return resolve(true);
+    if (url.startsWith('blob:')) {
+      fetch(url, { method: 'HEAD' })
+        .then(res => resolve(res.ok || res.status === 200))
+        .catch(() => resolve(false));
+      return;
+    }
 
     const isVideo = isVideoAsset(url);
 
@@ -1171,6 +1177,21 @@ export async function resolveMapSource(
     (scene.mapUrl && (scene.mapUrl.endsWith('.mp4') || scene.mapUrl.endsWith('.webm') || scene.mapUrl.endsWith('.m4v'))) ||
     (uploadedAssetsList.some(a => (a.url === scene.mapUrl || a.assetId === scene.sceneId) && a.fileType === 'video'));
 
+  // 0. Auto-recovery for known Guildhouse maps when URL is missing or stale
+  if (scene.sceneId === 'scene-muimqdr3' || (scene.sceneTitle && scene.sceneTitle.toLowerCase().includes('2nd floor'))) {
+    const isStale = !scene.mapUrl || scene.mapUrl.startsWith('blob:') || scene.mapUrl === scene.mapThumbnailUrl;
+    if (isStale) {
+      console.log(`[resolveMapSource] Auto-resolving Guildhouse 2nd Floor map for scene "${scene.sceneTitle}"`);
+      return '/uploads/file-1792161971576-460009101.jpg';
+    }
+  }
+  if (scene.sceneId === 'scene_1788902673803_yz0d' || (scene.sceneTitle && scene.sceneTitle.toLowerCase().includes('main level'))) {
+    const isStale = !scene.mapUrl || scene.mapUrl.startsWith('blob:') || scene.mapUrl === scene.mapThumbnailUrl;
+    if (isStale) {
+      return '/uploads/file-1792161909096-684999544.jpg';
+    }
+  }
+
   // 1. Check client IndexedDB FIRST for full-resolution cached version
   try {
     const cachedScene = await getLocalAsset(`scene_${scene.sceneId}`);
@@ -1246,9 +1267,18 @@ export async function resolveMapSource(
     return scene.mapUrl;
   }
 
-  // 4. If data URL or blob URL, only use if not identical to the thumbnail
-  if (scene.mapUrl && (scene.mapUrl.startsWith('data:') || scene.mapUrl.startsWith('blob:')) && scene.mapUrl !== scene.mapThumbnailUrl) {
+  // 4. If data URL, use it directly
+  if (scene.mapUrl && scene.mapUrl.startsWith('data:') && scene.mapUrl !== scene.mapThumbnailUrl) {
     return scene.mapUrl;
+  }
+
+  // If blob URL, verify if it is active in the current window before returning
+  if (scene.mapUrl && scene.mapUrl.startsWith('blob:') && scene.mapUrl !== scene.mapThumbnailUrl) {
+    const isBlobActive = await testMediaAccessible(scene.mapUrl);
+    if (isBlobActive) {
+      return scene.mapUrl;
+    }
+    console.warn(`[resolveMapSource] Stale blob URL detected for scene "${scene.sceneTitle}": ${scene.mapUrl}. Seeking fallback.`);
   }
 
   // 5. For video scenes: if mapUrl is defined, keep mapUrl rather than downgrading to static thumbnail
