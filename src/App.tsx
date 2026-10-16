@@ -1600,25 +1600,45 @@ export default function App() {
     }
   }, [tool, tutorial.isActive, tutorial.triggerTaskCompletion]);
 
+  // Ensure no fog of war during tutorial drawing tools demonstration for crystal clear map visibility
+  useEffect(() => {
+    if (!tutorial.isActive) return;
+    const stepId = tutorial.currentStep?.id;
+    if (['draw-walls', 'doors-operation', 'erase-walls', 'draw-zones'].includes(stepId)) {
+      setIsFogVisible(false);
+    }
+  }, [tutorial.isActive, tutorial.currentStep?.id]);
+
+  // Launch tutorial with preloaded "The Guild House - Main Level" scene and fog turned off
+  const handleStartTutorial = () => {
+    handleLoadSceneFromCampaign(DEMO_GV_SCENE, DEMO_GV_CAMPAIGN.campaignId, DEMO_GV_CHAPTER.chapterId);
+    setIsFogVisible(false);
+    tutorial.startTutorial();
+  };
+
   // Demo Action Handlers for Tutorial
   const handleLoadDemoGv = () => {
     handleLoadSceneFromCampaign(DEMO_GV_SCENE, DEMO_GV_CAMPAIGN.campaignId, DEMO_GV_CHAPTER.chapterId);
+    setIsFogVisible(false);
     tutorial.triggerTaskCompletion('load-demo-campaign');
-    toast.success('Loaded "Masterpiece Imbroglio: Main Floor" with drawn walls and zones!');
+    toast.success('Loaded "The Guild House - Main Level" with 64 walls/doors and 13 room zones!');
   };
 
   const handleActivateWallTool = () => {
     setTool('wall');
+    setIsFogVisible(false);
     tutorial.triggerTaskCompletion('draw-walls');
   };
 
   const handleActivateWallEraser = () => {
     setTool('erase_wall');
+    setIsFogVisible(false);
     tutorial.triggerTaskCompletion('erase-walls');
   };
 
   const handleActivateZoneTool = () => {
     setTool('zone');
+    setIsFogVisible(false);
     tutorial.triggerTaskCompletion('draw-zones');
   };
 
@@ -5403,7 +5423,7 @@ export default function App() {
           }}
           onHoverZone={setHoveredZoneId}
           currentMapImage={imageFile}
-          onStartTutorial={tutorial.startTutorial}
+          onStartTutorial={handleStartTutorial}
           onOpenBugReport={() => setIsBugReportModalOpen(true)}
           onOpenBugManager={() => setIsBugManagerModalOpen(true)}
           onEquipCustomEffect={handleEquipCustomEffect}
@@ -5532,14 +5552,14 @@ export default function App() {
                   type="button"
                   id="btn-start-tutorial-guide-home"
                   onClick={() => {
-                    tutorial.startTutorial();
+                    handleStartTutorial();
                   }}
                   className="group px-7 py-3 bg-gradient-to-r from-amber-500/20 via-zinc-900/90 to-amber-500/15 hover:from-amber-500/30 hover:to-amber-500/25 border border-amber-500/50 hover:border-amber-400 text-amber-300 hover:text-amber-200 font-bold rounded-xl transition-all font-mono text-xs flex items-center gap-2.5 shadow-xl shadow-amber-950/40 cursor-pointer transform hover:scale-105 active:scale-95"
                 >
                   <HelpCircle className="w-4 h-4 text-amber-400 group-hover:rotate-12 transition-transform" />
                   <span>Interactive DM Tutorial Guide</span>
                   <span className="px-2 py-0.5 text-[9px] bg-amber-500/20 border border-amber-500/40 rounded-full text-amber-300 font-sans">
-                    9 Steps
+                    11 Steps
                   </span>
                 </button>
               </div>

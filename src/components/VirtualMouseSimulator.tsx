@@ -115,13 +115,13 @@ export const VirtualMouseSimulator: React.FC<VirtualMouseSimulatorProps> = ({
 
       addTimeout(() => {
         setPos({ x: Math.min(vw * 0.45, 520), y: 180 });
-        setActiveBadge('Selecting "Masterpiece Imbroglio: Main Floor"...');
+        setActiveBadge('Selecting "The Guild House - Main Level"...');
       }, 2000);
 
       addTimeout(() => {
         setIsClicking(true);
         setClickType('left');
-        setActiveBadge('Loaded Scene with Drawn Walls & 4 Zones!');
+        setActiveBadge('Loaded Scene: 64 Walls, 5 Tokens & 13 Room Zones!');
         setTimeout(() => setIsClicking(false), 400);
       }, 3200);
     }

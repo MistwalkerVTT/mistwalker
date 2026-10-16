@@ -171,7 +171,7 @@ export const HelpDrawer: React.FC<HelpDrawerProps> = ({
     try {
       const extraContext = `User is using MistWalker VTT:
 - Web-based VTT with dynamic lighting walls, interactive doors (block/allow vision when open), room polygon zones with PDF briefings, player view fog of war, and D&D Beyond sync.
-- Prebuilt demo: Masterpiece Imbroglio (Main Floor) from Keys from the Golden Vault with Area G10, G21, G26, G27.`;
+- Prebuilt demo: The Guild House - Main Level from Keys to the Golden Vault (Masterpiece Imbroglio) with 64 walls/doors, 5 tokens, and 13 room zones (G1 to G13).`;
 
       const response = await chatWithDndBot(
         newHistory,

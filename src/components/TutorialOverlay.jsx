@@ -517,7 +517,7 @@ export const TutorialOverlay = (props) => {
                       className="w-full py-2 px-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-zinc-950 font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-md shadow-amber-500/20 transition cursor-pointer"
                     >
                       <Play className="w-3.5 h-3.5 fill-current" />
-                      <span>Load Masterpiece Imbroglio: Main Floor</span>
+                      <span>Load The Guild House - Main Level</span>
                     </button>
                   )}
                   {onOpenCampaignBuilder && (

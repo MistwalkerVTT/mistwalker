@@ -14,18 +14,18 @@ export const TUTORIAL_STEPS = [
     actionLabel: 'Tour Sidebar Buttons'
   },
 
-  // Step 2: Campaign Architecture & Loading Golden Vault Main Floor
+  // Step 2: Campaign Architecture & Loading The Guild House Scene
   {
     id: 'campaign-manager',
     phase: 'Step 2 of 11: Campaign Architecture',
-    title: 'Campaign Manager & Golden Vault Scene',
-    description: 'The Campaign Manager organizes your adventure into campaigns, chapters, and tactical battle scenes. We will load the prebuilt demo: "Masterpiece Imbroglio: Main Floor" from Keys from the Golden Vault, with walls, door, and 4 room zones already drawn.',
-    taskHint: 'Click to load "Masterpiece Imbroglio: Main Floor"',
+    title: 'Campaign Manager & The Guild House Scene',
+    description: 'The Campaign Manager organizes your adventure into campaigns, chapters, and tactical battle scenes. We will load the prebuilt scene: "The Guild House - Main Level" from Keys to the Golden Vault, with 64 walls/doors, 5 tokens, and 13 room zones already drawn.',
+    taskHint: 'Click to load "The Guild House - Main Level"',
     targetSelector: '[data-tutorial="campaign-manager"]',
     fallbackSelector: '#group-btn-maps, #btn-open-campaign-manager-empty-screen',
     type: 'task',
     taskId: 'load-demo-campaign',
-    actionLabel: 'Load Masterpiece Imbroglio: Main Floor'
+    actionLabel: 'Load The Guild House - Main Level'
   },
 
   // Step 3: Running a Campaign vs Creator Mode
@@ -45,9 +45,9 @@ export const TUTORIAL_STEPS = [
   {
     id: 'draw-walls',
     phase: 'Step 4 of 11: Dynamic Walls',
-    title: 'Draw Tactical Walls',
-    description: 'Under Tactical Layers, choose the Wall Tool. Left-click to start a wall line, click to add corner points, and double-click to finish. Solid walls physically block player vision, light sources, and fog of war.',
-    taskHint: 'Activate the Wall Tool or practice placing wall nodes',
+    title: 'Draw Tactical Walls (Fog Disabled)',
+    description: 'Under Tactical Layers, choose the Wall Tool. Fog of War is turned off so you have total clarity while drawing. Left-click to start a wall line, click to add corner points, and double-click to finish. Solid walls physically block player vision, light sources, and fog of war.',
+    taskHint: 'Activate the Wall Tool or practice placing wall nodes on the Guild House map',
     targetSelector: '[data-tutorial="tactical-layers"]',
     fallbackSelector: '#group-btn-lighting, #btn-bar-wall-tool',
     type: 'task',
@@ -61,7 +61,7 @@ export const TUTORIAL_STEPS = [
     phase: 'Step 5 of 11: Interactive Doors',
     title: 'Add & Operate Interactive Doors',
     description: 'Doors can be drawn as wall segments with type "door". When closed, doors block line of sight. When you or a player clicks a door, it swings open, instantly allowing light and vision to flood into the adjoining room!',
-    taskHint: 'Inspect or click the center dividing door in the Agile Hand Guildhouse to toggle it open or closed',
+    taskHint: 'Inspect or click any door in The Guild House to toggle it open or closed',
     targetSelector: '#btn-bar-wall-tool',
     fallbackSelector: '[data-tutorial="tactical-layers"], #group-btn-lighting',
     type: 'tour',
@@ -87,7 +87,7 @@ export const TUTORIAL_STEPS = [
     id: 'draw-zones',
     phase: 'Step 7 of 11: Room Zones',
     title: 'Draw Room Polygon Zones',
-    description: 'Under Tactical Layers, switch to the "Room Zones" tab and click "Draw Polygon". Click corners around any chamber (like Room G10 Parlor or G21 Raven Roost) to map an interactive room zone and link PDF descriptions.',
+    description: 'Under Tactical Layers, switch to the "Room Zones" tab and click "Draw Polygon". Click corners around any chamber (like Area G10 Main Hall or G4 Cartwright Workshop) to map an interactive room zone and link PDF descriptions without fog obstruction.',
     taskHint: 'Click Room Zones tab and select Draw Polygon',
     targetSelector: '#subtab-room-zones',
     fallbackSelector: '#btn-sidebar-zone-polygon, [data-tutorial="tactical-layers"]',
@@ -101,13 +101,13 @@ export const TUTORIAL_STEPS = [
     id: 'zone-details-pdf',
     phase: 'Step 8 of 11: PDF Lore & DM Notes',
     title: 'Right-Click Zone: PDF Lore & DM Secret Notes',
-    description: 'Right-click directly on any room zone on the canvas (like Area G10 or G21). This opens the Room Briefing Drawer showing parsed PDF adventure data: room title, boxed read-aloud text, and secret DM notes with trap DCs, secrets, and monster rosters!',
+    description: 'Right-click directly on any room zone on the canvas (like Area G10 or G2a). This opens the Room Briefing Drawer showing parsed PDF adventure data: room title, boxed read-aloud text, and secret DM notes with trap DCs, secrets, and monster rosters!',
     taskHint: 'Right-click on Room G10 on the canvas or click below to inspect',
     targetSelector: '[data-tutorial="room-zones"]',
     fallbackSelector: '#subtab-room-zones, [data-tutorial="tactical-layers"]',
     type: 'task',
     taskId: 'inspect-zone',
-    actionLabel: 'Inspect Demo Zone (G10 Parlor)'
+    actionLabel: 'Inspect Demo Zone (G10 Main Hall)'
   },
 
   // Step 9: Broadcasting Description to Players
