@@ -13,6 +13,8 @@
     "deploy": "node scripts/deploy.js"
   },
   "dependencies": {
+    "@3d-dice/dice-box": "^1.1.4",
+    "@3d-dice/dice-themes": "^0.2.1",
     "@google/genai": "^2.4.0",
     "@tailwindcss/vite": "^4.1.14",
     "@types/multer": "^1.4.11",

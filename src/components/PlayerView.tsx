@@ -53,6 +53,7 @@ import { DynamicLightingLayer } from './DynamicLightingLayer';
 import { GridLayer } from './GridLayer';
 import { AnimatedFeaturesKonvaImage, AnimatedFeature, WeatherEffectType } from './AnimatedMapOverlay';
 import { ProceduralSpellEffect } from './ProceduralSpellEffect';
+import { DiceTableOverlay } from './DiceTableOverlay';
 import { WallSegment, VisionConfig, RoomAnnotation, Combatant, isMonsterToken } from '../types';
 import homeBackgroundImage from '../assets/images/home_background.jpg';
 import sceneBackdropImage from '../assets/images/scene_backdrop.jpg';
@@ -3959,6 +3960,16 @@ export default function PlayerView() {
           </div>
         </div>
       )}
+
+      {/* 3D Physics Dice Table Overlay */}
+      <DiceTableOverlay
+        socket={socketRef.current}
+        onCriticalHit={() => {
+          setIsShaking(true);
+          playCriticalHitSound();
+          setTimeout(() => setIsShaking(false), 600);
+        }}
+      />
 
       {/* Toast Notification Container for Player View */}
       <Toaster position="bottom-right" theme="dark" richColors />

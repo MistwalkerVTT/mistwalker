@@ -39,6 +39,8 @@ import { ApiKeyModal } from './components/ApiKeyModal';
 import { CombatTracker } from './components/CombatTracker';
 import { LeftSidebar } from './components/LeftSidebar';
 import { AnimatedMapOverlay, AnimatedFeaturesKonvaImage } from './components/AnimatedMapOverlay';
+import { DiceTableOverlay } from './components/DiceTableOverlay';
+import { DdbDiceRollEvent } from './types/dice';
 import { EffectContextMenu, ContextMenuData } from './components/EffectContextMenu';
 import { ProceduralSpellEffect } from './components/ProceduralSpellEffect';
 import { CampaignBuilderModal } from './components/CampaignBuilderModal';
@@ -1885,6 +1887,38 @@ export default function App() {
     };
     
     setDiceHistory(prev => [newRoll, ...prev].slice(0, 30));
+
+    // Construct 3D dice event
+    const diceEvent: DdbDiceRollEvent = {
+      id: newRoll.id,
+      characterName: 'Dungeon Master',
+      action: 'Dice Tray Roll',
+      formula: diceSummary,
+      diceNotation: dicePool.join('+'),
+      dice: dicePool.map((type, idx) => ({
+        sides: type === 'd100' ? 100 : parseInt(type.substring(1)),
+        result: results[idx],
+        type
+      })),
+      total,
+      isCritical: dicePool.includes('d20') && results[dicePool.indexOf('d20')] === 20,
+      isFumble: dicePool.includes('d20') && results[dicePool.indexOf('d20')] === 1,
+      theme: 'default',
+      themeColor: '#d97706',
+      timestamp: Date.now(),
+      source: 'local'
+    };
+
+    // Broadcast roll to connected players
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', diceEvent);
+    }
+
+    // Trigger local 3D roll
+    if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+      (window as any).__mistwalkerRoll3d(diceEvent);
+    }
+
     setDicePool([]);
     return total;
   };
@@ -7432,6 +7466,12 @@ export default function App() {
           onPanToToken={(id) => setSelectedTokenIds([id])}
         />
       )}
+
+      {/* 3D Physics Dice Table Overlay */}
+      <DiceTableOverlay
+        socket={socketRef.current}
+        onCriticalHit={() => triggerShake(true)}
+      />
 
       {/* Lore Ledger Modal/Panel - REMOVED */}
       {false && (

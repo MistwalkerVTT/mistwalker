@@ -1,6 +1,7 @@
 import { Server } from 'socket.io';
 import { getDdbHeaders } from './ddbService';
 import { Character } from '../src/types/character';
+import { DdbGameLogDaemon } from './ddbGameLogDaemon';
 
 export interface DdbCampaignSummary {
   id: string;
@@ -438,6 +439,11 @@ export class DdbHpSyncDaemon {
   public async setMonitoredCampaign(campaignId: string) {
     this.activeCampaignId = campaignId;
     console.log(`[DdbHpSyncDaemon] Monitoring D&D Beyond campaign: ${campaignId}`);
+    try {
+      DdbGameLogDaemon.getInstance().setMonitoredCampaign(campaignId);
+    } catch (e) {
+      console.warn('[DdbCampaignService] GameLog daemon start note:', e);
+    }
     const data = await fetchDdbCampaignCharacters(campaignId);
     
     this.cachedCharacters = data.characters;

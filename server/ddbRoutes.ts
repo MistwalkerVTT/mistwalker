@@ -16,6 +16,8 @@ import {
   fetchDdbCampaignCharacters,
   DdbHpSyncDaemon
 } from './ddbCampaignService';
+import { DdbGameLogDaemon } from './ddbGameLogDaemon';
+import { DdbDiceRollEvent } from '../src/types/dice';
 
 export const ddbRouter = Router();
 
@@ -270,4 +272,52 @@ ddbRouter.post('/set-token', (req: Request, res: Response) => {
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// GET /api/ddb/gamelog/status - Status of the live dice stream
+ddbRouter.get('/gamelog/status', (req: Request, res: Response) => {
+  const status = DdbGameLogDaemon.getInstance().getStatus();
+  res.json({ status });
+});
+
+// POST /api/ddb/simulate-roll - Broadcast a test or simulated roll
+ddbRouter.post('/simulate-roll', (req: Request, res: Response) => {
+  const {
+    characterName = 'Thorin Oakenshield',
+    playerName = 'Player',
+    action = 'Warhammer Attack',
+    formula = '1d20 + 7',
+    diceNotation = '1d20',
+    dice = [{ sides: 20, result: 18, type: 'd20' }],
+    modifier = 7,
+    total = 25,
+    isCritical = false,
+    isFumble = false,
+    theme = 'default',
+    themeColor = '#d97706',
+    avatarUrl
+  } = req.body;
+
+  const rollEvent: DdbDiceRollEvent = {
+    id: `sim-${Date.now()}`,
+    characterName,
+    playerName,
+    avatarUrl,
+    action,
+    rollType: 'attack',
+    formula,
+    diceNotation,
+    dice,
+    modifier,
+    total,
+    isCritical,
+    isFumble,
+    theme,
+    themeColor,
+    timestamp: Date.now(),
+    source: 'simulation'
+  };
+
+  DdbGameLogDaemon.getInstance().broadcastRoll(rollEvent);
+  res.json({ success: true, roll: rollEvent });
 });

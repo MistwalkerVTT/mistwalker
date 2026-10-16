@@ -10,6 +10,7 @@ import { aiRouter } from "./server/aiRoutes";
 import { ddbRouter } from "./server/ddbRoutes";
 import cors from "cors";
 import { DdbHpSyncDaemon } from "./server/ddbCampaignService";
+import { DdbGameLogDaemon } from "./server/ddbGameLogDaemon";
 
 
 
@@ -55,8 +56,9 @@ async function startServer() {
     }
   });
 
-  // Initialize D&D Beyond real-time HP synchronization daemon
+  // Initialize D&D Beyond real-time HP synchronization daemon & GameLog dice daemon
   DdbHpSyncDaemon.getInstance().init(io);
+  DdbGameLogDaemon.getInstance().init(io);
 
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
@@ -421,6 +423,14 @@ async function startServer() {
 
     socket.on("SYNC_SHAKE", (val: any) => {
       socket.broadcast.emit("SYNC_SHAKE", val);
+    });
+
+    socket.on("SYNC_LOCAL_DICE_ROLL", (data: any) => {
+      socket.broadcast.emit("SYNC_LOCAL_DICE_ROLL", data);
+    });
+
+    socket.on("DDB_DICE_ROLLED", (data: any) => {
+      socket.broadcast.emit("DDB_DICE_ROLLED", data);
     });
 
     socket.on("SYNC_AUDIO", (val: any) => {
