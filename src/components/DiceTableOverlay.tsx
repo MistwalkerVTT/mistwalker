@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import DiceBox from '@3d-dice/dice-box';
 import { io, Socket } from 'socket.io-client';
 import { DdbDiceRollEvent } from '../types/dice';
 import { RollSummaryToast } from './RollSummaryToast';
+import { ThreeDiceEngine, DieRollRequest } from '../graphics/dice/diceEngine';
 
 interface Props {
   socket?: Socket | null;
@@ -15,109 +15,65 @@ export const DiceTableOverlay: React.FC<Props> = ({
   onCriticalHit,
   enabled = true
 }) => {
-  const diceBoxRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [isInitialized, setIsInitialized] = useState(false);
+  const engineRef = useRef<ThreeDiceEngine | null>(null);
   const [activeRollToast, setActiveRollToast] = useState<DdbDiceRollEvent | null>(null);
-  const clearTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Initialize DiceBox instance once container is mounted
+  // Initialize Three.js + Cannon-es 3D physics dice engine
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !containerRef.current) return;
 
-    let isCancelled = false;
-    const box = new DiceBox('#mistwalker-3d-dice-box', {
-      assetPath: '/assets/dice-box/',
-      scale: 6,
-      gravity: 2,
-      theme: 'default',
-      themeColor: '#d97706',
-      shadows: true,
-      sounds: true,
-      offscreen: false // Using onscreen canvas for reliable rendering across all browsers
-    });
-
-    box.init()
-      .then(() => {
-        if (!isCancelled) {
-          diceBoxRef.current = box;
-          setIsInitialized(true);
-        }
-      })
-      .catch((err: any) => {
-        console.warn('[DiceTableOverlay] DiceBox init note (running in standard mode):', err);
-      });
+    const engine = new ThreeDiceEngine(containerRef.current);
+    engineRef.current = engine;
 
     return () => {
-      isCancelled = true;
-      if (clearTimerRef.current) clearTimeout(clearTimerRef.current);
-      try {
-        diceBoxRef.current?.clear();
-      } catch {
-        // Safe disposal
-      }
+      engine.destroy();
+      engineRef.current = null;
     };
   }, [enabled]);
 
-  // Execute 3D physical dice roll animation
+  // Execute 3D physical dice roll animation with predetermined results
   const roll3d = useCallback(async (rollData: DdbDiceRollEvent) => {
     setActiveRollToast(rollData);
 
     // If Nat 20, trigger critical hit screen shake
-    const isCrit = rollData.isCritical || rollData.dice.some(d => d.sides === 20 && d.result === 20);
+    const isCrit = rollData.isCritical || rollData.dice?.some(d => d.sides === 20 && d.result === 20);
     if (isCrit && onCriticalHit) {
       onCriticalHit();
     }
 
-    if (!enabled) return;
-
-    // If dice box is still initializing, wait briefly up to 2.5 seconds
-    let box = diceBoxRef.current;
-    if (!box) {
-      for (let i = 0; i < 25; i++) {
-        await new Promise(r => setTimeout(r, 100));
-        if (diceBoxRef.current) {
-          box = diceBoxRef.current;
-          break;
-        }
-      }
-    }
-
-    if (!box) {
-      console.warn('[DiceTableOverlay] DiceBox canvas not available for 3D physics roll');
-      return;
-    }
+    if (!enabled || !engineRef.current) return;
 
     try {
-      if (clearTimerRef.current) {
-        clearTimeout(clearTimerRef.current);
+      // Build predetermined die requests from incoming payload
+      const requests: DieRollRequest[] = [];
+
+      if (rollData.dice && rollData.dice.length > 0) {
+        for (const d of rollData.dice) {
+          const dieType = d.type || (d.sides === 6 ? 'd6' : 'd20');
+          requests.push({
+            type: dieType,
+            result: d.result,
+            isCritical: d.sides === 20 && d.result === 20,
+            isFumble: d.sides === 20 && d.result === 1
+          });
+        }
+      } else {
+        // Fallback for single d20 total
+        const total = rollData.total ?? 20;
+        const sides = rollData.diceNotation?.toLowerCase().includes('d6') ? 6 : 20;
+        requests.push({
+          type: sides === 6 ? 'd6' : 'd20',
+          result: Math.min(sides, Math.max(1, total)),
+          isCritical: sides === 20 && total === 20,
+          isFumble: sides === 20 && total === 1
+        });
       }
 
-      // Format roll notation from event
-      let notation = rollData.diceNotation || rollData.formula || '1d20';
-      // Clean formula to basic dice notation (e.g. "1d20+5" -> "1d20")
-      const cleanNotationMatch = notation.match(/([0-9]*d[0-9]+)/gi);
-      const cleanNotation = cleanNotationMatch ? cleanNotationMatch.join('+') : '1d20';
-
-      // Always roll with standard basic D&D polyhedral dice (robust default theme)
-      const rollOptions = {
-        theme: 'default',
-        themeColor: '#d97706'
-      };
-
-      console.log('[DiceTableOverlay] 🎲 Rolling basic 3D D&D dice:', cleanNotation);
-      await box.roll(cleanNotation, rollOptions);
-
-      // Auto-clear dice after 4.5 seconds so table remains clean
-      clearTimerRef.current = setTimeout(() => {
-        try {
-          box?.clear();
-        } catch {
-          // Ignore
-        }
-      }, 4500);
+      console.log('[DiceTableOverlay] 🎲 Rolling predetermined 3D dice:', requests);
+      engineRef.current.roll(requests);
     } catch (err) {
-      console.warn('[DiceTableOverlay] Error playing 3D roll:', err);
+      console.warn('[DiceTableOverlay] Error playing 3D predetermined roll:', err);
     }
   }, [enabled, onCriticalHit]);
 
@@ -175,11 +131,11 @@ export const DiceTableOverlay: React.FC<Props> = ({
 
   return (
     <>
-      {/* 3D Dice Box Canvas Container */}
+      {/* 3D Transparent Full-Viewport Overlay directly above Konva stage */}
       <div
-        id="mistwalker-3d-dice-box"
+        id="mistwalker-3d-dice-overlay"
         ref={containerRef}
-        className="fixed inset-0 pointer-events-none z-[82] overflow-hidden"
+        className="fixed inset-0 pointer-events-none z-40 overflow-hidden"
         style={{ width: '100vw', height: '100vh' }}
       />
 
