@@ -2446,9 +2446,9 @@ export default function PlayerView() {
           combatant: {
             ...c,
             name: 'Hidden Creature',
-            hp: undefined,
-            maxHp: undefined,
-            ac: undefined,
+            currentHp: 0,
+            maxHp: 0,
+            ac: 0,
             conditions: []
           },
           token: undefined,
