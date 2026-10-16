@@ -1,0 +1,131 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@keyframes shake {
+  0% { transform: translate(1px, 1px) rotate(0deg); }
+  10% { transform: translate(-1px, -2px) rotate(-1deg); }
+  20% { transform: translate(-3px, 0px) rotate(1deg); }
+  30% { transform: translate(3px, 2px) rotate(0deg); }
+  40% { transform: translate(1px, -1px) rotate(1deg); }
+  50% { transform: translate(-1px, 2px) rotate(-1deg); }
+  60% { transform: translate(-3px, 1px) rotate(0deg); }
+  70% { transform: translate(3px, 1px) rotate(-1deg); }
+  80% { transform: translate(-1px, -1px) rotate(1deg); }
+  90% { transform: translate(1px, 2px) rotate(0deg); }
+  100% { transform: translate(1px, -2px) rotate(-1deg); }
+}
+
+.animate-shake {
+  animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+}
+
+/* Global Scrollbar Theme */
+html, body { background-color: #0c0d10; color: #d4d4d8; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: #0a0a0a; }
+::-webkit-scrollbar-thumb { background: #27272a; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
+
+*::-webkit-scrollbar {
+  width: 6px !important;
+  height: 6px !important;
+}
+
+*::-webkit-scrollbar-track {
+  background: #18181b !important; /* zinc-900 */
+  border-radius: 10px !important;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #3f3f46 !important; /* zinc-700 */
+  border-radius: 10px !important;
+  border: 1px solid #18181b !important; /* zinc-900 */
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: #52525b !important; /* zinc-600 */
+}
+
+/* Emerald variant for tokens menu */
+.custom-scrollbar-emerald::-webkit-scrollbar-thumb {
+  background: rgba(16, 185, 129, 0.5) !important; /* emerald-500/50 */
+}
+
+.sidebar-scrollbar::-webkit-scrollbar {
+  width: 4px !important;
+}
+.sidebar-scrollbar::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+.sidebar-scrollbar::-webkit-scrollbar-thumb {
+  background: #3f3f46 !important;
+  border-radius: 4px !important;
+}
+.sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #71717a !important;
+}
+
+.custom-scrollbar-emerald::-webkit-scrollbar-thumb:hover {
+  background: #10b981 !important; /* emerald-500 */
+}
+
+/* Orange variant for effects menu */
+.custom-scrollbar-orange::-webkit-scrollbar-thumb {
+  background: rgba(249, 115, 22, 0.5) !important; /* orange-500/50 */
+}
+
+.custom-scrollbar-orange::-webkit-scrollbar-thumb:hover {
+  background: #f97316 !important; /* orange-500 */
+}
+
+/* Red variant for conditions menu */
+.custom-scrollbar-red::-webkit-scrollbar-thumb {
+  background: rgba(239, 68, 68, 0.5) !important; /* red-500/50 */
+}
+
+.custom-scrollbar-red::-webkit-scrollbar-thumb:hover {
+  background: #ef4444 !important; /* red-500 */
+}
+
+/* Purple variant for dice history */
+.custom-scrollbar-purple::-webkit-scrollbar-thumb {
+  background: rgba(168, 85, 247, 0.5) !important; /* purple-500/50 */
+}
+
+.custom-scrollbar-purple::-webkit-scrollbar-thumb:hover {
+  background: #a855f7 !important; /* purple-500 */
+}
+
+/* Firefox support */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #3f3f46 #18181b;
+}
+
+.custom-scrollbar-emerald {
+  scrollbar-color: #10b981 #18181b;
+}
+
+.custom-scrollbar-orange {
+  scrollbar-color: #f97316 #18181b;
+}
+
+.custom-scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.custom-scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Ensure Konva canvas elements maintain native pixel dimensions without CSS stretching */
+.konvajs-content canvas {
+  max-width: none !important;
+  max-height: none !important;
+}
+

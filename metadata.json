@@ -1,0 +1,8 @@
+{
+  "name": "MistWalker",
+  "description": "Tactical battlemap generator, fog-of-war campaign board, and D&D AI Chatbot oracle specializing in Keys from the Golden Vault, Vecna: Eve of Ruin, 5e RAW rules, and real-time DM co-piloting.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

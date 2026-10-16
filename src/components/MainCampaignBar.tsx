@@ -1,0 +1,490 @@
+import React, { useState } from 'react';
+import {
+  BookOpen,
+  Save,
+  FolderOpen,
+  FileText,
+  Users,
+  Sliders,
+  Check,
+  AlertCircle,
+  X,
+  Plus,
+  Sparkles,
+  Play,
+  Pencil,
+  DoorOpen,
+  Pentagon,
+  Layers,
+  GraduationCap,
+  Radio,
+  Share2
+} from 'lucide-react';
+import { toast } from 'sonner';
+import { Campaign, Scene } from '../lib/firebase';
+import { CampaignMode } from '../types';
+import { CampaignPdfImporterModal } from './CampaignPdfImporterModal';
+
+interface MainCampaignBarProps {
+  activeSceneInfo: {
+    campaignId: string;
+    chapterId: string;
+    sceneId: string;
+    sceneTitle: string;
+    mapWidth?: number;
+    mapHeight?: number;
+    mapUrl?: string;
+  } | null;
+  activeDmNotes: string;
+  onUpdateDmNotes: (notes: string) => void;
+  campaigns: Campaign[];
+  tokenCount: number;
+  onQuickSave: () => void;
+  isQuickSaving: boolean;
+  onOpenSaveModal: () => void;
+  onOpenLoadModal: () => void;
+  onOpenCampaignManager: () => void;
+  onOpenMonsterCompendium?: () => void;
+  onOpenCharacterCompendium?: () => void;
+  onOpenDdbSync?: () => void;
+  onOpenDndChatbot?: () => void;
+  isFirebaseConnected?: boolean;
+  onRelinkMap?: () => void;
+  onForceSync?: () => void;
+  campaignMode: CampaignMode;
+  onModeChange: (mode: CampaignMode) => void;
+  tool?: string;
+  setTool?: (tool: string) => void;
+  activeMapId?: 'DM1' | 'DM2' | 'DM3';
+  onMapSwitch?: (id: 'DM1' | 'DM2' | 'DM3') => void;
+  onOpenTutorial?: () => void;
+}
+
+export const MainCampaignBar: React.FC<MainCampaignBarProps> = ({
+  activeSceneInfo,
+  activeDmNotes,
+  onUpdateDmNotes,
+  campaigns,
+  tokenCount,
+  onQuickSave,
+  isQuickSaving,
+  onOpenSaveModal,
+  onOpenLoadModal,
+  onOpenCampaignManager,
+  onOpenMonsterCompendium,
+  onOpenCharacterCompendium,
+  onOpenDdbSync,
+  onOpenDndChatbot,
+  onOpenTutorial,
+  isFirebaseConnected = true,
+  onRelinkMap,
+  onForceSync,
+  campaignMode,
+  onModeChange,
+  tool,
+  setTool,
+  activeMapId,
+  onMapSwitch
+}) => {
+  const [showNotesPopover, setShowNotesPopover] = useState(false);
+  const [isPdfImporterOpen, setIsPdfImporterOpen] = useState(false);
+
+  // Find active campaign name
+  const activeCampaign = campaigns.find(c => c.campaignId === activeSceneInfo?.campaignId);
+  const activeChapter = activeCampaign?.chapters.find(ch => ch.chapterId === activeSceneInfo?.chapterId);
+
+  return (
+    <div
+      id="main-campaign-bar"
+      className="absolute top-3 left-4 z-40 flex flex-wrap items-center gap-2 bg-zinc-950/90 backdrop-blur-md border border-zinc-800/90 rounded-2xl px-3 py-1.5 shadow-2xl text-xs font-mono select-none max-w-[calc(100vw-360px)]"
+    >
+      {/* Scene Status Indicator */}
+      {activeSceneInfo ? (
+        <div className="flex items-center gap-2 pr-2 border-r border-zinc-800">
+          <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+          <div className="flex flex-col">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] uppercase font-bold text-zinc-400">Scene:</span>
+              <span className="font-bold text-emerald-300 truncate max-w-[200px]" title={activeSceneInfo.sceneTitle}>
+                {activeSceneInfo.sceneTitle}
+              </span>
+            </div>
+            {activeCampaign && (
+              <span className="text-[9px] text-zinc-500 truncate max-w-[180px]">
+                {activeCampaign.campaignTitle} {activeChapter ? `› ${activeChapter.chapterTitle}` : ''}
+              </span>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 pr-2 border-r border-zinc-800">
+          <div className="w-2 h-2 rounded-full bg-amber-400/80" />
+          <span className="text-[11px] text-zinc-400 font-medium">Unlinked Canvas</span>
+        </div>
+      )}
+
+      {/* Campaign Mode Switcher (Run Campaign vs Creator Mode) */}
+      <div className="flex items-center p-0.5 rounded-xl bg-zinc-900/90 border border-zinc-750 shrink-0 shadow-inner">
+        <button
+          id="btn-mode-run-campaign"
+          onClick={() => onModeChange('run')}
+          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all ${
+            campaignMode === 'run'
+              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30 font-semibold'
+              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
+          }`}
+          title="Run Campaign Mode: Normal wall lines are hidden from view. Doors remain visible and can be clicked to open or close."
+        >
+          <Play className={`w-3.5 h-3.5 ${campaignMode === 'run' ? 'text-emerald-200' : 'text-zinc-400'}`} />
+          <span>Run Campaign</span>
+        </button>
+        <button
+          id="btn-mode-creator"
+          onClick={() => onModeChange('creator')}
+          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all ${
+            campaignMode === 'creator'
+              ? 'bg-amber-500 text-zinc-950 shadow-md shadow-amber-500/30 font-semibold'
+              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
+          }`}
+          title="Campaign Creator Mode: Draw wall lines and doors, configure portals, and edit geometry."
+        >
+          <Pencil className={`w-3.5 h-3.5 ${campaignMode === 'creator' ? 'text-zinc-950' : 'text-zinc-400'}`} />
+          <span>Creator Mode</span>
+        </button>
+      </div>
+
+      {/* Map Layer Slots (DM1, DM2, DM3) */}
+      {onMapSwitch && (
+        <div className="flex items-center p-0.5 rounded-xl bg-zinc-900/90 border border-zinc-750 shrink-0 shadow-inner gap-0.5">
+          <span className="text-[9px] uppercase font-bold font-mono text-zinc-500 px-1.5 select-none">Layer:</span>
+          {(['DM1', 'DM2', 'DM3'] as const).map((slotId) => (
+            <button
+              key={slotId}
+              id={`btn-mainbar-slot-${slotId}`}
+              onClick={() => onMapSwitch(slotId)}
+              className={`px-2 py-1 rounded-lg text-[10px] font-mono font-bold transition-all cursor-pointer ${
+                activeMapId === slotId
+                  ? 'bg-emerald-500 text-zinc-950 shadow-sm font-black'
+                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
+              }`}
+              title={`Switch to Map Layer ${slotId}${activeMapId === slotId ? ' (Active)' : ' (Click to switch)'}`}
+            >
+              {slotId}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Distinct Tools: Wall Tool vs Room Polygon Tool */}
+      {setTool && (
+        <div className="flex items-center p-0.5 rounded-xl bg-zinc-900/90 border border-zinc-750 shrink-0 shadow-inner gap-1">
+          <button
+            id="btn-bar-wall-tool"
+            onClick={() => {
+              if (campaignMode !== 'creator') onModeChange('creator');
+              setTool(tool === 'wall' ? 'select' : 'wall');
+            }}
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+              tool === 'wall'
+                ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30 font-semibold'
+                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
+            }`}
+            title="Wall Tool: Draw solid lines, doors, and windows that block vision and light"
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>Walls</span>
+          </button>
+
+          <button
+            id="btn-bar-polygon-zone-tool"
+            onClick={() => {
+              if (campaignMode !== 'creator') onModeChange('creator');
+              setTool(tool === 'zone' || tool === 'hotspot' ? 'select' : 'zone');
+            }}
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+              tool === 'zone' || tool === 'hotspot'
+                ? 'bg-amber-500 text-zinc-950 shadow-md shadow-amber-500/40 ring-1 ring-amber-400 font-semibold'
+                : 'text-amber-400/90 hover:text-amber-300 hover:bg-zinc-800/60'
+            }`}
+            title="Room Polygon Tool: Draw custom room boundary polygons for DM boxed text, secrets, traps, and PDF citations (Different from Wall Tool)"
+          >
+            <Pentagon className="w-3.5 h-3.5" />
+            <span>Room Polygon Tool</span>
+          </button>
+        </div>
+      )}
+
+      {/* Token Count Pill */}
+      <div className="flex items-center gap-1 text-[11px] text-zinc-300 px-2 py-0.5 rounded-lg bg-zinc-900 border border-zinc-800 shrink-0">
+        <Users className="w-3.5 h-3.5 text-blue-400" />
+        <span>{tokenCount} tokens</span>
+      </div>
+
+      {/* Firebase Cloud Connection Status Pill */}
+      <div
+        className={`flex items-center gap-1.5 text-[10px] font-mono px-2 py-0.5 rounded-lg border shrink-0 transition-colors ${
+          isFirebaseConnected !== false
+            ? 'bg-emerald-950/40 border-emerald-500/30 text-emerald-400'
+            : 'bg-red-950/40 border-red-500/30 text-red-400'
+        }`}
+        title={
+          isFirebaseConnected !== false
+            ? 'Firebase Firestore: Connected & Syncing in Real-Time'
+            : 'Firebase Firestore: Offline or Reconnecting'
+        }
+      >
+        <span
+          className={`w-1.5 h-1.5 rounded-full ${
+            isFirebaseConnected !== false ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'
+          }`}
+        />
+        <span>{isFirebaseConnected !== false ? 'Cloud Sync Online' : 'Cloud Offline'}</span>
+      </div>
+
+      {/* Action Buttons */}
+      <div className="flex items-center gap-1.5 shrink-0">
+        {/* Quick Save Scene */}
+        {activeSceneInfo ? (
+          <button
+            id="btn-quick-save-scene"
+            onClick={onQuickSave}
+            disabled={isQuickSaving}
+            className="px-2.5 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] flex items-center gap-1.5 transition-all shadow-md shadow-emerald-950/40 active:scale-95 disabled:opacity-50"
+            title="Save current token positions, stats, and battlemap to this active scene in Firestore"
+          >
+            {isQuickSaving ? (
+              <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <Save className="w-3.5 h-3.5" />
+            )}
+            <span>Save Scene</span>
+          </button>
+        ) : (
+          <button
+            id="btn-save-to-campaign"
+            onClick={onOpenSaveModal}
+            className="px-2.5 py-1 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[11px] flex items-center gap-1.5 transition-all shadow-md shadow-amber-950/40 active:scale-95"
+            title="Save this map and placed tokens into Campaign Manager"
+          >
+            <Save className="w-3.5 h-3.5" />
+            <span>Save to Campaign</span>
+          </button>
+        )}
+
+        {/* Save As / New Scene */}
+        {activeSceneInfo && (
+          <button
+            id="btn-save-as-new-scene"
+            onClick={onOpenSaveModal}
+            className="px-2 py-1 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700/80 text-[11px] flex items-center gap-1 transition-all"
+            title="Save as a new scene or into another campaign"
+          >
+            <Plus className="w-3 h-3 text-amber-400" />
+            <span>Save As...</span>
+          </button>
+        )}
+
+        {/* Load Campaign Scene */}
+        <button
+          id="btn-main-load-campaign"
+          onClick={onOpenLoadModal}
+          className="px-2.5 py-1 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 hover:text-white border border-zinc-700/80 text-[11px] flex items-center gap-1.5 transition-all"
+          title="Browse and load a saved scene from your campaigns onto the canvas"
+        >
+          <FolderOpen className="w-3.5 h-3.5 text-blue-400" />
+          <span>Load Scene</span>
+        </button>
+
+        {/* Import from Adventure PDF */}
+        <button
+          id="btn-main-import-adventure-pdf"
+          onClick={() => setIsPdfImporterOpen(true)}
+          className="px-2.5 py-1 rounded-xl bg-gradient-to-r from-blue-600/30 to-indigo-600/30 hover:from-blue-600/50 hover:to-indigo-600/50 text-blue-200 border border-blue-500/40 text-[11px] font-bold flex items-center gap-1.5 transition-all shadow-md active:scale-95 cursor-pointer"
+          title="Import from Adventure PDF: Automatically extract battlemaps, room annotations, and dynamic lighting walls from official D&D adventure PDFs"
+        >
+          <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+          <span>Import from Adventure PDF</span>
+        </button>
+
+        {/* Replace / Re-link Battlemap */}
+        {onRelinkMap && (
+          <button
+            id="btn-main-relink-map"
+            onClick={onRelinkMap}
+            className="px-2.5 py-1 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-emerald-300 border border-zinc-700/80 hover:border-emerald-500/50 text-[11px] flex items-center gap-1.5 transition-all"
+            title="Replace or re-link the battlemap image file while strictly preserving all walls, doors, tokens, vision, and fog"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Re-link Map</span>
+          </button>
+        )}
+
+        {/* Force Sync to Players */}
+        {onForceSync && (
+          <button
+            id="btn-main-force-sync-players"
+            onClick={onForceSync}
+            className="px-2.5 py-1 rounded-xl bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 border border-blue-500/40 text-[11px] font-bold flex items-center gap-1.5 transition-all shadow-md active:scale-95 cursor-pointer"
+            title="Force Sync to Players: Immediately broadcast full-resolution battlemap and scene state to all player screens"
+          >
+            <Radio className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
+            <span>Force Sync to Players</span>
+          </button>
+        )}
+
+        {/* Share Player View Link */}
+        <button
+          id="btn-main-share-player-view"
+          onClick={() => {
+            const playerUrl = `${window.location.origin}${window.location.pathname}?view=player`;
+            navigator.clipboard.writeText(playerUrl);
+            toast.success('Player View link copied to clipboard!', {
+              description: playerUrl
+            });
+          }}
+          className="px-2.5 py-1 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/35 text-emerald-300 hover:text-emerald-200 border border-emerald-500/40 text-[11px] font-bold flex items-center gap-1.5 transition-all shadow-md active:scale-95 cursor-pointer"
+          title="Share Player View link: Copy URL for your players"
+        >
+          <Share2 className="w-3.5 h-3.5 text-emerald-400" />
+          <span>Share Player View</span>
+        </button>
+
+        {/* DM Notes Toggle */}
+        <div className="relative">
+          <button
+            id="btn-main-dm-notes"
+            onClick={() => setShowNotesPopover(!showNotesPopover)}
+            className={`px-2 py-1 rounded-xl text-[11px] flex items-center gap-1 transition-all border ${
+              showNotesPopover
+                ? 'bg-amber-500/20 border-amber-500/50 text-amber-300'
+                : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border-zinc-700/80'
+            }`}
+            title="View or edit DM Notes for this encounter"
+          >
+            <FileText className="w-3 h-3 text-amber-400" />
+            <span>Notes</span>
+          </button>
+
+          {showNotesPopover && (
+            <div className="absolute top-8 left-0 z-50 w-80 bg-zinc-950 border border-zinc-800 rounded-2xl p-4 shadow-2xl text-xs flex flex-col space-y-2 animate-in fade-in">
+              <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
+                <span className="font-bold text-zinc-200 font-mono">DM Notes & Secret Lore</span>
+                <button
+                  onClick={() => setShowNotesPopover(false)}
+                  className="text-zinc-500 hover:text-zinc-300"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <textarea
+                rows={5}
+                value={activeDmNotes}
+                onChange={(e) => onUpdateDmNotes(e.target.value)}
+                placeholder="Traps, perception checks, monster tactics, read-aloud text..."
+                className="w-full p-2 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-200 text-xs focus:outline-none focus:border-amber-500 leading-relaxed font-sans"
+              />
+              <div className="flex justify-between items-center pt-1">
+                <span className="text-[10px] text-zinc-500">Saved with scene</span>
+                <button
+                  onClick={() => {
+                    onQuickSave();
+                    setShowNotesPopover(false);
+                  }}
+                  className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold rounded-lg text-[10px] font-mono transition-all"
+                >
+                  Save Notes
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Monster Compendium Link */}
+        {onOpenMonsterCompendium && (
+          <button
+            id="btn-main-open-monster-compendium"
+            onClick={onOpenMonsterCompendium}
+            className="px-2 py-1 rounded-xl bg-red-950/40 hover:bg-red-900/50 text-red-300 border border-red-500/40 text-[11px] font-bold flex items-center gap-1 transition-all"
+            title="Open Monster Compendium, AI Statblock Digester, and Creature Library"
+          >
+            <BookOpen className="w-3.5 h-3.5 text-red-400" />
+            <span>Monsters</span>
+          </button>
+        )}
+
+        {/* Character Compendium Link */}
+        {onOpenCharacterCompendium && (
+          <button
+            id="btn-main-open-character-compendium"
+            onClick={onOpenCharacterCompendium}
+            className="px-2 py-1 rounded-xl bg-amber-950/40 hover:bg-amber-900/50 text-amber-300 border border-amber-500/40 text-[11px] font-bold flex items-center gap-1 transition-all"
+            title="Open Character Compendium, Hero Tokens, and PDF Character Sheets"
+          >
+            <Users className="w-3.5 h-3.5 text-amber-400" />
+            <span>Characters</span>
+          </button>
+        )}
+
+        {/* D&D Beyond Live Sync & Compendium Link */}
+        {onOpenDdbSync && (
+          <button
+            id="btn-main-open-ddb-sync"
+            onClick={onOpenDdbSync}
+            className="px-2.5 py-1 rounded-xl bg-gradient-to-r from-red-950/70 via-slate-900 to-red-950/70 hover:from-red-900/80 hover:to-slate-800 text-amber-200 border border-red-700/60 text-[11px] font-bold flex items-center gap-1.5 transition-all shadow-md active:scale-95 cursor-pointer"
+            title="D&D Beyond: Real-time Character HP Sync & Monster Compendium Ingestion"
+          >
+            <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+            <span>D&D Beyond</span>
+          </button>
+        )}
+
+        {/* Campaign Manager Drawer Link */}
+        <button
+          id="btn-main-open-campaign-manager"
+          onClick={onOpenCampaignManager}
+          className="px-2 py-1 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px] font-bold flex items-center gap-1 transition-all"
+          title="Open Full Campaign Builder and Chapter Hierarchy"
+        >
+          <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+          <span>Manager</span>
+        </button>
+
+        {/* D&D AI Oracle / Chatbot Launcher */}
+        {onOpenDndChatbot && (
+          <button
+            id="btn-main-open-dnd-chatbot"
+            onClick={onOpenDndChatbot}
+            className="px-2.5 py-1 rounded-xl bg-gradient-to-r from-amber-600/30 to-red-600/30 hover:from-amber-600/45 hover:to-red-600/45 text-white border border-amber-500/50 text-[11px] font-bold flex items-center gap-1.5 transition-all shadow-[0_0_12px_rgba(245,158,11,0.25)] active:scale-95"
+            title="Open D&D AI Oracle (Golden Vault & Vecna Expert)"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+            <span>D&D Oracle</span>
+          </button>
+        )}
+
+        {/* Tutorial & DM Guide Launcher */}
+        {onOpenTutorial && (
+          <button
+            id="btn-main-open-tutorial"
+            onClick={onOpenTutorial}
+            className="px-2.5 py-1 rounded-xl bg-indigo-950/50 hover:bg-indigo-900/60 text-indigo-300 hover:text-indigo-200 border border-indigo-500/40 text-[11px] font-bold flex items-center gap-1.5 transition-all shadow-md shadow-indigo-950/40 active:scale-95 cursor-pointer"
+            title="Open Interactive Tutorial & DM Campaign Guide"
+          >
+            <GraduationCap className="w-3.5 h-3.5 text-indigo-400" />
+            <span>Tutorial</span>
+          </button>
+        )}
+      </div>
+
+      {/* Campaign PDF Importer Modal */}
+      <CampaignPdfImporterModal
+        isOpen={isPdfImporterOpen}
+        onClose={() => setIsPdfImporterOpen(false)}
+        campaigns={campaigns}
+        activeCampaignId={activeSceneInfo?.campaignId}
+        activeChapterId={activeSceneInfo?.chapterId}
+      />
+    </div>
+  );
+};
+

@@ -1,0 +1,49 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Production build outputs
+dist/
+build/
+coverage/
+
+# Environment files & Secrets (CRITICAL: NEVER COMMIT SECRETS TO GIT)
+.env
+.env.*
+.env.local
+.env.development
+.env.test
+.env.production
+!.env.example
+
+# Local User Uploads & Media (Avoid committing user uploads to Git repo)
+uploads/*
+!uploads/.gitkeep
+scratch/*
+!scratch/.gitkeep
+
+# Archives & Temporary files
+*.zip
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+mistwalker2.0.zip
+
+# System & Editor files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/
+.system_generated/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*

@@ -1,0 +1,75 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net: default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Connection check
+    match /test/{testId} {
+      allow read: if true;
+    }
+
+    // Campaign Builder Hierarchy
+    match /campaigns/{campaignId} {
+      allow read: if true;
+      allow create, update: if isValidId(campaignId);
+      allow delete: if isValidId(campaignId);
+
+      match /zones/{zoneId} {
+        allow read: if true;
+        allow create, update, delete: if isValidId(zoneId);
+      }
+
+      match /{subcollection=**} {
+        allow read, write: if true;
+      }
+    }
+
+    // Dedicated Map Zones collection
+    match /mapZones/{zoneId} {
+      allow read: if true;
+      allow create, update, delete: if isValidId(zoneId);
+    }
+
+    // Real-time Player Session Synchronization
+    match /activeSession/{sessionId} {
+      allow read: if true;
+      allow create, update: if isValidId(sessionId);
+      allow delete: if isValidId(sessionId);
+    }
+
+    // Uploaded Assets Library (Maps, Tokens, PDFs, Media)
+    match /uploadedAssets/{assetId} {
+      allow read: if true;
+      allow create, update: if isValidId(assetId);
+      allow delete: if isValidId(assetId);
+    }
+
+    // Monster Compendium Collection
+    match /monsters/{monsterId} {
+      allow read: if true;
+      allow create, update: if isValidId(monsterId);
+      allow delete: if isValidId(monsterId);
+    }
+
+    // Character Compendium Collection
+    match /characters/{characterId} {
+      allow read: if true;
+      allow create, update: if isValidId(characterId);
+      allow delete: if isValidId(characterId);
+    }
+
+    // Special Effects Collection (Spell & Environmental Animations)
+    match /special_effects/{effectId} {
+      allow read: if true;
+      allow create, update: if isValidId(effectId);
+      allow delete: if isValidId(effectId);
+    }
+  }
+}

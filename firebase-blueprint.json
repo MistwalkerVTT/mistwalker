@@ -1,0 +1,409 @@
+{
+  "entities": {
+    "campaign": {
+      "collection": "campaigns",
+      "fields": {
+        "campaignId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "campaignTitle": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "createdAt": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "number"
+        },
+        "chapters": {
+          "type": "array"
+        }
+      }
+    },
+    "activeSession": {
+      "collection": "activeSession",
+      "fields": {
+        "sessionId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "campaignId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "chapterId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "sceneId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "sceneTitle": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "mapUrl": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "dmNotes": {
+          "type": "string",
+          "maxLength": 10000
+        },
+        "tokens": {
+          "type": "array"
+        },
+        "roomAnnotations": {
+          "type": "array"
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+
+      }
+    },
+    "uploadedAsset": {
+      "collection": "uploadedAssets",
+      "fields": {
+        "assetId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "type": {
+          "type": "string",
+          "enum": ["map", "token", "pdf", "audio", "other"]
+        },
+        "url": {
+          "type": "string",
+          "maxLength": 500000
+        },
+        "fileType": {
+          "type": "string",
+          "maxLength": 50
+        },
+        "size": {
+          "type": "number"
+        },
+        "fileSizeBytes": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+      }
+    },
+    "mapZone": {
+      "collection": "mapZones",
+      "fields": {
+        "zoneId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "campaignId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "sceneId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "roomNumber": {
+          "type": "string",
+          "maxLength": 50
+        },
+        "roomName": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "label": {
+          "type": "string",
+          "maxLength": 250
+        },
+        "polygonPoints": {
+          "type": "array"
+        },
+        "bounds": {
+          "type": "object"
+        },
+        "boxedText": {
+          "type": "string",
+          "maxLength": 10000
+        },
+        "dmNotes": {
+          "type": "string",
+          "maxLength": 10000
+        },
+        "color": {
+          "type": "string",
+          "maxLength": 50
+        },
+        "pdfSection": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "pdfPage": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+      }
+    },
+    "monster": {
+      "collection": "monsters",
+      "fields": {
+        "monsterId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "size": {
+          "type": "string",
+          "maxLength": 50
+        },
+        "type": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "alignment": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "ac": {
+          "type": "number"
+        },
+        "acNotes": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "hp": {
+          "type": "number"
+        },
+        "hpFormula": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "speed": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "initiativeBonus": {
+          "type": "number"
+        },
+        "str": { "type": "number" },
+        "dex": { "type": "number" },
+        "con": { "type": "number" },
+        "int": { "type": "number" },
+        "wis": { "type": "number" },
+        "cha": { "type": "number" },
+        "savingThrows": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "skills": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "damageResistances": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "damageImmunities": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "conditionImmunities": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "senses": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "languages": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "challenge": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "proficiencyBonus": {
+          "type": "number"
+        },
+        "avatarUrl": {
+          "type": "string",
+          "maxLength": 500000
+        },
+        "statblockImageUrl": {
+          "type": "string",
+          "maxLength": 500000
+        },
+        "traits": {
+          "type": "array"
+        },
+        "actions": {
+          "type": "array"
+        },
+        "bonusActions": {
+          "type": "array"
+        },
+        "reactions": {
+          "type": "array"
+        },
+        "legendaryActions": {
+          "type": "array"
+        },
+        "legendaryDescription": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "source": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "createdAt": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+      }
+    },
+    "character": {
+      "collection": "characters",
+      "fields": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "race": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "classLevel": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "alignment": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "avatarUrl": {
+          "type": "string",
+          "maxLength": 500000
+        },
+        "pdfUrl": {
+          "type": "string",
+          "maxLength": 500000
+        },
+        "pdfName": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "ac": { "type": "number" },
+        "hp": { "type": "number" },
+        "maxHp": { "type": "number" },
+        "speed": { "type": "string", "maxLength": 100 },
+        "stats": { "type": "object" },
+        "features": { "type": "array" },
+        "spells": { "type": "array" },
+        "notes": { "type": "string", "maxLength": 5000 },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      }
+    },
+    "specialEffect": {
+      "collection": "special_effects",
+      "fields": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "category": {
+          "type": "string",
+          "enum": ["spell", "environmental", "custom"]
+        },
+        "shape": {
+          "type": "string",
+          "enum": ["circle", "cone", "line"]
+        },
+        "defaultSize": {
+          "type": "number"
+        },
+        "color": {
+          "type": "string",
+          "maxLength": 50
+        },
+        "imageUrl": {
+          "type": "string",
+          "maxLength": 500000
+        },
+        "thumbnailUrl": {
+          "type": "string",
+          "maxLength": 500000
+        },
+        "isPersistent": {
+          "type": "boolean"
+        },
+        "blendMode": {
+          "type": "string",
+          "enum": ["normal", "screen", "lighter", "multiply"]
+        },
+        "source": {
+          "type": "string",
+          "enum": ["upload", "gemini", "preset"]
+        },
+        "prompt": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "createdAt": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+      }
+    }
+  }
+}

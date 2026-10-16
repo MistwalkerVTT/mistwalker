@@ -1,0 +1,29 @@
+# =============================================================================
+# Render.com Blueprint Specification for MistWalker 3.0
+# Reference: https://render.com/docs/blueprint-spec
+# =============================================================================
+
+services:
+  - type: web
+    name: mistwalker
+    env: node
+    plan: starter # Change to 'free' if deploying without persistent disk
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: GEMINI_API_KEY
+        sync: false # Render will prompt you to enter this securely in the dashboard
+      - key: GEMINI_FALLBACK_KEYS
+        sync: false # Optional backup Gemini keys
+      - key: DND_BEYOND_COBALT_SESSION
+        sync: false # Optional D&D Beyond session cookie
+      - key: ELEVENLABS_API_KEY
+        sync: false # Optional voice generation key
+    # Optional persistent disk for user battlemap uploads on Starter ($7/mo) plan:
+    disk:
+      name: mistwalker-uploads
+      mountPath: /app/uploads
+      sizeGB: 5
