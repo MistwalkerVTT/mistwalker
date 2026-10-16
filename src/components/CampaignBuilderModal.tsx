@@ -50,7 +50,7 @@ import { UploadedAsset, WallSegment, VisionConfig, RoomAnnotation, ChapterPdfDig
 import { PRESET_BATTLEMAPS, PresetBattlemap } from '../data/presetBattlemaps';
 import { digestChapterPdf } from '../services/aiService';
 import { CampaignPdfImporterModal } from './CampaignPdfImporterModal';
-import { DEMO_GV_CAMPAIGN } from '../data/demoCampaignGv';
+import { DEMO_GV_CAMPAIGN, DEMO_GV_CHAPTER, DEMO_GV_SCENE, DEMO_GV_ROOM_ZONES, DEMO_GV_TOKENS, DEMO_GV_PDF_DIGEST } from '../data/demoCampaignGv';
 
 interface CampaignBuilderModalProps {
   isOpen: boolean;
@@ -257,7 +257,27 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
         setExpandedChapters({});
       } else {
         const enriched = list.some(c => c.campaignId === DEMO_GV_CAMPAIGN.campaignId)
-          ? list
+          ? list.map(c => {
+              if (c.campaignId !== DEMO_GV_CAMPAIGN.campaignId) return c;
+              return {
+                ...c,
+                chapters: c.chapters.map(ch => {
+                  if (ch.chapterId !== DEMO_GV_CHAPTER.chapterId) return ch;
+                  return {
+                    ...ch,
+                    pdfDigest: DEMO_GV_PDF_DIGEST,
+                    scenes: ch.scenes.map(sc => {
+                      if (sc.sceneId !== DEMO_GV_SCENE.sceneId) return sc;
+                      return {
+                        ...sc,
+                        roomAnnotations: DEMO_GV_ROOM_ZONES,
+                        tokens: DEMO_GV_TOKENS
+                      };
+                    })
+                  };
+                })
+              };
+            })
           : [DEMO_GV_CAMPAIGN, ...list];
         setCampaigns(enriched);
         if (!selectedCampaignId && enriched.length > 0) {

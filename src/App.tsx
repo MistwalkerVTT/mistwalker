@@ -113,7 +113,7 @@ import { TutorialOverlay } from './components/TutorialOverlay';
 import { useTutorial } from './hooks/useTutorial';
 import { BugReportModal } from './components/BugReportModal';
 import { BugReportManagerModal } from './components/BugReportManagerModal';
-import { DEMO_GV_CAMPAIGN, DEMO_GV_SCENE, DEMO_GV_CHAPTER, DEMO_GV_ROOM_ZONES } from './data/demoCampaignGv';
+import { DEMO_GV_CAMPAIGN, DEMO_GV_SCENE, DEMO_GV_CHAPTER, DEMO_GV_ROOM_ZONES, DEMO_GV_TOKENS } from './data/demoCampaignGv';
 import ReactMarkdown from 'react-markdown';
 import { snapPointToGrid, findNearestWall, segmentsIntersect } from './lib/visionEngine';
 import { Toaster, toast } from 'sonner';
@@ -2622,9 +2622,13 @@ export default function App() {
     }
 
     // 2. Load Tokens
+    let tokenSource = scene.tokens;
+    if (scene.sceneId === DEMO_GV_SCENE.sceneId && (!tokenSource || !tokenSource.some((t: any) => t.isMonster))) {
+      tokenSource = DEMO_GV_TOKENS;
+    }
     let loadedTokens: any[] = [];
-    if (scene.tokens && Array.isArray(scene.tokens)) {
-      loadedTokens = scene.tokens.map((t: any) => {
+    if (tokenSource && Array.isArray(tokenSource)) {
+      loadedTokens = tokenSource.map((t: any) => {
         const isMonster = t.isMonster === true || t.category === 'monster' || t.isPlayer === false || isMonsterToken(t);
         return {
           id: t.id,
@@ -2667,8 +2671,12 @@ export default function App() {
     }
 
     // 5. Load Room Annotations & Polygon Zones (directly tied to the scene, just like walls and doors)
-    if (scene.roomAnnotations && Array.isArray(scene.roomAnnotations) && scene.roomAnnotations.length > 0) {
-      const mapped = scene.roomAnnotations.map(ra => ({
+    let annotationSource = scene.roomAnnotations;
+    if (scene.sceneId === DEMO_GV_SCENE.sceneId && (!annotationSource || annotationSource.length < DEMO_GV_ROOM_ZONES.length)) {
+      annotationSource = DEMO_GV_ROOM_ZONES;
+    }
+    if (annotationSource && Array.isArray(annotationSource) && annotationSource.length > 0) {
+      const mapped = annotationSource.map(ra => ({
         ...ra,
         sceneId: scene.sceneId,
         campaignId: campaignId

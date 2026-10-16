@@ -1,5 +1,5 @@
 import guildhouseMainLevelImg from '../assets/images/guildhouse_main_level.jpg';
-import { Campaign, Scene, Chapter } from '../lib/firebase';
+import { Campaign, Scene, Chapter, SceneToken } from '../lib/firebase';
 import { RoomAnnotation, WallSegment, ChapterPdfDigest } from '../types';
 
 /**
@@ -1279,7 +1279,7 @@ export const DEMO_GV_ROOM_ZONES: RoomAnnotation[] = [
   }
 ];
 
-export const DEMO_GV_TOKENS = [
+export const DEMO_GV_TOKENS: SceneToken[] = [
   {
     "category": "character",
     "y": 1300,
