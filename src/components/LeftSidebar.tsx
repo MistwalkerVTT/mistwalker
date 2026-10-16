@@ -105,6 +105,7 @@ import { DEFAULT_MONSTERS } from '../data/defaultMonsters';
 import { PRESET_BATTLEMAPS, PresetBattlemap } from '../data/presetBattlemaps';
 import { toast } from 'sonner';
 import { SpecialEffectsManager } from './SpecialEffectsManager';
+import { HelpDrawer } from './HelpDrawer';
 
 interface LeftSidebarProps {
   isPlayerView?: boolean;
@@ -248,7 +249,7 @@ interface LeftSidebarProps {
   activeEquippedCustomEffectId?: string | null;
 }
 
-type GroupMenuId = 'maps' | 'zones' | 'fog-grid' | 'lighting' | 'combat' | 'fx' | 'spells' | 'tokens' | 'dice' | 'ai';
+type GroupMenuId = 'maps' | 'zones' | 'fog-grid' | 'lighting' | 'combat' | 'fx' | 'spells' | 'tokens' | 'dice' | 'ai' | 'help';
 
 export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   isPlayerView,
@@ -822,19 +823,27 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
 
         <div className="w-8 h-px bg-zinc-800/80 my-1 shrink-0" />
 
-        {/* Tutorial Guide Trigger Button in Middle Section */}
-        {onStartTutorial && (
-          <div className="relative group shrink-0">
-            <button
-              id="btn-sidebar-tutorial"
-              onClick={onStartTutorial}
-              className="w-11 h-11 rounded-xl flex items-center justify-center transition-all text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/40 hover:border-amber-400/60 shadow-sm cursor-pointer active:scale-95"
-              title="Start Interactive DM Tutorial Guide"
-            >
-              <HelpCircle className="w-5.5 h-5.5" />
-            </button>
-          </div>
-        )}
+        {/* Help & Support Group */}
+        <div className="relative group shrink-0">
+          <button
+            id="group-btn-help"
+            data-tutorial="help-section"
+            onMouseEnter={(e) => handleMouseEnter('help', e)}
+            onMouseLeave={handleMouseLeave}
+            onClick={(e) => handleGroupClick('help', e)}
+            className={`w-11 h-11 rounded-xl flex flex-col items-center justify-center transition-all relative ${
+              activeGroup === 'help'
+                ? 'bg-sky-500/25 text-sky-400 border border-sky-500/60 shadow-[0_0_14px_rgba(56,189,248,0.35)]'
+                : 'text-zinc-400 hover:text-sky-300 hover:bg-zinc-850 hover:border hover:border-zinc-700/60'
+            }`}
+            title="Help, Feature FAQ & AI Assistant"
+          >
+            <HelpCircle className="w-5 h-5" />
+            <span className="text-[6.5px] font-black font-mono tracking-wider text-sky-400 -mt-0.5 leading-none">
+              HELP
+            </span>
+          </button>
+        </div>
 
         {/* Report Bug Trigger Button */}
         {onOpenBugReport && (
@@ -4698,6 +4707,17 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                 </div>
               </div>
             </div>
+          )}
+
+          {/* Help & Support Flyout */}
+          {activeGroup === 'help' && (
+            <HelpDrawer
+              pinnedGroup={pinnedGroup}
+              handleDragStart={handleDragStart}
+              onClose={closeFlyout}
+              onStartTutorial={onStartTutorial}
+              onOpenBugReport={onOpenBugReport}
+            />
           )}
         </div>
       )}

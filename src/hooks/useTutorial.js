@@ -1,51 +1,77 @@
 import { useState, useCallback, useRef } from 'react';
 
 export const TUTORIAL_STEPS = [
-  // Step 1: Campaign Manager & Prebuilt Demo Campaign
+  // Step 1: Side Bar Exploration & Highlights
+  {
+    id: 'sidebar-overview',
+    phase: 'Step 1 of 11: Sidebar Navigation',
+    title: 'Side Bar Exploration & Navigation',
+    description: 'MistWalker organizes all DM controls along the left rail: Maps & Campaigns, Creature Tokens, Dice Roller, Combat Tracker, Tactical Layers (Fog, Walls & Zones), Weather & Spell FX, AI DM Suite, and the Help & Support Center.',
+    taskHint: 'Hover or click each button on the left sidebar to explore their tools',
+    targetSelector: '#group-btn-maps',
+    fallbackSelector: '[data-tutorial="campaign-manager"]',
+    type: 'tour',
+    actionLabel: 'Tour Sidebar Buttons'
+  },
+
+  // Step 2: Campaign Architecture & Loading Golden Vault Main Floor
   {
     id: 'campaign-manager',
-    phase: 'Step 1 of 10: Campaign Architecture',
-    title: 'Campaign Manager & Prebuilt Demo',
-    description: 'The Campaign Manager organizes your entire adventure into campaigns, chapters, and tactical scenes. We will explore using our prebuilt demo: "The Guild from GV" (Keys from the Golden Vault: Masterpiece Imbroglio).',
-    taskHint: 'Click to open Campaign Manager or Load "The Guild from GV" Demo',
+    phase: 'Step 2 of 11: Campaign Architecture',
+    title: 'Campaign Manager & Golden Vault Scene',
+    description: 'The Campaign Manager organizes your adventure into campaigns, chapters, and tactical battle scenes. We will load the prebuilt demo: "Masterpiece Imbroglio: Main Floor" from Keys from the Golden Vault, with walls, door, and 4 room zones already drawn.',
+    taskHint: 'Click to load "Masterpiece Imbroglio: Main Floor"',
     targetSelector: '[data-tutorial="campaign-manager"]',
     fallbackSelector: '#group-btn-maps, #btn-open-campaign-manager-empty-screen',
     type: 'task',
     taskId: 'load-demo-campaign',
-    actionLabel: 'Load "The Guild from GV" Demo'
+    actionLabel: 'Load Masterpiece Imbroglio: Main Floor'
   },
 
-  // Step 2: Creating Scenes & Loading Battlemaps
+  // Step 3: Running a Campaign vs Creator Mode
   {
-    id: 'create-scene-map',
-    phase: 'Step 2 of 10: Scenes & Maps',
-    title: 'Create a Scene & Load a Map',
-    description: 'Each scene represents a tactical battle encounter with its own battlemap image, tokens, and lighting walls. You can upload custom maps, select preset battlemaps, or import full chapters with AI room digests.',
-    taskHint: 'Click "+ Add Scene" in Campaign Manager or select any scene',
-    targetSelector: '[data-tutorial="campaign-manager"]',
-    fallbackSelector: '#group-btn-maps, #btn-open-campaign-manager-empty-screen',
+    id: 'run-campaign-mode',
+    phase: 'Step 3 of 11: Campaign Execution',
+    title: 'Running a Campaign vs Creator Mode',
+    description: 'At the top bar, you can toggle between "Run Campaign" and "Creator Mode". In Run Campaign mode, wall geometry is hidden while doors remain interactive. Token line-of-sight physically blocks Fog of War in real time. In Creator Mode, you can draw and edit walls and zones.',
+    taskHint: 'Observe the Run Campaign / Creator Mode toggle in the top bar',
+    targetSelector: '#btn-mode-run-campaign',
+    fallbackSelector: '#btn-mode-creator, #main-campaign-bar',
     type: 'tour',
-    actionLabel: 'Open Campaign Builder'
+    actionLabel: 'Examine Campaign Modes'
   },
 
-  // Step 3: Drawing Tactical Walls & Doors
+  // Step 4: Drawing Tactical Walls
   {
     id: 'draw-walls',
-    phase: 'Step 3 of 10: Dynamic Walls',
-    title: 'Draw Tactical Walls & Doors',
-    description: 'Open Tactical Layers and choose the Wall Tool. Left-click to place wall nodes that physically block Line of Sight and Fog of War for player vision. Double-click to complete. You can also place doors and toggle them open or closed!',
-    taskHint: 'Click the Tactical Layers button and select the Wall Tool',
+    phase: 'Step 4 of 11: Dynamic Walls',
+    title: 'Draw Tactical Walls',
+    description: 'Under Tactical Layers, choose the Wall Tool. Left-click to start a wall line, click to add corner points, and double-click to finish. Solid walls physically block player vision, light sources, and fog of war.',
+    taskHint: 'Activate the Wall Tool or practice placing wall nodes',
     targetSelector: '[data-tutorial="tactical-layers"]',
-    fallbackSelector: '#group-btn-lighting',
+    fallbackSelector: '#group-btn-lighting, #btn-bar-wall-tool',
     type: 'task',
     taskId: 'draw-walls',
     actionLabel: 'Activate Wall Tool'
   },
 
-  // Step 4: Erasing Walls
+  // Step 5: Adding and Toggling Doors
+  {
+    id: 'doors-operation',
+    phase: 'Step 5 of 11: Interactive Doors',
+    title: 'Add & Operate Interactive Doors',
+    description: 'Doors can be drawn as wall segments with type "door". When closed, doors block line of sight. When you or a player clicks a door, it swings open, instantly allowing light and vision to flood into the adjoining room!',
+    taskHint: 'Inspect or click the center dividing door in the Agile Hand Guildhouse to toggle it open or closed',
+    targetSelector: '#btn-bar-wall-tool',
+    fallbackSelector: '[data-tutorial="tactical-layers"], #group-btn-lighting',
+    type: 'tour',
+    actionLabel: 'Explore Door Operations'
+  },
+
+  // Step 6: Erasing Walls & Doors
   {
     id: 'erase-walls',
-    phase: 'Step 4 of 10: Wall Management',
+    phase: 'Step 6 of 11: Wall Management',
     title: 'Erase & Modify Walls',
     description: 'Need to clear a wall or open a breach? Select the Wall Eraser tool. Click any wall segment to delete it instantly, or click-and-drag across wall lines to slice through multiple walls at once.',
     taskHint: 'Select the Wall Eraser tool or delete any wall segment',
@@ -56,10 +82,10 @@ export const TUTORIAL_STEPS = [
     actionLabel: 'Activate Wall Eraser'
   },
 
-  // Step 5: Drawing Room Polygon Zones
+  // Step 7: Drawing Room Polygon Zones
   {
     id: 'draw-zones',
-    phase: 'Step 5 of 10: Room Zones',
+    phase: 'Step 7 of 11: Room Zones',
     title: 'Draw Room Polygon Zones',
     description: 'Under Tactical Layers, switch to the "Room Zones" tab and click "Draw Polygon". Click corners around any chamber (like Room G10 Parlor or G21 Raven Roost) to map an interactive room zone and link PDF descriptions.',
     taskHint: 'Click Room Zones tab and select Draw Polygon',
@@ -70,27 +96,13 @@ export const TUTORIAL_STEPS = [
     actionLabel: 'Open Room Zones'
   },
 
-  // Step 6: Erasing Room Zones
-  {
-    id: 'erase-zones',
-    phase: 'Step 6 of 10: Zone Management',
-    title: 'Erase & Manage Room Zones',
-    description: 'To remove a room boundary, open the Room Zones list or drawer and click the trash icon. The zone boundary is cleared while your underlying map and tokens remain completely untouched.',
-    taskHint: 'Inspect the room zones list or click delete on any zone',
-    targetSelector: '#subtab-room-zones',
-    fallbackSelector: '[data-tutorial="tactical-layers"], #group-btn-lighting',
-    type: 'task',
-    taskId: 'erase-zones',
-    actionLabel: 'View Room Zones'
-  },
-
-  // Step 7: Right-Click Zone: PDF Info & DM Secret Notes
+  // Step 8: Right-Click Zone: PDF Info & DM Secret Notes
   {
     id: 'zone-details-pdf',
-    phase: 'Step 7 of 10: PDF Briefings & Notes',
+    phase: 'Step 8 of 11: PDF Lore & DM Notes',
     title: 'Right-Click Zone: PDF Lore & DM Secret Notes',
-    description: 'Right-click directly on any room zone on the map (or click its room badge). This opens the Room Briefing Drawer, showing parsed PDF adventure data: room title, boxed read-aloud text, and secret DM notes with trap DCs, secrets, and monster rosters!',
-    taskHint: 'Right-click on any room zone on the canvas or click a room badge',
+    description: 'Right-click directly on any room zone on the canvas (like Area G10 or G21). This opens the Room Briefing Drawer showing parsed PDF adventure data: room title, boxed read-aloud text, and secret DM notes with trap DCs, secrets, and monster rosters!',
+    taskHint: 'Right-click on Room G10 on the canvas or click below to inspect',
     targetSelector: '[data-tutorial="room-zones"]',
     fallbackSelector: '#subtab-room-zones, [data-tutorial="tactical-layers"]',
     type: 'task',
@@ -98,12 +110,12 @@ export const TUTORIAL_STEPS = [
     actionLabel: 'Inspect Demo Zone (G10 Parlor)'
   },
 
-  // Step 8: Broadcasting Description to Players
+  // Step 9: Broadcasting Description to Players
   {
     id: 'broadcast-players',
-    phase: 'Step 8 of 10: Player Immersion',
+    phase: 'Step 9 of 11: Player Immersion',
     title: 'Broadcast Read-Aloud to Players',
-    description: 'In the Room Briefing Drawer, click "Broadcast to Players" (or the radio icon). The boxed read-aloud description immediately displays across all connected Player View screens, with optional voice narration!',
+    description: 'In the Room Briefing Drawer, click "Broadcast to Players". The boxed read-aloud description immediately displays across all connected Player View screens with real-time text and optional voice narration!',
     taskHint: 'Click Broadcast to Players in the room briefing',
     targetSelector: '[data-tutorial="broadcast-readaloud"]',
     fallbackSelector: '#subtab-room-zones, [data-tutorial="tactical-layers"]',
@@ -112,12 +124,12 @@ export const TUTORIAL_STEPS = [
     actionLabel: 'Broadcast Demo Description'
   },
 
-  // Step 9: Spawning Creatures from Compendium
+  // Step 10: Spawning Creatures from Compendium
   {
     id: 'spawn-creatures',
-    phase: 'Step 9 of 10: Compendium Spawning',
+    phase: 'Step 10 of 11: Compendium Spawning',
     title: 'Spawn Creatures from Compendium',
-    description: 'The Room Briefing automatically identifies creatures mentioned in the PDF. Click "Spawn" or "Add to Map" next to any monster (like Bandit, Spy, or Oni) to drop their interactive token directly onto the tactical battlemap with full stats!',
+    description: 'The Room Briefing automatically identifies creatures mentioned in the PDF. Click "Spawn" or "Add to Map" next to any monster (Bandit, Spy, Oni, Assassin) to drop their interactive token directly onto the tactical battlemap with full stats!',
     taskHint: 'Click Spawn Monster or drop any creature token onto the map',
     targetSelector: '[data-tutorial="room-monsters-section"]',
     fallbackSelector: '[data-tutorial="token-menu"], #group-btn-tokens',
@@ -126,17 +138,17 @@ export const TUTORIAL_STEPS = [
     actionLabel: 'Spawn Demo Creature'
   },
 
-  // Step 10: Report Bug Feature
+  // Step 11: Help Section & AI Chatbot Support
   {
-    id: 'report-bug',
-    phase: 'Step 10 of 10: Support & Developer Notes',
-    title: 'Report Bugs & Developer Notes',
-    description: 'Encounter a visual glitch or want to log private notes? Click "Report Bug" anytime to submit notes with auto-captured session diagnostics. Access and manage your logged notes via "Bug Log" in the sidebar.',
-    taskHint: 'Click Report Bug or finish the tutorial',
-    targetSelector: '[data-tutorial="report-bug"]',
-    fallbackSelector: '#btn-report-bug-sidebar, [data-tutorial="combat-tracker"]',
+    id: 'help-section',
+    phase: 'Step 11 of 11: Help & AI Assistant',
+    title: 'Help Section, FAQ & AI Chatbot',
+    description: 'Need assistance or have rule questions? Click the new "Help" button on the left sidebar. It includes a searchable feature FAQ, an embedded AI Assistant chatbot to answer any question, and quick access to restart this tutorial anytime.',
+    taskHint: 'Click the Help icon on the sidebar or finish the tutorial',
+    targetSelector: '#group-btn-help',
+    fallbackSelector: '[data-tutorial="help-section"]',
     type: 'tour',
-    actionLabel: 'Open Bug Reporter'
+    actionLabel: 'Open Help & Support'
   }
 ];
 

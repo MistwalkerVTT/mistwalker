@@ -1604,7 +1604,7 @@ export default function App() {
   const handleLoadDemoGv = () => {
     handleLoadSceneFromCampaign(DEMO_GV_SCENE, DEMO_GV_CAMPAIGN.campaignId, DEMO_GV_CHAPTER.chapterId);
     tutorial.triggerTaskCompletion('load-demo-campaign');
-    toast.success('Loaded "The Guild from GV" demo adventure!');
+    toast.success('Loaded "Masterpiece Imbroglio: Main Floor" with drawn walls and zones!');
   };
 
   const handleActivateWallTool = () => {
@@ -8300,6 +8300,16 @@ export default function App() {
         onBroadcastDemo={handleBroadcastDemo}
         onSpawnDemoMonster={handleSpawnDemoMonster}
         onOpenBugReport={() => setIsBugReportModalOpen(true)}
+        campaignMode={campaignMode}
+        onToggleCampaignMode={() => handleModeChange(campaignMode === 'run' ? 'creator' : 'run')}
+        onToggleDemoDoor={() => {
+          const door = walls.find(w => w.id === 'gv-wall-div-door1' || w.wallType === 'door');
+          if (door) handleToggleDoor(door.id);
+        }}
+        onOpenHelp={() => {
+          const helpBtn = document.querySelector<HTMLButtonElement>('#group-btn-help');
+          if (helpBtn) helpBtn.click();
+        }}
       />
 
       {/* Bug Report Submission Modal */}

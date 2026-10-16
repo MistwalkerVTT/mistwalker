@@ -102,7 +102,7 @@ export const DEMO_GV_PDF_DIGEST: ChapterPdfDigest = {
   digestedAt: Date.now(),
   scenes: [
     {
-      sceneTitle: 'Agile Hand Guildhouse (Ground Floor & Vault)',
+      sceneTitle: 'Masterpiece Imbroglio: Main Floor',
       summary: 'Infiltrating the thieves guildhouse, bypassing security, and recovering Constantori\'s sentient painting.',
       keyNpcs: ['Guildmaster Dusk', 'Gwish (disguised Oni)', 'Jaymont the Sinner', 'Dartinal Livereth'],
       trapsAndHazards: ['G10 Poison Gas Doorknob', 'G27 Gas Canisters behind Frame', 'Floorboard Creaks (Disadvantage on Stealth)'],
@@ -147,8 +147,8 @@ export const DEMO_GV_PDF_DIGEST: ChapterPdfDigest = {
 };
 
 export const DEMO_GV_SCENE: Scene = {
-  sceneId: 'scene-gv-agile-hand-guildhouse',
-  sceneTitle: 'Agile Hand Guildhouse (Ground Floor & Vault)',
+  sceneId: 'scene-gv-masterpiece-main-floor',
+  sceneTitle: 'Masterpiece Imbroglio: Main Floor',
   mapUrl: subterraneanMazeImg,
   dmNotes: 'ADVENTURE: Masterpiece Imbroglio (Keys from the Golden Vault)\nMISSION: Infiltrate the Agile Hand thieves guildhouse and recover Constantori\'s sentient painting.\nSECURITY: Master keys are carried by Guildmaster Dusk (G26) and Gwish (G21).\nSTEALTH: Warped hardwood floorboards give disadvantage on stealth checks in the upper quarters.',
   tokens: [
@@ -216,7 +216,7 @@ export const DEMO_GV_CHAPTER: Chapter = {
 
 export const DEMO_GV_CAMPAIGN: Campaign = {
   campaignId: 'keys-from-golden-vault-agile-hand',
-  campaignTitle: 'The Guild from GV (Agile Hand Guildhouse)',
+  campaignTitle: 'Keys from the Golden Vault (Masterpiece Imbroglio)',
   description: 'Keys from the Golden Vault: Masterpiece Imbroglio. Operatives infiltrate the Agile Hand thieves guildhouse to recover Constantori\'s occult sentient portrait.',
   createdAt: 1700000000000,
   chapters: [DEMO_GV_CHAPTER]

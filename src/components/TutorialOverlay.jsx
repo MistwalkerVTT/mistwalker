@@ -19,8 +19,11 @@ import {
   Plus,
   GripHorizontal,
   Minus,
-  Maximize2
+  Maximize2,
+  RotateCcw,
+  DoorOpen
 } from 'lucide-react';
+import { VirtualMouseSimulator } from './VirtualMouseSimulator';
 
 export const TutorialOverlay = (props) => {
   const {
@@ -43,7 +46,11 @@ export const TutorialOverlay = (props) => {
     onOpenRoomZones,
     onBroadcastDemo,
     onSpawnDemoMonster,
-    onOpenBugReport
+    onOpenBugReport,
+    campaignMode,
+    onToggleCampaignMode,
+    onToggleDemoDoor,
+    onOpenHelp
   } = props || {};
 
   const [targetRect, setTargetRect] = useState(null);
@@ -52,6 +59,8 @@ export const TutorialOverlay = (props) => {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [isMinimized, setIsMinimized] = useState(false);
+  const [mouseSimulatorEnabled, setMouseSimulatorEnabled] = useState(true);
+  const [replayTrigger, setReplayTrigger] = useState(0);
 
   const cardRef = useRef(null);
   const retryTimerRef = useRef(null);
@@ -97,16 +106,17 @@ export const TutorialOverlay = (props) => {
       }
       // General fallbacks based on step id
       if (!el) {
-        if (currentStep.id === 'campaign-manager') el = document.querySelector('#group-btn-maps, #btn-open-campaign-manager-empty-screen');
-        else if (currentStep.id === 'create-scene-map') el = document.querySelector('#group-btn-maps, #btn-open-campaign-manager-empty-screen');
-        else if (currentStep.id === 'draw-walls') el = document.querySelector('#tool-wall, #group-btn-lighting');
+        if (currentStep.id === 'sidebar-overview') el = document.querySelector('#group-btn-maps, [data-tutorial="campaign-manager"]');
+        else if (currentStep.id === 'campaign-manager') el = document.querySelector('#group-btn-maps, #btn-open-campaign-manager-empty-screen');
+        else if (currentStep.id === 'run-campaign-mode') el = document.querySelector('#btn-mode-run-campaign, #btn-mode-creator');
+        else if (currentStep.id === 'draw-walls') el = document.querySelector('#tool-wall, #btn-bar-wall-tool, #group-btn-lighting');
+        else if (currentStep.id === 'doors-operation') el = document.querySelector('#btn-bar-wall-tool, [data-tutorial="tactical-layers"]');
         else if (currentStep.id === 'erase-walls') el = document.querySelector('#btn-sidebar-erase-wall-tool, #group-btn-lighting');
         else if (currentStep.id === 'draw-zones') el = document.querySelector('#btn-sidebar-zone-polygon, #subtab-room-zones, #group-btn-lighting');
-        else if (currentStep.id === 'erase-zones') el = document.querySelector('#subtab-room-zones, #group-btn-lighting');
         else if (currentStep.id === 'zone-details-pdf') el = document.querySelector('#subtab-room-zones, [data-tutorial="room-zones"]');
         else if (currentStep.id === 'broadcast-players') el = document.querySelector('[data-tutorial="broadcast-readaloud"], #btn-broadcast-room-text, #subtab-room-zones');
         else if (currentStep.id === 'spawn-creatures') el = document.querySelector('[data-tutorial="room-monsters-section"], #group-btn-tokens');
-        else if (currentStep.id === 'report-bug') el = document.querySelector('#btn-report-bug-sidebar, [data-tutorial="report-bug"]');
+        else if (currentStep.id === 'help-section') el = document.querySelector('#group-btn-help, [data-tutorial="help-section"]');
       }
 
       if (el) {
@@ -318,6 +328,13 @@ export const TutorialOverlay = (props) => {
         </>
       )}
 
+      {/* Virtual animated cursor demonstrating DM actions on screen */}
+      <VirtualMouseSimulator
+        stepId={currentStep?.id}
+        isEnabled={mouseSimulatorEnabled && isActive}
+        replayTrigger={replayTrigger}
+      />
+
       {/* 
         Floating, Draggable, Minimizable Tutorial Walkthrough Card:
         - pointer-events-auto ONLY on the card itself so user can interact with the card.
@@ -356,6 +373,19 @@ export const TutorialOverlay = (props) => {
           </div>
 
           <div className="flex items-center gap-1 shrink-0">
+            {/* Replay Mouse Action Demonstration */}
+            <button
+              type="button"
+              onClick={() => {
+                setMouseSimulatorEnabled(true);
+                setReplayTrigger(prev => prev + 1);
+              }}
+              className="p-1 rounded-lg text-amber-400 hover:text-amber-300 hover:bg-zinc-800 transition cursor-pointer"
+              title="Replay animated mouse demonstration on screen"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </button>
+
             {/* Minimize / Expand Toggle */}
             <button
               type="button"
@@ -412,9 +442,38 @@ export const TutorialOverlay = (props) => {
             </h3>
 
             {/* Step Description */}
-            <p className="text-xs text-zinc-300 leading-relaxed mb-4">
+            <p className="text-xs text-zinc-300 leading-relaxed mb-3">
               {currentStep.description}
             </p>
+
+            {/* Animated Mouse Mimic Status Indicator & Toggle */}
+            <div className="flex items-center justify-between text-[11px] px-2.5 py-1.5 rounded-lg bg-zinc-900/60 border border-zinc-800/80 mb-3 text-zinc-400">
+              <div className="flex items-center gap-1.5">
+                <span className={`w-2 h-2 rounded-full ${mouseSimulatorEnabled ? 'bg-amber-400 animate-pulse' : 'bg-zinc-600'}`} />
+                <span className="text-[10px] font-mono font-semibold uppercase tracking-wider text-zinc-300">
+                  Mouse Mimic: {mouseSimulatorEnabled ? 'Demonstrating' : 'Paused'}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMouseSimulatorEnabled(true);
+                    setReplayTrigger(prev => prev + 1);
+                  }}
+                  className="text-[10px] font-semibold text-amber-400 hover:text-amber-300 flex items-center gap-0.5 cursor-pointer underline"
+                >
+                  <RotateCcw className="w-2.5 h-2.5" /> Replay Demo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMouseSimulatorEnabled(prev => !prev)}
+                  className="text-[10px] font-mono text-zinc-400 hover:text-zinc-200 cursor-pointer"
+                >
+                  {mouseSimulatorEnabled ? 'Hide Cursor' : 'Show Cursor'}
+                </button>
+              </div>
+            </div>
 
             {/* Interactive Action Box */}
             <div className="mb-4 p-3.5 rounded-xl bg-zinc-900/90 border border-zinc-800 text-xs flex flex-col gap-2.5">
@@ -441,6 +500,14 @@ export const TutorialOverlay = (props) => {
               )}
 
               {/* Direct Action Helpers */}
+              {currentStep.id === 'sidebar-overview' && (
+                <div className="flex flex-col gap-2 pt-1 border-t border-zinc-800">
+                  <div className="text-[11px] text-zinc-300">
+                    The left navigation rail houses all MistWalker VTT tools. The virtual cursor will cycle through each icon, or you can proceed to load the Golden Vault adventure scene.
+                  </div>
+                </div>
+              )}
+
               {currentStep.id === 'campaign-manager' && (
                 <div className="flex flex-col gap-2 pt-1 border-t border-zinc-800">
                   {onLoadDemoCampaign && (
@@ -450,7 +517,7 @@ export const TutorialOverlay = (props) => {
                       className="w-full py-2 px-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-zinc-950 font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-md shadow-amber-500/20 transition cursor-pointer"
                     >
                       <Play className="w-3.5 h-3.5 fill-current" />
-                      <span>Load Demo: The Guild from GV</span>
+                      <span>Load Masterpiece Imbroglio: Main Floor</span>
                     </button>
                   )}
                   {onOpenCampaignBuilder && (
@@ -466,15 +533,14 @@ export const TutorialOverlay = (props) => {
                 </div>
               )}
 
-              {currentStep.id === 'create-scene-map' && onOpenCampaignBuilder && (
+              {currentStep.id === 'run-campaign-mode' && onToggleCampaignMode && (
                 <div className="pt-1 border-t border-zinc-800">
                   <button
                     type="button"
-                    onClick={onOpenCampaignBuilder}
-                    className="w-full py-2 px-3 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                    onClick={onToggleCampaignMode}
+                    className="w-full py-2 px-3 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
                   >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Open Campaign Builder to Add Scene</span>
+                    <span>Switch to {campaignMode === 'run' ? 'Creator Mode (Edit Walls & Zones)' : 'Run Campaign Mode (Doors & Fog)'}</span>
                   </button>
                 </div>
               )}
@@ -492,6 +558,31 @@ export const TutorialOverlay = (props) => {
                 </div>
               )}
 
+              {currentStep.id === 'doors-operation' && (
+                <div className="flex flex-col gap-2 pt-1 border-t border-zinc-800">
+                  {onToggleDemoDoor && (
+                    <button
+                      type="button"
+                      onClick={onToggleDemoDoor}
+                      className="w-full py-2 px-3 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                    >
+                      <DoorOpen className="w-3.5 h-3.5" />
+                      <span>Toggle Center Dividing Door Open / Closed</span>
+                    </button>
+                  )}
+                  {onActivateWallTool && (
+                    <button
+                      type="button"
+                      onClick={onActivateWallTool}
+                      className="w-full py-1.5 px-2 bg-zinc-800 hover:bg-zinc-750 border border-zinc-700 text-zinc-300 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                    >
+                      <Shield className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Activate Wall Tool to Draw New Doors</span>
+                    </button>
+                  )}
+                </div>
+              )}
+
               {currentStep.id === 'erase-walls' && onActivateWallEraser && (
                 <div className="pt-1 border-t border-zinc-800">
                   <button
@@ -505,29 +596,28 @@ export const TutorialOverlay = (props) => {
                 </div>
               )}
 
-              {currentStep.id === 'draw-zones' && onActivateZoneTool && (
-                <div className="pt-1 border-t border-zinc-800">
-                  <button
-                    type="button"
-                    onClick={onActivateZoneTool}
-                    className="w-full py-2 px-3 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
-                  >
-                    <Layers className="w-3.5 h-3.5" />
-                    <span>Activate Room Polygon Tool</span>
-                  </button>
-                </div>
-              )}
-
-              {currentStep.id === 'erase-zones' && onOpenRoomZones && (
-                <div className="pt-1 border-t border-zinc-800">
-                  <button
-                    type="button"
-                    onClick={onOpenRoomZones}
-                    className="w-full py-2 px-3 bg-zinc-800 hover:bg-zinc-750 border border-zinc-700 text-zinc-200 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
-                  >
-                    <Layers className="w-3.5 h-3.5 text-amber-400" />
-                    <span>View Room Zones List</span>
-                  </button>
+              {currentStep.id === 'draw-zones' && (
+                <div className="flex flex-col gap-2 pt-1 border-t border-zinc-800">
+                  {onActivateZoneTool && (
+                    <button
+                      type="button"
+                      onClick={onActivateZoneTool}
+                      className="w-full py-2 px-3 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                    >
+                      <Layers className="w-3.5 h-3.5" />
+                      <span>Activate Room Polygon Tool</span>
+                    </button>
+                  )}
+                  {onOpenRoomZones && (
+                    <button
+                      type="button"
+                      onClick={onOpenRoomZones}
+                      className="w-full py-1.5 px-2 bg-zinc-800 hover:bg-zinc-750 border border-zinc-700 text-zinc-300 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                    >
+                      <Layers className="w-3.5 h-3.5 text-amber-400" />
+                      <span>View Room Zones List</span>
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -539,7 +629,7 @@ export const TutorialOverlay = (props) => {
                     className="w-full py-2 px-3 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
                   >
                     <BookOpen className="w-3.5 h-3.5" />
-                    <span>Open G10 Infiltration Parlor Notes</span>
+                    <span>Open G10 Infiltration Parlor Notes & Lore</span>
                   </button>
                 </div>
               )}
@@ -570,16 +660,28 @@ export const TutorialOverlay = (props) => {
                 </div>
               )}
 
-              {currentStep.id === 'report-bug' && onOpenBugReport && (
-                <div className="pt-1 border-t border-zinc-800">
-                  <button
-                    type="button"
-                    onClick={onOpenBugReport}
-                    className="w-full py-2 px-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md shadow-red-900/30 transition cursor-pointer"
-                  >
-                    <Bug className="w-3.5 h-3.5" />
-                    <span>Open Bug Reporter & DM Notes</span>
-                  </button>
+              {currentStep.id === 'help-section' && (
+                <div className="flex flex-col gap-2 pt-1 border-t border-zinc-800">
+                  {onOpenHelp && (
+                    <button
+                      type="button"
+                      onClick={onOpenHelp}
+                      className="w-full py-2 px-3 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                    >
+                      <HelpCircle className="w-3.5 h-3.5" />
+                      <span>Open Help Drawer & AI Chatbot</span>
+                    </button>
+                  )}
+                  {onOpenBugReport && (
+                    <button
+                      type="button"
+                      onClick={onOpenBugReport}
+                      className="w-full py-1.5 px-2 bg-zinc-800 hover:bg-zinc-750 border border-zinc-700 text-zinc-300 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                    >
+                      <Bug className="w-3.5 h-3.5 text-red-400" />
+                      <span>Open Bug Reporter & DM Notes</span>
+                    </button>
+                  )}
                 </div>
               )}
             </div>
