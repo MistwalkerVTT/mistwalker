@@ -1132,12 +1132,13 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                         onClick={() => {
                           const playerUrl = `${window.location.origin}${window.location.pathname}?view=player`;
                           navigator.clipboard.writeText(playerUrl);
-                          toast.success('Player View link copied to clipboard!', {
+                          window.open(playerUrl, '_blank');
+                          toast.success('Player View link copied to clipboard and opened in new window!', {
                             description: playerUrl
                           });
                         }}
                         className="flex-1 py-2 px-3 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 hover:text-emerald-200 border border-emerald-500/30 hover:border-emerald-400 font-semibold text-xs flex items-center justify-center gap-2 transition-all shadow-sm active:scale-95 cursor-pointer"
-                        title="Copy Player View link to clipboard for your players"
+                        title="Copy Player View link to clipboard and open in a new window"
                       >
                         <Share2 className="w-3.5 h-3.5 text-emerald-400" />
                         <span>Share Player View</span>

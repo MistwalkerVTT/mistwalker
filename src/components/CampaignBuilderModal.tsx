@@ -1200,12 +1200,13 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
               onClick={() => {
                 const playerUrl = `${window.location.origin}${window.location.pathname}?view=player`;
                 navigator.clipboard.writeText(playerUrl);
-                toast.success('Player View link copied to clipboard!', {
+                window.open(playerUrl, '_blank');
+                toast.success('Player View link copied to clipboard and opened in new window!', {
                   description: playerUrl
                 });
               }}
               className="px-3 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 hover:text-emerald-200 border border-emerald-500/30 font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm active:scale-95 cursor-pointer"
-              title="Copy Player View link to clipboard for your players"
+              title="Copy Player View link to clipboard and open in a new window"
             >
               <Share2 className="w-4 h-4 text-emerald-400" />
               <span>Share Player View</span>
