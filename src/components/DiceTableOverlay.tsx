@@ -45,25 +45,50 @@ export const DiceTableOverlay: React.FC<Props> = ({
     if (!enabled || !engineRef.current) return;
 
     try {
-      // Build predetermined die requests from incoming payload
+      // Accurately resolve die types for incoming roll
+      const resolveType = (type?: string, sides?: number): string => {
+        if (type) {
+          const lower = type.toLowerCase();
+          if (lower.includes('100') || lower.includes('%')) return 'd100';
+          if (lower.includes('20')) return 'd20';
+          if (lower.includes('12')) return 'd12';
+          if (lower.includes('10')) return 'd10';
+          if (lower.includes('8')) return 'd8';
+          if (lower.includes('6')) return 'd6';
+          if (lower.includes('4')) return 'd4';
+        }
+        if (sides === 100) return 'd100';
+        if (sides === 20) return 'd20';
+        if (sides === 12) return 'd12';
+        if (sides === 10) return 'd10';
+        if (sides === 8) return 'd8';
+        if (sides === 6) return 'd6';
+        if (sides === 4) return 'd4';
+        return 'd20';
+      };
+
       const requests: DieRollRequest[] = [];
 
       if (rollData.dice && rollData.dice.length > 0) {
         for (const d of rollData.dice) {
-          const dieType = d.type || (d.sides === 6 ? 'd6' : 'd20');
+          const dieType = resolveType(d.type, d.sides);
           requests.push({
             type: dieType,
             result: d.result,
-            isCritical: d.sides === 20 && d.result === 20,
-            isFumble: d.sides === 20 && d.result === 1
+            isCritical: (dieType === 'd20' || d.sides === 20) && d.result === 20,
+            isFumble: (dieType === 'd20' || d.sides === 20) && d.result === 1
           });
         }
       } else {
-        // Fallback for single d20 total
-        const total = rollData.total ?? 20;
-        const sides = rollData.diceNotation?.toLowerCase().includes('d6') ? 6 : 20;
+        // Fallback for roll without explicit dice array
+        const notation = rollData.diceNotation || rollData.formula || '1d20';
+        const match = notation.match(/([0-9]*)d([0-9]+)/i);
+        const sides = match ? parseInt(match[2], 10) : 20;
+        const dieType = resolveType(undefined, sides);
+        const total = rollData.total ?? sides;
+
         requests.push({
-          type: sides === 6 ? 'd6' : 'd20',
+          type: dieType,
           result: Math.min(sides, Math.max(1, total)),
           isCritical: sides === 20 && total === 20,
           isFumble: sides === 20 && total === 1

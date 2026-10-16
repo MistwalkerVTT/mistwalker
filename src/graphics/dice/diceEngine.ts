@@ -1,12 +1,27 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { createD20TextureAtlas, createD6Materials } from './diceTextures';
-import { createD20Bundle, createD6Bundle, DieGeometryBundle } from './diceGeometries';
+import {
+  createD20TextureAtlas,
+  createD12TextureAtlas,
+  createD10TextureAtlas,
+  createD8TextureAtlas,
+  createD6Materials,
+  createD4TextureAtlas
+} from './diceTextures';
+import {
+  createD20Bundle,
+  createD12Bundle,
+  createD10Bundle,
+  createD8Bundle,
+  createD6Bundle,
+  createD4Bundle,
+  DieGeometryBundle
+} from './diceGeometries';
 import { DicePhysicsWorld } from './dicePhysicsWorld';
 
 export interface DieRollRequest {
-  type: string; // 'd20', 'd6', etc.
-  result: number; // Predetermined numerical result (e.g. 17)
+  type: string; // 'd20', 'd12', 'd10', 'd8', 'd6', 'd4', 'd100'
+  result: number; // Predetermined numerical result
   isCritical?: boolean;
   isFumble?: boolean;
 }
@@ -36,10 +51,26 @@ export class ThreeDiceEngine {
   private animFrameId: number | null = null;
   private lastTime = 0;
 
-  // Bundles and shared assets
-  private d20Bundle: DieGeometryBundle;
-  private d6Bundle: DieGeometryBundle;
-  private d20Material: THREE.MeshStandardMaterial;
+  // Bundles for all polyhedral dice
+  private bundles: {
+    d20: DieGeometryBundle;
+    d12: DieGeometryBundle;
+    d10: DieGeometryBundle;
+    d100: DieGeometryBundle;
+    d8: DieGeometryBundle;
+    d6: DieGeometryBundle;
+    d4: DieGeometryBundle;
+  };
+
+  // Materials
+  private materials: {
+    d20: THREE.MeshStandardMaterial;
+    d12: THREE.MeshStandardMaterial;
+    d10: THREE.MeshStandardMaterial;
+    d100: THREE.MeshStandardMaterial;
+    d8: THREE.MeshStandardMaterial;
+    d4: THREE.MeshStandardMaterial;
+  };
 
   // Lifecycle state
   private allSettledTime: number | null = null;
@@ -75,18 +106,19 @@ export class ThreeDiceEngine {
     // Three.js Scene
     this.scene = new THREE.Scene();
 
-    // Perspective Camera positioned above the table looking down
+    // Top-down Perspective Camera (looking directly down on the tabletop, upright facing North)
     this.camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 100);
-    this.camera.position.set(0, 24, 12);
-    this.camera.lookAt(0, 0, 1.5);
+    this.camera.position.set(0, 26, 0);
+    this.camera.up.set(0, 0, -1);
+    this.camera.lookAt(0, 0, 0);
 
     // Studio Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 1.35);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 1.4);
     this.scene.add(ambientLight);
 
-    // Key directional light with soft contact shadows
-    const keyLight = new THREE.DirectionalLight(0xfff5eb, 2.2);
-    keyLight.position.set(10, 30, 14);
+    // Key directional light casting soft contact shadows
+    const keyLight = new THREE.DirectionalLight(0xfff5eb, 2.4);
+    keyLight.position.set(10, 32, 10);
     keyLight.castShadow = true;
     keyLight.shadow.mapSize.width = 2048;
     keyLight.shadow.mapSize.height = 2048;
@@ -99,12 +131,12 @@ export class ThreeDiceEngine {
     keyLight.shadow.bias = -0.0015;
     this.scene.add(keyLight);
 
-    // Rim back-light for edge highlights on resin bevels
-    const rimLight = new THREE.DirectionalLight(0x93c5fd, 0.9);
-    rimLight.position.set(-14, 18, -12);
+    // Rim specular light
+    const rimLight = new THREE.DirectionalLight(0x93c5fd, 0.85);
+    rimLight.position.set(-12, 28, -12);
     this.scene.add(rimLight);
 
-    // Shadow receiver floor (completely transparent except for soft dice shadows)
+    // Shadow receiver floor
     const floorGeo = new THREE.PlaneGeometry(60, 40);
     const floorMat = new THREE.ShadowMaterial({
       opacity: 0.36
@@ -119,17 +151,35 @@ export class ThreeDiceEngine {
     this.physics = new DicePhysicsWorld();
     this.updateViewportPhysicsBounds(width, height);
 
-    // Preload bundles & textures
-    this.d20Bundle = createD20Bundle(1.4);
-    this.d6Bundle = createD6Bundle(1.8);
-    const d20Atlas = createD20TextureAtlas();
-    this.d20Material = new THREE.MeshStandardMaterial({
-      map: d20Atlas,
-      roughness: 0.22,
-      metalness: 0.12,
-      transparent: true,
-      opacity: 1.0
-    });
+    // Preload bundles
+    this.bundles = {
+      d20: createD20Bundle(1.4),
+      d12: createD12Bundle(1.4),
+      d10: createD10Bundle(1.35, false),
+      d100: createD10Bundle(1.35, true),
+      d8: createD8Bundle(1.4),
+      d6: createD6Bundle(1.8),
+      d4: createD4Bundle(1.5)
+    };
+
+    // Preload materials
+    const makeStdMat = (tex: THREE.CanvasTexture) =>
+      new THREE.MeshStandardMaterial({
+        map: tex,
+        roughness: 0.22,
+        metalness: 0.12,
+        transparent: true,
+        opacity: 1.0
+      });
+
+    this.materials = {
+      d20: makeStdMat(createD20TextureAtlas()),
+      d12: makeStdMat(createD12TextureAtlas()),
+      d10: makeStdMat(createD10TextureAtlas(false)),
+      d100: makeStdMat(createD10TextureAtlas(true)),
+      d8: makeStdMat(createD8TextureAtlas()),
+      d4: makeStdMat(createD4TextureAtlas())
+    };
 
     window.addEventListener('resize', this.handleResize);
   }
@@ -145,7 +195,6 @@ export class ThreeDiceEngine {
   };
 
   private updateViewportPhysicsBounds(width: number, height: number) {
-    // Estimate visible tabletop dimensions at camera depth
     const aspect = width / height;
     const visibleHeight = 16;
     const visibleWidth = visibleHeight * aspect;
@@ -155,9 +204,6 @@ export class ThreeDiceEngine {
     });
   }
 
-  /**
-   * Throw dice with predetermined results
-   */
   public roll(diceRequests: DieRollRequest[], onFinished?: () => void) {
     this.clearDice();
     this.onRollFinishedCallback = onFinished;
@@ -177,19 +223,31 @@ export class ThreeDiceEngine {
     }
   }
 
+  private resolveDieKey(type: string): 'd20' | 'd12' | 'd10' | 'd100' | 'd8' | 'd6' | 'd4' {
+    const lower = (type || '').toLowerCase();
+    if (lower.includes('100') || lower.includes('%')) return 'd100';
+    if (lower.includes('20')) return 'd20';
+    if (lower.includes('12')) return 'd12';
+    if (lower.includes('10')) return 'd10';
+    if (lower.includes('8')) return 'd8';
+    if (lower.includes('6')) return 'd6';
+    if (lower.includes('4')) return 'd4';
+    return 'd20';
+  }
+
   private spawnDie(req: DieRollRequest, index: number, totalDice: number) {
-    const isD6 = req.type.toLowerCase().includes('d6');
-    const bundle = isD6 ? this.d6Bundle : this.d20Bundle;
+    const key = this.resolveDieKey(req.type);
+    const bundle = this.bundles[key];
     const targetValue = req.result;
 
     // Create Mesh
     let mesh: THREE.Mesh;
-    if (isD6) {
+    if (key === 'd6') {
       const d6Mats = createD6Materials();
       d6Mats.forEach(m => { m.transparent = true; m.opacity = 1.0; });
       mesh = new THREE.Mesh(bundle.geometry, d6Mats);
     } else {
-      const mat = this.d20Material.clone();
+      const mat = this.materials[key].clone();
       mesh = new THREE.Mesh(bundle.geometry, mat);
     }
     mesh.castShadow = true;
@@ -206,25 +264,24 @@ export class ThreeDiceEngine {
 
     // Spawn location: scattered along top or edges thrown inward towards center
     const side = index % 2 === 0 ? -1 : 1;
-    const startX = (side * (6 + Math.random() * 4)) + ((index - totalDice / 2) * 1.5);
+    const startX = (side * (6 + Math.random() * 4)) + ((index - totalDice / 2) * 1.6);
     const startY = 8 + Math.random() * 3;
-    const startZ = -4 + Math.random() * 8;
+    const startZ = -4 + (Math.random() - 0.5) * 8;
 
     body.position.set(startX, startY, startZ);
 
     // Impulse towards table center
     const targetX = (Math.random() - 0.5) * 4;
-    const targetZ = 1 + (Math.random() - 0.5) * 4;
+    const targetZ = (Math.random() - 0.5) * 4;
     const dirX = targetX - startX;
     const dirZ = targetZ - startZ;
 
-    const speed = 14 + Math.random() * 6;
-    body.velocity.set(dirX * 0.9, -4 - Math.random() * 3, dirZ * 0.9);
+    body.velocity.set(dirX * 0.95, -5 - Math.random() * 3, dirZ * 0.95);
 
-    // Initial chaotic angular spin (20 - 35 rad/s)
-    const spinX = (Math.random() - 0.5) * 50;
-    const spinY = (Math.random() - 0.5) * 50;
-    const spinZ = (Math.random() - 0.5) * 50;
+    // Initial chaotic angular spin (25 - 45 rad/s)
+    const spinX = (Math.random() - 0.5) * 60;
+    const spinY = (Math.random() - 0.5) * 60;
+    const spinZ = (Math.random() - 0.5) * 60;
     body.angularVelocity.set(spinX, spinY, spinZ);
 
     // Random initial orientation
@@ -236,14 +293,14 @@ export class ThreeDiceEngine {
     );
     body.quaternion.normalize();
 
-    // Precompute exact resting quaternion for the target value
-    const targetQuaternion = bundle.getRestingQuaternion(targetValue, 0.25);
+    // Precompute exact resting quaternion for target value (upward towards top-down camera)
+    const targetQuaternion = bundle.getRestingQuaternion(targetValue, 0.12);
 
     this.scene.add(mesh);
     this.physics.world.addBody(body);
 
     this.activeDice.push({
-      id: `die-${index}-${Date.now()}`,
+      id: `die-${key}-${index}-${Date.now()}`,
       mesh,
       body,
       bundle,
@@ -283,8 +340,8 @@ export class ThreeDiceEngine {
           allDiceAreSettled = false;
 
           // Increase physics damping to simulate tabletop friction
-          die.body.angularDamping = 0.85;
-          die.body.linearDamping = 0.75;
+          die.body.angularDamping = 0.88;
+          die.body.linearDamping = 0.78;
 
           const currentQ = new THREE.Quaternion(
             die.body.quaternion.x,
@@ -294,7 +351,7 @@ export class ThreeDiceEngine {
           );
 
           const progress = (elapsed - 1.0) / 0.8;
-          currentQ.slerp(die.targetQuaternion, progress * 0.25);
+          currentQ.slerp(die.targetQuaternion, progress * 0.28);
           die.body.quaternion.set(currentQ.x, currentQ.y, currentQ.z, currentQ.w);
 
           die.mesh.position.copy(die.body.position as any);
@@ -305,15 +362,24 @@ export class ThreeDiceEngine {
           const speed = die.body.velocity.length();
           const angSpeed = die.body.angularVelocity.length();
 
-          if (speed < 0.25 && angSpeed < 0.35) {
+          if (speed < 0.25 && angSpeed < 0.35 || elapsed > 2.2) {
             die.settled = true;
             die.settleTime = now;
             die.body.velocity.set(0, 0, 0);
             die.body.angularVelocity.set(0, 0, 0);
 
-            // Snap final orientation exactly to target face
-            die.mesh.quaternion.copy(die.targetQuaternion);
+            // Settle flat on the table at exact inRadius height
+            die.body.position.y = die.bundle.inRadius;
+            die.body.quaternion.set(
+              die.targetQuaternion.x,
+              die.targetQuaternion.y,
+              die.targetQuaternion.z,
+              die.targetQuaternion.w
+            );
+
+            // Snap final mesh orientation exactly to target face
             die.mesh.position.copy(die.body.position as any);
+            die.mesh.quaternion.copy(die.targetQuaternion);
           } else {
             allDiceAreSettled = false;
             die.mesh.position.copy(die.body.position as any);

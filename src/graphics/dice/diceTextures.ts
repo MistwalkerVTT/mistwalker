@@ -5,9 +5,9 @@ const textureCache = new Map<string, THREE.CanvasTexture>();
 
 export interface DiceThemeOptions {
   primaryColor?: string; // e.g. '#b45309' (amber gold)
-  secondaryColor?: string; // e.g. '#78350f' (deep resin amber)
-  numberColor?: string; // e.g. '#fef08a' (gold white)
-  borderColor?: string; // e.g. '#f59e0b' (burnished gold)
+  secondaryColor?: string; // e.g. '#451a03' (deep resin amber)
+  numberColor?: string; // e.g. '#ffffff' (crisp white)
+  borderColor?: string; // e.g. '#fbbf24' (burnished gold)
 }
 
 const DEFAULT_THEME: Required<DiceThemeOptions> = {
@@ -18,18 +18,22 @@ const DEFAULT_THEME: Required<DiceThemeOptions> = {
 };
 
 /**
- * Generate a 20-face triangular atlas for d20
- * 5 columns x 4 rows of 512x512 equilateral triangle tiles (atlas: 2560 x 2048)
+ * Generic high-resolution procedural canvas texture atlas generator
  */
-export function createD20TextureAtlas(options: DiceThemeOptions = {}): THREE.CanvasTexture {
+export function createPolyhedralAtlas(
+  cachePrefix: string,
+  labels: string[],
+  cols: number,
+  rows: number,
+  shape: 'triangle' | 'pentagon' | 'kite',
+  options: DiceThemeOptions = {}
+): THREE.CanvasTexture {
   const theme = { ...DEFAULT_THEME, ...options };
-  const cacheKey = `d20_${theme.primaryColor}_${theme.numberColor}`;
+  const cacheKey = `${cachePrefix}_${theme.primaryColor}_${theme.numberColor}`;
   if (textureCache.has(cacheKey)) {
     return textureCache.get(cacheKey)!;
   }
 
-  const cols = 5;
-  const rows = 4;
   const tileW = 512;
   const tileH = 512;
   const canvas = document.createElement('canvas');
@@ -42,64 +46,94 @@ export function createD20TextureAtlas(options: DiceThemeOptions = {}): THREE.Can
   ctx.fillStyle = theme.secondaryColor;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  for (let f = 0; f < 20; f++) {
+  for (let f = 0; f < labels.length; f++) {
     const col = f % cols;
     const row = Math.floor(f / cols);
-    const val = f + 1; // 1 to 20
+    const label = labels[f];
 
     const x = col * tileW;
     const y = row * tileH;
     const cx = x + tileW / 2;
     const cy = y + tileH / 2;
 
-    // Draw equilateral triangle bounds inside tile
-    // v0: bottom-left, v1: bottom-right, v2: top apex
-    const pad = 36;
-    const p0 = { x: x + pad, y: y + tileH - pad };
-    const p1 = { x: x + tileW - pad, y: y + tileH - pad };
-    const p2 = { x: cx, y: y + pad };
-
     ctx.save();
     ctx.beginPath();
-    ctx.moveTo(p2.x, p2.y);
-    ctx.lineTo(p1.x, p1.y);
-    ctx.lineTo(p0.x, p0.y);
+
+    if (shape === 'triangle') {
+      const pad = 36;
+      ctx.moveTo(cx, y + pad);
+      ctx.lineTo(x + tileW - pad, y + tileH - pad);
+      ctx.lineTo(x + pad, y + tileH - pad);
+    } else if (shape === 'pentagon') {
+      const r = tileW * 0.44;
+      for (let i = 0; i < 5; i++) {
+        const angle = -Math.PI / 2 + (i * Math.PI * 2) / 5;
+        const px = cx + Math.cos(angle) * r;
+        const py = cy + Math.sin(angle) * r;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+    } else {
+      // Kite / Deltoid (for d10)
+      const pad = 32;
+      ctx.moveTo(cx, y + pad);
+      ctx.lineTo(x + tileW - pad, cy + 40);
+      ctx.lineTo(cx, y + tileH - pad);
+      ctx.lineTo(x + pad, cy + 40);
+    }
+
     ctx.closePath();
     ctx.clip();
 
     // Radial resin depth gradient
-    const grad = ctx.createRadialGradient(cx, cy + 40, 40, cx, cy, tileW / 1.5);
-    if (val === 20) {
-      grad.addColorStop(0, '#d97706');
-      grad.addColorStop(0.7, '#92400e');
+    const grad = ctx.createRadialGradient(cx, cy + 30, 40, cx, cy, tileW / 1.4);
+    if (label === '20') {
+      grad.addColorStop(0, '#f59e0b');
+      grad.addColorStop(0.7, '#b45309');
       grad.addColorStop(1, '#451a03');
-    } else if (val === 1) {
-      grad.addColorStop(0, '#991b1b');
-      grad.addColorStop(0.7, '#7f1d1d');
+    } else if (label === '1' && labels.length === 20) {
+      grad.addColorStop(0, '#dc2626');
+      grad.addColorStop(0.7, '#991b1b');
       grad.addColorStop(1, '#450a0a');
     } else {
       grad.addColorStop(0, theme.primaryColor);
-      grad.addColorStop(0.7, '#78350f');
+      grad.addColorStop(0.7, '#92400e');
       grad.addColorStop(1, theme.secondaryColor);
     }
     ctx.fillStyle = grad;
     ctx.fillRect(x, y, tileW, tileH);
 
     // Subtle metallic edge bevel
-    ctx.strokeStyle = val === 20 ? '#fde047' : theme.borderColor;
+    ctx.strokeStyle = label === '20' ? '#fde047' : theme.borderColor;
     ctx.lineWidth = 14;
     ctx.stroke();
 
     ctx.restore();
 
-    // Inner gold border
+    // Inner gold border accent
     ctx.save();
     ctx.beginPath();
-    ctx.moveTo(p2.x, p2.y + 16);
-    ctx.lineTo(p1.x - 12, p1.y - 10);
-    ctx.lineTo(p0.x + 12, p0.y - 10);
+    if (shape === 'triangle') {
+      ctx.moveTo(cx, y + 54);
+      ctx.lineTo(x + tileW - 48, y + tileH - 46);
+      ctx.lineTo(x + 48, y + tileH - 46);
+    } else if (shape === 'pentagon') {
+      const r = tileW * 0.39;
+      for (let i = 0; i < 5; i++) {
+        const angle = -Math.PI / 2 + (i * Math.PI * 2) / 5;
+        const px = cx + Math.cos(angle) * r;
+        const py = cy + Math.sin(angle) * r;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+    } else {
+      ctx.moveTo(cx, y + 46);
+      ctx.lineTo(x + tileW - 44, cy + 36);
+      ctx.lineTo(cx, y + tileH - 46);
+      ctx.lineTo(x + 44, cy + 36);
+    }
     ctx.closePath();
-    ctx.strokeStyle = val === 20 ? 'rgba(253, 224, 71, 0.85)' : 'rgba(251, 191, 36, 0.45)';
+    ctx.strokeStyle = label === '20' ? 'rgba(253, 224, 71, 0.85)' : 'rgba(251, 191, 36, 0.45)';
     ctx.lineWidth = 4;
     ctx.stroke();
     ctx.restore();
@@ -109,22 +143,22 @@ export function createD20TextureAtlas(options: DiceThemeOptions = {}): THREE.Can
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    const textY = cy + 45; // Offset slightly down to align with triangle visual centroid
+    const textY = shape === 'triangle' ? cy + 46 : (shape === 'kite' ? cy + 12 : cy);
 
-    // Shadow
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
-    ctx.shadowBlur = 12;
+    // Soft drop shadow
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
+    ctx.shadowBlur = 14;
     ctx.shadowOffsetX = 3;
     ctx.shadowOffsetY = 4;
 
-    ctx.font = 'bold 150px "Cinzel", "Times New Roman", Georgia, serif';
-    ctx.fillStyle = val === 20 ? '#fef08a' : (val === 1 ? '#fecaca' : theme.numberColor);
+    const fontSize = label.length > 2 ? 110 : (label.length === 2 ? 130 : 155);
+    ctx.font = `bold ${fontSize}px "Cinzel", "Times New Roman", Georgia, serif`;
+    ctx.fillStyle = label === '20' ? '#fef08a' : (label === '1' && labels.length === 20 ? '#fecaca' : theme.numberColor);
     
-    let label = String(val);
     ctx.fillText(label, cx, textY);
 
-    // Number underline for 6 and 9
-    if (val === 6 || val === 9) {
+    // Number underline dot for 6 and 9
+    if (label === '6' || label === '9') {
       ctx.beginPath();
       ctx.arc(cx, textY + 68, 8, 0, Math.PI * 2);
       ctx.fillStyle = theme.numberColor;
@@ -132,7 +166,7 @@ export function createD20TextureAtlas(options: DiceThemeOptions = {}): THREE.Can
     }
 
     // Nat 20 flare
-    if (val === 20) {
+    if (label === '20') {
       ctx.font = 'bold 36px sans-serif';
       ctx.fillStyle = '#fef08a';
       ctx.fillText('CRIT', cx, textY - 95);
@@ -147,6 +181,33 @@ export function createD20TextureAtlas(options: DiceThemeOptions = {}): THREE.Can
   texture.minFilter = THREE.LinearMipmapLinearFilter;
   textureCache.set(cacheKey, texture);
   return texture;
+}
+
+export function createD20TextureAtlas(options: DiceThemeOptions = {}): THREE.CanvasTexture {
+  const labels = Array.from({ length: 20 }, (_, i) => String(i + 1));
+  return createPolyhedralAtlas('d20', labels, 5, 4, 'triangle', options);
+}
+
+export function createD12TextureAtlas(options: DiceThemeOptions = {}): THREE.CanvasTexture {
+  const labels = Array.from({ length: 12 }, (_, i) => String(i + 1));
+  return createPolyhedralAtlas('d12', labels, 4, 3, 'pentagon', options);
+}
+
+export function createD10TextureAtlas(isPercentile = false, options: DiceThemeOptions = {}): THREE.CanvasTexture {
+  const labels = isPercentile
+    ? ['00', '10', '20', '30', '40', '50', '60', '70', '80', '90']
+    : ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'];
+  return createPolyhedralAtlas(isPercentile ? 'd100' : 'd10', labels, 5, 2, 'kite', options);
+}
+
+export function createD8TextureAtlas(options: DiceThemeOptions = {}): THREE.CanvasTexture {
+  const labels = Array.from({ length: 8 }, (_, i) => String(i + 1));
+  return createPolyhedralAtlas('d8', labels, 4, 2, 'triangle', options);
+}
+
+export function createD4TextureAtlas(options: DiceThemeOptions = {}): THREE.CanvasTexture {
+  const labels = Array.from({ length: 4 }, (_, i) => String(i + 1));
+  return createPolyhedralAtlas('d4', labels, 2, 2, 'triangle', options);
 }
 
 /**
@@ -175,7 +236,7 @@ export function createD6Materials(options: DiceThemeOptions = {}): THREE.MeshSta
     // Resin gradient
     const grad = ctx.createRadialGradient(size / 2, size / 2, 30, size / 2, size / 2, size / 1.5);
     grad.addColorStop(0, theme.primaryColor);
-    grad.addColorStop(0.7, '#78350f');
+    grad.addColorStop(0.7, '#92400e');
     grad.addColorStop(1, theme.secondaryColor);
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, size, size);
@@ -195,9 +256,9 @@ export function createD6Materials(options: DiceThemeOptions = {}): THREE.MeshSta
     // Number
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
-    ctx.shadowBlur = 10;
-    ctx.shadowOffsetX = 2;
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
+    ctx.shadowBlur = 12;
+    ctx.shadowOffsetX = 3;
     ctx.shadowOffsetY = 4;
     ctx.font = 'bold 220px "Cinzel", "Times New Roman", Georgia, serif';
     ctx.fillStyle = theme.numberColor;
@@ -209,7 +270,9 @@ export function createD6Materials(options: DiceThemeOptions = {}): THREE.MeshSta
     materials.push(new THREE.MeshStandardMaterial({
       map: texture,
       roughness: 0.22,
-      metalness: 0.12
+      metalness: 0.12,
+      transparent: true,
+      opacity: 1.0
     }));
   }
 
