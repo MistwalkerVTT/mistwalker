@@ -7,6 +7,7 @@ import {
   ZoomIn,
   ZoomOut,
   RotateCcw,
+  Tv,
   Shield,
   Users,
   User,
@@ -2026,16 +2027,6 @@ export default function PlayerView() {
     });
   }, []);
 
-  // Zoom handlers
-  const handleZoom = useCallback((factor: number) => {
-    setStageScale(prev => Math.max(0.1, Math.min(prev * factor, 5)));
-  }, []);
-
-  const handleResetZoom = useCallback(() => {
-    setStageScale(1);
-    setStagePos({ x: 0, y: 0 });
-  }, []);
-
   // Natural Map Dimensions - Prioritize natural loaded image dimensions
   const naturalW = image?.width || (image as any)?.naturalWidth || 0;
   const naturalH = image?.height || (image as any)?.naturalHeight || 0;
@@ -2045,6 +2036,64 @@ export default function PlayerView() {
   const isRotated = mapRotation % 180 !== 0;
   const targetMapW = isRotated ? mapHeight : mapWidth;
   const targetMapH = isRotated ? mapWidth : mapHeight;
+
+  // Calibrate 1"x1" physical grid scale for a 32-inch 16:9 TV
+  const applyTvScale = useCallback((targetGridSize?: number, targetTokens?: any[]) => {
+    // 32-inch 16:9 TV PPI calculation
+    const screenW = window.screen?.width || window.innerWidth || 1920;
+    const screenH = window.screen?.height || window.innerHeight || 1080;
+    const diagPx = Math.hypot(screenW, screenH);
+    const ppi32 = diagPx / 32; // ~68.84 PPI on standard 1080p, ~137.68 PPI on 4K
+
+    const effectiveGrid = (targetGridSize !== undefined && targetGridSize > 0)
+      ? targetGridSize
+      : (gridSize > 0 ? gridSize : 50);
+
+    // Exact scale factor where 1 grid square = 1 physical inch on a 32" TV
+    const tvScale = Math.max(0.1, Math.min(ppi32 / effectiveGrid, 5));
+
+    // Center on claimed token or active party player token
+    const tokenList = targetTokens || tokens;
+    const primaryToken = tokenList.find(t => t.id === claimedTokenId) ||
+                         tokenList.find(t => t.isPlayer) ||
+                         tokenList[0];
+
+    const currentW = targetMapW || 1920;
+    const currentH = targetMapH || 1080;
+
+    let startX = 0;
+    let startY = 0;
+    if (primaryToken && typeof primaryToken.x === 'number' && typeof primaryToken.y === 'number') {
+      startX = (window.innerWidth / 2) - primaryToken.x * tvScale;
+      startY = (window.innerHeight / 2) - primaryToken.y * tvScale;
+    } else if (currentW > 0 && currentH > 0) {
+      startX = (window.innerWidth - currentW * tvScale) / 2;
+      startY = (window.innerHeight - currentH * tvScale) / 2;
+    }
+
+    setStageScale(tvScale);
+    setStagePos({ x: startX, y: startY });
+  }, [gridSize, tokens, claimedTokenId, targetMapW, targetMapH]);
+
+  // Zoom handlers
+  const handleZoom = useCallback((factor: number) => {
+    setStageScale(prev => Math.max(0.1, Math.min(prev * factor, 5)));
+  }, []);
+
+  const handleResetZoom = useCallback(() => {
+    applyTvScale();
+    toast.info('Reset to 1" grid scale for 32" TV');
+  }, [applyTvScale]);
+
+  // Auto-calibrate 1"x1" scale for 32" TV when a scene or map loads
+  const lastCalibratedSceneRef = useRef<string | null>(null);
+  useEffect(() => {
+    const sceneKey = activeSceneInfo?.sceneId || imageFile;
+    if (sceneKey && sceneKey !== lastCalibratedSceneRef.current && (image || naturalW > 0)) {
+      lastCalibratedSceneRef.current = sceneKey;
+      applyTvScale(gridSize, tokens);
+    }
+  }, [activeSceneInfo?.sceneId, imageFile, image, naturalW, gridSize, applyTvScale, tokens]);
 
   // Claimed Token Data & Character Stats
   const claimedToken = useMemo(() => {
@@ -2657,9 +2706,20 @@ export default function PlayerView() {
           <button
             onClick={handleResetZoom}
             className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
-            title="Reset Zoom & Pan"
+            title="Reset to 1x1 32-inch TV Scale"
           >
             <RotateCcw className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => {
+              applyTvScale();
+              toast.info('Calibrated to 1" grid for 32" TV');
+            }}
+            className="px-2 py-1.5 rounded-lg text-amber-400 hover:text-amber-200 hover:bg-zinc-800 transition-colors flex items-center gap-1.5 text-xs font-semibold"
+            title="Calibrate 1x1 Grid for 32-inch TV Tabletop"
+          >
+            <Tv className="w-4 h-4" />
+            <span className="text-[10px] hidden sm:inline">1" TV</span>
           </button>
           <div className="w-[1px] h-4 bg-zinc-700/60 mx-0.5" />
           <button

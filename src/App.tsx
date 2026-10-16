@@ -1794,6 +1794,40 @@ export default function App() {
     };
   }, [mapType, image, dimensions, videoSize, mapRotation, activeSceneInfo, walls]);
 
+  // Zoom out / fit entire map cleanly into DM Viewport
+  const fitWholeMapToScreen = useCallback((overrideW?: number, overrideH?: number) => {
+    const vpWidth = Math.max(200, (dimensions.width || containerRef.current?.offsetWidth || window.innerWidth) - 64);
+    const vpHeight = Math.max(200, dimensions.height || containerRef.current?.offsetHeight || window.innerHeight);
+
+    const dims = getMapDimensions();
+    const isRotated = mapRotation % 180 !== 0;
+    const rawW = overrideW || (isRotated ? dims.height : dims.width);
+    const rawH = overrideH || (isRotated ? dims.width : dims.height);
+    if (!rawW || !rawH || rawW <= 0 || rawH <= 0) return;
+
+    // 48px padding so map is comfortably contained within the viewport
+    const padding = 48;
+    const availW = Math.max(100, vpWidth - padding * 2);
+    const availH = Math.max(100, vpHeight - padding * 2);
+
+    const fitScale = Math.min(availW / rawW, availH / rawH, 1.0);
+    const posX = (vpWidth - rawW * fitScale) / 2;
+    const posY = (vpHeight - rawH * fitScale) / 2;
+
+    setStageScale(fitScale);
+    setStagePos({ x: posX, y: posY });
+  }, [dimensions, getMapDimensions, mapRotation]);
+
+  // Auto-fit whenever a new map or scene loads in DM view
+  const lastFittedAssetRef = useRef<string | null>(null);
+  useEffect(() => {
+    const currentAssetKey = activeSceneInfo?.sceneId || imageFile || (image ? `${image.src}_${image.width}x${image.height}` : null);
+    if (currentAssetKey && currentAssetKey !== lastFittedAssetRef.current && (image || videoSize.width > 0)) {
+      lastFittedAssetRef.current = currentAssetKey;
+      fitWholeMapToScreen(image?.width || videoSize.width, image?.height || videoSize.height);
+    }
+  }, [image, imageFile, activeSceneInfo?.sceneId, videoSize, fitWholeMapToScreen]);
+
   // Full-state synchronization helper for emitting authoritative map, tokens, and lighting to Player View
   const broadcastFullState = useCallback((customMapUrl?: string) => {
     if (!socketRef.current?.connected) return;
@@ -2497,6 +2531,9 @@ export default function App() {
     });
     setActiveDmNotes(scene.dmNotes || '');
     tutorial.triggerTaskCompletion('load-scene');
+
+    // Automatically fit the entire map inside the DM view
+    fitWholeMapToScreen(scene.mapWidth, scene.mapHeight);
 
     // 7. Socket broadcast: immediately emit SYNC_IMAGE and SYNC_STATE with the authoritative full-resolution URL
     if (socketRef.current?.connected) {
@@ -7124,6 +7161,13 @@ export default function App() {
                 className="p-3 bg-zinc-900/80 backdrop-blur border border-zinc-700 rounded-full text-zinc-300 hover:text-white transition-all shadow-xl"
               >
                 <ZoomOut className="w-6 h-6" />
+              </button>
+              <button 
+                onClick={() => fitWholeMapToScreen()}
+                className="p-3 bg-zinc-900/80 backdrop-blur border border-zinc-700 rounded-full text-amber-400 hover:text-amber-200 hover:border-amber-500/50 transition-all shadow-xl"
+                title="Fit Entire Map in DM View"
+              >
+                <Scan className="w-6 h-6" />
               </button>
             </div>
 
