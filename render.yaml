@@ -8,7 +8,7 @@ services:
     name: mistwalker
     env: node
     plan: starter # Change to 'free' if deploying without persistent disk
-    buildCommand: npm install && npm run build
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
     envVars:
