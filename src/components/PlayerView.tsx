@@ -61,7 +61,8 @@ import {
   DEFAULT_CHARACTERS,
   resolveTokenCharacterStats,
   getCharacterTokenUrl,
-  CHARACTER_TOKEN_IMAGES
+  CHARACTER_TOKEN_IMAGES,
+  isDdbMatch
 } from '../data/defaultCharacters';
 import { Character } from '../types/character';
 import {
@@ -1414,6 +1415,13 @@ export default function PlayerView() {
         maxHp: number;
         tempHp: number;
         ac: number;
+        race?: string;
+        classLevel?: string;
+        playerName?: string;
+        avatarUrl?: string;
+        readonlyUrl?: string;
+        stats?: any;
+        speed?: string;
       }>;
     }) => {
       if (!data.characters || data.characters.length === 0) return;
@@ -1421,59 +1429,60 @@ export default function PlayerView() {
 
       // 1. Update compendium characters
       setCompendiumCharacters(prev => {
-        let changed = false;
-        const next = prev.map(c => {
-          const cName = c.name.toLowerCase().trim();
-          const match = data.characters.find(d => {
-            const dId = String(d.id);
-            const dName = d.name.toLowerCase().trim();
-            return String((c as any).ddbCharacterId) === dId ||
-              c.id === dId ||
-              c.id === `char_ddb_${dId}` ||
-              (cName && (
-                cName === dName ||
-                cName.includes(dName) ||
-                dName.includes(cName) ||
-                (cName.split(/[\s"'(]/)[0] && cName.split(/[\s"'(]/)[0].length >= 3 && cName.split(/[\s"'(]/)[0] === dName.split(/[\s"'(]/)[0])
-              ));
-          });
+        const next = [...prev];
+        data.characters.forEach((d: any) => {
+          const dId = String(d.id);
+          const dName = (d.name || '').trim();
+          const existingIdx = next.findIndex(c =>
+            isDdbMatch(c.name, c.id, (c as any).ddbCharacterId, dId, dName)
+          );
 
-          if (match) {
-            changed = true;
-            return {
-              ...c,
-              ddbCharacterId: String(match.id),
-              hp: match.currentHp,
-              maxHp: match.maxHp,
-              tempHp: match.tempHp || 0,
-              ac: match.ac || c.ac,
+          if (existingIdx >= 0) {
+            const existing = next[existingIdx];
+            next[existingIdx] = {
+              ...existing,
+              ddbCharacterId: dId,
+              hp: d.currentHp,
+              maxHp: d.maxHp,
+              tempHp: d.tempHp || 0,
+              ac: d.ac || existing.ac || 10,
+              avatarUrl: existing.avatarUrl || d.avatarUrl || getCharacterTokenUrl(dName),
               updatedAt: Date.now()
             };
+          } else {
+            const newChar: Character = {
+              id: `char_ddb_${dId}`,
+              ddbCharacterId: dId,
+              name: d.name,
+              race: d.race || 'Humanoid',
+              classLevel: d.classLevel || 'Level 1',
+              alignment: 'Neutral',
+              avatarUrl: d.avatarUrl || getCharacterTokenUrl(dName),
+              ac: d.ac || 10,
+              hp: d.currentHp,
+              maxHp: d.maxHp,
+              tempHp: d.tempHp || 0,
+              speed: d.speed || '30 ft.',
+              stats: d.stats || { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
+              features: [],
+              spells: [],
+              notes: `Imported from D&D Beyond Campaign (Player: ${d.playerName || 'Player'}). Direct URL: ${d.readonlyUrl || ''}`,
+              createdAt: Date.now(),
+              updatedAt: Date.now()
+            };
+            next.push(newChar);
           }
-          return c;
         });
-        return changed ? next : prev;
+        return next;
       });
 
       // 2. Update matching tokens in Player View
       setTokens(prev => {
         let changed = false;
         const next = prev.map(t => {
-          const tName = (t.name || '').toLowerCase().trim();
-          const match = data.characters.find(d => {
-            const dId = String(d.id);
-            const dName = d.name.toLowerCase().trim();
-            return String((t as any).ddbCharacterId) === dId ||
-              String((t as any).characterId) === dId ||
-              String((t as any).characterId) === `char_ddb_${dId}` ||
-              String((t as any).id) === `char_ddb_${dId}` ||
-              (tName && (
-                tName === dName ||
-                tName.includes(dName) ||
-                dName.includes(tName) ||
-                (tName.split(/[\s"'(]/)[0] && tName.split(/[\s"'(]/)[0].length >= 3 && tName.split(/[\s"'(]/)[0] === dName.split(/[\s"'(]/)[0])
-              ));
-          });
+          const match = data.characters.find((d: any) =>
+            isDdbMatch(t.name, (t as any).characterId || t.id, (t as any).ddbCharacterId, String(d.id), (d.name || '').trim())
+          );
 
           if (match) {
             changed = true;
@@ -1509,52 +1518,59 @@ export default function PlayerView() {
     }) => {
       console.log(`[PlayerView] ⚡ D&D Beyond HP Update: ${data.name} -> ${data.currentHp}/${data.maxHp} (temp: ${data.tempHp})`);
       const charIdStr = String(data.characterId);
-      const ddbName = data.name.toLowerCase().trim();
+      const ddbName = (data.name || '').trim();
 
       // 1. Update character in compendiumCharacters state
       setCompendiumCharacters(prev => {
-        return prev.map(c => {
-          const cName = c.name.toLowerCase().trim();
-          const isMatch = String((c as any).ddbCharacterId) === charIdStr ||
-            c.id === charIdStr ||
-            c.id === `char_ddb_${charIdStr}` ||
-            (cName && (
-              cName === ddbName ||
-              cName.includes(ddbName) ||
-              ddbName.includes(cName) ||
-              (cName.split(/[\s"'(]/)[0] && cName.split(/[\s"'(]/)[0].length >= 3 && cName.split(/[\s"'(]/)[0] === ddbName.split(/[\s"'(]/)[0])
-            ));
-
+        let matched = false;
+        const next = prev.map(c => {
+          const isMatch = isDdbMatch(c.name, c.id, (c as any).ddbCharacterId, charIdStr, ddbName);
           if (isMatch) {
+            matched = true;
             return {
               ...c,
               ddbCharacterId: charIdStr,
               hp: data.currentHp,
               maxHp: data.maxHp,
-              tempHp: data.tempHp,
+              tempHp: data.tempHp || 0,
               updatedAt: Date.now()
             };
           }
           return c;
         });
+
+        if (!matched) {
+          const newChar: Character = {
+            id: `char_ddb_${charIdStr}`,
+            ddbCharacterId: charIdStr,
+            name: data.name,
+            race: 'Humanoid',
+            classLevel: 'Level 1',
+            alignment: 'Neutral',
+            avatarUrl: getCharacterTokenUrl(data.name),
+            ac: 10,
+            hp: data.currentHp,
+            maxHp: data.maxHp,
+            tempHp: data.tempHp || 0,
+            speed: '30 ft.',
+            stats: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
+            features: [],
+            spells: [],
+            notes: `Auto-created from D&D Beyond sync`,
+            createdAt: Date.now(),
+            updatedAt: Date.now()
+          };
+          next.push(newChar);
+        }
+
+        return next;
       });
 
       // 2. Update matching tokens in Player View
       setTokens(prev => {
         let changed = false;
         const next = prev.map(t => {
-          const tName = (t.name || '').toLowerCase().trim();
-          const isMatch = String((t as any).ddbCharacterId) === charIdStr ||
-            String((t as any).characterId) === charIdStr ||
-            String((t as any).characterId) === `char_ddb_${charIdStr}` ||
-            String((t as any).id) === `char_ddb_${charIdStr}` ||
-            (tName && (
-              tName === ddbName ||
-              tName.includes(ddbName) ||
-              ddbName.includes(tName) ||
-              (tName.split(/[\s"'(]/)[0] && tName.split(/[\s"'(]/)[0].length >= 3 && tName.split(/[\s"'(]/)[0] === ddbName.split(/[\s"'(]/)[0])
-            ));
-
+          const isMatch = isDdbMatch(t.name, (t as any).characterId || t.id, (t as any).ddbCharacterId, charIdStr, ddbName);
           if (isMatch) {
             changed = true;
             return {
@@ -1563,7 +1579,7 @@ export default function PlayerView() {
               hp: data.currentHp,
               currentHp: data.currentHp,
               maxHp: data.maxHp,
-              tempHp: data.tempHp
+              tempHp: data.tempHp || 0
             };
           }
           return t;
@@ -1604,54 +1620,59 @@ export default function PlayerView() {
         if (Array.isArray(chars) && chars.length > 0) {
           console.log(`[PlayerView] Syncing ${chars.length} D&D Beyond characters on load.`);
           setCompendiumCharacters(prev => {
-            return prev.map(c => {
-              const cName = c.name.toLowerCase().trim();
-              const match = chars.find((d: any) => {
-                const dId = String(d.id);
-                const dName = d.name.toLowerCase().trim();
-                return String((c as any).ddbCharacterId) === dId ||
-                  c.id === dId ||
-                  c.id === `char_ddb_${dId}` ||
-                  (cName && (
-                    cName === dName ||
-                    cName.includes(dName) ||
-                    dName.includes(cName) ||
-                    (cName.split(/[\s"'(]/)[0] && cName.split(/[\s"'(]/)[0].length >= 3 && cName.split(/[\s"'(]/)[0] === dName.split(/[\s"'(]/)[0])
-                  ));
-              });
-              if (match) {
-                return {
-                  ...c,
-                  ddbCharacterId: String(match.id),
-                  hp: match.currentHp,
-                  maxHp: match.maxHp,
-                  tempHp: match.tempHp || 0,
-                  ac: match.ac || c.ac,
+            const next = [...prev];
+            chars.forEach((d: any) => {
+              const dId = String(d.id);
+              const dName = (d.name || '').trim();
+              const existingIdx = next.findIndex(c =>
+                isDdbMatch(c.name, c.id, (c as any).ddbCharacterId, dId, dName)
+              );
+
+              if (existingIdx >= 0) {
+                const existing = next[existingIdx];
+                next[existingIdx] = {
+                  ...existing,
+                  ddbCharacterId: dId,
+                  hp: d.currentHp,
+                  maxHp: d.maxHp,
+                  tempHp: d.tempHp || 0,
+                  ac: d.ac || existing.ac || 10,
+                  avatarUrl: existing.avatarUrl || d.avatarUrl || getCharacterTokenUrl(dName),
                   updatedAt: Date.now()
                 };
+              } else {
+                const newChar: Character = {
+                  id: `char_ddb_${dId}`,
+                  ddbCharacterId: dId,
+                  name: d.name,
+                  race: d.race || 'Humanoid',
+                  classLevel: d.classLevel || 'Level 1',
+                  alignment: 'Neutral',
+                  avatarUrl: d.avatarUrl || getCharacterTokenUrl(dName),
+                  ac: d.ac || 10,
+                  hp: d.currentHp,
+                  maxHp: d.maxHp,
+                  tempHp: d.tempHp || 0,
+                  speed: d.speed || '30 ft.',
+                  stats: d.stats || { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
+                  features: [],
+                  spells: [],
+                  notes: `Imported from D&D Beyond Campaign (Player: ${d.playerName || 'Player'}). Direct URL: ${d.readonlyUrl || ''}`,
+                  createdAt: Date.now(),
+                  updatedAt: Date.now()
+                };
+                next.push(newChar);
               }
-              return c;
             });
+            return next;
           });
 
           setTokens(prev => {
             let changed = false;
             const next = prev.map(t => {
-              const tName = (t.name || '').toLowerCase().trim();
-              const match = chars.find((d: any) => {
-                const dId = String(d.id);
-                const dName = d.name.toLowerCase().trim();
-                return String((t as any).ddbCharacterId) === dId ||
-                  String((t as any).characterId) === dId ||
-                  String((t as any).characterId) === `char_ddb_${dId}` ||
-                  String((t as any).id) === `char_ddb_${dId}` ||
-                  (tName && (
-                    tName === dName ||
-                    tName.includes(dName) ||
-                    dName.includes(tName) ||
-                    (tName.split(/[\s"'(]/)[0] && tName.split(/[\s"'(]/)[0].length >= 3 && tName.split(/[\s"'(]/)[0] === dName.split(/[\s"'(]/)[0])
-                  ));
-              });
+              const match = chars.find((d: any) =>
+                isDdbMatch(t.name, (t as any).characterId || t.id, (t as any).ddbCharacterId, String(d.id), (d.name || '').trim())
+              );
               if (match) {
                 changed = true;
                 return {

@@ -892,6 +892,7 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
                   <button
                     type="button"
                     id="btn-broadcast-room-text"
+                    data-tutorial="broadcast-readaloud"
                     onClick={handleBroadcast}
                     disabled={isBroadcasting}
                     className={`w-full mt-1 py-2 px-3 rounded-xl font-mono text-xs font-bold flex items-center justify-center gap-2 border transition-all cursor-pointer ${
@@ -1196,7 +1197,10 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
                 };
 
                 return (
-                  <div className={`flex flex-col gap-3 p-4 rounded-2xl bg-red-950/20 border border-red-900/40 shadow-lg transition-all duration-200 shrink-0 relative ${showMonsterSelect ? 'z-30' : 'z-10'}`}>
+                  <div 
+                    data-tutorial="room-monsters-section"
+                    className={`flex flex-col gap-3 p-4 rounded-2xl bg-red-950/20 border border-red-900/40 shadow-lg transition-all duration-200 shrink-0 relative ${showMonsterSelect ? 'z-30' : 'z-10'}`}
+                  >
                     {/* Collapsible Header */}
                     <div
                       className="flex items-center justify-between cursor-pointer select-none group w-full"

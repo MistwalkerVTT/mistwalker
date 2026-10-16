@@ -58,6 +58,8 @@ import {
   Video,
   Waves,
   CloudRain,
+  Bug,
+  FileText,
   Droplets,
   Play,
   Pause,
@@ -239,6 +241,8 @@ interface LeftSidebarProps {
   onHoverZone?: (zoneId: string | null) => void;
   currentMapImage?: string;
   onStartTutorial?: () => void;
+  onOpenBugReport?: () => void;
+  onOpenBugManager?: () => void;
   onEquipCustomEffect?: (effect: CustomSpecialEffect) => void;
   onQuickPlaceCustomEffect?: (effect: CustomSpecialEffect) => void;
   activeEquippedCustomEffectId?: string | null;
@@ -378,6 +382,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   onHoverZone,
   currentMapImage,
   onStartTutorial,
+  onOpenBugReport,
+  onOpenBugManager,
   onEquipCustomEffect,
   onQuickPlaceCustomEffect,
   activeEquippedCustomEffectId
@@ -826,6 +832,35 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
               title="Start Interactive DM Tutorial Guide"
             >
               <HelpCircle className="w-5.5 h-5.5" />
+            </button>
+          </div>
+        )}
+
+        {/* Report Bug Trigger Button */}
+        {onOpenBugReport && (
+          <div className="relative group shrink-0">
+            <button
+              id="btn-report-bug-sidebar"
+              data-tutorial="report-bug"
+              onClick={onOpenBugReport}
+              className="w-11 h-11 rounded-xl flex items-center justify-center transition-all text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 hover:border-rose-400/50 shadow-sm cursor-pointer active:scale-95"
+              title="Report a Bug & Issue Notes"
+            >
+              <Bug className="w-5 h-5" />
+            </button>
+          </div>
+        )}
+
+        {/* Bug Log & DM Notes Manager Trigger Button */}
+        {onOpenBugManager && (
+          <div className="relative group shrink-0">
+            <button
+              id="btn-sidebar-bug-manager"
+              onClick={onOpenBugManager}
+              className="w-11 h-11 rounded-xl flex items-center justify-center transition-all text-zinc-400 hover:text-amber-300 bg-zinc-900/60 hover:bg-zinc-850 border border-zinc-800 hover:border-amber-500/40 shadow-sm cursor-pointer active:scale-95"
+              title="Bug Log & DM Developer Notes"
+            >
+              <FileText className="w-5 h-5" />
             </button>
           </div>
         )}

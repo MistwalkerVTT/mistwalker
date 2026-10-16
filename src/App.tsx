@@ -50,7 +50,7 @@ import { MonsterCompendiumModal } from './components/MonsterCompendiumModal';
 import { CharacterCompendiumModal } from './components/CharacterCompendiumModal';
 import { DdbSyncModal } from './components/DdbSyncModal';
 import { DEFAULT_MONSTERS } from './data/defaultMonsters';
-import { DEFAULT_CHARACTERS, getCharacterTokenUrl, resolveTokenCharacterStats } from './data/defaultCharacters';
+import { DEFAULT_CHARACTERS, getCharacterTokenUrl, resolveTokenCharacterStats, isDdbMatch } from './data/defaultCharacters';
 import { Monster, getSizeMultiplier } from './types/monster';
 import { Character } from './types/character';
 import {
@@ -77,7 +77,8 @@ import {
   deleteMapZone,
   cleanupZonesExceptScene,
   subscribeToMonsters,
-  subscribeToCharacters
+  subscribeToCharacters,
+  saveCharacter
 } from './lib/firebase';
 import { getImageNaturalDimensions, getVideoNaturalDimensions, isVideoAsset, getLocalAsset } from './lib/storageCache';
 import { io } from 'socket.io-client';
@@ -108,6 +109,9 @@ import { RoomBriefingDrawer } from './components/RoomBriefingDrawer';
 import { GridLayer } from './components/GridLayer';
 import { TutorialOverlay } from './components/TutorialOverlay';
 import { useTutorial } from './hooks/useTutorial';
+import { BugReportModal } from './components/BugReportModal';
+import { BugReportManagerModal } from './components/BugReportManagerModal';
+import { DEMO_GV_CAMPAIGN, DEMO_GV_SCENE, DEMO_GV_CHAPTER, DEMO_GV_ROOM_ZONES } from './data/demoCampaignGv';
 import ReactMarkdown from 'react-markdown';
 import { snapPointToGrid, findNearestWall, segmentsIntersect } from './lib/visionEngine';
 import { Toaster, toast } from 'sonner';
@@ -1168,6 +1172,8 @@ export default function App() {
   const [showDdbModal, setShowDdbModal] = useState(false);
   const [characterCompendiumInitialSearch, setCharacterCompendiumInitialSearch] = useState<string>('');
   const [compendiumCharacters, setCompendiumCharacters] = useState<Character[]>(DEFAULT_CHARACTERS);
+  const [isBugReportModalOpen, setIsBugReportModalOpen] = useState<boolean>(false);
+  const [isBugManagerModalOpen, setIsBugManagerModalOpen] = useState<boolean>(false);
 
   useEffect(() => {
     const unsub = subscribeToCharacters((remoteChars) => {
@@ -1187,7 +1193,7 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // Auto-sync D&D Beyond party health on initial load
+  // Auto-sync D&D Beyond party health on initial load and persist to Firestore
   useEffect(() => {
     fetch('/api/ddb/campaigns/sync-status')
       .then(res => res.json())
@@ -1196,54 +1202,73 @@ export default function App() {
         if (Array.isArray(chars) && chars.length > 0) {
           console.log(`[D&D Beyond] Syncing ${chars.length} campaign characters on initial load.`);
           setCompendiumCharacters(prev => {
-            return prev.map(c => {
-              const cName = c.name.toLowerCase().trim();
-              const match = chars.find((d: any) => {
-                const dId = String(d.id);
-                const dName = d.name.toLowerCase().trim();
-                return String((c as any).ddbCharacterId) === dId ||
-                  c.id === dId ||
-                  c.id === `char_ddb_${dId}` ||
-                  (cName && (
-                    cName === dName ||
-                    cName.includes(dName) ||
-                    dName.includes(cName) ||
-                    (cName.split(/[\s"'(]/)[0] && cName.split(/[\s"'(]/)[0].length >= 3 && cName.split(/[\s"'(]/)[0] === dName.split(/[\s"'(]/)[0])
-                  ));
-              });
-              if (match) {
-                return {
-                  ...c,
-                  ddbCharacterId: String(match.id),
-                  hp: match.currentHp,
-                  maxHp: match.maxHp,
-                  tempHp: match.tempHp || 0,
-                  ac: match.ac || c.ac,
+            const next = [...prev];
+            const toSave: Character[] = [];
+
+            chars.forEach((d: any) => {
+              const dId = String(d.id);
+              const dName = (d.name || '').trim();
+              const existingIdx = next.findIndex(c =>
+                isDdbMatch(c.name, c.id, (c as any).ddbCharacterId, dId, dName)
+              );
+
+              if (existingIdx >= 0) {
+                const existing = next[existingIdx];
+                const updated: Character = {
+                  ...existing,
+                  ddbCharacterId: dId,
+                  hp: d.currentHp,
+                  maxHp: d.maxHp,
+                  tempHp: d.tempHp || 0,
+                  ac: d.ac || existing.ac || 10,
+                  avatarUrl: existing.avatarUrl || d.avatarUrl || getCharacterTokenUrl(dName),
                   updatedAt: Date.now()
                 };
+                next[existingIdx] = updated;
+                toSave.push(updated);
+              } else {
+                const newChar: Character = {
+                  id: `char_ddb_${dId}`,
+                  ddbCharacterId: dId,
+                  name: d.name,
+                  race: d.race || 'Humanoid',
+                  classLevel: d.classLevel || 'Level 1',
+                  alignment: 'Neutral',
+                  avatarUrl: d.avatarUrl || getCharacterTokenUrl(dName),
+                  ac: d.ac || 10,
+                  hp: d.currentHp,
+                  maxHp: d.maxHp,
+                  tempHp: d.tempHp || 0,
+                  speed: d.speed || '30 ft.',
+                  stats: d.stats || { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
+                  features: [],
+                  spells: [],
+                  notes: `Imported from D&D Beyond Campaign (Player: ${d.playerName || 'Player'}). Direct URL: ${d.readonlyUrl || ''}`,
+                  createdAt: Date.now(),
+                  updatedAt: Date.now()
+                };
+                next.push(newChar);
+                toSave.push(newChar);
               }
-              return c;
             });
+
+            toSave.forEach(char => {
+              saveCharacter(char).catch(err =>
+                console.warn('[D&D Beyond Auto-Sync] Failed to persist character:', char.name, err)
+              );
+            });
+
+            return next;
           });
 
           setTokens(prev => {
-            return prev.map(t => {
-              const tName = (t.name || '').toLowerCase().trim();
-              const match = chars.find((d: any) => {
-                const dId = String(d.id);
-                const dName = d.name.toLowerCase().trim();
-                return String((t as any).ddbCharacterId) === dId ||
-                  String((t as any).characterId) === dId ||
-                  String((t as any).characterId) === `char_ddb_${dId}` ||
-                  String((t as any).id) === `char_ddb_${dId}` ||
-                  (tName && (
-                    tName === dName ||
-                    tName.includes(dName) ||
-                    dName.includes(tName) ||
-                    (tName.split(/[\s"'(]/)[0] && tName.split(/[\s"'(]/)[0].length >= 3 && tName.split(/[\s"'(]/)[0] === dName.split(/[\s"'(]/)[0])
-                  ));
-              });
+            let changed = false;
+            const next = prev.map(t => {
+              const match = chars.find((d: any) =>
+                isDdbMatch(t.name, (t as any).characterId || t.id, (t as any).ddbCharacterId, String(d.id), (d.name || '').trim())
+              );
               if (match) {
+                changed = true;
                 return {
                   ...t,
                   ddbCharacterId: String(match.id),
@@ -1256,6 +1281,17 @@ export default function App() {
               }
               return t;
             });
+
+            if (changed) {
+              const currentMap = activeMapIdRef.current;
+              if (mapsDataRef.current[currentMap]) {
+                mapsDataRef.current[currentMap].tokens = next;
+              }
+              if (socketRef.current?.connected) {
+                socketRef.current.emit('SYNC_TOKENS', next);
+              }
+            }
+            return next;
           });
         }
       })
@@ -1535,6 +1571,7 @@ export default function App() {
   // Tutorial Interactive Task Progression Gates
   useEffect(() => {
     if (tutorial.isActive && (activeSceneInfo || imageFile)) {
+      tutorial.triggerTaskCompletion('load-demo-campaign');
       tutorial.triggerTaskCompletion('load-scene');
     }
   }, [activeSceneInfo, imageFile, tutorial.isActive, tutorial.triggerTaskCompletion]);
@@ -1552,6 +1589,70 @@ export default function App() {
       tutorial.triggerTaskCompletion('inspect-zone');
     }
   }, [isRoomDrawerOpen, isZoneSidePanelOpen, tutorial.isActive, tutorial.triggerTaskCompletion]);
+
+  useEffect(() => {
+    if (tutorial.isActive && tool === 'wall') {
+      tutorial.triggerTaskCompletion('draw-walls');
+    } else if (tutorial.isActive && tool === 'erase_wall') {
+      tutorial.triggerTaskCompletion('erase-walls');
+    } else if (tutorial.isActive && (tool === 'zone' || tool === 'polygon_zone')) {
+      tutorial.triggerTaskCompletion('draw-zones');
+    }
+  }, [tool, tutorial.isActive, tutorial.triggerTaskCompletion]);
+
+  // Demo Action Handlers for Tutorial
+  const handleLoadDemoGv = () => {
+    handleLoadSceneFromCampaign(DEMO_GV_SCENE, DEMO_GV_CAMPAIGN.campaignId, DEMO_GV_CHAPTER.chapterId);
+    tutorial.triggerTaskCompletion('load-demo-campaign');
+    toast.success('Loaded "The Guild from GV" demo adventure!');
+  };
+
+  const handleActivateWallTool = () => {
+    setTool('wall');
+    tutorial.triggerTaskCompletion('draw-walls');
+  };
+
+  const handleActivateWallEraser = () => {
+    setTool('erase_wall');
+    tutorial.triggerTaskCompletion('erase-walls');
+  };
+
+  const handleActivateZoneTool = () => {
+    setTool('zone');
+    tutorial.triggerTaskCompletion('draw-zones');
+  };
+
+  const handleOpenRoomZones = () => {
+    tutorial.triggerTaskCompletion('erase-zones');
+    toast.info('Inspect room zones list or click delete to remove zones');
+  };
+
+  const handleOpenDemoRoomBriefing = () => {
+    const targetZone = roomAnnotations.find(r => r.roomNumber === 'G10') || DEMO_GV_ROOM_ZONES[0];
+    setSelectedRoomAnnotation(targetZone);
+    setSelectedZoneForSidePanel(targetZone);
+    setIsZoneSidePanelOpen(false);
+    setIsRoomDrawerOpen(true);
+    tutorial.triggerTaskCompletion('inspect-zone');
+  };
+
+  const handleBroadcastDemo = () => {
+    const targetZone = roomAnnotations.find(r => r.roomNumber === 'G10') || DEMO_GV_ROOM_ZONES[0];
+    handleBroadcastRoomReadAloud(targetZone.boxedText, targetZone.label);
+    tutorial.triggerTaskCompletion('broadcast-players');
+    toast.success('Broadcasted read-aloud description to Player View!');
+  };
+
+  const handleSpawnDemoMonster = () => {
+    handleSpawnMonsterToken({
+      name: 'Agile Hand Lookout',
+      avatarUrl: 'https://images.unsplash.com/photo-1579783902614-a3fb3927b675?auto=format&fit=crop&w=150&q=80',
+      hp: 11,
+      ac: 12,
+      size: 1
+    });
+    tutorial.triggerTaskCompletion('add-token');
+  };
   
   // Lifted Combat Tracker State
   const [combatTrackerCombatants, setCombatTrackerCombatants] = useState<Combatant[]>([]);
@@ -1996,66 +2097,86 @@ export default function App() {
         maxHp: number;
         tempHp: number;
         ac: number;
+        race?: string;
+        classLevel?: string;
+        playerName?: string;
+        avatarUrl?: string;
+        readonlyUrl?: string;
+        stats?: any;
+        speed?: string;
       }>;
     }) => {
       if (!data.characters || data.characters.length === 0) return;
       console.log(`[DM Socket] ⚡ D&D Beyond Initial Sync for ${data.characters.length} characters`);
 
-      // 1. Update compendium characters
+      // 1. Update compendium characters and persist to Firestore
       setCompendiumCharacters(prev => {
-        let changed = false;
-        const next = prev.map(c => {
-          const cName = c.name.toLowerCase().trim();
-          const match = data.characters.find(d => {
-            const dId = String(d.id);
-            const dName = d.name.toLowerCase().trim();
-            return String((c as any).ddbCharacterId) === dId ||
-              c.id === dId ||
-              c.id === `char_ddb_${dId}` ||
-              (cName && (
-                cName === dName ||
-                cName.includes(dName) ||
-                dName.includes(cName) ||
-                (cName.split(/[\s"'(]/)[0] && cName.split(/[\s"'(]/)[0].length >= 3 && cName.split(/[\s"'(]/)[0] === dName.split(/[\s"'(]/)[0])
-              ));
-          });
+        const next = [...prev];
+        const toSave: Character[] = [];
 
-          if (match) {
-            changed = true;
-            return {
-              ...c,
-              ddbCharacterId: String(match.id),
-              hp: match.currentHp,
-              maxHp: match.maxHp,
-              tempHp: match.tempHp || 0,
-              ac: match.ac || c.ac,
+        data.characters.forEach((d: any) => {
+          const dId = String(d.id);
+          const dName = (d.name || '').trim();
+          const existingIdx = next.findIndex(c =>
+            isDdbMatch(c.name, c.id, (c as any).ddbCharacterId, dId, dName)
+          );
+
+          if (existingIdx >= 0) {
+            const existing = next[existingIdx];
+            const updated: Character = {
+              ...existing,
+              ddbCharacterId: dId,
+              hp: d.currentHp,
+              maxHp: d.maxHp,
+              tempHp: d.tempHp || 0,
+              ac: d.ac || existing.ac || 10,
+              avatarUrl: existing.avatarUrl || d.avatarUrl || getCharacterTokenUrl(dName),
               updatedAt: Date.now()
             };
+            next[existingIdx] = updated;
+            toSave.push(updated);
+          } else {
+            const newChar: Character = {
+              id: `char_ddb_${dId}`,
+              ddbCharacterId: dId,
+              name: d.name,
+              race: d.race || 'Humanoid',
+              classLevel: d.classLevel || 'Level 1',
+              alignment: 'Neutral',
+              avatarUrl: d.avatarUrl || getCharacterTokenUrl(dName),
+              ac: d.ac || 10,
+              hp: d.currentHp,
+              maxHp: d.maxHp,
+              tempHp: d.tempHp || 0,
+              speed: d.speed || '30 ft.',
+              stats: d.stats || { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
+              features: [],
+              spells: [],
+              notes: `Imported from D&D Beyond Campaign (Player: ${d.playerName || 'Player'}). Direct URL: ${d.readonlyUrl || ''}`,
+              createdAt: Date.now(),
+              updatedAt: Date.now()
+            };
+            next.push(newChar);
+            toSave.push(newChar);
           }
-          return c;
         });
-        return changed ? next : prev;
+
+        toSave.forEach(char => {
+          saveCharacter(char).catch(err =>
+            console.warn('[D&D Beyond Socket Init] Failed to persist character:', char.name, err)
+          );
+        });
+
+        return next;
       });
 
       // 2. Update tokens on the board
       setTokens(prev => {
         let changed = false;
         const next = prev.map(t => {
-          const tName = (t.name || '').toLowerCase().trim();
-          const match = data.characters.find(d => {
-            const dId = String(d.id);
-            const dName = d.name.toLowerCase().trim();
-            return String((t as any).ddbCharacterId) === dId ||
-              String((t as any).characterId) === dId ||
-              String((t as any).characterId) === `char_ddb_${dId}` ||
-              String((t as any).id) === `char_ddb_${dId}` ||
-              (tName && (
-                tName === dName ||
-                tName.includes(dName) ||
-                dName.includes(tName) ||
-                (tName.split(/[\s"'(]/)[0] && tName.split(/[\s"'(]/)[0].length >= 3 && tName.split(/[\s"'(]/)[0] === dName.split(/[\s"'(]/)[0])
-              ));
-          });
+          const match = data.characters.find((d: any) =>
+            isDdbMatch(t.name, (t as any).characterId || t.id, (t as any).ddbCharacterId, String(d.id), (d.name || '').trim())
+          );
 
           if (match) {
             changed = true;
@@ -2097,52 +2218,69 @@ export default function App() {
     }) => {
       console.log(`[DM Socket] ⚡ D&D Beyond HP Update: ${data.name} -> ${data.currentHp}/${data.maxHp} (temp: ${data.tempHp})`);
       const charIdStr = String(data.characterId);
-      const ddbName = data.name.toLowerCase().trim();
+      const ddbName = (data.name || '').trim();
 
-      // 1. Update character in compendiumCharacters state
+      // 1. Update character in compendiumCharacters state and persist to Firestore
+      let updatedCharToSave: Character | null = null;
       setCompendiumCharacters(prev => {
-        return prev.map(c => {
-          const cName = c.name.toLowerCase().trim();
-          const isMatch = String((c as any).ddbCharacterId) === charIdStr ||
-            c.id === charIdStr ||
-            c.id === `char_ddb_${charIdStr}` ||
-            (cName && (
-              cName === ddbName ||
-              cName.includes(ddbName) ||
-              ddbName.includes(cName) ||
-              (cName.split(/[\s"'(]/)[0] && cName.split(/[\s"'(]/)[0].length >= 3 && cName.split(/[\s"'(]/)[0] === ddbName.split(/[\s"'(]/)[0])
-            ));
-
+        let matched = false;
+        const next = prev.map(c => {
+          const isMatch = isDdbMatch(c.name, c.id, (c as any).ddbCharacterId, charIdStr, ddbName);
           if (isMatch) {
-            return {
+            matched = true;
+            const updated: Character = {
               ...c,
               ddbCharacterId: charIdStr,
               hp: data.currentHp,
               maxHp: data.maxHp,
-              tempHp: data.tempHp,
+              tempHp: data.tempHp || 0,
               updatedAt: Date.now()
             };
+            updatedCharToSave = updated;
+            return updated;
           }
           return c;
         });
+
+        if (!matched) {
+          const newChar: Character = {
+            id: `char_ddb_${charIdStr}`,
+            ddbCharacterId: charIdStr,
+            name: data.name,
+            race: 'Humanoid',
+            classLevel: 'Level 1',
+            alignment: 'Neutral',
+            avatarUrl: getCharacterTokenUrl(data.name),
+            ac: 10,
+            hp: data.currentHp,
+            maxHp: data.maxHp,
+            tempHp: data.tempHp || 0,
+            speed: '30 ft.',
+            stats: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
+            features: [],
+            spells: [],
+            notes: `Auto-created from D&D Beyond sync`,
+            createdAt: Date.now(),
+            updatedAt: Date.now()
+          };
+          updatedCharToSave = newChar;
+          next.push(newChar);
+        }
+
+        if (updatedCharToSave) {
+          saveCharacter(updatedCharToSave).catch(err =>
+            console.warn('[D&D Beyond Socket HP] Failed to persist character:', (updatedCharToSave as Character).name, err)
+          );
+        }
+
+        return next;
       });
 
       // 2. Update matching tokens on canvas
       setTokens(prev => {
         let changed = false;
         const next = prev.map(t => {
-          const tName = (t.name || '').toLowerCase().trim();
-          const isMatch = String((t as any).ddbCharacterId) === charIdStr ||
-            String((t as any).characterId) === charIdStr ||
-            String((t as any).characterId) === `char_ddb_${charIdStr}` ||
-            String((t as any).id) === `char_ddb_${charIdStr}` ||
-            (tName && (
-              tName === ddbName ||
-              tName.includes(ddbName) ||
-              ddbName.includes(tName) ||
-              (tName.split(/[\s"'(]/)[0] && tName.split(/[\s"'(]/)[0].length >= 3 && tName.split(/[\s"'(]/)[0] === ddbName.split(/[\s"'(]/)[0])
-            ));
-
+          const isMatch = isDdbMatch(t.name, (t as any).characterId || t.id, (t as any).ddbCharacterId, charIdStr, ddbName);
           if (isMatch) {
             changed = true;
             return {
@@ -2151,7 +2289,7 @@ export default function App() {
               hp: data.currentHp,
               currentHp: data.currentHp,
               maxHp: data.maxHp,
-              tempHp: data.tempHp
+              tempHp: data.tempHp || 0
             };
           }
           return t;
@@ -5236,6 +5374,8 @@ export default function App() {
           onHoverZone={setHoveredZoneId}
           currentMapImage={imageFile}
           onStartTutorial={tutorial.startTutorial}
+          onOpenBugReport={() => setIsBugReportModalOpen(true)}
+          onOpenBugManager={() => setIsBugManagerModalOpen(true)}
           onEquipCustomEffect={handleEquipCustomEffect}
           onQuickPlaceCustomEffect={handleQuickPlaceCustomEffect}
           activeEquippedCustomEffectId={tool === 'custom_effect' ? selectedCustomEffect?.id : null}
@@ -8103,6 +8243,17 @@ export default function App() {
         isOpen={showDdbModal}
         onClose={() => setShowDdbModal(false)}
         initialTab="campaign"
+        onCharacterImportedToCompendium={(newChar) => {
+          setCompendiumCharacters(prev => {
+            const idx = prev.findIndex(c => c.id === newChar.id || isDdbMatch(c.name, c.id, (c as any).ddbCharacterId, (newChar as any).ddbCharacterId, newChar.name));
+            if (idx >= 0) {
+              const next = [...prev];
+              next[idx] = newChar;
+              return next;
+            }
+            return [...prev, newChar];
+          });
+        }}
       />
 
       {/* D&D AI Chatbot Modal */}
@@ -8118,14 +8269,45 @@ export default function App() {
         {...tutorial}
         onOpenCampaignBuilder={() => setShowCampaignBuilder(true)}
         onOpenLoadCampaign={() => setShowLoadCampaignModal(true)}
+        onLoadDemoCampaign={handleLoadDemoGv}
         onOpenTokens={() => {
           const tokenBtn = document.querySelector<HTMLButtonElement>('#group-btn-tokens');
           if (tokenBtn) tokenBtn.click();
           else setShowCharacterCompendium(true);
         }}
-        onOpenRoomBriefing={() => {
-          setIsZoneSidePanelOpen(true);
+        onOpenRoomBriefing={handleOpenDemoRoomBriefing}
+        onActivateWallTool={handleActivateWallTool}
+        onActivateWallEraser={handleActivateWallEraser}
+        onActivateZoneTool={handleActivateZoneTool}
+        onOpenRoomZones={handleOpenRoomZones}
+        onBroadcastDemo={handleBroadcastDemo}
+        onSpawnDemoMonster={handleSpawnDemoMonster}
+        onOpenBugReport={() => setIsBugReportModalOpen(true)}
+      />
+
+      {/* Bug Report Submission Modal */}
+      <BugReportModal
+        isOpen={isBugReportModalOpen}
+        onClose={() => setIsBugReportModalOpen(false)}
+        onOpenManager={() => setIsBugManagerModalOpen(true)}
+        environmentInfo={{
+          activeSceneTitle: activeSceneInfo?.sceneTitle,
+          activeCampaignTitle: campaignsList.find(c => c.campaignId === activeSceneInfo?.campaignId)?.campaignTitle,
+          mapDimensions: imageFile ? `${getMapDimensions().width}x${getMapDimensions().height}` : undefined,
+          tokenCount: tokens.length,
+          wallCount: walls.length,
+          zoneCount: roomAnnotations.length,
+          screenResolution: `${window.innerWidth}x${window.innerHeight}`,
+          userAgent: navigator.userAgent,
+          timestamp: Date.now()
         }}
+      />
+
+      {/* Bug Reports & DM Developer Notes Manager */}
+      <BugReportManagerModal
+        isOpen={isBugManagerModalOpen}
+        onClose={() => setIsBugManagerModalOpen(false)}
+        onOpenReportModal={() => setIsBugReportModalOpen(true)}
       />
 
       {/* Quota Exceeded Modal */}

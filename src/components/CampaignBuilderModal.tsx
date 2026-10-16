@@ -50,6 +50,7 @@ import { UploadedAsset, WallSegment, VisionConfig, RoomAnnotation, ChapterPdfDig
 import { PRESET_BATTLEMAPS, PresetBattlemap } from '../data/presetBattlemaps';
 import { digestChapterPdf } from '../services/aiService';
 import { CampaignPdfImporterModal } from './CampaignPdfImporterModal';
+import { DEMO_GV_CAMPAIGN } from '../data/demoCampaignGv';
 
 interface CampaignBuilderModalProps {
   isOpen: boolean;
@@ -255,9 +256,12 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
         setExpandedCampaigns({});
         setExpandedChapters({});
       } else {
-        setCampaigns(list);
-        if (!selectedCampaignId && list.length > 0) {
-          setSelectedCampaignId(list[0].campaignId);
+        const enriched = list.some(c => c.campaignId === DEMO_GV_CAMPAIGN.campaignId)
+          ? list
+          : [DEMO_GV_CAMPAIGN, ...list];
+        setCampaigns(enriched);
+        if (!selectedCampaignId && enriched.length > 0) {
+          setSelectedCampaignId(enriched[0].campaignId);
           setExpandedCampaigns({});
           if (list[0].chapters.length > 0) {
             setSelectedChapterId(list[0].chapters[0].chapterId);

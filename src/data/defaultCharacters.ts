@@ -456,6 +456,32 @@ export interface ResolvedTokenStats {
   isFromCharacterSheet: boolean;
 }
 
+export function isDdbMatch(
+  targetName?: string,
+  targetId?: string | number,
+  targetDdbId?: string | number,
+  ddbId?: string | number,
+  ddbName?: string
+): boolean {
+  const dId = ddbId ? String(ddbId) : '';
+  const tDdbId = targetDdbId ? String(targetDdbId) : '';
+  const tId = targetId ? String(targetId) : '';
+
+  if (dId && tDdbId && dId === tDdbId) return true;
+  if (dId && tId && (tId === dId || tId === `char_ddb_${dId}` || `char_ddb_${tId}` === dId)) return true;
+
+  const nA = (targetName || '').toLowerCase().trim();
+  const nB = (ddbName || '').toLowerCase().trim();
+  if (nA && nB) {
+    if (nA === nB) return true;
+    if (nA.includes(nB) || nB.includes(nA)) return true;
+    const firstA = nA.split(/[\s"'(]/)[0];
+    const firstB = nB.split(/[\s"'(]/)[0];
+    if (firstA && firstB && firstA.length >= 3 && firstA === firstB) return true;
+  }
+  return false;
+}
+
 export function resolveTokenCharacterStats(
   token: { name?: string; ac?: number; hp?: number; maxHp?: number; currentHp?: number; tempHp?: number; characterId?: string; ddbCharacterId?: number | string },
   customCharacters?: Character[]

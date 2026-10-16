@@ -8,6 +8,8 @@ export interface Combatant {
   ac: number;
   passivePerception: number;
   conditions: string[];
+  tokenId?: string;
+  avatarUrl?: string;
 }
 
 export const CONDITIONS_LIST = [

@@ -71,5 +71,11 @@ service cloud.firestore {
       allow create, update: if isValidId(effectId);
       allow delete: if isValidId(effectId);
     }
+
+    // Bug Reports & DM Developer Notes
+    match /bug_reports/{reportId} {
+      allow read: if true;
+      allow create, update, delete: if isValidId(reportId);
+    }
   }
 }

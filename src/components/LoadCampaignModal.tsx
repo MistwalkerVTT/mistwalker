@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { Campaign, Scene } from '../lib/firebase';
 import { isVideoAsset } from '../lib/storageCache';
+import { DEMO_GV_CAMPAIGN } from '../data/demoCampaignGv';
 
 interface LoadCampaignModalProps {
   isOpen: boolean;
@@ -83,11 +84,19 @@ export const LoadCampaignModal: React.FC<LoadCampaignModalProps> = ({
     setExpandedCampaigns(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
+  // Prepend Demo Campaign if not already present in database
+  const allCampaigns = useMemo(() => {
+    if (campaigns.some(c => c.campaignId === DEMO_GV_CAMPAIGN.campaignId)) {
+      return campaigns;
+    }
+    return [DEMO_GV_CAMPAIGN, ...campaigns];
+  }, [campaigns]);
+
   // Filtered campaigns
   const filteredCampaigns = useMemo(() => {
-    if (!searchQuery.trim()) return campaigns;
+    if (!searchQuery.trim()) return allCampaigns;
     const q = searchQuery.toLowerCase();
-    return campaigns.filter(camp => {
+    return allCampaigns.filter(camp => {
       if (camp.campaignTitle.toLowerCase().includes(q)) return true;
       if (camp.description?.toLowerCase().includes(q)) return true;
       return camp.chapters.some(ch =>
@@ -98,7 +107,7 @@ export const LoadCampaignModal: React.FC<LoadCampaignModalProps> = ({
         )
       );
     });
-  }, [campaigns, searchQuery]);
+  }, [allCampaigns, searchQuery]);
 
   if (!isOpen) return null;
 
@@ -202,6 +211,11 @@ export const LoadCampaignModal: React.FC<LoadCampaignModalProps> = ({
                       <div>
                         <h3 className="text-sm font-bold text-zinc-100 font-mono flex items-center gap-2">
                           {camp.campaignTitle}
+                          {camp.campaignId === 'keys-from-golden-vault-agile-hand' && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono font-bold">
+                              ★ Prebuilt Demo
+                            </span>
+                          )}
                         </h3>
                         {camp.description && (
                           <p className="text-xs text-zinc-500 line-clamp-1 mt-0.5 font-sans">

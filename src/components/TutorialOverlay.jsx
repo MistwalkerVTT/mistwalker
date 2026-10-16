@@ -9,23 +9,39 @@ import {
   BookOpen,
   Users,
   Layers,
-  HelpCircle
+  HelpCircle,
+  Shield,
+  Eraser,
+  Radio,
+  Bug,
+  Play,
+  Flame,
+  Plus
 } from 'lucide-react';
 
-export const TutorialOverlay = ({
-  isActive,
-  currentStep,
-  currentStepIndex,
-  totalSteps,
-  completedTasks = {},
-  nextStep,
-  prevStep,
-  endTutorial,
-  onOpenCampaignBuilder,
-  onOpenLoadCampaign,
-  onOpenTokens,
-  onOpenRoomBriefing
-}) => {
+export const TutorialOverlay = (props) => {
+  const {
+    isActive,
+    currentStep,
+    currentStepIndex,
+    totalSteps,
+    completedTasks = {},
+    nextStep,
+    prevStep,
+    endTutorial,
+    onOpenCampaignBuilder,
+    onOpenLoadCampaign,
+    onLoadDemoCampaign,
+    onOpenTokens,
+    onOpenRoomBriefing,
+    onActivateWallTool,
+    onActivateWallEraser,
+    onActivateZoneTool,
+    onOpenRoomZones,
+    onBroadcastDemo,
+    onSpawnDemoMonster,
+    onOpenBugReport
+  } = props || {};
   const [targetRect, setTargetRect] = useState(null);
   const [cardPosition, setCardPosition] = useState({ top: 120, left: 100, placement: 'right' });
   const retryTimerRef = useRef(null);
@@ -65,15 +81,16 @@ export const TutorialOverlay = ({
       }
       // General fallbacks based on step id
       if (!el) {
-        if (currentStep.id === 'combat-tracker') el = document.querySelector('#group-btn-combat');
-        else if (currentStep.id === 'tactical-layers') el = document.querySelector('#group-btn-lighting');
-        else if (currentStep.id === 'fx-spells') el = document.querySelector('#group-btn-fx');
-        else if (currentStep.id === 'ai-suite') el = document.querySelector('#group-btn-ai');
-        else if (currentStep.id === 'pan-select') el = document.querySelector('#tool-pan-direct, #tool-select-direct');
-        else if (currentStep.id === 'zoom-controls') el = document.querySelector('#btn-zoom-in');
-        else if (currentStep.id === 'campaign-manager') el = document.querySelector('#group-btn-maps, #btn-open-campaign-manager-empty-screen');
-        else if (currentStep.id === 'token-menu') el = document.querySelector('#group-btn-tokens');
-        else if (currentStep.id === 'room-zones') el = document.querySelector('#subtab-room-zones, #group-btn-lighting');
+        if (currentStep.id === 'campaign-manager') el = document.querySelector('#group-btn-maps, #btn-open-campaign-manager-empty-screen');
+        else if (currentStep.id === 'create-scene-map') el = document.querySelector('#group-btn-maps, #btn-open-campaign-manager-empty-screen');
+        else if (currentStep.id === 'draw-walls') el = document.querySelector('#tool-wall, #group-btn-lighting');
+        else if (currentStep.id === 'erase-walls') el = document.querySelector('#btn-sidebar-erase-wall-tool, #group-btn-lighting');
+        else if (currentStep.id === 'draw-zones') el = document.querySelector('#btn-sidebar-zone-polygon, #subtab-room-zones, #group-btn-lighting');
+        else if (currentStep.id === 'erase-zones') el = document.querySelector('#subtab-room-zones, #group-btn-lighting');
+        else if (currentStep.id === 'zone-details-pdf') el = document.querySelector('#subtab-room-zones, [data-tutorial="room-zones"]');
+        else if (currentStep.id === 'broadcast-players') el = document.querySelector('[data-tutorial="broadcast-readaloud"], #btn-broadcast-room-text, #subtab-room-zones');
+        else if (currentStep.id === 'spawn-creatures') el = document.querySelector('[data-tutorial="room-monsters-section"], #group-btn-tokens');
+        else if (currentStep.id === 'report-bug') el = document.querySelector('#btn-report-bug-sidebar, [data-tutorial="report-bug"]');
       }
 
       if (el) {
@@ -118,12 +135,12 @@ export const TutorialOverlay = ({
           if (attempts > 12 && !targetRect) {
             // Graceful fallback coordinate on the left sidebar
             setTargetRect({
-              top: 100 + currentStepIndex * 48,
+              top: 100 + (currentStepIndex % 8) * 48,
               left: 12,
               width: 44,
               height: 44,
               right: 56,
-              bottom: 144 + currentStepIndex * 48
+              bottom: 144 + (currentStepIndex % 8) * 48
             });
           }
         }
@@ -150,8 +167,8 @@ export const TutorialOverlay = ({
 
     const viewportW = window.innerWidth;
     const viewportH = window.innerHeight;
-    const cardW = 360;
-    const cardH = 280;
+    const cardW = 380;
+    const cardH = 340;
     const padding = 20;
 
     let placement = 'right';
@@ -188,7 +205,7 @@ export const TutorialOverlay = ({
     });
   }, [targetRect]);
 
-  if (!isActive) return null;
+  if (!isActive || !currentStep) return null;
 
   const isTask = currentStep?.type === 'task';
   const isTaskCompleted = isTask && completedTasks[currentStep?.taskId];
@@ -203,51 +220,19 @@ export const TutorialOverlay = ({
 
   return (
     <div className="fixed inset-0 z-[150] overflow-hidden pointer-events-none select-none">
-      {/* 
-        Spotlight Backdrop:
-        - When in Task (Phase 2): Uses pointer-events: none dimming so user can freely click Campaign menus,
-          open flyouts, drag tokens onto the map canvas, and right-click room zones!
-        - When in Overview (Phase 1): Uses 4 blocker panels leaving the cutout box completely free of DOM elements,
-          so clicks on the spotlighted button always pass directly through to the target!
-      */}
-      {isTask ? (
-        <div className="absolute inset-0 pointer-events-none">
-          {/* Subtle dimming backdrop with spotlight cutout via box-shadow */}
-          <div
-            className="absolute rounded-2xl pointer-events-none transition-all duration-300"
-            style={{
-              top: spotY,
-              left: spotX,
-              width: spotW,
-              height: spotH,
-              boxShadow: '0 0 0 9999px rgba(4, 5, 10, 0.78), inset 0 0 20px rgba(245, 158, 11, 0.35)',
-            }}
-          />
-        </div>
-      ) : (
-        <div className="absolute inset-0 pointer-events-none">
-          {/* Top Panel */}
-          <div
-            className="absolute top-0 left-0 right-0 bg-black/75 pointer-events-auto"
-            style={{ height: spotY }}
-          />
-          {/* Bottom Panel */}
-          <div
-            className="absolute left-0 right-0 bottom-0 bg-black/75 pointer-events-auto"
-            style={{ top: spotY + spotH }}
-          />
-          {/* Left Panel */}
-          <div
-            className="absolute left-0 bg-black/75 pointer-events-auto"
-            style={{ top: spotY, height: spotH, width: spotX }}
-          />
-          {/* Right Panel */}
-          <div
-            className="absolute right-0 bg-black/75 pointer-events-auto"
-            style={{ top: spotY, height: spotH, left: spotX + spotW }}
-          />
-        </div>
-      )}
+      {/* Dimming backdrop with cutout */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div
+          className="absolute rounded-2xl pointer-events-none transition-all duration-300"
+          style={{
+            top: spotY,
+            left: spotX,
+            width: spotW,
+            height: spotH,
+            boxShadow: '0 0 0 9999px rgba(4, 5, 10, 0.78), inset 0 0 20px rgba(245, 158, 11, 0.35)',
+          }}
+        />
+      </div>
 
       {/* Pulsing Highlight Halo around the targeted element */}
       <div
@@ -288,7 +273,7 @@ export const TutorialOverlay = ({
 
       {/* Floating Walkthrough Card */}
       <div
-        className="absolute p-5 bg-zinc-950/95 border border-zinc-700/80 hover:border-zinc-600 rounded-2xl shadow-2xl backdrop-blur-2xl text-zinc-100 w-[360px] pointer-events-auto transition-all duration-200 animate-in fade-in zoom-in-95"
+        className="absolute p-5 bg-zinc-950/95 border border-zinc-700/80 hover:border-zinc-600 rounded-2xl shadow-2xl backdrop-blur-2xl text-zinc-100 w-[380px] pointer-events-auto transition-all duration-200 animate-in fade-in zoom-in-95"
         style={{
           top: cardPosition.top,
           left: cardPosition.left,
@@ -306,9 +291,6 @@ export const TutorialOverlay = ({
               }`}
             >
               {currentStep.phase}
-            </span>
-            <span className="text-[11px] font-mono text-zinc-400 font-semibold">
-              Step {currentStepIndex + 1} of {totalSteps}
             </span>
           </div>
 
@@ -331,82 +313,182 @@ export const TutorialOverlay = ({
           {currentStep.description}
         </p>
 
-        {/* Interactive Task Direct Action Shortcuts (Phase 2) */}
-        {isTask && (
-          <div className="mb-4 p-3 rounded-xl bg-zinc-900/90 border border-zinc-800 text-xs flex flex-col gap-2.5">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] uppercase font-bold font-mono text-zinc-400 flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                Action Required
+        {/* Interactive Task Box / Direct Action Controls */}
+        <div className="mb-4 p-3.5 rounded-xl bg-zinc-900/90 border border-zinc-800 text-xs flex flex-col gap-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] uppercase font-bold font-mono text-zinc-400 flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              Interactive Action
+            </span>
+            {isTaskCompleted ? (
+              <span className="text-[10px] font-bold text-emerald-400 flex items-center gap-1 font-mono">
+                <CheckCircle2 className="w-3.5 h-3.5" /> Done!
               </span>
-              {isTaskCompleted ? (
-                <span className="text-[10px] font-bold text-emerald-400 flex items-center gap-1 font-mono">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Done!
-                </span>
-              ) : (
-                <span className="text-[10px] font-mono text-amber-400/90 animate-pulse">
-                  Awaiting Action...
-                </span>
-              )}
-            </div>
+            ) : (
+              <span className="text-[10px] font-mono text-amber-400/90 animate-pulse">
+                Ready to try...
+              </span>
+            )}
+          </div>
 
+          {currentStep.taskHint && (
             <p className="text-[11px] text-zinc-300 italic">
               {currentStep.taskHint}
             </p>
+          )}
 
-            {/* Quick Action Buttons for Convenience */}
-            {currentStep.taskId === 'load-scene' && (
-              <div className="flex gap-2 pt-1 border-t border-zinc-800">
-                {onOpenCampaignBuilder && (
-                  <button
-                    type="button"
-                    onClick={onOpenCampaignBuilder}
-                    className="flex-1 py-1.5 px-2 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                  >
-                    <BookOpen className="w-3.5 h-3.5" />
-                    <span>Open Campaign Manager</span>
-                  </button>
-                )}
-                {onOpenLoadCampaign && (
-                  <button
-                    type="button"
-                    onClick={onOpenLoadCampaign}
-                    className="py-1.5 px-2 bg-zinc-800 hover:bg-zinc-750 border border-zinc-700 text-zinc-300 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer"
-                    title="Load Scene Selector"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-            )}
-
-            {currentStep.taskId === 'add-token' && onOpenTokens && (
-              <div className="pt-1 border-t border-zinc-800">
+          {/* Step 1: Campaign Manager & Demo Scene Loading */}
+          {currentStep.id === 'campaign-manager' && (
+            <div className="flex flex-col gap-2 pt-1 border-t border-zinc-800">
+              {onLoadDemoCampaign && (
                 <button
                   type="button"
-                  onClick={onOpenTokens}
-                  className="w-full py-1.5 px-2 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/40 text-blue-300 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  onClick={onLoadDemoCampaign}
+                  className="w-full py-2 px-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-zinc-950 font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-md shadow-amber-500/20 transition cursor-pointer"
                 >
-                  <Users className="w-3.5 h-3.5" />
-                  <span>Open Tokens Library</span>
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                  <span>Load Demo: The Guild from GV</span>
                 </button>
-              </div>
-            )}
-
-            {currentStep.taskId === 'inspect-zone' && onOpenRoomBriefing && (
-              <div className="pt-1 border-t border-zinc-800">
+              )}
+              {onOpenCampaignBuilder && (
                 <button
                   type="button"
-                  onClick={onOpenRoomBriefing}
-                  className="w-full py-1.5 px-2 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  onClick={onOpenCampaignBuilder}
+                  className="w-full py-1.5 px-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
                 >
-                  <Layers className="w-3.5 h-3.5" />
-                  <span>Open Room Zone Details</span>
+                  <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Open Campaign Manager</span>
                 </button>
-              </div>
-            )}
-          </div>
-        )}
+              )}
+            </div>
+          )}
+
+          {/* Step 2: Create Scene & Map */}
+          {currentStep.id === 'create-scene-map' && onOpenCampaignBuilder && (
+            <div className="pt-1 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={onOpenCampaignBuilder}
+                className="w-full py-2 px-3 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Open Campaign Builder to Add Scene</span>
+              </button>
+            </div>
+          )}
+
+          {/* Step 3: Draw Tactical Walls */}
+          {currentStep.id === 'draw-walls' && onActivateWallTool && (
+            <div className="pt-1 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={onActivateWallTool}
+                className="w-full py-2 px-3 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
+              >
+                <Shield className="w-3.5 h-3.5" />
+                <span>Activate Wall Tool (Click canvas to draw)</span>
+              </button>
+            </div>
+          )}
+
+          {/* Step 4: Erase Walls */}
+          {currentStep.id === 'erase-walls' && onActivateWallEraser && (
+            <div className="pt-1 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={onActivateWallEraser}
+                className="w-full py-2 px-3 bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-300 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
+              >
+                <Eraser className="w-3.5 h-3.5 text-red-400" />
+                <span>Activate Wall Eraser Tool</span>
+              </button>
+            </div>
+          )}
+
+          {/* Step 5: Draw Room Polygon Zones */}
+          {currentStep.id === 'draw-zones' && onActivateZoneTool && (
+            <div className="pt-1 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={onActivateZoneTool}
+                className="w-full py-2 px-3 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>Activate Room Polygon Tool</span>
+              </button>
+            </div>
+          )}
+
+          {/* Step 6: Erase Room Zones */}
+          {currentStep.id === 'erase-zones' && onOpenRoomZones && (
+            <div className="pt-1 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={onOpenRoomZones}
+                className="w-full py-2 px-3 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
+              >
+                <Layers className="w-3.5 h-3.5 text-amber-400" />
+                <span>View Room Zones List</span>
+              </button>
+            </div>
+          )}
+
+          {/* Step 7: Inspect Zone & DM Secret Notes */}
+          {currentStep.id === 'zone-details-pdf' && onOpenRoomBriefing && (
+            <div className="pt-1 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={onOpenRoomBriefing}
+                className="w-full py-2 px-3 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                <span>Open G10 Infiltration Parlor Notes</span>
+              </button>
+            </div>
+          )}
+
+          {/* Step 8: Broadcast Description to Players */}
+          {currentStep.id === 'broadcast-players' && onBroadcastDemo && (
+            <div className="pt-1 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={onBroadcastDemo}
+                className="w-full py-2 px-3 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md shadow-amber-500/20 transition cursor-pointer"
+              >
+                <Radio className="w-3.5 h-3.5" />
+                <span>Broadcast Demo Read-Aloud Now</span>
+              </button>
+            </div>
+          )}
+
+          {/* Step 9: Spawn Creature Token */}
+          {currentStep.id === 'spawn-creatures' && onSpawnDemoMonster && (
+            <div className="pt-1 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={onSpawnDemoMonster}
+                className="w-full py-2 px-3 bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-300 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
+              >
+                <Flame className="w-3.5 h-3.5 text-rose-400" />
+                <span>Spawn Agile Hand Lookout Token</span>
+              </button>
+            </div>
+          )}
+
+          {/* Step 10: Report Bug Feature */}
+          {currentStep.id === 'report-bug' && onOpenBugReport && (
+            <div className="pt-1 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={onOpenBugReport}
+                className="w-full py-2 px-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md shadow-red-900/30 transition cursor-pointer"
+              >
+                <Bug className="w-3.5 h-3.5" />
+                <span>Open Bug Reporter & DM Notes</span>
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* Progress Bar */}
         <div className="w-full bg-zinc-800/80 h-1.5 rounded-full overflow-hidden mb-4">
@@ -454,7 +536,7 @@ export const TutorialOverlay = ({
                 </>
               ) : isTask && !isTaskCompleted ? (
                 <>
-                  <span>Skip Task</span>
+                  <span>Next</span>
                   <ChevronRight className="w-4 h-4" />
                 </>
               ) : (
