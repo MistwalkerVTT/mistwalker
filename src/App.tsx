@@ -828,6 +828,7 @@ export default function App() {
   }
 
   const socketRef = useRef<any>(null);
+  const [socketInstance, setSocketInstance] = useState<any>(null);
   const [isReadingFile, setIsReadingFile] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<string | null>(null);
@@ -2069,6 +2070,8 @@ export default function App() {
   useEffect(() => {
     const socket = io();
     socketRef.current = socket;
+    (window as any).__mistwalkerSocket = socket;
+    setSocketInstance(socket);
 
     socket.on('connect', () => {
       console.log('[DM Socket] Connected to server as ID:', socket.id);
@@ -7471,7 +7474,7 @@ export default function App() {
 
       {/* 3D Physics Dice Table Overlay */}
       <DiceTableOverlay
-        socket={socketRef.current}
+        socket={socketInstance || socketRef.current}
         onCriticalHit={() => triggerShake(true)}
       />
 

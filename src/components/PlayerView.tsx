@@ -46,7 +46,8 @@ import {
   Copy,
   Wand2,
   Target,
-  Info
+  Info,
+  Dices
 } from 'lucide-react';
 import { toast, Toaster } from 'sonner';
 import { DynamicLightingLayer } from './DynamicLightingLayer';
@@ -984,6 +985,7 @@ const PlayerToken = React.memo(({
 
 export default function PlayerView() {
   const socketRef = useRef<Socket | null>(null);
+  const [socketInstance, setSocketInstance] = useState<Socket | null>(null);
   const bgLayerRef = useRef<any>(null);
 
   // Fullscreen viewport dimensions
@@ -1247,6 +1249,8 @@ export default function PlayerView() {
   useEffect(() => {
     const socket = io();
     socketRef.current = socket;
+    (window as any).__mistwalkerSocket = socket;
+    setSocketInstance(socket);
 
     socket.on('connect', () => {
       console.log('[PlayerView] Connected to socket. Requesting initial state...');
@@ -2611,6 +2615,38 @@ export default function PlayerView() {
             </button>
           </div>
 
+          {/* Quick 3D Dice Roller / Test Roll Button */}
+          <div className="border-l border-zinc-700 pl-2">
+            <button
+              onClick={() => {
+                if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+                  const rollVal = Math.floor(Math.random() * 20) + 1;
+                  (window as any).__mistwalkerRoll3d({
+                    id: `local-${Date.now()}`,
+                    characterName: claimedToken?.name || 'Local Player',
+                    action: 'd20 Check',
+                    rollType: 'roll',
+                    formula: `1d20 (${rollVal})`,
+                    diceNotation: '1d20',
+                    dice: [{ sides: 20, result: rollVal, type: 'd20' }],
+                    total: rollVal,
+                    isCritical: rollVal === 20,
+                    isFumble: rollVal === 1,
+                    theme: 'default',
+                    themeColor: '#d97706',
+                    timestamp: Date.now(),
+                    source: 'player'
+                  });
+                }
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-zinc-700/60 bg-zinc-800/80 hover:bg-zinc-800 text-zinc-300 hover:text-amber-400 transition-all text-xs font-medium cursor-pointer shadow-sm group"
+              title="Roll 3D Dice (Syncs with D&D Beyond live rolls)"
+            >
+              <Dices className="w-3.5 h-3.5 text-amber-400 group-hover:rotate-12 transition-transform" />
+              <span>Roll Dice</span>
+            </button>
+          </div>
+
           {/* Minimize All Menus Toggle */}
           <div className="border-l border-zinc-700 pl-2">
             <button
@@ -3963,7 +3999,7 @@ export default function PlayerView() {
 
       {/* 3D Physics Dice Table Overlay */}
       <DiceTableOverlay
-        socket={socketRef.current}
+        socket={socketInstance || socketRef.current}
         onCriticalHit={() => {
           setIsShaking(true);
           playCriticalHitSound();

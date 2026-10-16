@@ -481,6 +481,10 @@ export class DdbHpSyncDaemon {
     this.ensurePollingStarted();
   }
 
+  public getCachedCharacter(characterId: string): DdbCampaignCharacter | undefined {
+    return this.cachedCharacters.find(c => c.id === characterId);
+  }
+
   private async startBackgroundMonitoring() {
     const campaigns = await fetchDdbCampaigns();
     if (campaigns.length > 0) {

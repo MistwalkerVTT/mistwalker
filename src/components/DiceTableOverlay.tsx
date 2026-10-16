@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import DiceBox from '@3d-dice/dice-box';
-import { Socket } from 'socket.io-client';
+import { io, Socket } from 'socket.io-client';
 import { DdbDiceRollEvent } from '../types/dice';
 import { RollSummaryToast } from './RollSummaryToast';
 
@@ -69,7 +69,24 @@ export const DiceTableOverlay: React.FC<Props> = ({
       onCriticalHit();
     }
 
-    if (!enabled || !diceBoxRef.current) return;
+    if (!enabled) return;
+
+    // If dice box is still initializing, wait briefly up to 2.5 seconds
+    let box = diceBoxRef.current;
+    if (!box) {
+      for (let i = 0; i < 25; i++) {
+        await new Promise(r => setTimeout(r, 100));
+        if (diceBoxRef.current) {
+          box = diceBoxRef.current;
+          break;
+        }
+      }
+    }
+
+    if (!box) {
+      console.warn('[DiceTableOverlay] DiceBox canvas not available for 3D physics roll');
+      return;
+    }
 
     try {
       if (clearTimerRef.current) {
@@ -90,43 +107,59 @@ export const DiceTableOverlay: React.FC<Props> = ({
         rollOptions.themeColor = rollData.themeColor;
       }
 
-      await diceBoxRef.current.roll(cleanNotation, rollOptions);
+      console.log('[DiceTableOverlay] 🎲 Rolling 3D physical dice:', cleanNotation, rollOptions);
+      await box.roll(cleanNotation, rollOptions);
 
-      // Auto-clear dice after 3.8 seconds so table remains clean
+      // Auto-clear dice after 4.5 seconds so table remains clean
       clearTimerRef.current = setTimeout(() => {
         try {
-          diceBoxRef.current?.clear();
+          box?.clear();
         } catch {
           // Ignore
         }
-      }, 3800);
+      }, 4500);
     } catch (err) {
       console.warn('[DiceTableOverlay] Error playing 3D roll:', err);
     }
   }, [enabled, onCriticalHit]);
 
-  // Listen for socket events
+  // Listen for socket events with triple-layer resilience
   useEffect(() => {
-    if (!socket) return;
+    let activeSocket = socket || (typeof window !== 'undefined' ? (window as any).__mistwalkerSocket : null);
+    let createdLocal = false;
+
+    if (!activeSocket) {
+      try {
+        activeSocket = io();
+        createdLocal = true;
+      } catch (err) {
+        console.warn('[DiceTableOverlay] Fallback socket connection failed:', err);
+      }
+    }
+
+    if (!activeSocket) return;
 
     const handleDdbRoll = (data: DdbDiceRollEvent) => {
       if (!data) return;
-      console.log('[DiceTableOverlay] DDB_DICE_ROLLED received:', data);
+      console.log('[DiceTableOverlay] 🎲 DDB_DICE_ROLLED received via socket:', data);
       roll3d(data);
     };
 
     const handleLocalRoll = (data: DdbDiceRollEvent) => {
       if (!data) return;
-      console.log('[DiceTableOverlay] SYNC_LOCAL_DICE_ROLL received:', data);
+      console.log('[DiceTableOverlay] 🎲 SYNC_LOCAL_DICE_ROLL received via socket:', data);
       roll3d(data);
     };
 
-    socket.on('DDB_DICE_ROLLED', handleDdbRoll);
-    socket.on('SYNC_LOCAL_DICE_ROLL', handleLocalRoll);
+    activeSocket.on('DDB_DICE_ROLLED', handleDdbRoll);
+    activeSocket.on('SYNC_LOCAL_DICE_ROLL', handleLocalRoll);
 
     return () => {
-      socket.off('DDB_DICE_ROLLED', handleDdbRoll);
-      socket.off('SYNC_LOCAL_DICE_ROLL', handleLocalRoll);
+      activeSocket?.off('DDB_DICE_ROLLED', handleDdbRoll);
+      activeSocket?.off('SYNC_LOCAL_DICE_ROLL', handleLocalRoll);
+      if (createdLocal) {
+        activeSocket?.disconnect();
+      }
     };
   }, [socket, roll3d]);
 
