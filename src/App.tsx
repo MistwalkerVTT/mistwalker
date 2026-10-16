@@ -1602,45 +1602,39 @@ export default function App() {
     }
   }, [tool, tutorial.isActive, tutorial.triggerTaskCompletion]);
 
-  // Ensure no fog of war during tutorial drawing tools demonstration for crystal clear map visibility
+  // Ensure Fog of War remains active during tutorial walkthrough
   useEffect(() => {
     if (!tutorial.isActive) return;
-    const stepId = tutorial.currentStep?.id;
-    if (['draw-walls', 'doors-operation', 'erase-walls', 'draw-zones'].includes(stepId)) {
-      setIsFogVisible(false);
-    }
-  }, [tutorial.isActive, tutorial.currentStep?.id]);
+    setIsFogVisible(true);
+  }, [tutorial.isActive]);
 
-  // Launch tutorial with preloaded "The Guild House - Main Level" scene and fog turned off
+  // Launch tutorial with preloaded "The Guild House - Main Level" scene and Fog of War enabled
   const handleStartTutorial = () => {
     handleLoadSceneFromCampaign(DEMO_GV_SCENE, DEMO_GV_CAMPAIGN.campaignId, DEMO_GV_CHAPTER.chapterId);
-    setIsFogVisible(false);
+    setIsFogVisible(true);
     tutorial.startTutorial();
   };
 
   // Demo Action Handlers for Tutorial
   const handleLoadDemoGv = () => {
     handleLoadSceneFromCampaign(DEMO_GV_SCENE, DEMO_GV_CAMPAIGN.campaignId, DEMO_GV_CHAPTER.chapterId);
-    setIsFogVisible(false);
+    setIsFogVisible(true);
     tutorial.triggerTaskCompletion('load-demo-campaign');
-    toast.success('Loaded "The Guild House - Main Level" with 64 walls/doors and 13 room zones!');
+    toast.success('Loaded "The Guild House - Main Level" with Fog of War, 64 walls/doors and 13 room zones!');
   };
 
   const handleActivateWallTool = () => {
     setTool('wall');
-    setIsFogVisible(false);
     tutorial.triggerTaskCompletion('draw-walls');
   };
 
   const handleActivateWallEraser = () => {
     setTool('erase_wall');
-    setIsFogVisible(false);
     tutorial.triggerTaskCompletion('erase-walls');
   };
 
   const handleActivateZoneTool = () => {
     setTool('zone');
-    setIsFogVisible(false);
     tutorial.triggerTaskCompletion('draw-zones');
   };
 
@@ -8360,6 +8354,7 @@ export default function App() {
         onOpenBugReport={() => setIsBugReportModalOpen(true)}
         campaignMode={campaignMode}
         onToggleCampaignMode={() => handleModeChange(campaignMode === 'run' ? 'creator' : 'run')}
+        onSetCampaignMode={handleModeChange}
         onToggleDemoDoor={() => {
           const door = walls.find(w => w.id === 'gv-wall-div-door1' || w.wallType === 'door');
           if (door) handleToggleDoor(door.id);

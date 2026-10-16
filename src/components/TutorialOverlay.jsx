@@ -21,7 +21,10 @@ import {
   Minus,
   Maximize2,
   RotateCcw,
-  DoorOpen
+  DoorOpen,
+  Pencil,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { VirtualMouseSimulator } from './VirtualMouseSimulator';
 
@@ -49,6 +52,7 @@ export const TutorialOverlay = (props) => {
     onOpenBugReport,
     campaignMode,
     onToggleCampaignMode,
+    onSetCampaignMode,
     onToggleDemoDoor,
     onOpenHelp
   } = props || {};
@@ -533,15 +537,76 @@ export const TutorialOverlay = (props) => {
                 </div>
               )}
 
-              {currentStep.id === 'run-campaign-mode' && onToggleCampaignMode && (
-                <div className="pt-1 border-t border-zinc-800">
-                  <button
-                    type="button"
-                    onClick={onToggleCampaignMode}
-                    className="w-full py-2 px-3 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
-                  >
-                    <span>Switch to {campaignMode === 'run' ? 'Creator Mode (Edit Walls & Zones)' : 'Run Campaign Mode (Doors & Fog)'}</span>
-                  </button>
+              {currentStep.id === 'run-campaign-mode' && (
+                <div className="flex flex-col gap-2.5 pt-2 border-t border-zinc-800">
+                  <div className="text-[11px] font-semibold text-zinc-300">
+                    Switch between both modes below to see how the canvas updates live:
+                  </div>
+
+                  {/* Two Mode Choice Buttons */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (onSetCampaignMode) onSetCampaignMode('run');
+                        else if (campaignMode !== 'run' && onToggleCampaignMode) onToggleCampaignMode();
+                      }}
+                      className={`p-2.5 rounded-xl border text-left flex flex-col gap-1 transition-all cursor-pointer ${
+                        campaignMode === 'run'
+                          ? 'bg-emerald-950/70 border-emerald-500/80 shadow-lg shadow-emerald-900/30 ring-1 ring-emerald-500/50'
+                          : 'bg-zinc-900/80 border-zinc-750 hover:border-zinc-600 hover:bg-zinc-850'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 font-bold text-xs text-emerald-400">
+                          <Play className="w-3.5 h-3.5 fill-current" />
+                          <span>Run Campaign</span>
+                        </div>
+                        {campaignMode === 'run' && (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500 text-zinc-950">ACTIVE</span>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-zinc-400 leading-tight">
+                        • Wall geometry hidden<br />
+                        • Dynamic token vision & Fog<br />
+                        • Click doors to open/close
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (onSetCampaignMode) onSetCampaignMode('creator');
+                        else if (campaignMode !== 'creator' && onToggleCampaignMode) onToggleCampaignMode();
+                      }}
+                      className={`p-2.5 rounded-xl border text-left flex flex-col gap-1 transition-all cursor-pointer ${
+                        campaignMode === 'creator'
+                          ? 'bg-amber-950/70 border-amber-500/80 shadow-lg shadow-amber-900/30 ring-1 ring-amber-500/50'
+                          : 'bg-zinc-900/80 border-zinc-750 hover:border-zinc-600 hover:bg-zinc-850'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 font-bold text-xs text-amber-400">
+                          <Pencil className="w-3.5 h-3.5" />
+                          <span>Creator Mode</span>
+                        </div>
+                        {campaignMode === 'creator' && (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-400 text-zinc-950">ACTIVE</span>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-zinc-400 leading-tight">
+                        • Wall lines & nodes visible<br />
+                        • Edit, split or erase walls<br />
+                        • Draw room polygon zones
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Summary Comparison Callout */}
+                  <div className="p-2.5 rounded-xl bg-zinc-900/90 border border-zinc-800 text-[11px] leading-relaxed text-zinc-300">
+                    <span className="font-bold text-amber-300">Key Difference: </span>
+                    In <span className="text-emerald-400 font-semibold">Run Campaign</span>, players only see the art while tokens pierce the Fog of War. In <span className="text-amber-400 font-semibold">Creator Mode</span>, the DM sees all geometry lines and handles for editing.
+                  </div>
                 </div>
               )}
 

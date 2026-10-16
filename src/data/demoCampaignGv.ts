@@ -824,6 +824,70 @@ export const DEMO_GV_ROOM_ZONES: RoomAnnotation[] = [
     "campaignId": "camp-mtouse1g"
   },
   {
+    "dmNotes": "The hayloft is 10 feet above the stables and consists of a 5-foot-wide wooden walkway that runs the perimeter of the building. Broad, square loading doors open in the north and south walls, each fitted with block-and-tackle rigs for hoisting hay bales and other supplies into the loft. Hay bales and burlap sacks stuffed with feed grains take up most of the space. A few pitchforks, ropes, and feed buckets lie scattered about the bales.\n\nStable Hand. A young stable hand named Needly Pitts (neutral, human commoner) lazes in the loft, supposedly guarding against horse thieves. He has nodded off but wakes if characters disturb the horses, make too much noise in the barn, or start a fire. In the event of trouble, Needly bangs a metal pail and yells for the stablemaster (see area G16), who takes 1 minute to arrive.",
+    "sceneId": "scene_1788902673803_yz0d",
+    "id": "zone_1792021979825_g2bloft",
+    "pdfSection": "The Guild House - Main Level",
+    "roomName": "Hayloft",
+    "label": "g2b - Hayloft",
+    "color": "#f59e0b",
+    "boxedText": "",
+    "polygonPoints": [
+      76.95351750823257,
+      14.466017398948082,
+      77.11198173477824,
+      32.5,
+      87.49138857352153,
+      32.5,
+      87.49138857352153,
+      14.466017398948082
+    ],
+    "hiddenMonsterNames": [],
+    "bounds": {
+      "x": 76.95351750823257,
+      "y": 14.466017398948082,
+      "height": 18.033982601051918,
+      "width": 10.537871065288968
+    },
+    "roomNumber": "g2b",
+    "monsters": [
+      "1x Commoner (Needly Pitts)"
+    ],
+    "campaignId": "camp-mtouse1g"
+  },
+  {
+    "dmNotes": "The door at the top of the stairs is unlocked and opens into area G14.\n\nJaymont the Sinner. The figure on the steps is Jaymont the Sinner, a doppelganger disguised as a drunken guest. Only Guildmaster Dusk knows Jaymont's true nature. The doppelganger pretends to be asleep, but a character can discern that it's awake with a successful DC 15 Wisdom (Insight) check. Jaymont doesn't start fights it knows it can't win and allows intruders to pass by. When the intruders are gone, Jaymont taps three times on the staircase wall to alert Gwish in area G21, then slinks away to alert Guildmaster Dusk in area G26.\n\nMaster Key. Jaymont carries a master key that unlocks all doors in the guildhouse complex.",
+    "sceneId": "scene_1788902673803_yz0d",
+    "id": "zone_1792022019803_g3stair",
+    "pdfSection": "The Guild House - Main Level",
+    "roomName": "Staircase",
+    "label": "g3 - Staircase",
+    "color": "#f59e0b",
+    "boxedText": "Halfway up this flight of stairs is a sleeping figure wrapped in a wool blanket. A door is situated at the top of the stairs.",
+    "polygonPoints": [
+      54.5,
+      51.5,
+      60.0,
+      51.5,
+      60.0,
+      59.0,
+      54.5,
+      59.0
+    ],
+    "hiddenMonsterNames": [],
+    "bounds": {
+      "x": 54.5,
+      "y": 51.5,
+      "height": 7.5,
+      "width": 5.5
+    },
+    "roomNumber": "g3",
+    "monsters": [
+      "1x Doppelganger (Jaymont the Sinner)"
+    ],
+    "campaignId": "camp-mtouse1g"
+  },
+  {
     "dmNotes": "The shop has two access points: the stables to the east and a door to the west that leads to area G7.\n\nTreasure. Characters can assemble one set of leatherworker's tools from the tools stored here.",
     "sceneId": "scene_1788902673803_yz0d",
     "roomNumber": "g4",
@@ -920,9 +984,7 @@ export const DEMO_GV_ROOM_ZONES: RoomAnnotation[] = [
     "roomNumber": "g7"
   },
   {
-    "monsters": [
-      "1x Doppelganger (Jaymont the Sinner)"
-    ],
+    "monsters": [],
     "roomNumber": "g6",
     "boxedText": "A wooden staircase in the northeast corner of this empty, boarded-up room leads to the basement.",
     "sceneId": "scene_1788902673803_yz0d",
@@ -1229,7 +1291,9 @@ export const DEMO_GV_TOKENS = [
     "x": 1400,
     "avatarUrl": "https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/Varrak.png/:/rs=w:1440,h:1440",
     "isPlayer": true,
-    "name": "Varrak"
+    "name": "Varrak",
+    "hp": 45,
+    "ac": 16
   },
   {
     "size": 1,
@@ -1242,7 +1306,9 @@ export const DEMO_GV_TOKENS = [
     "isPlayer": true,
     "category": "character",
     "x": 1500,
-    "visionRadius": 60
+    "visionRadius": 60,
+    "hp": 38,
+    "ac": 15
   },
   {
     "x": 1550,
@@ -1255,7 +1321,9 @@ export const DEMO_GV_TOKENS = [
     "avatarUrl": "https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/Noctua.png/:/rs=w:1440,h:1440",
     "visionEnabled": true,
     "name": "Noctua",
-    "y": 1300
+    "y": 1300,
+    "hp": 32,
+    "ac": 14
   },
   {
     "name": "Aggie",
@@ -1268,7 +1336,9 @@ export const DEMO_GV_TOKENS = [
     "id": "f8a7v",
     "visionEnabled": true,
     "isPlayer": true,
-    "y": 1300
+    "y": 1300,
+    "hp": 28,
+    "ac": 13
   },
   {
     "category": "character",
@@ -1281,7 +1351,153 @@ export const DEMO_GV_TOKENS = [
     "visionRadius": 60,
     "y": 1300,
     "name": "Rowan",
-    "isPlayer": true
+    "isPlayer": true,
+    "hp": 35,
+    "ac": 15
+  },
+  {
+    "id": "token_jaymont_sinner",
+    "name": "Jaymont the Sinner",
+    "avatarUrl": "/uploads/file-1792077381663-439615846.png",
+    "x": 1680,
+    "y": 780,
+    "hp": 52,
+    "ac": 14,
+    "size": 1,
+    "isMonster": true,
+    "category": "monster"
+  },
+  {
+    "id": "token_thug_g12_1",
+    "name": "Thug",
+    "avatarUrl": "/uploads/file-1792077380953-585139729.png",
+    "x": 860,
+    "y": 920,
+    "hp": 32,
+    "ac": 11,
+    "size": 1,
+    "isMonster": true,
+    "category": "monster"
+  },
+  {
+    "id": "token_thug_g12_2",
+    "name": "Thug",
+    "avatarUrl": "/uploads/file-1792077380953-585139729.png",
+    "x": 920,
+    "y": 920,
+    "hp": 32,
+    "ac": 11,
+    "size": 1,
+    "isMonster": true,
+    "category": "monster"
+  },
+  {
+    "id": "token_thug_g12_3",
+    "name": "Thug",
+    "avatarUrl": "/uploads/file-1792077380953-585139729.png",
+    "x": 860,
+    "y": 980,
+    "hp": 32,
+    "ac": 11,
+    "size": 1,
+    "isMonster": true,
+    "category": "monster"
+  },
+  {
+    "id": "token_gladiator_g12",
+    "name": "Gladiator",
+    "avatarUrl": "/uploads/file-1792077381663-439615846.png",
+    "x": 930,
+    "y": 980,
+    "hp": 112,
+    "ac": 16,
+    "size": 1,
+    "isMonster": true,
+    "category": "monster"
+  },
+  {
+    "id": "token_thug_g13",
+    "name": "Thug",
+    "avatarUrl": "/uploads/file-1792077380953-585139729.png",
+    "x": 600,
+    "y": 1120,
+    "hp": 32,
+    "ac": 11,
+    "size": 1,
+    "isMonster": true,
+    "category": "monster"
+  },
+  {
+    "id": "token_needly_pitts",
+    "name": "Commoner (Needly Pitts)",
+    "avatarUrl": "/uploads/file-1792077381663-439615846.png",
+    "x": 2450,
+    "y": 320,
+    "hp": 4,
+    "ac": 10,
+    "size": 1,
+    "isMonster": true,
+    "category": "monster"
+  },
+  {
+    "id": "token_horse_g2a_1",
+    "name": "Riding Horse",
+    "avatarUrl": "/uploads/file-1792077383356-748374669.png",
+    "x": 2360,
+    "y": 460,
+    "hp": 13,
+    "ac": 10,
+    "size": 2,
+    "isMonster": true,
+    "category": "monster"
+  },
+  {
+    "id": "token_horse_g2a_2",
+    "name": "Riding Horse",
+    "avatarUrl": "/uploads/file-1792077383356-748374669.png",
+    "x": 2540,
+    "y": 460,
+    "hp": 13,
+    "ac": 10,
+    "size": 2,
+    "isMonster": true,
+    "category": "monster"
+  },
+  {
+    "id": "token_horse_g2a_3",
+    "name": "Riding Horse",
+    "avatarUrl": "/uploads/file-1792077383356-748374669.png",
+    "x": 2360,
+    "y": 650,
+    "hp": 13,
+    "ac": 10,
+    "size": 2,
+    "isMonster": true,
+    "category": "monster"
+  },
+  {
+    "id": "token_horse_g2a_4",
+    "name": "Riding Horse",
+    "avatarUrl": "/uploads/file-1792077383356-748374669.png",
+    "x": 2540,
+    "y": 650,
+    "hp": 13,
+    "ac": 10,
+    "size": 2,
+    "isMonster": true,
+    "category": "monster"
+  },
+  {
+    "id": "token_spider_g5",
+    "name": "Spider",
+    "avatarUrl": "/uploads/file-1792077381663-439615846.png",
+    "x": 1600,
+    "y": 640,
+    "hp": 1,
+    "ac": 12,
+    "size": 1,
+    "isMonster": true,
+    "category": "monster"
   }
 ];
 
@@ -1618,7 +1834,7 @@ export const DEMO_GV_PDF_DIGEST: ChapterPdfDigest = {
       "sceneTitle": "Guild House - 2nd Floor",
       "roomNumber": "G27",
       "monsters": [
-        "Constantori's Portrait (Guardian Portrait)"
+        "1x Guardian Portrait (Constantori's Portrait)"
       ],
       "roomName": "Tower Peak",
       "boxedText": "This tower chamber is lit by a pewter chandelier suspended from beams that support a conical roof. A cluttered writing desk and a padded chair are positioned opposite the descending staircase. A gold-framed painting of a beautiful, well-dressed man hangs in a shallow alcove near the top of the stairs."
@@ -1650,7 +1866,9 @@ export const DEMO_GV_PDF_DIGEST: ChapterPdfDigest = {
     {
       "roomName": "Trapdoor",
       "dmNotes": "This unlit, T-shaped area is empty except for a wooden trapdoor in the floor. A tunnel (area G31) leads south from here.\n\nTrapdoor. Below the trapdoor is a 4-foot-wide, 4-foot-high tunnel filled with murky water and a hungry swarm of quippers (see area G29 for details). Characters who follow this tunnel west come to a dead end unless they previously opened that end of tunnel in area G29.",
-      "monsters": [],
+      "monsters": [
+        "1x Swarm of Quippers"
+      ],
       "boxedText": "",
       "sceneTitle": "Guildhouse Basement",
       "roomNumber": "G30",
@@ -1920,14 +2138,14 @@ export const DEMO_GV_SCENE: Scene = {
   tokens: DEMO_GV_TOKENS,
   gridSize: 50,
   gridOpacity: 0.3,
-  isFogVisible: false, // Strictly no fog of war during tutorial drawing tools demonstration
+  isFogVisible: true, // Fog of War enabled for the tutorial walkthrough
   walls: DEMO_GV_WALLS,
   visionConfig: {
-    enabled: false,
-    explorationMemory: false,
-    darknessOpacity: 0,
-    dimVisionOpacity: 0,
-    ambientLight: true,
+    enabled: true,
+    explorationMemory: true,
+    darknessOpacity: 0.85,
+    dimVisionOpacity: 0.4,
+    ambientLight: false,
     dmPreviewMode: true,
     showDoorBadges: true
   },

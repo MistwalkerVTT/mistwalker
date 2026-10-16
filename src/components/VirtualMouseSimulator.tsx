@@ -129,25 +129,66 @@ export const VirtualMouseSimulator: React.FC<VirtualMouseSimulatorProps> = ({
     // STEP 3: Running Campaign vs Creator Mode
     else if (stepId === 'run-campaign-mode') {
       setCursorType('pointer');
-      setPos({ x: 180, y: 200 });
+      
+      const getRunBtnPos = () => {
+        const el = document.querySelector('#btn-mode-run-campaign');
+        if (el) {
+          const r = el.getBoundingClientRect();
+          return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+        }
+        return { x: 270, y: 28 };
+      };
 
+      const getCreatorBtnPos = () => {
+        const el = document.querySelector('#btn-mode-creator');
+        if (el) {
+          const r = el.getBoundingClientRect();
+          return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+        }
+        return { x: 380, y: 28 };
+      };
+
+      setPos({ x: 180, y: 160 });
+      setActiveBadge('Comparing "Run Campaign" vs "Creator Mode"...');
+
+      // 1. Move to Run Campaign button & click
       addTimeout(() => {
-        // Move to Run Campaign button at top bar
-        setPos({ x: 270, y: 28 });
+        const runPos = getRunBtnPos();
+        setPos(runPos);
         setIsClicking(true);
         setClickType('left');
-        setActiveBadge('Run Campaign: Normal walls hidden, vision active');
+        setActiveBadge('▶ RUN CAMPAIGN: Walls hidden for player immersion, dynamic vision casts through Fog of War!');
         setTimeout(() => setIsClicking(false), 400);
-      }, 800);
+      }, 1000);
 
+      // 2. Move down to player token on the map to show vision line-of-sight
       addTimeout(() => {
-        // Move to Creator Mode button
-        setPos({ x: 380, y: 28 });
-        setIsClicking(true);
-        setClickType('left');
-        setActiveBadge('Creator Mode: Draw & edit walls, doors & zones');
-        setTimeout(() => setIsClicking(false), 400);
+        setPos({ x: Math.round(vw * 0.48), y: Math.round(vh * 0.58) });
+        setActiveBadge('Tokens project vision rays; unvisited rooms remain shrouded in darkness.');
       }, 2800);
+
+      // 3. Move to Creator Mode button & click
+      addTimeout(() => {
+        const creatorPos = getCreatorBtnPos();
+        setPos(creatorPos);
+        setIsClicking(true);
+        setClickType('left');
+        setActiveBadge('✎ CREATOR MODE: Wall geometry & door hinges revealed for editing!');
+        setTimeout(() => setIsClicking(false), 400);
+      }, 5000);
+
+      // 4. Move down to wall segment to highlight visible geometry & handles
+      addTimeout(() => {
+        setPos({ x: Math.round(vw * 0.44), y: Math.round(vh * 0.42) });
+        setActiveBadge('Wall lines & room zone outlines are now visible and selectable.');
+      }, 7200);
+
+      // 5. Move back to Run Campaign
+      addTimeout(() => {
+        const runPos = getRunBtnPos();
+        setPos(runPos);
+        setActiveBadge('Ready to toggle between modes anytime during your game!');
+      }, 9200);
     }
 
     // STEP 4: Drawing Tactical Walls

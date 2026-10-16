@@ -32,21 +32,21 @@ export const TUTORIAL_STEPS = [
   {
     id: 'run-campaign-mode',
     phase: 'Step 3 of 11: Campaign Execution',
-    title: 'Running a Campaign vs Creator Mode',
-    description: 'At the top bar, you can toggle between "Run Campaign" and "Creator Mode". In Run Campaign mode, wall geometry is hidden while doors remain interactive. Token line-of-sight physically blocks Fog of War in real time. In Creator Mode, you can draw and edit walls and zones.',
-    taskHint: 'Observe the Run Campaign / Creator Mode toggle in the top bar',
+    title: 'Run Campaign Mode vs Creator Mode',
+    description: 'At the top bar, you can toggle between "Run Campaign" and "Creator Mode":\n\n• RUN CAMPAIGN: For live gameplay sessions. Wall geometries and construction lines are hidden for player immersion. Tokens cast dynamic line-of-sight vision through the Fog of War, while doors remain clickable on the canvas to open or shut them.\n\n• CREATOR MODE: For map preparation. All wall lines, door hinges, and room zones are revealed with color-coded strokes and draggable handles so you can draw, erase, or modify geometry.',
+    taskHint: 'Click Run Campaign or Creator Mode in the top bar (or use the toggle buttons below) to see the difference',
     targetSelector: '#btn-mode-run-campaign',
     fallbackSelector: '#btn-mode-creator, #main-campaign-bar',
     type: 'tour',
-    actionLabel: 'Examine Campaign Modes'
+    actionLabel: 'Compare Run vs Creator Mode'
   },
 
   // Step 4: Drawing Tactical Walls
   {
     id: 'draw-walls',
     phase: 'Step 4 of 11: Dynamic Walls',
-    title: 'Draw Tactical Walls (Fog Disabled)',
-    description: 'Under Tactical Layers, choose the Wall Tool. Fog of War is turned off so you have total clarity while drawing. Left-click to start a wall line, click to add corner points, and double-click to finish. Solid walls physically block player vision, light sources, and fog of war.',
+    title: 'Draw Tactical Walls & Line-of-Sight',
+    description: 'Under Tactical Layers, choose the Wall Tool. With Fog of War enabled, solid walls dynamically cast shadows and block line-of-sight for all player tokens. Left-click to start a wall line, click to add corner points, and double-click to finish. Solid walls physically block player vision, light sources, and fog of war.',
     taskHint: 'Activate the Wall Tool or practice placing wall nodes on the Guild House map',
     targetSelector: '[data-tutorial="tactical-layers"]',
     fallbackSelector: '#group-btn-lighting, #btn-bar-wall-tool',
@@ -60,7 +60,7 @@ export const TUTORIAL_STEPS = [
     id: 'doors-operation',
     phase: 'Step 5 of 11: Interactive Doors',
     title: 'Add & Operate Interactive Doors',
-    description: 'Doors can be drawn as wall segments with type "door". When closed, doors block line of sight. When you or a player clicks a door, it swings open, instantly allowing light and vision to flood into the adjoining room!',
+    description: 'Doors can be drawn as wall segments with type "door". When closed, doors block line of sight and keep Fog of War shrouded. When you or a player clicks a door, it swings open, instantly allowing light and vision to flood into the adjoining room!',
     taskHint: 'Inspect or click any door in The Guild House to toggle it open or closed',
     targetSelector: '#btn-bar-wall-tool',
     fallbackSelector: '[data-tutorial="tactical-layers"], #group-btn-lighting',
@@ -87,7 +87,7 @@ export const TUTORIAL_STEPS = [
     id: 'draw-zones',
     phase: 'Step 7 of 11: Room Zones',
     title: 'Draw Room Polygon Zones',
-    description: 'Under Tactical Layers, switch to the "Room Zones" tab and click "Draw Polygon". Click corners around any chamber (like Area G10 Main Hall or G4 Cartwright Workshop) to map an interactive room zone and link PDF descriptions without fog obstruction.',
+    description: 'Under Tactical Layers, switch to the "Room Zones" tab and click "Draw Polygon". Click corners around any chamber (like Area G10 Main Hall or G4 Cartwright Workshop) to map an interactive room zone and link PDF descriptions directly to that space.',
     taskHint: 'Click Room Zones tab and select Draw Polygon',
     targetSelector: '#subtab-room-zones',
     fallbackSelector: '#btn-sidebar-zone-polygon, [data-tutorial="tactical-layers"]',
