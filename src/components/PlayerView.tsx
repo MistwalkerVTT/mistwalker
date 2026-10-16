@@ -2036,9 +2036,11 @@ export default function PlayerView() {
     setStagePos({ x: 0, y: 0 });
   }, []);
 
-  // Natural Map Dimensions
-  const mapWidth = activeSceneInfo?.mapWidth || image?.width || (image as any)?.naturalWidth || dimensions.width;
-  const mapHeight = activeSceneInfo?.mapHeight || image?.height || (image as any)?.naturalHeight || dimensions.height;
+  // Natural Map Dimensions - Prioritize natural loaded image dimensions
+  const naturalW = image?.width || (image as any)?.naturalWidth || 0;
+  const naturalH = image?.height || (image as any)?.naturalHeight || 0;
+  const mapWidth = naturalW > 0 ? naturalW : (activeSceneInfo?.mapWidth || dimensions.width);
+  const mapHeight = naturalH > 0 ? naturalH : (activeSceneInfo?.mapHeight || dimensions.height);
 
   const isRotated = mapRotation % 180 !== 0;
   const targetMapW = isRotated ? mapHeight : mapWidth;

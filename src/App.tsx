@@ -1754,8 +1754,11 @@ export default function App() {
     let baseWidth = mapType === 'image' ? (image ? image.width : dimensions.width) : (videoSize.width || dimensions.width);
     let baseHeight = mapType === 'image' ? (image ? image.height : dimensions.height) : (videoSize.height || dimensions.height);
 
-    // If active scene has explicit map dimensions, honor them as authoritative canvas size
-    if (activeSceneInfo?.mapWidth && activeSceneInfo?.mapHeight && activeSceneInfo.mapWidth > 0 && activeSceneInfo.mapHeight > 0) {
+    // If a loaded image is present with valid natural dimensions, use its true pixel size
+    if (mapType === 'image' && image && image.width > 0 && image.height > 0) {
+      baseWidth = image.width;
+      baseHeight = image.height;
+    } else if (activeSceneInfo?.mapWidth && activeSceneInfo?.mapHeight && activeSceneInfo.mapWidth > 0 && activeSceneInfo.mapHeight > 0) {
       baseWidth = activeSceneInfo.mapWidth;
       baseHeight = activeSceneInfo.mapHeight;
     } else if (walls.length > 0) {

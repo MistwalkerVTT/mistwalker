@@ -17,8 +17,12 @@ coverage/
 .env.production
 !.env.example
 
-# Local User Uploads & Media (Avoid committing user uploads to Git repo)
-uploads/*
+# Exclude giant PDFs, videos, and raw binaries from uploads (allow map and token images)
+uploads/*.pdf
+uploads/*.bin
+uploads/*.mp4
+uploads/*.zip
+uploads/*.json
 !uploads/.gitkeep
 scratch/*
 !scratch/.gitkeep
