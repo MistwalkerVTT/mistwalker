@@ -99,15 +99,13 @@ export const DiceTableOverlay: React.FC<Props> = ({
       const cleanNotationMatch = notation.match(/([0-9]*d[0-9]+)/gi);
       const cleanNotation = cleanNotationMatch ? cleanNotationMatch.join('+') : '1d20';
 
-      const rollOptions: any = {};
-      if (rollData.theme) {
-        rollOptions.theme = rollData.theme;
-      }
-      if (rollData.themeColor) {
-        rollOptions.themeColor = rollData.themeColor;
-      }
+      // Always roll with standard basic D&D polyhedral dice (robust default theme)
+      const rollOptions = {
+        theme: 'default',
+        themeColor: '#d97706'
+      };
 
-      console.log('[DiceTableOverlay] 🎲 Rolling 3D physical dice:', cleanNotation, rollOptions);
+      console.log('[DiceTableOverlay] 🎲 Rolling basic 3D D&D dice:', cleanNotation);
       await box.roll(cleanNotation, rollOptions);
 
       // Auto-clear dice after 4.5 seconds so table remains clean

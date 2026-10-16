@@ -228,18 +228,9 @@ export class DdbGameLogDaemon {
       const isCrit = dice.some(d => d.sides === 20 && d.result === 20);
       const isFumble = dice.some(d => d.sides === 20 && d.result === 1);
 
-      // Map skin set ID to our bundled 3D themes
-      let theme = 'default';
-      let themeColor = '#d97706';
-
-      const setId = data.setId;
-      if (setId === '04901') {
-        theme = 'gemstone';
-        themeColor = '#9333ea';
-      } else if (setId === '06901') {
-        theme = 'rust';
-        themeColor = '#dc2626';
-      }
+      // Standard basic D&D rendered dice (clean amber/gold)
+      const theme = 'default';
+      const themeColor = '#d97706';
 
       return {
         id: String(entry.id || Date.now()),
