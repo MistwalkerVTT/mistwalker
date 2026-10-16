@@ -1075,6 +1075,48 @@ export default function PlayerView() {
     showCombatTracker: false
   });
 
+  // Screen Shake & Critical Hit Feedback
+  const [isShaking, setIsShaking] = useState(false);
+
+  // Player view turn order list visibility (with persistent user preference)
+  const [showPlayerCombatTracker, setShowPlayerCombatTracker] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    const saved = localStorage.getItem('mistwalker_player_turn_order_visible');
+    return saved !== null ? saved === 'true' : true;
+  });
+
+  const togglePlayerCombatTracker = useCallback(() => {
+    setShowPlayerCombatTracker(prev => {
+      const next = !prev;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('mistwalker_player_turn_order_visible', String(next));
+      }
+      return next;
+    });
+  }, []);
+
+  // Web Audio procedural sub-bass impact thump on critical hit
+  const playCriticalHitSound = useCallback(() => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(140, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(25, ctx.currentTime + 0.45);
+      gain.gain.setValueAtTime(0.7, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.45);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.5);
+    } catch {
+      // AudioContext policy fallback
+    }
+  }, []);
+
   // Broadcast Room Description / Text
   const [roomBroadcast, setRoomBroadcast] = useState<BroadcastRoomText | null>(null);
 
@@ -1298,6 +1340,13 @@ export default function PlayerView() {
         turnIndex: data.turnIndex || 0,
         showCombatTracker: data.showCombatTracker !== false
       });
+    });
+
+    // 3b. SYNC_SHAKE (Critical Hit Camera Rumble)
+    socket.on('SYNC_SHAKE', () => {
+      setIsShaking(true);
+      playCriticalHitSound();
+      setTimeout(() => setIsShaking(false), 600);
     });
 
     // 4. SYNC_AUDIO
@@ -1698,6 +1747,7 @@ export default function PlayerView() {
       .catch(() => {});
 
     return () => {
+      socket.off('SYNC_SHAKE');
       if (activeNarrationAudioRef.current) {
         activeNarrationAudioRef.current.pause();
         activeNarrationAudioRef.current = null;
@@ -2348,12 +2398,81 @@ export default function PlayerView() {
     );
   }, [tokens, claimedTokenId]);
 
+  // Filter combatants for player view: track ONLY tokens presently visible to players
+  const visibleCombatants = useMemo(() => {
+    if (!combatState.combatants || combatState.combatants.length === 0) return [];
+
+    const activeIndex = combatState.combatants.length > 0 
+      ? Math.max(0, Math.min(combatState.turnIndex, combatState.combatants.length - 1))
+      : 0;
+
+    const result: Array<{
+      combatant: Combatant;
+      token?: Token;
+      originalIndex: number;
+      isCurrentTurn: boolean;
+      isHiddenActiveTurn: boolean;
+      isClaimed: boolean;
+    }> = [];
+
+    combatState.combatants.forEach((c, idx) => {
+      const isCurrentTurn = idx === activeIndex;
+      // Match combatant with on-board token
+      const matchingToken = tokens.find(t =>
+        (c.tokenId && t.id === c.tokenId) ||
+        t.id === c.id ||
+        (t.name && c.name && t.name.toLowerCase() === c.name.toLowerCase())
+      );
+
+      const isVisible = matchingToken
+        ? isTokenVisibleToPlayer(matchingToken)
+        : (c.type === 'player');
+
+      const isClaimed = matchingToken?.id === claimedTokenId || c.tokenId === claimedTokenId;
+
+      if (isVisible) {
+        result.push({
+          combatant: c,
+          token: matchingToken,
+          originalIndex: idx,
+          isCurrentTurn,
+          isHiddenActiveTurn: false,
+          isClaimed
+        });
+      } else if (isCurrentTurn) {
+        // If an enemy is in the fog / behind an occluding wall and it's their turn,
+        // show a mystery turn marker so the turn progression is clear without spoiling identity or stats
+        result.push({
+          combatant: {
+            ...c,
+            name: 'Hidden Creature',
+            hp: undefined,
+            maxHp: undefined,
+            ac: undefined,
+            conditions: []
+          },
+          token: undefined,
+          originalIndex: idx,
+          isCurrentTurn: true,
+          isHiddenActiveTurn: true,
+          isClaimed: false
+        });
+      }
+    });
+
+    return result;
+  }, [combatState.combatants, combatState.turnIndex, tokens, isTokenVisibleToPlayer, claimedTokenId]);
+
   return (
     <div
-      className="relative w-screen h-screen overflow-hidden bg-zinc-950 select-none"
+      className={`relative w-screen h-screen overflow-hidden bg-zinc-950 select-none ${isShaking ? 'animate-shake' : ''}`}
       onDragOver={handleStageDragOver}
       onDrop={handleStageDrop}
     >
+      {/* Critical Hit Impact Flash Overlay */}
+      {isShaking && (
+        <div className="absolute inset-0 pointer-events-none z-[999] animate-crit-flash bg-red-600/30" />
+      )}
       {/* Background Wallpaper / Scene Backdrop */}
       <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none select-none">
         <img
@@ -2530,46 +2649,129 @@ export default function PlayerView() {
       )}
 
       {/* ========================================================= */}
-      {/* Floating Combat Tracker Banner (If combat is active)      */}
+      {/* Floating Compact Combat Tracker (Turn Order for Visible Tokens) */}
       {/* ========================================================= */}
       {!isUiMinimized && combatState.showCombatTracker && combatState.combatants.length > 0 && (
-        <div className="absolute top-4 right-4 z-50 bg-zinc-900/95 backdrop-blur-md border border-zinc-800 rounded-2xl p-2.5 shadow-2xl pointer-events-auto max-w-md">
-          <div className="flex items-center justify-between gap-3 mb-2 px-1 border-b border-zinc-800 pb-1.5">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-amber-400 font-mono">
-              <Swords className="w-3.5 h-3.5" />
-              <span>ROUND {combatState.round}</span>
-            </div>
-            <span className="text-[11px] text-zinc-500 font-mono">
-              Turn {combatState.turnIndex + 1} of {combatState.combatants.length}
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5 overflow-x-auto py-1">
-            {combatState.combatants.map((c, idx) => {
-              const isCurrentTurn = idx === combatState.turnIndex;
-              const isPlayer = c.type === 'player';
-              return (
-                <div
-                  key={c.id || idx}
-                  className={`flex flex-col items-center p-1.5 rounded-xl min-w-[64px] border transition-all ${
-                    isCurrentTurn
-                      ? 'bg-amber-950/60 border-amber-500 scale-105 shadow-md shadow-amber-500/20'
-                      : isPlayer
-                      ? 'bg-zinc-800/60 border-zinc-700/60'
-                      : 'bg-red-950/30 border-red-900/40'
-                  }`}
-                >
-                  <span className={`text-[10px] font-bold truncate max-w-[60px] ${
-                    isCurrentTurn ? 'text-amber-300' : isPlayer ? 'text-zinc-200' : 'text-red-300'
-                  }`}>
-                    {c.name}
-                  </span>
-                  <span className="text-[9px] font-mono text-zinc-400">
-                    Init: {c.initiative}
+        <div className="absolute top-4 right-4 z-50 pointer-events-auto">
+          {showPlayerCombatTracker ? (
+            <div className="w-56 bg-zinc-950/95 backdrop-blur-xl border border-zinc-800/90 rounded-2xl p-2.5 shadow-2xl text-zinc-200 animate-in fade-in slide-in-from-top-2 duration-200">
+              {/* Header */}
+              <div className="flex items-center justify-between gap-2 pb-2 mb-1.5 border-b border-zinc-800/80">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-5 h-5 rounded-md bg-amber-500/10 border border-amber-500/30 flex items-center justify-center">
+                    <Swords className="w-3 h-3 text-amber-400" />
+                  </div>
+                  <span className="text-[11px] font-bold font-mono tracking-wider text-amber-300 uppercase">
+                    Round {combatState.round}
                   </span>
                 </div>
-              );
-            })}
-          </div>
+
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-mono text-zinc-400">
+                    {visibleCombatants.length} in sight
+                  </span>
+                  <button
+                    onClick={togglePlayerCombatTracker}
+                    className="p-1 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 rounded-lg transition-colors cursor-pointer"
+                    title="Hide Turn Order"
+                  >
+                    <EyeOff className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Turn Order List */}
+              <div className="max-h-60 overflow-y-auto space-y-1 pr-0.5 select-none">
+                {visibleCombatants.length === 0 ? (
+                  <div className="py-3 text-center text-[10px] font-mono text-zinc-400 italic">
+                    No enemies or allies in sight
+                  </div>
+                ) : (
+                  visibleCombatants.map((item) => {
+                    const { combatant: c, token, isCurrentTurn, isHiddenActiveTurn, isClaimed } = item;
+                    const avatarSrc = c.avatarUrl || token?.url || (token as any)?.avatarUrl || getCharacterTokenUrl(c.name);
+
+                    return (
+                      <div
+                        key={c.id || item.originalIndex}
+                        className={`flex items-center justify-between gap-1.5 px-2 py-1 rounded-xl text-xs transition-all ${
+                          isCurrentTurn
+                            ? isHiddenActiveTurn
+                              ? 'bg-purple-950/60 border border-purple-500/70 shadow-md shadow-purple-950/50 text-purple-200 animate-pulse'
+                              : 'bg-amber-950/60 border border-amber-500/80 shadow-md shadow-amber-950/50 text-amber-200'
+                            : isClaimed
+                            ? 'bg-emerald-950/30 border border-emerald-500/30 text-emerald-200'
+                            : c.type === 'player'
+                            ? 'bg-zinc-900/80 border border-zinc-800/80 text-zinc-300'
+                            : 'bg-red-950/25 border border-red-900/30 text-red-200'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          {/* Active Turn Dot Indicator */}
+                          <div className="shrink-0 flex items-center justify-center">
+                            {isCurrentTurn ? (
+                              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping inline-block" />
+                            ) : (
+                              <span className="w-1.5 h-1.5 rounded-full bg-zinc-700 inline-block" />
+                            )}
+                          </div>
+
+                          {/* Mini Avatar */}
+                          <div className="w-5 h-5 rounded-full overflow-hidden bg-zinc-800 border border-zinc-700/80 shrink-0 flex items-center justify-center text-[9px] font-bold">
+                            {isHiddenActiveTurn ? (
+                              <EyeOff className="w-3 h-3 text-purple-400" />
+                            ) : avatarSrc ? (
+                              <img src={avatarSrc} alt={c.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <span>{c.name.charAt(0).toUpperCase()}</span>
+                            )}
+                          </div>
+
+                          {/* Name and Tag */}
+                          <div className="flex items-center gap-1 min-w-0">
+                            <span className="text-[11px] font-medium truncate max-w-[90px]" title={c.name}>
+                              {isHiddenActiveTurn ? 'Hidden Enemy' : c.name}
+                            </span>
+                            {isClaimed && (
+                              <span className="text-[8px] font-mono px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shrink-0">
+                                You
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Initiative & Status Badge */}
+                        <div className="shrink-0 flex items-center gap-1">
+                          {isCurrentTurn && (
+                            <span className="text-[9px] font-mono uppercase font-bold text-amber-400">
+                              TURN
+                            </span>
+                          )}
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-400">
+                            {c.initiative ?? '-'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          ) : (
+            /* Minimized toggle button to restore Combat Turn Order */
+            <button
+              onClick={togglePlayerCombatTracker}
+              className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700/80 hover:border-amber-500/50 text-zinc-300 hover:text-amber-300 font-mono text-xs rounded-xl shadow-2xl backdrop-blur-md transition-all cursor-pointer group"
+              title="Click to show Combat Turn Order"
+            >
+              <Swords className="w-3.5 h-3.5 text-amber-400 group-hover:rotate-12 transition-transform" />
+              <span className="font-bold text-[11px]">Turn Order</span>
+              <span className="px-1.5 py-0.2 text-[9px] bg-amber-500/20 border border-amber-500/40 rounded-full text-amber-300 font-sans">
+                R{combatState.round}
+              </span>
+              <Eye className="w-3.5 h-3.5 text-zinc-400 group-hover:text-amber-300 ml-0.5" />
+            </button>
+          )}
         </div>
       )}
 

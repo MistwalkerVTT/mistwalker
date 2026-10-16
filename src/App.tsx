@@ -1723,9 +1723,31 @@ export default function App() {
   const [selectedAIVoice, setSelectedAIVoice] = useState('wizard');
   const [isShaking, setIsShaking] = useState(false);
 
+  const playCriticalHitSound = () => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(100, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(25, ctx.currentTime + 0.45);
+      gain.gain.setValueAtTime(0.7, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.45);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.5);
+    } catch {
+      // AudioContext policy fallback
+    }
+  };
+
   const triggerShake = (sync = true) => {
     setIsShaking(true);
-    setTimeout(() => setIsShaking(false), 500);
+    playCriticalHitSound();
+    setTimeout(() => setIsShaking(false), 600);
     if (sync) {
       socketRef.current?.emit('SYNC_SHAKE', 1);
     }
@@ -2085,6 +2107,10 @@ export default function App() {
       if (mapsDataRef.current[currentMap]) {
         mapsDataRef.current[currentMap].effects = [];
       }
+    });
+
+    socket.on('SYNC_SHAKE', () => {
+      triggerShake(false);
     });
 
     // Full party initial D&D Beyond synchronization on socket connection or campaign switch
@@ -5213,7 +5239,11 @@ export default function App() {
       <div className="absolute inset-0 opacity-20 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at center, rgba(255,100,0,0.1) 0%, transparent 70%)' }}></div>
 
       {/* Main Content */}
-      <main className="flex-1 flex relative overflow-hidden bg-[#09090b]" ref={containerRef}>
+      <main className={`flex-1 flex relative overflow-hidden bg-[#09090b] ${isShaking ? 'animate-shake' : ''}`} ref={containerRef}>
+        {/* Critical Hit Impact Flash Overlay */}
+        {isShaking && (
+          <div className="absolute inset-0 pointer-events-none z-[999] animate-crit-flash bg-red-600/30" />
+        )}
         {/* Main Screen Fantasy Wallpaper / Scene Backdrop Background */}
         <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden select-none">
           <img
@@ -7379,6 +7409,9 @@ export default function App() {
           setTurnIndex={setCombatTrackerTurnIndex}
           isMinimized={isCombatTrackerMinimized}
           setIsMinimized={setIsCombatTrackerMinimized}
+          tokens={tokens}
+          onUpdateToken={(id, updates) => setTokens(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t))}
+          onPanToToken={(id) => setSelectedTokenIds([id])}
         />
       )}
 
