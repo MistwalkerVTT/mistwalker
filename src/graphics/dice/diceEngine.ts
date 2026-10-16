@@ -8,7 +8,8 @@ import {
   createD6Materials,
   createD4TextureAtlas,
   DiceThemeOptions,
-  DEFAULT_THEME
+  DEFAULT_THEME,
+  clearDiceTextureCache
 } from './diceTextures';
 import {
   createD20Bundle,
@@ -174,6 +175,7 @@ export class ThreeDiceEngine {
 
   public setTheme(theme: DiceThemeOptions) {
     this.currentTheme = theme;
+    clearDiceTextureCache();
     this.buildMaterials(theme);
   }
 
@@ -182,6 +184,15 @@ export class ThreeDiceEngine {
   }
 
   private buildMaterials(theme: DiceThemeOptions) {
+    if (this.materials) {
+      Object.values(this.materials).forEach(mat => {
+        if (mat.map) {
+          mat.map.dispose();
+        }
+        mat.dispose();
+      });
+    }
+
     const makeStdMat = (tex: THREE.CanvasTexture) =>
       new THREE.MeshStandardMaterial({
         map: tex,

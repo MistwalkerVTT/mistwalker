@@ -3,6 +3,11 @@ import * as THREE from 'three';
 // Cache generated textures to avoid regenerating identical textures
 const textureCache = new Map<string, THREE.CanvasTexture>();
 
+export function clearDiceTextureCache() {
+  textureCache.forEach(tex => tex.dispose());
+  textureCache.clear();
+}
+
 export interface DiceThemeOptions {
   primaryColor?: string; // e.g. '#b45309' (amber gold)
   secondaryColor?: string; // e.g. '#451a03' (deep resin amber)
@@ -49,12 +54,12 @@ export const DICE_COLOR_PRESETS: DiceColorPreset[] = [
   {
     id: 'ruby_magma',
     name: 'Hellfire Magma',
-    description: 'Fiery crimson volcanic stone with incandescent gold numbers.',
+    description: 'Fiery crimson volcanic stone with incandescent white numerals.',
     theme: {
       primaryColor: '#dc2626',
       secondaryColor: '#450a0a',
       borderColor: '#f87171',
-      numberColor: '#fef08a'
+      numberColor: '#ffffff'
     },
     previewColor: '#ef4444',
     previewGradient: 'from-red-600 to-zinc-950'
@@ -93,7 +98,7 @@ export const DICE_COLOR_PRESETS: DiceColorPreset[] = [
       primaryColor: '#18181b',
       secondaryColor: '#09090b',
       borderColor: '#ef4444',
-      numberColor: '#fecaca'
+      numberColor: '#ffffff'
     },
     previewColor: '#dc2626',
     previewGradient: 'from-zinc-800 to-black'
@@ -101,12 +106,12 @@ export const DICE_COLOR_PRESETS: DiceColorPreset[] = [
   {
     id: 'celestial_ivory',
     name: 'Celestial Ivory',
-    description: 'Polished divine ivory marble with antique bronze numerals.',
+    description: 'Polished divine ivory marble with crisp dark obsidian numerals.',
     theme: {
       primaryColor: '#fef3c7',
-      secondaryColor: '#b45309',
+      secondaryColor: '#78350f',
       borderColor: '#d97706',
-      numberColor: '#451a03'
+      numberColor: '#0f172a'
     },
     previewColor: '#fde68a',
     previewGradient: 'from-amber-200 to-amber-700'
@@ -119,7 +124,7 @@ export const DICE_COLOR_PRESETS: DiceColorPreset[] = [
       primaryColor: '#0d9488',
       secondaryColor: '#042f2e',
       borderColor: '#2dd4bf',
-      numberColor: '#f0fdfa'
+      numberColor: '#ffffff'
     },
     previewColor: '#2dd4bf',
     previewGradient: 'from-teal-600 to-slate-950'
@@ -198,23 +203,13 @@ export function createPolyhedralAtlas(
 
     // Radial resin depth gradient
     const grad = ctx.createRadialGradient(cx, cy + 30, 40, cx, cy, tileW / 1.4);
-    if (label === '20') {
-      grad.addColorStop(0, '#f59e0b');
-      grad.addColorStop(0.7, '#b45309');
-      grad.addColorStop(1, '#451a03');
-    } else if (label === '1' && labels.length === 20) {
-      grad.addColorStop(0, '#dc2626');
-      grad.addColorStop(0.7, '#991b1b');
-      grad.addColorStop(1, '#450a0a');
-    } else {
-      grad.addColorStop(0, theme.primaryColor);
-      grad.addColorStop(1, theme.secondaryColor);
-    }
+    grad.addColorStop(0, theme.primaryColor);
+    grad.addColorStop(1, theme.secondaryColor);
     ctx.fillStyle = grad;
     ctx.fillRect(x, y, tileW, tileH);
 
     // Subtle metallic edge bevel
-    ctx.strokeStyle = label === '20' ? '#fde047' : theme.borderColor;
+    ctx.strokeStyle = theme.borderColor;
     ctx.lineWidth = 14;
     ctx.stroke();
 
@@ -243,8 +238,8 @@ export function createPolyhedralAtlas(
       ctx.lineTo(x + 44, cy + 36);
     }
     ctx.closePath();
-    ctx.strokeStyle = label === '20' ? 'rgba(253, 224, 71, 0.85)' : theme.borderColor;
-    ctx.globalAlpha = label === '20' ? 0.85 : 0.45;
+    ctx.strokeStyle = theme.borderColor;
+    ctx.globalAlpha = 0.45;
     ctx.lineWidth = 4;
     ctx.stroke();
     ctx.restore();
@@ -264,7 +259,7 @@ export function createPolyhedralAtlas(
 
     const fontSize = label.length > 2 ? 110 : (label.length === 2 ? 130 : 155);
     ctx.font = `bold ${fontSize}px "Cinzel", "Times New Roman", Georgia, serif`;
-    ctx.fillStyle = label === '20' ? '#fef08a' : (label === '1' && labels.length === 20 ? '#fecaca' : theme.numberColor);
+    ctx.fillStyle = theme.numberColor;
     
     ctx.fillText(label, cx, textY);
 
@@ -274,13 +269,6 @@ export function createPolyhedralAtlas(
       ctx.arc(cx, textY + 68, 8, 0, Math.PI * 2);
       ctx.fillStyle = theme.numberColor;
       ctx.fill();
-    }
-
-    // Nat 20 flare
-    if (label === '20') {
-      ctx.font = 'bold 36px sans-serif';
-      ctx.fillStyle = '#fef08a';
-      ctx.fillText('CRIT', cx, textY - 95);
     }
 
     ctx.restore();

@@ -2697,7 +2697,7 @@ export default function PlayerView() {
               onClick={() => setShowDicePaletteModal(prev => !prev)}
               className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border transition-all text-xs font-medium cursor-pointer shadow-sm ${
                 showDicePaletteModal
-                  ? 'bg-amber-600/90 text-white border-amber-500 ring-1 ring-amber-400/40 shadow-amber-950/40'
+                  ? 'bg-zinc-800 text-white border-zinc-500 ring-1 ring-zinc-400/40 shadow-lg'
                   : 'bg-zinc-800/80 hover:bg-zinc-800 text-zinc-300 hover:text-white border-zinc-700/60'
               }`}
               title="Change 3D Dice Colors & Style"
@@ -4115,9 +4115,17 @@ export default function PlayerView() {
                     onClick={() => handleSelectDicePreset(preset)}
                     className={`relative text-left p-3.5 rounded-xl border transition-all flex items-start gap-3 group cursor-pointer ${
                       isSelected
-                        ? 'bg-zinc-900 border-amber-500 shadow-lg ring-2 ring-amber-500/30'
+                        ? 'bg-zinc-900 shadow-lg ring-1'
                         : 'bg-zinc-900/60 border-zinc-800 hover:bg-zinc-900 hover:border-zinc-700'
                     }`}
+                    style={
+                      isSelected
+                        ? {
+                            borderColor: preset.theme.borderColor,
+                            boxShadow: `0 0 16px ${preset.theme.primaryColor}35`
+                          }
+                        : undefined
+                    }
                   >
                     {/* Visual 3D Die Swatch / Badge */}
                     <div
@@ -4138,11 +4146,21 @@ export default function PlayerView() {
                     {/* Details */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-1.5">
-                        <span className={`text-sm font-semibold truncate ${isSelected ? 'text-amber-400 font-bold' : 'text-zinc-200 group-hover:text-white'}`}>
+                        <span
+                          className={`text-sm font-semibold truncate ${isSelected ? 'font-bold' : 'text-zinc-200 group-hover:text-white'}`}
+                          style={isSelected ? { color: preset.theme.borderColor } : undefined}
+                        >
                           {preset.name}
                         </span>
                         {isSelected && (
-                          <span className="flex items-center gap-1 text-[10px] font-mono font-bold text-amber-400 bg-amber-950/70 border border-amber-800/80 px-1.5 py-0.5 rounded-md">
+                          <span
+                            className="flex items-center gap-1 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md border"
+                            style={{
+                              color: preset.theme.borderColor,
+                              backgroundColor: `${preset.theme.secondaryColor}bb`,
+                              borderColor: `${preset.theme.borderColor}66`
+                            }}
+                          >
                             <Check className="w-3 h-3" />
                             Equipped
                           </span>
@@ -4189,14 +4207,14 @@ export default function PlayerView() {
                   }}
                   className="px-3 py-1.5 rounded-xl border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
                 >
-                  <Dices className="w-3.5 h-3.5 text-amber-400" />
+                  <Dices className="w-3.5 h-3.5 text-zinc-300" />
                   <span>Test Roll</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setShowDicePaletteModal(false)}
-                  className="px-4 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold shadow-md transition-colors cursor-pointer"
+                  className="px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md transition-colors cursor-pointer"
                 >
                   Done
                 </button>
