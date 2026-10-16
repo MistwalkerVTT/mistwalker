@@ -16,7 +16,9 @@ import {
   Bug,
   Activity,
   Layers,
-  Sparkles
+  Sparkles,
+  Image as ImageIcon,
+  ZoomIn
 } from 'lucide-react';
 import { BugReport, BugStatus, BugCategory, BugSeverity } from '../types/bugReport';
 import { getBugReports, updateBugReport, deleteBugReport } from '../services/bugReportService';
@@ -57,6 +59,7 @@ export const BugReportManagerModal: React.FC<BugReportManagerModalProps> = ({
   const [activeDmNotes, setActiveDmNotes] = useState('');
   const [activeStatus, setActiveStatus] = useState<BugStatus>('open');
   const [isSaving, setIsSaving] = useState(false);
+  const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null);
 
   const loadReports = async () => {
     setLoading(true);
@@ -158,11 +161,12 @@ export const BugReportManagerModal: React.FC<BugReportManagerModalProps> = ({
 - **Date:** ${new Date(report.createdAt).toLocaleString()}
 - **Active Scene:** ${report.environment?.activeSceneTitle || 'N/A'}
 - **Tokens / Walls / Zones:** ${report.environment?.tokenCount ?? 'N/A'} tokens / ${report.environment?.wallCount ?? 'N/A'} walls / ${report.environment?.zoneCount ?? 'N/A'} zones
-
+${report.screenshotUrl ? `- **Screenshot:** ${report.screenshotUrl}\n` : ''}
 #### Description:
 ${report.description}
 
 ${report.stepsToReproduce ? `#### Steps to Reproduce:\n${report.stepsToReproduce}\n` : ''}
+${report.screenshotUrl ? `#### Attached Screenshot:\n![${report.screenshotName || 'Screenshot'}](${report.screenshotUrl})\n` : ''}
 ${report.dmNotes ? `#### DM Notes:\n${report.dmNotes}\n` : ''}`;
 
     navigator.clipboard.writeText(md);
@@ -309,7 +313,15 @@ ${report.dmNotes ? `#### DM Notes:\n${report.dmNotes}\n` : ''}`;
                         <span className={`px-1 rounded border ${sevConf.badge}`}>
                           {sevConf.label}
                         </span>
-                        <span>{new Date(report.createdAt).toLocaleDateString()}</span>
+                        <div className="flex items-center gap-2">
+                          {report.screenshotUrl && (
+                            <span className="flex items-center gap-1 text-sky-400" title="Includes attached screenshot">
+                              <ImageIcon className="w-3 h-3" />
+                              <span className="text-[9px]">IMG</span>
+                            </span>
+                          )}
+                          <span>{new Date(report.createdAt).toLocaleDateString()}</span>
+                        </div>
                       </div>
                     </div>
                   );
@@ -411,6 +423,57 @@ ${report.dmNotes ? `#### DM Notes:\n${report.dmNotes}\n` : ''}`;
                   )}
                 </div>
 
+                {/* Attached Screenshot / Visual Evidence Card */}
+                {selectedReport.screenshotUrl && (
+                  <div className="bg-zinc-950/60 border border-zinc-800/80 rounded-xl p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-sky-400 flex items-center gap-1.5">
+                        <ImageIcon className="w-3.5 h-3.5" />
+                        Attached Screenshot / Visual Evidence
+                      </h4>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setLightboxImageUrl(selectedReport.screenshotUrl!)}
+                          className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-[11px] text-zinc-300 hover:text-white border border-zinc-700 transition flex items-center gap-1 cursor-pointer"
+                        >
+                          <ZoomIn className="w-3.5 h-3.5 text-sky-400" />
+                          <span>Enlarge</span>
+                        </button>
+                        <a
+                          href={selectedReport.screenshotUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 border border-zinc-700 transition cursor-pointer"
+                          title="Open original in new tab"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      </div>
+                    </div>
+
+                    <div
+                      onClick={() => setLightboxImageUrl(selectedReport.screenshotUrl!)}
+                      className="group relative max-h-80 w-fit rounded-lg overflow-hidden border border-zinc-700/80 bg-black cursor-pointer shadow-lg"
+                    >
+                      <img
+                        src={selectedReport.screenshotUrl}
+                        alt={selectedReport.screenshotName || 'Attached Screenshot'}
+                        className="max-h-80 w-auto object-contain rounded-lg transition-transform duration-300 group-hover:scale-[1.02]"
+                      />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 text-white font-medium text-xs">
+                        <ZoomIn className="w-5 h-5 text-sky-400" />
+                        <span>Click to view full size</span>
+                      </div>
+                    </div>
+                    {selectedReport.screenshotName && (
+                      <div className="text-[10px] font-mono text-zinc-500 mt-1.5 truncate">
+                        File: {selectedReport.screenshotName}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Environment / Telemetry Box */}
                 {selectedReport.environment && (
                   <div className="bg-zinc-950/60 border border-zinc-800/80 rounded-xl p-4">
@@ -474,6 +537,50 @@ ${report.dmNotes ? `#### DM Notes:\n${report.dmNotes}\n` : ''}`;
           </div>
         </div>
       </div>
+
+      {/* Lightbox Modal */}
+      {lightboxImageUrl && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in"
+          onClick={() => setLightboxImageUrl(null)}
+        >
+          <div
+            className="relative max-w-5xl max-h-[92vh] flex flex-col items-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-full flex items-center justify-between pb-2 text-xs text-zinc-400">
+              <span className="truncate max-w-md font-mono text-zinc-300">
+                {selectedReport?.screenshotName || 'Screenshot Lightbox Preview'}
+              </span>
+              <div className="flex items-center gap-2">
+                <a
+                  href={lightboxImageUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-200 border border-zinc-700 flex items-center gap-1.5 transition"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Open Raw / Full Size</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setLightboxImageUrl(null)}
+                  className="p-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white border border-zinc-700 transition cursor-pointer"
+                  title="Close Preview"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <img
+              src={lightboxImageUrl}
+              alt="Enlarged screenshot"
+              className="max-w-full max-h-[84vh] rounded-xl border border-zinc-700 object-contain shadow-2xl bg-zinc-950"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

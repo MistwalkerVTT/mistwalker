@@ -24,6 +24,68 @@ function saveLocalReports(reports: BugReport[]): void {
 }
 
 /**
+ * Uploads a screenshot image (File, Blob, or base64 data string)
+ * Attempts server static file persistence via /api/upload or /api/upload-base64,
+ * and gracefully falls back to base64 Data URL if offline.
+ */
+export async function uploadScreenshot(
+  fileOrBase64: File | Blob | string,
+  filename?: string
+): Promise<string> {
+  // Case 1: Base64 string
+  if (typeof fileOrBase64 === 'string') {
+    if (fileOrBase64.startsWith('http://') || fileOrBase64.startsWith('https://') || fileOrBase64.startsWith('/uploads/')) {
+      return fileOrBase64;
+    }
+    try {
+      const res = await fetch('/api/upload-base64', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          base64: fileOrBase64,
+          filename: filename || `bug_screen_${Date.now()}`,
+          type: 'bug_screenshot'
+        })
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.url) return json.url;
+      }
+    } catch (err) {
+      console.warn('[uploadScreenshot] Server base64 upload failed, using data URL fallback:', err);
+    }
+    return fileOrBase64;
+  }
+
+  // Case 2: File or Blob object
+  try {
+    const formData = new FormData();
+    const fname = filename || (fileOrBase64 instanceof File ? fileOrBase64.name : `screenshot_${Date.now()}.png`);
+    formData.append('file', fileOrBase64, fname);
+
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      body: formData
+    });
+
+    if (res.ok) {
+      const json = await res.json();
+      if (json.url) return json.url;
+    }
+  } catch (err) {
+    console.warn('[uploadScreenshot] Server multipart upload failed, generating data URL:', err);
+  }
+
+  // Fallback to FileReader base64
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = (e) => reject(e);
+    reader.readAsDataURL(fileOrBase64);
+  });
+}
+
+/**
  * Creates and logs a new bug report to Firestore and localStorage
  */
 export async function createBugReport(

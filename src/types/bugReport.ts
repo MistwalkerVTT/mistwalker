@@ -38,6 +38,8 @@ export interface BugReport {
   environment: BugEnvironmentInfo;
   status: BugStatus;
   dmNotes?: string;
+  screenshotUrl?: string;
+  screenshotName?: string;
   createdAt: number;
   updatedAt?: number;
 }
