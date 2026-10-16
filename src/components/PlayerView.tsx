@@ -1056,6 +1056,27 @@ export default function PlayerView() {
   // Compendium Characters synced from DM
   const [compendiumCharacters, setCompendiumCharacters] = useState<Character[]>(DEFAULT_CHARACTERS);
 
+  // Claimed Token Data & Character Stats
+  const claimedToken = useMemo(() => {
+    return tokens.find(t => t.id === claimedTokenId);
+  }, [tokens, claimedTokenId]);
+
+  const claimedStats = useMemo(() => {
+    if (!claimedToken) return null;
+    return resolveTokenCharacterStats(claimedToken, compendiumCharacters);
+  }, [claimedToken, compendiumCharacters]);
+
+  // 3D Dice Customization State (persisted in localStorage)
+  const [dicePresetId, setDicePresetId] = useState<string>(() => {
+    if (typeof window === 'undefined') return 'amber_gold';
+    return localStorage.getItem('mistwalker_player_dice_preset') || 'amber_gold';
+  });
+  const [showDicePaletteModal, setShowDicePaletteModal] = useState<boolean>(false);
+
+  const selectedDicePreset = useMemo<DiceColorPreset>(() => {
+    return DICE_COLOR_PRESETS.find(p => p.id === dicePresetId) || DICE_COLOR_PRESETS[0];
+  }, [dicePresetId]);
+
   // Active drag state and claimedTokenId ref to prevent rubber-banding during local drag
   const activeDraggingTokenIdRef = useRef<string | null>(null);
   const claimedTokenIdRef = useRef<string | null>(claimedTokenId);
@@ -2201,26 +2222,6 @@ export default function PlayerView() {
     }
   }, [activeSceneInfo?.sceneId, imageFile, image, naturalW, gridSize, applyTvScale, tokens]);
 
-  // Claimed Token Data & Character Stats
-  const claimedToken = useMemo(() => {
-    return tokens.find(t => t.id === claimedTokenId);
-  }, [tokens, claimedTokenId]);
-
-  const claimedStats = useMemo(() => {
-    if (!claimedToken) return null;
-    return resolveTokenCharacterStats(claimedToken, compendiumCharacters);
-  }, [claimedToken, compendiumCharacters]);
-
-  // 3D Dice Customization State (persisted in localStorage)
-  const [dicePresetId, setDicePresetId] = useState<string>(() => {
-    if (typeof window === 'undefined') return 'amber_gold';
-    return localStorage.getItem('mistwalker_player_dice_preset') || 'amber_gold';
-  });
-  const [showDicePaletteModal, setShowDicePaletteModal] = useState<boolean>(false);
-
-  const selectedDicePreset = useMemo<DiceColorPreset>(() => {
-    return DICE_COLOR_PRESETS.find(p => p.id === dicePresetId) || DICE_COLOR_PRESETS[0];
-  }, [dicePresetId]);
 
   const handleSelectDicePreset = useCallback((preset: DiceColorPreset) => {
     setDicePresetId(preset.id);
