@@ -28,7 +28,7 @@ export const DEFAULT_ALLIES: Ally[] = [
     languages: '—',
     challenge: '1 (200 XP)',
     proficiencyBonus: 2,
-    avatarUrl: '/uploads/file-1792077384022-922852625.png',
+    avatarUrl: 'https://www.dndbeyond.com/avatars/47158/804/638742831347754764.png',
     traits: [
       {
         name: 'Keen Hearing and Smell',
@@ -77,7 +77,7 @@ export const DEFAULT_ALLIES: Ally[] = [
     languages: '—',
     challenge: '1 (200 XP)',
     proficiencyBonus: 2,
-    avatarUrl: 'https://images.unsplash.com/photo-1589656966895-2f33e7653819?auto=format&fit=crop&w=300&q=80',
+    avatarUrl: 'https://www.dndbeyond.com/avatars/43939/60/638607413478213174.png',
     traits: [
       {
         name: 'Keen Smell',
@@ -135,7 +135,7 @@ export const DEFAULT_ALLIES: Ally[] = [
     languages: '—',
     challenge: '1 (200 XP)',
     proficiencyBonus: 2,
-    avatarUrl: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=300&q=80',
+    avatarUrl: 'https://www.dndbeyond.com/avatars/30849/299/638064499038216933.png',
     traits: [
       {
         name: 'Spider Climb',
@@ -193,7 +193,7 @@ export const DEFAULT_ALLIES: Ally[] = [
     languages: '—',
     challenge: '1/4 (50 XP)',
     proficiencyBonus: 2,
-    avatarUrl: 'https://images.unsplash.com/photo-1574063413132-355dbfd83e25?auto=format&fit=crop&w=300&q=80',
+    avatarUrl: 'https://www.dndbeyond.com/avatars/16/530/636376327839601860.jpeg',
     traits: [
       {
         name: 'Keen Smell',
@@ -250,7 +250,7 @@ export const DEFAULT_ALLIES: Ally[] = [
     languages: 'Giant Owl, understands Common, Elvish, Sylvan',
     challenge: '1/4 (50 XP)',
     proficiencyBonus: 2,
-    avatarUrl: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=300&q=80',
+    avatarUrl: 'https://www.dndbeyond.com/avatars/16/535/636376331788287090.jpeg',
     traits: [
       {
         name: 'Flyby',
@@ -298,7 +298,7 @@ export const DEFAULT_ALLIES: Ally[] = [
     languages: '—',
     challenge: '2 (450 XP)',
     proficiencyBonus: 2,
-    avatarUrl: 'https://images.unsplash.com/photo-1531386151447-fd76ad50012f?auto=format&fit=crop&w=300&q=80',
+    avatarUrl: 'https://www.dndbeyond.com/avatars/47138/856/638741964104306226.png',
     actions: [
       {
         name: 'Bite',
@@ -345,7 +345,7 @@ export const DEFAULT_ALLIES: Ally[] = [
     languages: 'Giant Elk, understands Common, Elvish, Sylvan',
     challenge: '2 (450 XP)',
     proficiencyBonus: 2,
-    avatarUrl: 'https://images.unsplash.com/photo-1484406566174-9da000fda645?auto=format&fit=crop&w=300&q=80',
+    avatarUrl: 'https://www.dndbeyond.com/avatars/58417/88/639226713770809470.jpeg',
     traits: [
       {
         name: 'Charge',
@@ -398,7 +398,7 @@ export const DEFAULT_ALLIES: Ally[] = [
     languages: '—',
     challenge: '1/4 (50 XP)',
     proficiencyBonus: 2,
-    avatarUrl: 'https://images.unsplash.com/photo-1564865878688-9a244444042a?auto=format&fit=crop&w=300&q=80',
+    avatarUrl: 'https://www.dndbeyond.com/avatars/43939/948/638607435568755201.png',
     traits: [
       {
         name: 'Keen Hearing and Smell',
@@ -446,7 +446,7 @@ export const DEFAULT_ALLIES: Ally[] = [
     languages: 'Understands the languages you speak',
     challenge: 'Summon Spirit',
     proficiencyBonus: 2,
-    avatarUrl: 'https://images.unsplash.com/photo-1546182990-dffeafbe841d?auto=format&fit=crop&w=300&q=80',
+    avatarUrl: 'https://www.dndbeyond.com/avatars/43939/899/638607434272563738.png',
     traits: [
       {
         name: 'Primal Bond',
@@ -496,7 +496,7 @@ export const DEFAULT_ALLIES: Ally[] = [
     languages: 'Understands the languages you speak',
     challenge: 'Wildfire Feature',
     proficiencyBonus: 2,
-    avatarUrl: 'https://images.unsplash.com/photo-1517594422361-5eeb8ae275a9?auto=format&fit=crop&w=300&q=80',
+    avatarUrl: 'https://www.dndbeyond.com/avatars/30833/322/638063861332130639.png',
     actions: [
       {
         name: 'Flame Seed',
@@ -540,7 +540,7 @@ export const DEFAULT_ALLIES: Ally[] = [
     languages: 'Sylvan',
     challenge: '1/4 (50 XP)',
     proficiencyBonus: 2,
-    avatarUrl: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=300&q=80',
+    avatarUrl: 'https://www.dndbeyond.com/avatars/30834/691/638063894967407910.png',
     traits: [
       {
         name: 'Magic Resistance',
@@ -586,7 +586,7 @@ export const DEFAULT_ALLIES: Ally[] = [
     languages: 'Elvish, Sylvan',
     challenge: '1 (200 XP)',
     proficiencyBonus: 2,
-    avatarUrl: '/uploads/file-1790541905194-354381266.png',
+    avatarUrl: 'https://www.dndbeyond.com/avatars/30782/916/638061981460060607.png',
     traits: [
       {
         name: 'Tree Stride',
@@ -645,7 +645,7 @@ export const DEFAULT_ALLIES: Ally[] = [
     languages: 'Ignan',
     challenge: '5 (1,800 XP)',
     proficiencyBonus: 3,
-    avatarUrl: 'https://images.unsplash.com/photo-1577493340887-b7bdef030977?auto=format&fit=crop&w=300&q=80',
+    avatarUrl: 'https://www.dndbeyond.com/avatars/30783/695/638062015772259390.png',
     traits: [
       {
         name: 'Fire Form',
@@ -705,7 +705,7 @@ export const DEFAULT_ALLIES: Ally[] = [
     languages: 'Aquan',
     challenge: '5 (1,800 XP)',
     proficiencyBonus: 3,
-    avatarUrl: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=300&q=80',
+    avatarUrl: 'https://www.dndbeyond.com/avatars/30783/698/638062015886859442.png',
     traits: [
       {
         name: 'Water Form',
@@ -766,7 +766,7 @@ export const DEFAULT_ALLIES: Ally[] = [
     languages: 'Terran',
     challenge: '5 (1,800 XP)',
     proficiencyBonus: 3,
-    avatarUrl: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=300&q=80',
+    avatarUrl: 'https://www.dndbeyond.com/avatars/30783/692/638062015664899420.png',
     traits: [
       {
         name: 'Earth Glide',
@@ -821,7 +821,7 @@ export const DEFAULT_ALLIES: Ally[] = [
     languages: 'Auran',
     challenge: '5 (1,800 XP)',
     proficiencyBonus: 3,
-    avatarUrl: 'https://images.unsplash.com/photo-1534088568595-a066f410bcda?auto=format&fit=crop&w=300&q=80',
+    avatarUrl: 'https://www.dndbeyond.com/avatars/30783/689/638062015555039371.png',
     traits: [
       {
         name: 'Air Form',
@@ -879,7 +879,7 @@ export const DEFAULT_ALLIES: Ally[] = [
     languages: '—',
     challenge: '0 (10 XP)',
     proficiencyBonus: 2,
-    avatarUrl: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=300&q=80',
+    avatarUrl: 'https://www.dndbeyond.com/avatars/47158/951/638742837731128628.png',
     traits: [
       {
         name: 'Flyby',
@@ -933,7 +933,7 @@ export const DEFAULT_ALLIES: Ally[] = [
     languages: 'Understands Common and Draconic but can\'t speak',
     challenge: '1/4 (50 XP)',
     proficiencyBonus: 2,
-    avatarUrl: 'https://i.ibb.co/tPQBm3DZ/Mushu.gif',
+    avatarUrl: 'https://www.dndbeyond.com/avatars/30834/696/638063895061837826.png',
     traits: [
       {
         name: 'Magic Resistance',
@@ -992,7 +992,7 @@ export const DEFAULT_ALLIES: Ally[] = [
     languages: 'Infernal, Common',
     challenge: '1 (200 XP)',
     proficiencyBonus: 2,
-    avatarUrl: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?auto=format&fit=crop&w=300&q=80',
+    avatarUrl: 'https://www.dndbeyond.com/avatars/30782/21/638061948417487055.png',
     traits: [
       {
         name: 'Shapechanger',
@@ -1052,7 +1052,7 @@ export const DEFAULT_ALLIES: Ally[] = [
     languages: 'Abyssal, Common',
     challenge: '1 (200 XP)',
     proficiencyBonus: 2,
-    avatarUrl: 'https://images.unsplash.com/photo-1563089145-599997674d42?auto=format&fit=crop&w=300&q=80',
+    avatarUrl: 'https://www.dndbeyond.com/avatars/30781/635/638061932141924320.png',
     traits: [
       {
         name: 'Shapechanger',
@@ -1111,7 +1111,7 @@ export const DEFAULT_ALLIES: Ally[] = [
     languages: 'Common, Elvish, Sylvan',
     challenge: '1/4 (50 XP)',
     proficiencyBonus: 2,
-    avatarUrl: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=300&q=80',
+    avatarUrl: 'https://www.dndbeyond.com/avatars/30835/934/638063924408565694.png',
     traits: [
       {
         name: 'Heart Sight',
@@ -1160,7 +1160,7 @@ export const DEFAULT_ALLIES: Ally[] = [
     languages: '—',
     challenge: '0 (10 XP)',
     proficiencyBonus: 2,
-    avatarUrl: 'https://images.unsplash.com/photo-1520697830682-bbb6e85e2b0b?auto=format&fit=crop&w=300&q=80',
+    avatarUrl: 'https://www.dndbeyond.com/avatars/47158/985/638742838863997460.png',
     traits: [
       {
         name: 'Mimicry',
@@ -1204,7 +1204,7 @@ export const DEFAULT_ALLIES: Ally[] = [
     languages: '—',
     challenge: '0 (10 XP)',
     proficiencyBonus: 2,
-    avatarUrl: 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&w=300&q=80',
+    avatarUrl: 'https://www.dndbeyond.com/avatars/43939/81/638607414147450285.png',
     traits: [
       {
         name: 'Keen Smell',
@@ -1252,7 +1252,7 @@ export const DEFAULT_ALLIES: Ally[] = [
     languages: '—',
     challenge: 'Spell Feature',
     proficiencyBonus: 2,
-    avatarUrl: 'https://i.ibb.co/b5hZS9HG/Spirit-Weapon.gif',
+    avatarUrl: 'https://www.dndbeyond.com/avatars/30761/834/638061095632921781.png',
     bonusActions: [
       {
         name: 'Move & Strike',
@@ -1290,7 +1290,7 @@ export const DEFAULT_ALLIES: Ally[] = [
     languages: '—',
     challenge: 'Spell Feature',
     proficiencyBonus: 3,
-    avatarUrl: 'https://images.unsplash.com/photo-1519074069444-1ba4fff16def?auto=format&fit=crop&w=300&q=80',
+    avatarUrl: 'https://www.dndbeyond.com/avatars/30835/840/638063922477985887.png',
     traits: [
       {
         name: 'Vigilant Guardian',
@@ -1325,7 +1325,7 @@ export const DEFAULT_ALLIES: Ally[] = [
     languages: '—',
     challenge: 'Spell Feature',
     proficiencyBonus: 4,
-    avatarUrl: 'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?auto=format&fit=crop&w=300&q=80',
+    avatarUrl: 'https://www.dndbeyond.com/avatars/12734/921/637357081710269077.jpeg',
     actions: [
       {
         name: 'Clenched Fist',
@@ -1381,7 +1381,7 @@ export const DEFAULT_ALLIES: Ally[] = [
     languages: 'Understands languages you speak',
     challenge: 'Artificer Feature',
     proficiencyBonus: 2,
-    avatarUrl: 'https://images.unsplash.com/photo-1485827404703-89b55fcc595e?auto=format&fit=crop&w=300&q=80',
+    avatarUrl: 'https://www.dndbeyond.com/avatars/7803/905/637098520679843438.jpeg',
     traits: [
       {
         name: 'Vigilant',
@@ -1436,7 +1436,7 @@ export const DEFAULT_ALLIES: Ally[] = [
     languages: 'Understands one language of its summoner',
     challenge: '1/2 (100 XP)',
     proficiencyBonus: 2,
-    avatarUrl: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=300&q=80',
+    avatarUrl: 'https://www.dndbeyond.com/avatars/43939/915/638607434779874338.png',
     traits: [
       {
         name: 'Trampling Charge',
@@ -1481,7 +1481,7 @@ export const DEFAULT_ALLIES: Ally[] = [
     languages: 'Understands Celestial, Common, Elvish, Sylvan',
     challenge: '2 (450 XP)',
     proficiencyBonus: 2,
-    avatarUrl: 'https://images.unsplash.com/photo-1553284965-83fd3e82fa5a?auto=format&fit=crop&w=300&q=80',
+    avatarUrl: 'https://www.dndbeyond.com/avatars/30834/674/638063894663528037.png',
     actions: [
       {
         name: 'Hooves',
@@ -1526,7 +1526,7 @@ export const DEFAULT_ALLIES: Ally[] = [
     languages: 'Understands languages it knew in life but can\'t speak',
     challenge: '1/4 (50 XP)',
     proficiencyBonus: 2,
-    avatarUrl: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&w=300&q=80',
+    avatarUrl: 'https://www.dndbeyond.com/avatars/30835/849/638063922565505819.png',
     actions: [
       {
         name: 'Shortsword',
@@ -1574,7 +1574,7 @@ export const DEFAULT_ALLIES: Ally[] = [
     languages: 'Understands the languages it knew in life but can\'t speak',
     challenge: '1/4 (50 XP)',
     proficiencyBonus: 2,
-    avatarUrl: 'https://images.unsplash.com/photo-1509248961158-e54f6934749c?auto=format&fit=crop&w=300&q=80',
+    avatarUrl: 'https://www.dndbeyond.com/avatars/30836/823/638063945376881949.png',
     traits: [
       {
         name: 'Undead Fortitude',

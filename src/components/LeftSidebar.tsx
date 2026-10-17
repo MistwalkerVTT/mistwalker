@@ -4377,7 +4377,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                               <div className={`grid grid-cols-4 gap-2 ${collapseAllies ? 'hidden' : ''}`}>
                                 {allyTokens.map((tok) => {
                                   const allyMultiplier = getSizeMultiplier(tok.size);
-                                  const avatarUrl = tok.avatarUrl || 'https://images.unsplash.com/photo-1564865878688-9a244444042a?auto=format&fit=crop&w=300&q=80';
+                                  const avatarUrl = tok.avatarUrl || 'https://www.dndbeyond.com/avatars/43939/948/638607435568755201.png';
                                   return (
                                     <div
                                       key={tok.allyId}

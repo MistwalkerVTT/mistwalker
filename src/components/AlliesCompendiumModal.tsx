@@ -14,7 +14,10 @@ import {
   AlertCircle,
   Copy,
   ChevronRight,
-  Move
+  Move,
+  Globe,
+  Loader2,
+  Image as ImageIcon
 } from 'lucide-react';
 import { Ally, AllyTrait, AllyAction, getSizeMultiplier } from '../types/ally';
 import { DEFAULT_ALLIES } from '../data/defaultAllies';
@@ -74,7 +77,7 @@ export const AlliesCompendiumModal: React.FC<AlliesCompendiumModalProps> = ({
     cha: 6,
     challenge: '1/4 (50 XP)',
     proficiencyBonus: 2,
-    avatarUrl: 'https://images.unsplash.com/photo-1564865878688-9a244444042a?auto=format&fit=crop&w=300&q=80',
+    avatarUrl: 'https://www.dndbeyond.com/avatars/43939/948/638607435568755201.png',
     traits: [],
     actions: [],
     category: 'ally'
@@ -82,6 +85,15 @@ export const AlliesCompendiumModal: React.FC<AlliesCompendiumModalProps> = ({
 
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [allyToDelete, setAllyToDelete] = useState<Ally | null>(null);
+
+  // D&D Beyond Token Search / Pairing Modal state
+  const [isDdbPickerOpen, setIsDdbPickerOpen] = useState(false);
+  const [ddbPickerMode, setDdbPickerMode] = useState<'pair_statblock' | 'pair_form' | 'import_new'>('pair_statblock');
+  const [ddbTargetAlly, setDdbTargetAlly] = useState<Ally | null>(null);
+  const [ddbSearchQuery, setDdbSearchQuery] = useState('');
+  const [ddbSearchResults, setDdbSearchResults] = useState<any[]>([]);
+  const [isLoadingDdb, setIsLoadingDdb] = useState(false);
+  const [ddbTypeFilter, setDdbTypeFilter] = useState('all');
 
   // Keep search query updated if initial changes
   useEffect(() => {
@@ -92,12 +104,21 @@ export const AlliesCompendiumModal: React.FC<AlliesCompendiumModalProps> = ({
 
   // Subscribe to real-time Firestore updates for allies
   useEffect(() => {
+    const defaultAllyMap = new Map(DEFAULT_ALLIES.map(a => [a.allyId, a]));
     const unsubscribe = subscribeToAllies((firestoreAllies) => {
       if (firestoreAllies && firestoreAllies.length > 0) {
-        // Merge Firestore allies with DEFAULT_ALLIES (Firestore takes precedence)
-        const firestoreIds = new Set(firestoreAllies.map(a => a.allyId));
+        // Upgrade any stale Unsplash or missing /uploads/ URLs to the official D&D Beyond token URLs
+        const cleanedFirestoreAllies = firestoreAllies.map(fa => {
+          const def = defaultAllyMap.get(fa.allyId);
+          if (def && (!fa.avatarUrl || fa.avatarUrl.includes('images.unsplash.com') || fa.avatarUrl.startsWith('/uploads/'))) {
+            return { ...fa, avatarUrl: def.avatarUrl };
+          }
+          return fa;
+        });
+
+        const firestoreIds = new Set(cleanedFirestoreAllies.map(a => a.allyId));
         const merged = [
-          ...firestoreAllies,
+          ...cleanedFirestoreAllies,
           ...DEFAULT_ALLIES.filter(a => !firestoreIds.has(a.allyId))
         ];
         setAllies(merged);
@@ -114,6 +135,166 @@ export const AlliesCompendiumModal: React.FC<AlliesCompendiumModalProps> = ({
 
     return () => unsubscribe();
   }, []);
+
+  // Search D&D Beyond Live / Local for monster tokens
+  const searchDdbTokens = async (query: string, typeFilter: string = 'all') => {
+    setIsLoadingDdb(true);
+    try {
+      let results: any[] = [];
+      const cleanQ = query.trim();
+
+      // 1. Try server live search endpoint
+      try {
+        const params = new URLSearchParams();
+        if (cleanQ) params.set('q', cleanQ);
+        params.set('limit', '36');
+        if (typeFilter !== 'all') params.set('type', typeFilter);
+
+        const res = await fetch(`/api/ddb/search?${params.toString()}`);
+        if (res.ok) {
+          const json = await res.json();
+          results = json.monsters || [];
+        }
+      } catch (liveErr) {
+        console.warn('Live DDB search failed, trying compendium fallback:', liveErr);
+      }
+
+      // 2. If results empty or live unavailable, query local compendium
+      if (results.length === 0) {
+        try {
+          const res = await fetch('/data/dndbeyond_compendium.json');
+          if (res.ok) {
+            const comp: any[] = await res.json();
+            results = comp.filter(m => {
+              const matchesName = !cleanQ || m.name.toLowerCase().includes(cleanQ.toLowerCase()) || (m.type && m.type.toLowerCase().includes(cleanQ.toLowerCase()));
+              const matchesType = typeFilter === 'all' || (m.type && m.type.toLowerCase().includes(typeFilter.toLowerCase()));
+              return matchesName && matchesType;
+            }).slice(0, 36);
+          }
+        } catch (compErr) {
+          console.warn('Compendium fallback failed:', compErr);
+        }
+      }
+
+      // Filter to only monsters with valid avatarUrl
+      const valid = results.filter(m => m.avatarUrl || m.largeAvatarUrl);
+      setDdbSearchResults(valid);
+    } catch (err: any) {
+      console.error('Error searching D&D Beyond tokens:', err);
+      toast.error('Failed to search D&D Beyond tokens.');
+    } finally {
+      setIsLoadingDdb(false);
+    }
+  };
+
+  const openDdbPickerForAlly = (ally: Ally) => {
+    setDdbPickerMode('pair_statblock');
+    setDdbTargetAlly(ally);
+    const cleanName = ally.name.replace(/\s*\(Summoned\)/i, '').replace(/ Familiar/i, '').replace(/\\'/g, "'").trim();
+    setDdbSearchQuery(cleanName);
+    setIsDdbPickerOpen(true);
+    searchDdbTokens(cleanName, 'all');
+  };
+
+  const openDdbPickerForForm = () => {
+    setDdbPickerMode('pair_form');
+    const cleanName = (editingAlly.name || '').replace(/\s*\(Summoned\)/i, '').replace(/ Familiar/i, '').trim();
+    setDdbSearchQuery(cleanName || 'Wolf');
+    setIsDdbPickerOpen(true);
+    searchDdbTokens(cleanName || 'Wolf', 'all');
+  };
+
+  const openDdbPickerForImport = () => {
+    setDdbPickerMode('import_new');
+    setDdbTargetAlly(null);
+    setDdbSearchQuery('Wolf');
+    setIsDdbPickerOpen(true);
+    searchDdbTokens('Wolf', 'all');
+  };
+
+  const handleSelectDdbToken = async (monster: any) => {
+    const avatar = monster.largeAvatarUrl || monster.avatarUrl;
+    if (!avatar) return;
+
+    if (ddbPickerMode === 'pair_form') {
+      setEditingAlly(prev => ({
+        ...prev,
+        avatarUrl: avatar
+      }));
+      toast.success(`Paired "${monster.name}" token art with form!`);
+      setIsDdbPickerOpen(false);
+    } else if (ddbPickerMode === 'pair_statblock' && ddbTargetAlly) {
+      try {
+        const updatedAlly: Ally = {
+          ...ddbTargetAlly,
+          avatarUrl: avatar,
+          updatedAt: Date.now()
+        };
+        await saveAlly(updatedAlly);
+        setSelectedAlly(updatedAlly);
+        setAllies(prev => prev.map(a => a.allyId === updatedAlly.allyId ? updatedAlly : a));
+        toast.success(`Paired "${monster.name}" token art with ${updatedAlly.name}!`);
+        setIsDdbPickerOpen(false);
+      } catch (err: any) {
+        toast.error('Failed to save paired token art: ' + err.message);
+      }
+    } else if (ddbPickerMode === 'import_new') {
+      await handleImportAsNewAlly(monster);
+    }
+  };
+
+  const handleImportAsNewAlly = async (monster: any) => {
+    const avatar = monster.largeAvatarUrl || monster.avatarUrl || 'https://www.dndbeyond.com/avatars/43939/948/638607435568755201.png';
+    try {
+      const newAlly: Ally = {
+        allyId: `ally_ddb_${monster.monsterId ? monster.monsterId.replace('ddb_', '') : Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        name: monster.name,
+        size: monster.size || 'Medium',
+        type: monster.type || 'Beast',
+        summonSource: `D&D Beyond (${monster.source || 'Monster Manual'})`,
+        alignment: monster.alignment || 'Unaligned',
+        ac: Number(monster.ac) || 10,
+        acNotes: monster.acNotes || '',
+        hp: Number(monster.hp) || 10,
+        hpFormula: monster.hpFormula || '',
+        speed: monster.speed || '30 ft.',
+        initiativeBonus: Number(monster.initiativeBonus) || 0,
+        str: Number(monster.str) || 10,
+        dex: Number(monster.dex) || 10,
+        con: Number(monster.con) || 10,
+        int: Number(monster.int) || 10,
+        wis: Number(monster.wis) || 10,
+        cha: Number(monster.cha) || 10,
+        savingThrows: monster.savingThrows || '',
+        skills: monster.skills || '',
+        damageResistances: monster.damageResistances || '',
+        damageImmunities: monster.damageImmunities || '',
+        conditionImmunities: monster.conditionImmunities || '',
+        senses: monster.senses || '',
+        languages: monster.languages || '—',
+        challenge: monster.challenge || 'Custom',
+        proficiencyBonus: Number(monster.proficiencyBonus) || 2,
+        avatarUrl: avatar,
+        traits: monster.traits || [],
+        actions: monster.actions || [],
+        reactions: monster.reactions || [],
+        bonusActions: monster.bonusActions || [],
+        description: `Imported summon from D&D Beyond: ${monster.name}.`,
+        source: monster.source || 'D&D Beyond',
+        category: 'ally',
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+
+      await saveAlly(newAlly);
+      setAllies(prev => [newAlly, ...prev.filter(a => a.allyId !== newAlly.allyId)]);
+      setSelectedAlly(newAlly);
+      toast.success(`Imported "${newAlly.name}" as summon with D&D Beyond token art!`);
+      setIsDdbPickerOpen(false);
+    } catch (err: any) {
+      toast.error('Failed to import summon: ' + err.message);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -321,6 +502,16 @@ export const AlliesCompendiumModal: React.FC<AlliesCompendiumModalProps> = ({
 
           <div className="flex items-center gap-2.5">
             <button
+              type="button"
+              onClick={openDdbPickerForImport}
+              className="px-3.5 py-1.5 bg-gradient-to-r from-amber-700/80 to-amber-600/80 hover:from-amber-600 hover:to-amber-500 border border-amber-500/50 text-white font-bold text-xs rounded-xl shadow flex items-center gap-1.5 transition-all cursor-pointer"
+              title="Search D&D Beyond's bestiary to import summons and pair official tokens"
+            >
+              <Globe className="w-4 h-4 text-amber-300" />
+              Import from D&D Beyond
+            </button>
+
+            <button
               onClick={() => {
                 setEditingAlly({
                   name: '',
@@ -337,14 +528,14 @@ export const AlliesCompendiumModal: React.FC<AlliesCompendiumModalProps> = ({
                   str: 14, dex: 14, con: 14, int: 4, wis: 12, cha: 6,
                   challenge: '1/4 (50 XP)',
                   proficiencyBonus: 2,
-                  avatarUrl: 'https://images.unsplash.com/photo-1564865878688-9a244444042a?auto=format&fit=crop&w=300&q=80',
+                  avatarUrl: 'https://www.dndbeyond.com/avatars/43939/948/638607435568755201.png',
                   traits: [],
                   actions: [],
                   category: 'ally'
                 });
                 setIsEditing(true);
               }}
-              className="px-3.5 py-1.5 bg-gradient-to-r from-amber-600 to-emerald-600 hover:from-amber-500 hover:to-emerald-500 text-white font-bold text-xs rounded-xl shadow-lg flex items-center gap-1.5 transition-all cursor-pointer"
+              className="px-3.5 py-1.5 bg-gradient-to-r from-emerald-700/80 to-emerald-600/80 hover:from-emerald-600 hover:to-emerald-500 text-white font-bold text-xs rounded-xl shadow flex items-center gap-1.5 transition-all cursor-pointer border border-emerald-500/40"
             >
               <Plus className="w-4 h-4" />
               New Ally / Summon
@@ -455,6 +646,9 @@ export const AlliesCompendiumModal: React.FC<AlliesCompendiumModalProps> = ({
                             src={a.avatarUrl}
                             alt={a.name}
                             className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.currentTarget.src = 'https://www.dndbeyond.com/avatars/43939/948/638607435568755201.png';
+                            }}
                           />
                           {mult > 1 && (
                             <span className="absolute bottom-0 right-0 bg-amber-700 text-white text-[7px] font-bold px-1 rounded-tl">
@@ -636,13 +830,26 @@ export const AlliesCompendiumModal: React.FC<AlliesCompendiumModalProps> = ({
 
                 {/* Avatar / Token URL & Upload */}
                 <div>
-                  <label className="text-[11px] font-mono text-zinc-400 block mb-1">Token Image URL</label>
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-xl overflow-hidden bg-zinc-900 border border-zinc-700 shrink-0">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] font-mono text-zinc-400">Token Image URL</label>
+                    <button
+                      type="button"
+                      onClick={openDdbPickerForForm}
+                      className="text-[10px] font-mono text-amber-400 hover:text-amber-300 font-semibold flex items-center gap-1 hover:underline cursor-pointer"
+                    >
+                      <Sparkles className="w-3 h-3 text-amber-400" />
+                      Find Art on D&D Beyond
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-12 h-12 rounded-xl overflow-hidden bg-zinc-900 border border-zinc-700 shrink-0 relative">
                       <img
-                        src={editingAlly.avatarUrl || 'https://images.unsplash.com/photo-1564865878688-9a244444042a?auto=format&fit=crop&w=300&q=80'}
+                        src={editingAlly.avatarUrl || 'https://www.dndbeyond.com/avatars/43939/948/638607435568755201.png'}
                         alt="Preview"
                         className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.src = 'https://www.dndbeyond.com/avatars/43939/948/638607435568755201.png';
+                        }}
                       />
                     </div>
                     <input
@@ -652,6 +859,15 @@ export const AlliesCompendiumModal: React.FC<AlliesCompendiumModalProps> = ({
                       placeholder="Paste image URL..."
                       className="flex-1 px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-xs text-zinc-200"
                     />
+                    <button
+                      type="button"
+                      onClick={openDdbPickerForForm}
+                      className="px-3 py-2 bg-amber-600/20 hover:bg-amber-600 border border-amber-500/40 text-amber-300 hover:text-white rounded-lg text-xs font-mono font-semibold transition-all cursor-pointer flex items-center gap-1.5 shadow-sm"
+                      title="Search D&D Beyond for official token art"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      D&D Beyond
+                    </button>
                     <label className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-650 rounded-lg text-xs font-mono text-zinc-200 cursor-pointer">
                       {isUploadingImage ? 'Uploading...' : 'Upload File'}
                       <input
@@ -757,12 +973,26 @@ export const AlliesCompendiumModal: React.FC<AlliesCompendiumModalProps> = ({
                         {selectedAlly.size} {selectedAlly.type}, {selectedAlly.alignment}
                       </div>
                     </div>
-                    <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-[#822000] shadow-md shrink-0">
-                      <img
-                        src={selectedAlly.avatarUrl}
-                        alt={selectedAlly.name}
-                        className="w-full h-full object-cover"
-                      />
+                    <div className="flex items-center gap-2.5 shrink-0">
+                      <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-[#822000] shadow-md bg-zinc-900 shrink-0 relative group">
+                        <img
+                          src={selectedAlly.avatarUrl}
+                          alt={selectedAlly.name}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.src = 'https://www.dndbeyond.com/avatars/43939/948/638607435568755201.png';
+                          }}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => openDdbPickerForAlly(selectedAlly)}
+                        className="px-2.5 py-1.5 bg-[#822000]/10 hover:bg-[#822000] border border-[#822000]/40 text-[#822000] hover:text-[#fdf1dc] rounded-lg text-[10px] font-sans font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                        title="Search D&D Beyond to pair a high-resolution token image"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-amber-700 hover:text-amber-300" />
+                        Pair DDB Art
+                      </button>
                     </div>
                   </div>
 
@@ -943,6 +1173,190 @@ export const AlliesCompendiumModal: React.FC<AlliesCompendiumModalProps> = ({
               >
                 Delete Ally
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= D&D BEYOND TOKEN PICKER MODAL ================= */}
+      {isDdbPickerOpen && (
+        <div
+          className="fixed inset-0 z-[130] bg-black/85 backdrop-blur-md flex items-center justify-center p-3 md:p-6 animate-in fade-in duration-200"
+          onClick={() => setIsDdbPickerOpen(false)}
+        >
+          <div
+            className="w-full max-w-4xl h-[86vh] max-h-[820px] bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden text-zinc-100"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="px-6 py-4 bg-zinc-900/90 border-b border-zinc-800/80 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center">
+                  <Sparkles className="w-5 h-5 text-amber-400" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white font-serif tracking-wide flex items-center gap-2">
+                    {ddbPickerMode === 'import_new' 
+                      ? 'Import Summon from D&D Beyond' 
+                      : `Pair Token Art from D&D Beyond ${ddbTargetAlly ? `for "${ddbTargetAlly.name}"` : ''}`}
+                  </h3>
+                  <p className="text-xs text-zinc-400">
+                    Search official high-resolution D&D Beyond tokens, avatars, and monster statblocks.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsDdbPickerOpen(false)}
+                className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Search Bar & Filters */}
+            <div className="p-4 border-b border-zinc-800/80 bg-zinc-900/40 space-y-3 shrink-0">
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-2.5 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={ddbSearchQuery}
+                    onChange={(e) => setDdbSearchQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        searchDdbTokens(ddbSearchQuery, ddbTypeFilter);
+                      }
+                    }}
+                    placeholder="Search D&D Beyond (e.g. Wolf, Bear, Spider, Elemental, Pegasus, Imp, Skeleton)..."
+                    className="w-full pl-9 pr-3 py-2 bg-zinc-900 border border-zinc-750 rounded-xl text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => searchDdbTokens(ddbSearchQuery, ddbTypeFilter)}
+                  disabled={isLoadingDdb}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow"
+                >
+                  {isLoadingDdb ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                  Search
+                </button>
+              </div>
+
+              {/* Quick Creature Filter Pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto text-[11px] no-scrollbar">
+                <span className="text-[10px] font-mono text-zinc-500 uppercase font-semibold mr-1 shrink-0">Type:</span>
+                {['all', 'Beast', 'Elemental', 'Fey', 'Fiend', 'Celestial', 'Dragon', 'Construct', 'Undead'].map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => {
+                      setDdbTypeFilter(t);
+                      searchDdbTokens(ddbSearchQuery, t);
+                    }}
+                    className={`px-2.5 py-1 rounded-lg font-mono whitespace-nowrap transition-all cursor-pointer ${
+                      ddbTypeFilter === t
+                        ? 'bg-amber-600 text-white font-bold shadow'
+                        : 'bg-zinc-850 hover:bg-zinc-750 text-zinc-400'
+                    }`}
+                  >
+                    {t === 'all' ? 'All Types' : t}
+                  </button>
+                ))}
+              </div>
+
+              {/* Quick Preset Search Tags */}
+              <div className="flex items-center gap-1.5 overflow-x-auto text-[10px] font-mono text-zinc-400 no-scrollbar">
+                <span className="text-[10px] text-zinc-500 font-semibold mr-1 shrink-0">Popular Summons:</span>
+                {['Dire Wolf', 'Brown Bear', 'Giant Spider', 'Giant Owl', 'Constrictor Snake', 'Elk', 'Pixie', 'Fire Elemental', 'Water Elemental', 'Imp', 'Warhorse', 'Flying Sword'].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => {
+                      setDdbSearchQuery(preset);
+                      searchDdbTokens(preset, ddbTypeFilter);
+                    }}
+                    className="px-2 py-0.5 rounded bg-zinc-800/80 hover:bg-amber-600/20 hover:text-amber-300 border border-zinc-700/60 whitespace-nowrap cursor-pointer transition-colors"
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Results Grid */}
+            <div className="flex-1 overflow-y-auto p-4 bg-zinc-950/80">
+              {isLoadingDdb ? (
+                <div className="h-64 flex flex-col items-center justify-center text-zinc-400 gap-3">
+                  <Loader2 className="w-8 h-8 text-amber-500 animate-spin" />
+                  <p className="text-xs font-mono">Searching official D&D Beyond monster tokens...</p>
+                </div>
+              ) : ddbSearchResults.length === 0 ? (
+                <div className="h-64 flex flex-col items-center justify-center text-zinc-500 gap-2">
+                  <ImageIcon className="w-10 h-10 text-zinc-600" />
+                  <p className="text-sm font-semibold text-zinc-400">No D&D Beyond tokens found for "{ddbSearchQuery}".</p>
+                  <p className="text-xs">Try searching for generic terms like "Wolf", "Bear", "Elemental", or "Familiar".</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                  {ddbSearchResults.map((monster) => {
+                    const avatar = monster.largeAvatarUrl || monster.avatarUrl;
+                    return (
+                      <div
+                        key={monster.monsterId || monster.id || Math.random()}
+                        className="p-3 bg-zinc-900/80 hover:bg-zinc-850 border border-zinc-800 hover:border-amber-500/50 rounded-xl transition-all flex flex-col justify-between group shadow-sm"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-amber-500/40 shadow bg-zinc-950 shrink-0 group-hover:border-amber-400 transition-colors">
+                            <img
+                              src={avatar}
+                              alt={monster.name}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                e.currentTarget.src = 'https://www.dndbeyond.com/avatars/43939/948/638607435568755201.png';
+                              }}
+                            />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <h4 className="text-sm font-bold text-zinc-100 truncate font-serif group-hover:text-amber-300 transition-colors">
+                              {monster.name}
+                            </h4>
+                            <div className="text-[10px] font-mono text-zinc-400 truncate">
+                              {monster.size || 'Medium'} {monster.type || 'Creature'}
+                            </div>
+                            <div className="text-[10px] font-mono text-amber-400/90 font-semibold mt-0.5">
+                              CR {monster.challenge || '—'} • HP {monster.hp || '—'}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 pt-2 border-t border-zinc-800 flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleSelectDdbToken(monster)}
+                            className="flex-1 py-1.5 bg-amber-600/20 hover:bg-amber-600 border border-amber-500/40 text-amber-300 hover:text-white rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow"
+                          >
+                            <Sparkles className="w-3.5 h-3.5" />
+                            {ddbPickerMode === 'import_new' ? 'Import Ally' : 'Pair Token Art'}
+                          </button>
+
+                          {ddbPickerMode !== 'import_new' && (
+                            <button
+                              type="button"
+                              onClick={() => handleImportAsNewAlly(monster)}
+                              className="px-2.5 py-1.5 bg-zinc-800 hover:bg-emerald-600/30 border border-zinc-700 hover:border-emerald-500 text-zinc-300 hover:text-emerald-300 rounded-lg text-xs font-mono font-semibold transition-all cursor-pointer"
+                              title="Import as full new summon into Compendium"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </div>

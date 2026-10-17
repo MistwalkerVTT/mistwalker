@@ -1520,6 +1520,7 @@ export default function App() {
       const dropY = Math.round(worldY - (tokenPxSize / 2));
 
       const isMonster = data.isMonster || data.category === 'monster' || isMonsterToken({ name: data.name, category: data.category });
+      const isAlly = data.category === 'ally';
 
       // Automatically tie AC and HP directly to character sheet!
       const charStats = resolveTokenCharacterStats({ name: data.name }, compendiumCharacters);
@@ -1540,11 +1541,12 @@ export default function App() {
         maxHp: finalMaxHp,
         currentHp: finalCurrentHp,
         ac: finalAc,
-        isPlayer: !isMonster,
+        isPlayer: !isMonster && !isAlly,
         isMonster: isMonster,
-        category: isMonster ? 'monster' : (data.category || 'character'),
+        category: isMonster ? 'monster' : (isAlly ? 'ally' : (data.category || 'character')),
         visionEnabled: !isMonster,
-        visionRadius: isMonster ? 0 : 60
+        visionRadius: isMonster ? 0 : 60,
+        ...(data.allyId ? { allyId: data.allyId } : {})
       };
 
       setTokens(prev => {
