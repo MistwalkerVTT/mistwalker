@@ -251,7 +251,7 @@ interface LeftSidebarProps {
 
 type GroupMenuId = 'maps' | 'zones' | 'fog-grid' | 'lighting' | 'combat' | 'fx' | 'spells' | 'tokens' | 'dice' | 'ai' | 'help';
 
-export const LeftSidebar: React.FC<LeftSidebarProps> = ({
+export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   isPlayerView,
   activeMapId,
   handleMapSwitch,
@@ -4795,4 +4795,4 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
       )}
     </div>
   );
-};
+});

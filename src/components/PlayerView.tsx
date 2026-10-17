@@ -812,7 +812,9 @@ const PlayerToken = React.memo(({
             strokeWidth={3}
             dash={[6, 4]}
             shadowColor="#10b981"
-            shadowBlur={12}
+            shadowBlur={10}
+            shadowForStrokeEnabled={false}
+            perfectDrawEnabled={false}
             listening={false}
           />
           <Rect
@@ -824,6 +826,7 @@ const PlayerToken = React.memo(({
             cornerRadius={4}
             stroke="#10b981"
             strokeWidth={1}
+            perfectDrawEnabled={false}
             listening={false}
           />
           <Text
@@ -835,6 +838,7 @@ const PlayerToken = React.memo(({
             fill="#6ee7b7"
             fontSize={10}
             fontStyle="bold"
+            perfectDrawEnabled={false}
             listening={false}
           />
         </>
@@ -864,12 +868,14 @@ const PlayerToken = React.memo(({
               width={tokenPx}
               height={tokenPx}
               fill={token.isPlayer ? '#1e3a8a' : '#7f1d1d'}
+              perfectDrawEnabled={false}
             />
             <Circle
               x={radius}
               y={radius}
               radius={radius * 0.72}
               fill={token.isPlayer ? '#1d4ed8' : '#991b1b'}
+              perfectDrawEnabled={false}
             />
             <Text
               x={0}
@@ -881,8 +887,7 @@ const PlayerToken = React.memo(({
               fontStyle="bold"
               fontFamily="sans-serif"
               fill="white"
-              shadowColor="black"
-              shadowBlur={4}
+              perfectDrawEnabled={false}
             />
           </>
         )}
@@ -895,8 +900,10 @@ const PlayerToken = React.memo(({
         radius={radius}
         stroke={isClaimed ? '#10b981' : token.isPlayer ? '#38bdf8' : '#ef4444'}
         strokeWidth={isClaimed ? 3.5 : 2.5}
-        shadowColor="black"
-        shadowBlur={isClaimed ? 10 : 6}
+        shadowColor={isClaimed ? '#10b981' : undefined}
+        shadowBlur={isClaimed ? 8 : 0}
+        shadowForStrokeEnabled={false}
+        perfectDrawEnabled={false}
         listening={false}
       />
 
@@ -904,7 +911,7 @@ const PlayerToken = React.memo(({
 
       {/* 4. Large, High-Contrast HP Pill Badge directly tied to D&D Beyond & Character Sheet */}
       <Group x={pillX} y={pillY} listening={false}>
-        {/* Dark slate container badge with glow */}
+        {/* Dark slate container badge */}
         <Rect
           width={pillWidth}
           height={pillHeight}
@@ -912,9 +919,7 @@ const PlayerToken = React.memo(({
           stroke={hpRatio <= 0.25 ? "#ef4444" : "#475569"}
           strokeWidth={hpRatio <= 0.25 ? 1.5 : 1}
           cornerRadius={5}
-          shadowColor="black"
-          shadowBlur={6}
-          shadowOpacity={0.8}
+          perfectDrawEnabled={false}
         />
         {/* Background HP Track */}
         <Rect
@@ -924,6 +929,7 @@ const PlayerToken = React.memo(({
           height={4.5}
           fill="rgba(30, 41, 59, 0.9)"
           cornerRadius={2.5}
+          perfectDrawEnabled={false}
         />
         {/* Filled HP progress bar */}
         {hpRatio > 0 && (
@@ -934,8 +940,7 @@ const PlayerToken = React.memo(({
             height={4.5}
             fill={hpColor}
             cornerRadius={2.5}
-            shadowColor={hpColor}
-            shadowBlur={hpRatio <= 0.25 ? 6 : 3}
+            perfectDrawEnabled={false}
           />
         )}
         {/* Crisp Monospace HP text */}
@@ -948,8 +953,7 @@ const PlayerToken = React.memo(({
           fontStyle="bold"
           fontFamily="monospace"
           fill="#ffffff"
-          shadowColor="black"
-          shadowBlur={3}
+          perfectDrawEnabled={false}
         />
       </Group>
 
@@ -963,8 +967,7 @@ const PlayerToken = React.memo(({
           fill="white"
           fontSize={11.5}
           fontStyle="bold"
-          shadowColor="black"
-          shadowBlur={4}
+          perfectDrawEnabled={false}
         />
         {token.conditions && token.conditions.length > 0 && (
           <Text
@@ -977,12 +980,18 @@ const PlayerToken = React.memo(({
             width={tokenPx + 60}
             x={-30}
             y={16}
-            shadowBlur={3}
-            shadowColor="black"
+            perfectDrawEnabled={false}
           />
         )}
       </Group>
     </Group>
+  );
+}, (prevProps, nextProps) => {
+  return (
+    prevProps.token === nextProps.token &&
+    prevProps.gridSize === nextProps.gridSize &&
+    prevProps.isClaimed === nextProps.isClaimed &&
+    prevProps.characters === nextProps.characters
   );
 });
 
@@ -3237,11 +3246,6 @@ export default function PlayerView() {
         onMouseDown={handleStageMouseDown}
         onMouseMove={handleStageMouseMove}
         onMouseUp={handleStageMouseUp}
-        onDragMove={(e) => {
-          if (e.target === e.target.getStage()) {
-            setStagePos({ x: e.target.x(), y: e.target.y() });
-          }
-        }}
         onDragEnd={(e) => {
           if (e.target === e.target.getStage()) {
             setStagePos({ x: e.target.x(), y: e.target.y() });

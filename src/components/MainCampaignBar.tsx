@@ -56,7 +56,7 @@ interface MainCampaignBarProps {
   onOpenTutorial?: () => void;
 }
 
-export const MainCampaignBar: React.FC<MainCampaignBarProps> = ({
+export const MainCampaignBar: React.FC<MainCampaignBarProps> = React.memo(({
   activeSceneInfo,
   campaigns,
   tokenCount,
@@ -408,5 +408,5 @@ export const MainCampaignBar: React.FC<MainCampaignBarProps> = ({
       </div>
     </div>
   );
-};
+});
 

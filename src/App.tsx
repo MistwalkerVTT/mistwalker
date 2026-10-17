@@ -487,8 +487,10 @@ const TokenImage = React.memo(({
             strokeWidth={3}
             dash={[6, 3]}
             shadowColor="#f59e0b"
-            shadowBlur={10}
+            shadowBlur={8}
             shadowOpacity={0.9}
+            shadowForStrokeEnabled={false}
+            perfectDrawEnabled={false}
             listening={false}
           />
           <Circle
@@ -498,6 +500,7 @@ const TokenImage = React.memo(({
             stroke="#fbbf24"
             strokeWidth={1}
             opacity={0.6}
+            perfectDrawEnabled={false}
             listening={false}
           />
         </>
@@ -526,6 +529,7 @@ const TokenImage = React.memo(({
             width={tokenWidth}
             height={tokenWidth}
             fill={token.isPlayer ? '#1e3a8a' : '#7f1d1d'}
+            perfectDrawEnabled={false}
           />
         )}
       </Group>
@@ -545,8 +549,10 @@ const TokenImage = React.memo(({
             : "#10b981"
         }
         strokeWidth={isSelected ? 3.5 : 2.5}
-        shadowColor="black"
-        shadowBlur={isSelected ? 10 : 5}
+        shadowColor={isSelected ? "#f59e0b" : undefined}
+        shadowBlur={isSelected ? 8 : 0}
+        shadowForStrokeEnabled={false}
+        perfectDrawEnabled={false}
         listening={false}
       />
 
@@ -557,8 +563,7 @@ const TokenImage = React.memo(({
           fill="#0f172a"
           stroke="#38bdf8"
           strokeWidth={1.5}
-          shadowColor="black"
-          shadowBlur={4}
+          perfectDrawEnabled={false}
         />
         <Text
           x={-11}
@@ -569,6 +574,7 @@ const TokenImage = React.memo(({
           fontSize={6}
           fontStyle="bold"
           fill="#38bdf8"
+          perfectDrawEnabled={false}
         />
         <Text
           x={-11}
@@ -579,12 +585,13 @@ const TokenImage = React.memo(({
           fontSize={10}
           fontStyle="bold"
           fill="#ffffff"
+          perfectDrawEnabled={false}
         />
       </Group>
 
       {/* 4. Large, High-Contrast HP Pill Badge directly tied to D&D Beyond & Character Sheet */}
       <Group x={pillX} y={pillY} listening={false}>
-        {/* Dark slate container badge with glow */}
+        {/* Dark slate container badge */}
         <Rect
           width={pillWidth}
           height={pillHeight}
@@ -592,9 +599,7 @@ const TokenImage = React.memo(({
           stroke={stats.hpRatio <= 0.25 ? "#ef4444" : "#475569"}
           strokeWidth={stats.hpRatio <= 0.25 ? 1.5 : 1}
           cornerRadius={5}
-          shadowColor="black"
-          shadowBlur={6}
-          shadowOpacity={0.8}
+          perfectDrawEnabled={false}
         />
         {/* Background HP Track */}
         <Rect
@@ -604,6 +609,7 @@ const TokenImage = React.memo(({
           height={4.5}
           fill="rgba(30, 41, 59, 0.9)"
           cornerRadius={2.5}
+          perfectDrawEnabled={false}
         />
         {/* Filled HP progress bar */}
         {stats.hpRatio > 0 && (
@@ -614,8 +620,7 @@ const TokenImage = React.memo(({
             height={4.5}
             fill={hpColor}
             cornerRadius={2.5}
-            shadowColor={hpColor}
-            shadowBlur={stats.hpRatio <= 0.25 ? 6 : 3}
+            perfectDrawEnabled={false}
           />
         )}
         {/* Crisp Monospace HP text */}
@@ -628,8 +633,7 @@ const TokenImage = React.memo(({
           fontStyle="bold"
           fontFamily="monospace"
           fill="#ffffff"
-          shadowColor="black"
-          shadowBlur={3}
+          perfectDrawEnabled={false}
         />
       </Group>
 
@@ -642,8 +646,7 @@ const TokenImage = React.memo(({
           fill={isSelected ? "#fbbf24" : "white"}
           align="center"
           width={tokenWidth}
-          shadowBlur={isSelected ? 5 : 3}
-          shadowColor="black"
+          perfectDrawEnabled={false}
         />
         {token.conditions && token.conditions.length > 0 && (
           <Text
@@ -655,12 +658,21 @@ const TokenImage = React.memo(({
             align="center"
             width={tokenWidth}
             y={16}
-            shadowBlur={3}
-            shadowColor="black"
+            perfectDrawEnabled={false}
           />
         )}
       </Group>
     </Group>
+  );
+}, (prevProps, nextProps) => {
+  return (
+    prevProps.token === nextProps.token &&
+    prevProps.isSelected === nextProps.isSelected &&
+    prevProps.gridSize === nextProps.gridSize &&
+    prevProps.tool === nextProps.tool &&
+    prevProps.isSpacePressed === nextProps.isSpacePressed &&
+    prevProps.combatants === nextProps.combatants &&
+    prevProps.characters === nextProps.characters
   );
 });
 
@@ -5777,7 +5789,6 @@ export default function App() {
                     fx.style.left = `${newX}px`;
                     fx.style.top = `${newY}px`;
                   }
-                  setStagePos({ x: newX, y: newY });
                 }
               }}
               onDragEnd={(e) => {

@@ -45,6 +45,7 @@ export const GridLayer: React.FC<GridLayerProps> = React.memo(({
         stroke="white"
         strokeWidth={1 / stageScale}
         opacity={gridOpacity}
+        perfectDrawEnabled={false}
       />
     </Layer>
   );

@@ -37,7 +37,7 @@ interface Props {
   onPanToToken?: (id: string) => void;
 }
 
-export function CombatTracker({
+export const CombatTracker = React.memo(function CombatTracker({
   onClose,
   combatants,
   setCombatants,
@@ -536,4 +536,4 @@ export function CombatTracker({
       </div>
     </div>
   );
-}
+});

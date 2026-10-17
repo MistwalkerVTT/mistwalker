@@ -564,6 +564,7 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
           ]}
           opacity={0.85}
           listening={false}
+          perfectDrawEnabled={false}
         />
       ))}
     </Layer>
