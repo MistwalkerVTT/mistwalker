@@ -2176,8 +2176,8 @@ export default function App() {
       activeSceneInfo: activeSceneInfo ? {
         ...activeSceneInfo,
         mapUrl: authoritativeUrl,
-        mapWidth: activeSceneInfo.mapWidth || dims.width,
-        mapHeight: activeSceneInfo.mapHeight || dims.height,
+        mapWidth: dims.width || activeSceneInfo.mapWidth,
+        mapHeight: dims.height || activeSceneInfo.mapHeight,
       } : {
         mapUrl: authoritativeUrl,
         mapWidth: dims.width,

@@ -1104,9 +1104,11 @@ export default function PlayerView() {
     height: typeof window !== 'undefined' ? window.innerHeight : 1080,
   });
 
-  // Map Background State
-  const [imageFile, setImageFile] = useState<string | null>(null);
-  const [image, imageStatus] = useImage(imageFile || '');
+  // Dual-strategy battlemap image loading (anonymous CORS with fallback)
+  const [imgWithCors, statusWithCors] = useImage(imageFile || '', 'anonymous');
+  const [imgNoCors, statusNoCors] = useImage(statusWithCors === 'failed' ? (imageFile || '') : '');
+  const image = statusWithCors === 'loaded' ? imgWithCors : (statusNoCors === 'loaded' ? imgNoCors : (imgWithCors || imgNoCors));
+  const imageStatus = statusWithCors === 'loaded' ? 'loaded' : (statusNoCors === 'loaded' ? 'loaded' : (statusWithCors === 'failed' && statusNoCors === 'failed' ? 'failed' : 'loading'));
   const [mapRotation, setMapRotation] = useState(0);
 
   // Canvas Layers & Vision State
@@ -2289,12 +2291,30 @@ export default function PlayerView() {
   // Natural Map Dimensions - Prioritize natural loaded image dimensions
   const naturalW = image?.width || (image as any)?.naturalWidth || 0;
   const naturalH = image?.height || (image as any)?.naturalHeight || 0;
-  const mapWidth = naturalW > 0 ? naturalW : (activeSceneInfo?.mapWidth || dimensions.width);
-  const mapHeight = naturalH > 0 ? naturalH : (activeSceneInfo?.mapHeight || dimensions.height);
+  let baseMapW = naturalW > 0 ? naturalW : (activeSceneInfo?.mapWidth || dimensions.width);
+  let baseMapH = naturalH > 0 ? naturalH : (activeSceneInfo?.mapHeight || dimensions.height);
+
+  // Guard against outdated or shrunk map dimensions when tokens or walls exist outside bounds
+  if (tokens.length > 0) {
+    for (const t of tokens) {
+      const right = (t.x || 0) + ((t.size || 1) * gridSize) + 100;
+      const bottom = (t.y || 0) + ((t.size || 1) * gridSize) + 100;
+      if (right > baseMapW) baseMapW = right;
+      if (bottom > baseMapH) baseMapH = bottom;
+    }
+  }
+  if (walls.length > 0) {
+    for (const w of walls) {
+      if (w.p1.x > baseMapW) baseMapW = w.p1.x + 50;
+      if (w.p2.x > baseMapW) baseMapW = w.p2.x + 50;
+      if (w.p1.y > baseMapH) baseMapH = w.p1.y + 50;
+      if (w.p2.y > baseMapH) baseMapH = w.p2.y + 50;
+    }
+  }
 
   const isRotated = mapRotation % 180 !== 0;
-  const targetMapW = isRotated ? mapHeight : mapWidth;
-  const targetMapH = isRotated ? mapWidth : mapHeight;
+  const targetMapW = isRotated ? baseMapH : baseMapW;
+  const targetMapH = isRotated ? baseMapW : baseMapH;
 
   // Calibrate 1"x1" physical grid scale for a 32-inch 16:9 TV
   const applyTvScale = useCallback((targetGridSize?: number, targetTokens?: any[]) => {
@@ -2315,6 +2335,7 @@ export default function PlayerView() {
     const tokenList = targetTokens || tokens;
     const primaryToken = tokenList.find(t => t.id === claimedTokenId) ||
                          tokenList.find(t => t.isPlayer) ||
+                         tokenList.find(t => t.category === 'character' || t.category === 'ally') ||
                          tokenList[0];
 
     const currentW = targetMapW || 1920;
@@ -2323,8 +2344,9 @@ export default function PlayerView() {
     let startX = 0;
     let startY = 0;
     if (primaryToken && typeof primaryToken.x === 'number' && typeof primaryToken.y === 'number') {
-      startX = (window.innerWidth / 2) - primaryToken.x * tvScale;
-      startY = (window.innerHeight / 2) - primaryToken.y * tvScale;
+      const tokenCenterOffset = ((primaryToken.size || 1) * effectiveGrid) / 2;
+      startX = (window.innerWidth / 2) - (primaryToken.x + tokenCenterOffset) * tvScale;
+      startY = (window.innerHeight / 2) - (primaryToken.y + tokenCenterOffset) * tvScale;
     } else if (currentW > 0 && currentH > 0) {
       startX = (window.innerWidth - currentW * tvScale) / 2;
       startY = (window.innerHeight - currentH * tvScale) / 2;
@@ -2344,15 +2366,33 @@ export default function PlayerView() {
     toast.info('Reset to 1" grid scale for 32" TV');
   }, [applyTvScale]);
 
-  // Auto-calibrate 1"x1" scale for 32" TV when a scene or map loads
+  // Auto-calibrate 1"x1" scale for 32" TV and center on party
   const lastCalibratedSceneRef = useRef<string | null>(null);
+  const hasCenteredOnPartyRef = useRef<boolean>(false);
+
   useEffect(() => {
     const sceneKey = activeSceneInfo?.sceneId || imageFile;
-    if (sceneKey && sceneKey !== lastCalibratedSceneRef.current && (image || naturalW > 0)) {
+    if (sceneKey && sceneKey !== lastCalibratedSceneRef.current) {
       lastCalibratedSceneRef.current = sceneKey;
+      hasCenteredOnPartyRef.current = false;
       applyTvScale(gridSize, tokens);
     }
-  }, [activeSceneInfo?.sceneId, imageFile, image, naturalW, gridSize, applyTvScale, tokens]);
+  }, [activeSceneInfo?.sceneId, imageFile, gridSize, applyTvScale, tokens]);
+
+  // When tokens arrive or load after scene setup, auto-center on party once
+  useEffect(() => {
+    if (!hasCenteredOnPartyRef.current && tokens.length > 0 && (image || naturalW > 0 || targetMapW > 0)) {
+      hasCenteredOnPartyRef.current = true;
+      applyTvScale(gridSize, tokens);
+    }
+  }, [tokens, image, naturalW, targetMapW, gridSize, applyTvScale]);
+
+  // When claiming a token, center camera directly on it
+  useEffect(() => {
+    if (claimedTokenId && tokens.some(t => t.id === claimedTokenId)) {
+      applyTvScale(gridSize, tokens);
+    }
+  }, [claimedTokenId]);
 
 
   const handleSelectDicePreset = useCallback((preset: DiceColorPreset) => {
@@ -2394,20 +2434,21 @@ export default function PlayerView() {
 
     const activeVisionTokens = tokens.filter((t) => {
       if ((t as any).hidden) return false;
-      if (isMonsterToken(t) || t.isMonster === true || t.category === 'monster' || t.isPlayer === false) return false;
+      const isAlly = t.category === 'ally' || !!(t as any).allyId;
+      const isMonster = !isAlly && (isMonsterToken(t) || t.isMonster === true || t.category === 'monster' || t.isPlayer === false);
+      if (isMonster) return false;
       if (t.visionEnabled === false) return false;
       if (typeof t.visionRadius === 'number' && t.visionRadius <= 0) return false;
 
       // In Player View with a claimed token, only the claimed token (and its summons/allies) provides vision
       if (claimedTokenId) {
         if (t.id === claimedTokenId) return true;
-        const isAlly = t.category === 'ally' || !!(t as any).allyId;
         if (isAlly && (t as any).ownerId === claimedTokenId) return true;
         return false;
       }
 
       if (t.visionEnabled !== undefined) return t.visionEnabled;
-      return t.isPlayer === true || t.category === 'character';
+      return !isMonster || isAlly || t.isPlayer === true || t.category === 'character';
     });
 
     const sources: VisionSource[] = [];
@@ -2489,6 +2530,11 @@ export default function PlayerView() {
     // The player's own claimed token is always visible to them
     if (claimedTokenId && t.id === claimedTokenId) return true;
 
+    // Friendly party characters, summons, and companions are always visible to players
+    const isAlly = t.category === 'ally' || !!(t as any).allyId;
+    const isMonster = !isAlly && (isMonsterToken(t) || t.isMonster === true || t.category === 'monster' || t.isPlayer === false);
+    if (!isMonster || isAlly) return true;
+
     const tokenPx = gridSize * (t.size || 1);
     const radius = tokenPx / 2;
     const cx = t.x + radius;
@@ -2551,6 +2597,12 @@ export default function PlayerView() {
     // If the effect was cast by the active claimed character, they can always see their own spell
     if (claimedTokenId && eff.placedById === claimedTokenId) return true;
 
+    // On shared display view without a single claimed token, party spells are visible
+    if (!claimedTokenId && eff.placedById) {
+      const placer = tokens.find(t => t.id === eff.placedById);
+      if (placer && (placer.isPlayer || placer.category === 'character' || placer.category === 'ally')) return true;
+    }
+
     // If fog is completely disabled, all effects are visible
     if (!isFogVisible) return true;
 
@@ -2611,7 +2663,7 @@ export default function PlayerView() {
 
     // If no part of the effect is in revealed areas or active vision -> NOT visible
     return false;
-  }, [claimedTokenId, isFogVisible, reveals, polygonReveals, visionConfig.enabled, activeFovPolygons, walls]);
+  }, [claimedTokenId, isFogVisible, reveals, polygonReveals, visionConfig.enabled, activeFovPolygons, walls, tokens]);
 
   // Candidate Tokens for Claiming (Only non-monster player characters and friendly summons)
   const candidateTokens = useMemo(() => {
@@ -3342,13 +3394,36 @@ export default function PlayerView() {
 
 
       {/* Loading Overlay */}
-      {(!image || imageStatus === 'loading') && imageFile && !isVideo && (
+      {imageStatus === 'loading' && !image && imageFile && !isVideo && (
         <div className="absolute inset-0 z-40 flex items-center justify-center bg-zinc-950/80 backdrop-blur-sm pointer-events-none">
           <div className="flex flex-col items-center gap-3 text-zinc-400">
             <Loader2 className="w-8 h-8 animate-spin text-emerald-400" />
             <span className="text-sm font-mono tracking-wider text-zinc-300">
               Mounting Full-Resolution Battlemap...
             </span>
+          </div>
+        </div>
+      )}
+
+      {/* Failed Image Load State */}
+      {imageStatus === 'failed' && !image && imageFile && !isVideo && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-zinc-950/90 backdrop-blur-md">
+          <div className="flex flex-col items-center gap-3 text-center max-w-sm p-6 bg-zinc-900 border border-red-500/30 rounded-2xl shadow-2xl">
+            <div className="w-12 h-12 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400">
+              <Radio className="w-6 h-6" />
+            </div>
+            <h4 className="text-sm font-bold text-white">Battlemap Download Failed</h4>
+            <p className="text-xs text-zinc-400">The battlemap could not be loaded across the network connection.</p>
+            <button
+              onClick={() => {
+                const url = imageFile;
+                setImageFile(null);
+                setTimeout(() => setImageFile(url), 100);
+              }}
+              className="mt-2 px-4 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-semibold shadow transition-colors cursor-pointer"
+            >
+              Retry Download
+            </button>
           </div>
         </div>
       )}

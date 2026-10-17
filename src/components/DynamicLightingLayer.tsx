@@ -146,10 +146,8 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
     const activeVisionTokens = tokens.filter((t) => {
       if (t.hidden && isPlayerView) return false;
       const isAlly = t.category === 'ally' || !!(t as any).allyId;
-      if (!isAlly && isMonsterToken(t)) return false;
-      if (t.isMonster === true) return false;
-      if (t.category === 'monster') return false;
-      if (!isAlly && t.isPlayer === false) return false;
+      const isMonster = !isAlly && (isMonsterToken(t) || t.isMonster === true || t.category === 'monster' || t.isPlayer === false);
+      if (isMonster) return false;
       if (t.visionEnabled === false) return false;
       if (typeof t.visionRadius === 'number' && t.visionRadius <= 0) return false;
 
@@ -161,7 +159,7 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
       }
 
       if (t.visionEnabled !== undefined) return t.visionEnabled;
-      return t.isPlayer === true || t.category === 'character' || isAlly;
+      return !isMonster || isAlly || t.isPlayer === true || t.category === 'character';
     });
 
     const sources: VisionSource[] = [];
@@ -450,8 +448,10 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
               // Compute tight local bounding box for this light source (+ minimal padding)
               const minX = Math.max(0, Math.floor(cx - maxR - pad));
               const minY = Math.max(0, Math.floor(cy - maxR - pad));
-              const maxX = Math.min(mapDimensions.width, Math.ceil(cx + maxR + pad));
-              const maxY = Math.min(mapDimensions.height, Math.ceil(cy + maxR + pad));
+              const limitW = Math.max(mapDimensions.width, Math.ceil(cx + maxR + pad));
+              const limitH = Math.max(mapDimensions.height, Math.ceil(cy + maxR + pad));
+              const maxX = Math.max(minX + 1, Math.min(limitW, Math.ceil(cx + maxR + pad)));
+              const maxY = Math.max(minY + 1, Math.min(limitH, Math.ceil(cy + maxR + pad)));
               const boxW = maxX - minX;
               const boxH = maxY - minY;
               if (boxW <= 0 || boxH <= 0) continue;
