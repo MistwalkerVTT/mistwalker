@@ -29,7 +29,8 @@ import {
   AlertTriangle,
   Video,
   Share2,
-  GripVertical
+  GripVertical,
+  Copy
 } from 'lucide-react';
 import {
   Campaign,
@@ -485,6 +486,153 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
       setInsertAfterSceneId(null);
     } catch (e) {
       console.error('Error adding scene:', e);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Helper to generate a unique copy title (e.g. "Dungeon Hall (Copy)", "Dungeon Hall (Copy 2)")
+  const generateCopyTitle = (title: string, existingScenes: Scene[]): string => {
+    const baseTitle = title.replace(/\s*\(Copy(\s+\d+)?\)$/i, '').trim();
+    let candidate = `${baseTitle} (Copy)`;
+    let counter = 2;
+    const lowerTitles = new Set(existingScenes.map(s => s.sceneTitle.toLowerCase()));
+    while (lowerTitles.has(candidate.toLowerCase())) {
+      candidate = `${baseTitle} (Copy ${counter})`;
+      counter++;
+    }
+    return candidate;
+  };
+
+  // 3b. Duplicate Scene within Chapter
+  const handleDuplicateScene = async (
+    sceneToDuplicate: Scene,
+    chapterId?: string,
+    campaignId?: string
+  ) => {
+    let cId = campaignId;
+    let chId = chapterId;
+
+    // Resolve campaignId and chapterId if not passed directly
+    if (!cId || !chId) {
+      for (const camp of campaigns) {
+        for (const chap of camp.chapters) {
+          if (chap.scenes.some(s => s.sceneId === sceneToDuplicate.sceneId)) {
+            cId = camp.campaignId;
+            chId = chap.chapterId;
+            break;
+          }
+        }
+        if (cId) break;
+      }
+    }
+
+    if (!cId) cId = selectedCampaignId || undefined;
+    if (!chId) chId = selectedChapterId || undefined;
+
+    if (!cId || !chId) {
+      toast.error('Unable to locate campaign or chapter for duplication');
+      return;
+    }
+
+    const targetCamp = campaigns.find(c => c.campaignId === cId);
+    if (!targetCamp) {
+      toast.error('Campaign not found');
+      return;
+    }
+
+    const targetChap = targetCamp.chapters.find(ch => ch.chapterId === chId);
+    if (!targetChap) {
+      toast.error('Chapter not found');
+      return;
+    }
+
+    // Safety constraint: Never allow blob URLs
+    if (sceneToDuplicate.mapUrl && sceneToDuplicate.mapUrl.startsWith('blob:')) {
+      toast.error('Cannot duplicate temporary blob map');
+      return;
+    }
+
+    const newSceneId = 'scene-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 6);
+    const newSceneTitle = generateCopyTitle(sceneToDuplicate.sceneTitle, targetChap.scenes);
+
+    // Deep clone tokens with unique IDs
+    const clonedTokens: SceneToken[] = (sceneToDuplicate.tokens || []).map((t, idx) => ({
+      ...t,
+      id: `tok-${Date.now().toString(36)}-${idx}-${Math.random().toString(36).substring(2, 6)}`
+    }));
+
+    // Deep clone walls with unique IDs
+    const clonedWalls: WallSegment[] = (sceneToDuplicate.walls || []).map((w, idx) => ({
+      ...w,
+      id: `wall-${Date.now().toString(36)}-${idx}-${Math.random().toString(36).substring(2, 6)}`
+    }));
+
+    // Deep clone room annotations with unique IDs and updated sceneId
+    const clonedRooms: RoomAnnotation[] = (sceneToDuplicate.roomAnnotations || []).map((r, idx) => ({
+      ...r,
+      id: `room-${Date.now().toString(36)}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
+      sceneId: newSceneId
+    }));
+
+    const duplicatedScene: Scene = {
+      ...sceneToDuplicate,
+      sceneId: newSceneId,
+      sceneTitle: newSceneTitle,
+      mapUrl: sceneToDuplicate.mapUrl || '',
+      mapThumbnailUrl: sceneToDuplicate.mapThumbnailUrl,
+      mapWidth: sceneToDuplicate.mapWidth,
+      mapHeight: sceneToDuplicate.mapHeight,
+      dmNotes: sceneToDuplicate.dmNotes || '',
+      tokens: clonedTokens,
+      walls: clonedWalls,
+      roomAnnotations: clonedRooms,
+      gridSize: sceneToDuplicate.gridSize || 50,
+      gridOpacity: sceneToDuplicate.gridOpacity ?? 0.25,
+      isFogVisible: sceneToDuplicate.isFogVisible ?? true,
+      visionConfig: sceneToDuplicate.visionConfig ? { ...sceneToDuplicate.visionConfig } : undefined,
+      effects: sceneToDuplicate.effects ? JSON.parse(JSON.stringify(sceneToDuplicate.effects)) : undefined,
+      boardAnimatedFeatures: sceneToDuplicate.boardAnimatedFeatures ? JSON.parse(JSON.stringify(sceneToDuplicate.boardAnimatedFeatures)) : undefined,
+      boardAnimatedEnabled: sceneToDuplicate.boardAnimatedEnabled,
+      boardWeatherEffect: sceneToDuplicate.boardWeatherEffect
+    };
+
+    // Place the duplicate directly after the original scene
+    const originalIndex = targetChap.scenes.findIndex(s => s.sceneId === sceneToDuplicate.sceneId);
+    const updatedScenes = [...targetChap.scenes];
+    if (originalIndex !== -1) {
+      updatedScenes.splice(originalIndex + 1, 0, duplicatedScene);
+    } else {
+      updatedScenes.push(duplicatedScene);
+    }
+
+    const updatedChapters = targetCamp.chapters.map(ch =>
+      ch.chapterId === targetChap.chapterId ? { ...ch, scenes: updatedScenes } : ch
+    );
+
+    const updatedCamp: Campaign = {
+      ...targetCamp,
+      chapters: updatedChapters,
+      updatedAt: Date.now()
+    };
+
+    // Optimistically update UI
+    setCampaigns(prev => prev.map(c => c.campaignId === updatedCamp.campaignId ? updatedCamp : c));
+    setSelectedCampaignId(targetCamp.campaignId);
+    setSelectedChapterId(targetChap.chapterId);
+    setSelectedSceneId(duplicatedScene.sceneId);
+    setExpandedChapters(prev => ({ ...prev, [targetChap.chapterId]: true }));
+
+    setIsSaving(true);
+    try {
+      await saveCampaignDoc(updatedCamp);
+      toast.success(`Duplicated "${sceneToDuplicate.sceneTitle}" as "${newSceneTitle}"`);
+      setSaveSuccessMessage(`Duplicated scene "${newSceneTitle}"`);
+      setTimeout(() => setSaveSuccessMessage(null), 3000);
+    } catch (err) {
+      console.error('Error duplicating scene:', err);
+      toast.error('Failed to save duplicated scene to cloud');
+      await loadCampaigns();
     } finally {
       setIsSaving(false);
     }
@@ -1884,6 +2032,19 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
                                                     type="button"
                                                     onClick={(e) => {
                                                       e.stopPropagation();
+                                                      handleDuplicateScene(scene, chap.chapterId, camp.campaignId);
+                                                    }}
+                                                    className={`p-1 rounded text-zinc-500 hover:text-blue-400 hover:bg-blue-500/15 transition-all ${
+                                                      isSceneSelected ? 'opacity-100 text-zinc-400' : 'opacity-0 group-hover:opacity-100'
+                                                    }`}
+                                                    title={`Duplicate Scene "${scene.sceneTitle}"`}
+                                                  >
+                                                    <Copy className="w-3 h-3" />
+                                                  </button>
+                                                  <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
                                                       promptDeleteScene(scene.sceneId, scene.sceneTitle, camp.campaignId, chap.chapterId);
                                                     }}
                                                     className={`p-1 rounded text-zinc-500 hover:text-red-400 hover:bg-red-500/15 transition-all ${
@@ -2078,6 +2239,17 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
                     >
                       <Plus className="w-3.5 h-3.5 text-emerald-400" />
                       Add Scene Underneath
+                    </button>
+
+                    <button
+                      id="btn-duplicate-scene-inspector"
+                      type="button"
+                      onClick={() => handleDuplicateScene(selectedScene, selectedChapter?.chapterId, selectedCampaign?.campaignId)}
+                      className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-blue-300 border border-blue-500/30 text-xs font-medium flex items-center gap-1.5 transition-all active:scale-95"
+                      title={`Duplicate "${selectedScene.sceneTitle}" with all battlemap, tokens, rooms, and walls intact`}
+                    >
+                      <Copy className="w-3.5 h-3.5 text-blue-400" />
+                      Duplicate Scene
                     </button>
 
                     <button
