@@ -103,7 +103,9 @@ import {
   CampaignMode,
   RoomAnnotation,
   isMonsterToken,
-  CustomSpecialEffect
+  CustomSpecialEffect,
+  AURA_PRESETS,
+  AURA_COLOR_PALETTE
 } from './types';
 import { PresetBattlemap } from './data/presetBattlemaps';
 import { DynamicLightingLayer } from './components/DynamicLightingLayer';
@@ -1584,7 +1586,10 @@ export default function App() {
   }, []);
   const [showCombatTracker, setShowCombatTracker] = useState(false);
   const [isCombatTrackerMinimized, setIsCombatTrackerMinimized] = useState(false);
-  const [tokenMenuTab, setTokenMenuTab] = useState<'stats' | 'conditions'>('stats');
+  const [tokenMenuTab, setTokenMenuTab] = useState<'stats' | 'conditions' | 'auras'>('stats');
+  const [customAuraRadiusInput, setCustomAuraRadiusInput] = useState<number>(10);
+  const [customAuraColorInput, setCustomAuraColorInput] = useState<string>('rgba(234, 179, 8, 0.4)');
+  const [customAuraOpacityInput, setCustomAuraOpacityInput] = useState<number>(0.35);
 
   // Environmental Animated FX & Weather State on Main Board (Uploaded & Generated Maps)
   const [boardAnimatedFeatures, setBoardAnimatedFeatures] = useState<AnimatedFeature[]>([]);
@@ -3108,6 +3113,11 @@ export default function App() {
         if (typeof (t as any).isMonster === 'boolean') (tok as any).isMonster = (t as any).isMonster;
         if ((t as any).category) (tok as any).category = (t as any).category;
         if (typeof (t as any).visionEnabled === 'boolean') (tok as any).visionEnabled = (t as any).visionEnabled;
+        if (typeof (t as any).auraRadius === 'number') tok.auraRadius = (t as any).auraRadius;
+        if ((t as any).auraColor) tok.auraColor = (t as any).auraColor;
+        if (typeof (t as any).auraOpacity === 'number') tok.auraOpacity = (t as any).auraOpacity;
+        if ((t as any).auraName) tok.auraName = (t as any).auraName;
+        if (Array.isArray((t as any).auras)) tok.auras = (t as any).auras;
         return tok;
       });
 
@@ -4064,6 +4074,11 @@ export default function App() {
         if (typeof (t as any).visionRadius === 'number') tok.visionRadius = (t as any).visionRadius;
         if (typeof (t as any).visionAngle === 'number') tok.visionAngle = (t as any).visionAngle;
         if (typeof (t as any).visionEnabled === 'boolean') (tok as any).visionEnabled = (t as any).visionEnabled;
+        if (typeof (t as any).auraRadius === 'number') tok.auraRadius = (t as any).auraRadius;
+        if ((t as any).auraColor) tok.auraColor = (t as any).auraColor;
+        if (typeof (t as any).auraOpacity === 'number') tok.auraOpacity = (t as any).auraOpacity;
+        if ((t as any).auraName) tok.auraName = (t as any).auraName;
+        if (Array.isArray((t as any).auras)) tok.auras = (t as any).auras;
         return tok;
       });
 
@@ -7696,13 +7711,26 @@ export default function App() {
         const displayHp = currentToken?.currentHp ?? currentToken?.hp ?? matchingChar?.hp ?? matchingChar?.maxHp ?? 10;
         const displayMaxHp = currentToken?.maxHp ?? matchingChar?.maxHp ?? matchingChar?.hp ?? 10;
 
-        const menuX = Math.max(16, Math.min(activeTokenMenu.x, window.innerWidth - 275));
-        const menuY = Math.max(16, Math.min(activeTokenMenu.y, window.innerHeight - 300));
+        const menuX = Math.max(16, Math.min(activeTokenMenu.x, window.innerWidth - 300));
+        const menuY = Math.max(16, Math.min(activeTokenMenu.y, window.innerHeight - 440));
+
+        const handleUpdateDmToken = (updates: any) => {
+          setTokens(prev => {
+            const next = prev.map(t => t.id === activeTokenMenu.id ? { ...t, ...updates } : t);
+            if (mapsDataRef.current[activeMapId]) {
+              mapsDataRef.current[activeMapId].tokens = next;
+            }
+            if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) {
+              socketRef.current.emit('SYNC_TOKENS', next);
+            }
+            return next;
+          });
+        };
 
         return (
           <div 
             id="token-context-menu-popup"
-            className="fixed z-[300] bg-zinc-950/95 backdrop-blur-xl border border-zinc-700/80 rounded-xl shadow-2xl p-3.5 w-64 animate-in fade-in zoom-in-95"
+            className="fixed z-[300] bg-zinc-950/95 backdrop-blur-xl border border-zinc-700/80 rounded-xl shadow-2xl p-3.5 w-72 animate-in fade-in zoom-in-95"
             style={{ left: menuX, top: menuY }}
           >
             <div className="flex justify-between items-center mb-2.5 pb-2 border-b border-zinc-800">
@@ -7730,7 +7758,7 @@ export default function App() {
                     : 'text-zinc-400 hover:text-white'
                 }`}
               >
-                Stats & Info
+                Stats
               </button>
               <button
                 onClick={() => setTokenMenuTab('conditions')}
@@ -7745,9 +7773,23 @@ export default function App() {
                   <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse" />
                 )}
               </button>
+              <button
+                onClick={() => setTokenMenuTab('auras')}
+                className={`flex-1 py-1 rounded-md text-[10px] font-bold font-mono transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                  tokenMenuTab === 'auras'
+                    ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 shadow-xs'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                <Sparkles className="w-2.5 h-2.5 text-indigo-400" />
+                <span>Auras</span>
+                {((currentToken?.auraRadius && currentToken.auraRadius > 0) || (currentToken?.auras && currentToken.auras.length > 0)) && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse shrink-0" />
+                )}
+              </button>
             </div>
             
-            {tokenMenuTab === 'stats' ? (
+            {tokenMenuTab === 'stats' && (
               <div className="space-y-2.5">
                  {/* View Compendium Button (Hero vs Ally vs Monster) */}
                  {isCharacter ? (
@@ -7901,8 +7943,10 @@ export default function App() {
                    <Trash2 className="w-3.5 h-3.5" />
                    Delete Token
                  </button>
-              </div>
-            ) : (
+               </div>
+            )}
+
+            {tokenMenuTab === 'conditions' && (
               <div className="space-y-2">
                 <div className="flex justify-between items-center px-1">
                   <span className="text-[9px] font-mono text-zinc-400 uppercase font-bold tracking-tighter">D&D Status Conditions</span>
@@ -7933,6 +7977,193 @@ export default function App() {
                       </button>
                     );
                   })}
+                </div>
+              </div>
+            )}
+
+            {tokenMenuTab === 'auras' && (
+              <div className="space-y-3">
+                {/* Active Aura Status Banner */}
+                {((currentToken?.auraRadius && currentToken.auraRadius > 0) || (currentToken?.auras && currentToken.auras.length > 0)) ? (
+                  <div className="bg-indigo-950/40 border border-indigo-500/40 rounded-xl p-2.5 flex items-center justify-between">
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      <div
+                        className="w-4 h-4 rounded-full border border-white/50 shrink-0 shadow-sm"
+                        style={{ backgroundColor: currentToken?.auraColor || 'rgba(234, 179, 8, 0.5)' }}
+                      />
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-[11px] font-bold text-indigo-200 truncate">
+                          {currentToken?.auraName || 'Magical Aura'}
+                        </span>
+                        <span className="text-[9px] font-mono text-indigo-400">
+                          Radius: {currentToken?.auraRadius || 10} ft
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleUpdateDmToken({
+                          auraRadius: undefined,
+                          auraColor: undefined,
+                          auraName: undefined,
+                          auraOpacity: undefined,
+                          auras: []
+                        });
+                        toast.info(`Removed aura from ${currentToken?.name || 'token'}`);
+                      }}
+                      className="px-2 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/30 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 shrink-0"
+                      title="Remove Aura"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      <span>Clear</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-2 text-center text-[10px] text-zinc-400 font-mono">
+                    No active aura. Pick a preset or build a custom aura below.
+                  </div>
+                )}
+
+                {/* Section: Preset Auras */}
+                <div>
+                  <div className="flex justify-between items-center px-1 mb-1.5">
+                    <span className="text-[9px] font-mono text-zinc-400 uppercase font-bold tracking-tighter flex items-center gap-1">
+                      <Sparkles className="w-2.5 h-2.5 text-indigo-400" />
+                      Preset Magical Auras
+                    </span>
+                    <span className="text-[9px] font-mono text-indigo-400 font-bold">1-Click</span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-1.5 max-h-44 overflow-y-auto sidebar-scrollbar pr-1">
+                    {AURA_PRESETS.map((preset) => {
+                      const isActive = currentToken?.auraName === preset.name || 
+                        (currentToken?.auraRadius === preset.radius && currentToken?.auraColor === preset.color);
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => {
+                            handleUpdateDmToken({
+                              auraRadius: preset.radius,
+                              auraColor: preset.color,
+                              auraName: preset.name,
+                              auraOpacity: preset.opacity || 0.35
+                            });
+                            toast.success(`Equipped ${preset.name} (${preset.radius}ft)`);
+                          }}
+                          className={`w-full p-1.5 rounded-lg text-left transition-all flex items-center justify-between border cursor-pointer ${
+                            isActive
+                              ? 'bg-indigo-600/30 border-indigo-400/80 text-white shadow-sm'
+                              : 'bg-zinc-900/80 hover:bg-zinc-800 border-zinc-800 text-zinc-300'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div
+                              className="w-3.5 h-3.5 rounded-full border border-white/40 shrink-0"
+                              style={{ backgroundColor: preset.color }}
+                            />
+                            <div className="flex flex-col min-w-0">
+                              <span className="text-[11px] font-semibold truncate leading-tight">{preset.name}</span>
+                              {preset.description && (
+                                <span className="text-[9px] text-zinc-500 truncate leading-tight">{preset.description}</span>
+                              )}
+                            </div>
+                          </div>
+                          <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700 shrink-0 ml-1">
+                            {preset.radius}ft
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Section: Custom Aura Controls */}
+                <div className="border-t border-zinc-800/80 pt-2.5 space-y-2">
+                  <span className="text-[9px] font-mono text-zinc-400 uppercase font-bold tracking-tighter block px-1">
+                    Custom Aura Settings
+                  </span>
+
+                  {/* Radius quick buttons & input */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[9px] text-zinc-400 font-mono w-11 shrink-0">Radius:</span>
+                    <div className="flex items-center gap-1 flex-1 overflow-x-auto">
+                      {[5, 10, 15, 20, 30, 60].map((r) => (
+                        <button
+                          key={r}
+                          type="button"
+                          onClick={() => {
+                            setCustomAuraRadiusInput(r);
+                            handleUpdateDmToken({
+                              auraRadius: r,
+                              auraColor: currentToken?.auraColor || customAuraColorInput,
+                              auraName: currentToken?.auraName || 'Custom Aura',
+                              auraOpacity: currentToken?.auraOpacity ?? customAuraOpacityInput
+                            });
+                          }}
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold transition-all border cursor-pointer ${
+                            (currentToken?.auraRadius || customAuraRadiusInput) === r
+                              ? 'bg-amber-500/30 text-amber-300 border-amber-500/60'
+                              : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
+                          }`}
+                        >
+                          {r}ft
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Color Swatches */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[9px] text-zinc-400 font-mono w-11 shrink-0">Color:</span>
+                    <div className="flex items-center gap-1.5 flex-wrap flex-1">
+                      {AURA_COLOR_PALETTE.map((pal) => (
+                        <button
+                          key={pal.name}
+                          type="button"
+                          onClick={() => {
+                            setCustomAuraColorInput(pal.color);
+                            handleUpdateDmToken({
+                              auraColor: pal.color,
+                              auraRadius: currentToken?.auraRadius || customAuraRadiusInput || 10,
+                              auraName: currentToken?.auraName || 'Custom Aura',
+                              auraOpacity: currentToken?.auraOpacity ?? customAuraOpacityInput
+                            });
+                          }}
+                          className={`w-4 h-4 rounded-full border transition-all cursor-pointer ${
+                            (currentToken?.auraColor || customAuraColorInput) === pal.color
+                              ? 'ring-2 ring-white scale-110 border-white'
+                              : 'border-white/30 hover:scale-105'
+                          }`}
+                          style={{ backgroundColor: pal.color }}
+                          title={pal.name}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Custom Opacity */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[9px] text-zinc-400 font-mono w-11 shrink-0">Opacity:</span>
+                    <input
+                      type="range"
+                      min={0.15}
+                      max={0.7}
+                      step={0.05}
+                      value={currentToken?.auraOpacity ?? customAuraOpacityInput}
+                      onChange={(e) => {
+                        const op = parseFloat(e.target.value);
+                        setCustomAuraOpacityInput(op);
+                        if (currentToken?.auraRadius && currentToken.auraRadius > 0) {
+                          handleUpdateDmToken({ auraOpacity: op });
+                        }
+                      }}
+                      className="flex-1 accent-indigo-500 h-1 bg-zinc-800 rounded-lg cursor-pointer"
+                    />
+                    <span className="text-[9px] font-mono text-zinc-400 w-8 text-right">
+                      {Math.round((currentToken?.auraOpacity ?? customAuraOpacityInput) * 100)}%
+                    </span>
+                  </div>
                 </div>
               </div>
             )}
