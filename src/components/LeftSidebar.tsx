@@ -63,6 +63,7 @@ import {
   Droplets,
   Play,
   Pause,
+  Radio,
   Plus,
   Maximize2,
   Check,
@@ -113,6 +114,7 @@ interface LeftSidebarProps {
   isPlayerView?: boolean;
   activeMapId: 'DM1' | 'DM2' | 'DM3';
   liveMapId?: 'DM1' | 'DM2' | 'DM3';
+  onForceSync?: () => void;
   handleMapSwitch: (id: 'DM1' | 'DM2' | 'DM3') => void;
   onClearMapSlot?: (id?: 'DM1' | 'DM2' | 'DM3') => void;
   handleFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -260,6 +262,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   isPlayerView,
   activeMapId,
   liveMapId,
+  onForceSync,
   handleMapSwitch,
   onClearMapSlot,
   handleFileUpload,
@@ -1224,6 +1227,26 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                         );
                       })}
                     </div>
+                    {onForceSync && (
+                      <button
+                        type="button"
+                        id="btn-sidebar-force-sync"
+                        onClick={onForceSync}
+                        className={`w-full mt-2 py-1.5 px-2 rounded-xl text-xs font-bold font-mono transition-all flex items-center justify-center gap-1.5 border shadow-sm cursor-pointer ${
+                          activeMapId !== liveMapId
+                            ? 'bg-blue-600 hover:bg-blue-500 text-white border-blue-400 ring-2 ring-blue-500/50 animate-pulse'
+                            : 'bg-zinc-850 hover:bg-zinc-800 text-zinc-300 border-zinc-700'
+                        }`}
+                        title={`Force Sync: Broadcast slot ${activeMapId} to Player View. Currently, players are seeing ${liveMapId || 'DM1'}.`}
+                      >
+                        <Radio className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
+                        <span>
+                          {activeMapId !== liveMapId
+                            ? `Force Sync (${activeMapId} → Players)`
+                            : `Force Sync (${activeMapId} is Live)`}
+                        </span>
+                      </button>
+                    )}
                   </div>
                 </div>
 

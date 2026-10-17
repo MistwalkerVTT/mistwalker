@@ -944,6 +944,7 @@ export default function App() {
   const activeMapIdRef = useRef<'DM1'|'DM2'|'DM3'>('DM1');
   const liveMapIdRef = useRef<'DM1'|'DM2'|'DM3'>('DM1');
   const isSwitchingMapSlotRef = useRef<boolean>(false);
+  const lastSlotSwitchTimeRef = useRef<number>(0);
   const mapsDataRef = useRef<Record<string, any>>({
     DM1: null,
     DM2: null,
@@ -2187,7 +2188,7 @@ export default function App() {
 
   // Real-time synchronization of spell effects, board animated features & weather to Player View
   useEffect(() => {
-    if (isSwitchingMapSlotRef.current) return;
+    if (isSwitchingMapSlotRef.current || (Date.now() - lastSlotSwitchTimeRef.current < 1500)) return;
     if (activeMapIdRef.current !== liveMapIdRef.current) return;
     if (socketRef.current?.connected) {
       socketRef.current.emit('SYNC_STATE', {
@@ -2197,7 +2198,7 @@ export default function App() {
         boardWeatherEffect
       });
     }
-  }, [effects, boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect, activeMapId, liveMapId]);
+  }, [effects, boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect]);
 
   useEffect(() => {
     activeMapIdRef.current = activeMapId;
@@ -2598,24 +2599,31 @@ export default function App() {
       return;
     }
     // CRITICAL: Do NOT broadcast to players if DM is switching slots or editing a slot that is not the live slot!
-    if (isSwitchingMapSlotRef.current) return;
+    if (isSwitchingMapSlotRef.current || (Date.now() - lastSlotSwitchTimeRef.current < 1500)) return;
     if (activeMapIdRef.current !== liveMapIdRef.current) return;
 
     if (!socketRef.current?.connected) return;
     if (!imageFile && !activeSceneInfo?.mapUrl) return;
 
     const timer = setTimeout(() => {
+      // Re-check slot switch guard inside timer callback
+      if (isSwitchingMapSlotRef.current || (Date.now() - lastSlotSwitchTimeRef.current < 1500)) return;
+      if (activeMapIdRef.current !== liveMapIdRef.current) return;
       broadcastFullStateRef.current?.();
     }, 150);
 
     return () => clearTimeout(timer);
-  }, [reveals, polygonReveals, isFogVisible, visionConfig, walls, gridSize, gridOpacity, gridVisible, effects, mapRotation, activeMapId, liveMapId]);
+  }, [reveals, polygonReveals, isFogVisible, visionConfig, walls, gridSize, gridOpacity, gridVisible, effects, mapRotation]);
 
   // Manual "Force Sync to Players" action
   const handleForceSyncToPlayers = useCallback(() => {
     const currentSlot = activeMapIdRef.current as 'DM1' | 'DM2' | 'DM3';
     setLiveMapId(currentSlot);
     liveMapIdRef.current = currentSlot;
+
+    // Reset switching flags so force sync broadcast goes through cleanly
+    isSwitchingMapSlotRef.current = false;
+    lastSlotSwitchTimeRef.current = 0;
 
     // Save to mapsDataRef so it is always current
     mapsDataRef.current[currentSlot] = {
@@ -3021,69 +3029,52 @@ export default function App() {
     // Automatically fit the entire map inside the DM view
     fitWholeMapToScreen(scene.mapWidth, scene.mapHeight);
 
-    // 7. Socket broadcast: immediately emit SYNC_IMAGE and SYNC_STATE only if currently viewing the live slot
-    if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) {
-      if (authoritativeMapUrl) {
-        socketRef.current.emit('SYNC_IMAGE', authoritativeMapUrl);
-      }
-      socketRef.current.emit('SYNC_STATE', {
-        imageFile: authoritativeMapUrl,
-        tokens: loadedTokens,
-        walls: scene.walls || [],
-        gridSize: scene.gridSize || gridSize || 50,
-        gridOpacity: scene.gridOpacity ?? gridOpacity ?? 0.3,
-        isFogVisible: scene.isFogVisible ?? isFogVisible ?? true,
-        reveals: [],
-        polygonReveals: [],
-        visionConfig: scene.visionConfig || visionConfig,
-        roomAnnotations: scene.roomAnnotations || [],
-        effects: loadedEffects,
-        boardAnimatedFeatures: loadedFeatures,
-        boardAnimatedEnabled: loadedFeaturesEnabled,
-        boardWeatherEffect: loadedWeather,
-        activeSceneInfo: {
-          campaignId,
-          chapterId,
-          sceneId: scene.sceneId,
-          sceneTitle: scene.sceneTitle,
-          mapUrl: authoritativeMapUrl,
-          mapWidth: scene.mapWidth,
-          mapHeight: scene.mapHeight
-        }
-      });
-    }
-
-    // 8. Publish active session to Firestore for live player view synchronization only if live
-    if (activeMapIdRef.current === liveMapIdRef.current) {
-      publishActiveSession({
-        sessionId: 'current',
+    // Cache complete scene state in mapsDataRef for this slot
+    const targetSlot = (targetView || activeMapIdRef.current) as 'DM1' | 'DM2' | 'DM3';
+    mapsDataRef.current[targetSlot] = {
+      imageFile: authoritativeMapUrl,
+      mapType: (isVideoAsset(authoritativeMapUrl) || isVideoAsset(scene.mapUrl)) ? 'video' : 'image',
+      videoSize: { width: scene.mapWidth || 0, height: scene.mapHeight || 0 },
+      mapRotation: 0,
+      stageScale: 1,
+      stagePos: { x: 0, y: 0 },
+      reveals: [],
+      polygonReveals: [],
+      isFogVisible: scene.isFogVisible ?? true,
+      effects: loadedEffects,
+      tokens: loadedTokens,
+      gridVisible: true,
+      gridOpacity: scene.gridOpacity ?? 0.3,
+      gridSize: scene.gridSize || 50,
+      gridOffsetX: 0,
+      gridOffsetY: 0,
+      boardAnimatedFeatures: loadedFeatures,
+      boardAnimatedEnabled: loadedFeaturesEnabled,
+      boardWeatherEffect: loadedWeather,
+      walls: scene.walls || [],
+      visionConfig: scene.visionConfig || visionConfig,
+      roomAnnotations: roomAnnotations,
+      activeSceneInfo: {
         campaignId,
         chapterId,
         sceneId: scene.sceneId,
         sceneTitle: scene.sceneTitle,
-      mapUrl: authoritativeMapUrl,
-      mapThumbnailUrl: scene.mapThumbnailUrl,
-      mapWidth: scene.mapWidth,
-      mapHeight: scene.mapHeight,
-      dmNotes: scene.dmNotes || '',
-      tokens: loadedTokens as any,
-      gridSize: scene.gridSize || 50,
-      gridOpacity: scene.gridOpacity ?? 0.25,
-      isFogVisible: scene.isFogVisible ?? true,
-      walls: scene.walls || [],
-      visionConfig: scene.visionConfig || visionConfig,
-      roomAnnotations: scene.roomAnnotations || [],
-      effects: loadedEffects,
-      boardAnimatedFeatures: loadedFeatures,
-      boardAnimatedEnabled: loadedFeaturesEnabled,
-      boardWeatherEffect: loadedWeather,
-      updatedAt: Date.now()
-    }).catch(err => console.warn('[handleLoadSceneFromCampaign] Firestore activeSession publish warning:', err));
-    }
+        mapUrl: authoritativeMapUrl,
+        mapThumbnailUrl: scene.mapThumbnailUrl,
+        mapWidth: scene.mapWidth,
+        mapHeight: scene.mapHeight
+      },
+      activeDmNotes: scene.dmNotes || ''
+    };
+
+    // Suppress automatic background debounced broadcast right after scene load
+    lastSlotSwitchTimeRef.current = Date.now();
 
     const wallCount = scene.walls?.length || 0;
     const roomCount = scene.roomAnnotations?.length || 0;
-    toast.success(`Loaded scene "${scene.sceneTitle}" with ${scene.tokens?.length || 0} tokens${wallCount > 0 ? `, ${wallCount} walls/doors` : ''}${roomCount > 0 ? `, ${roomCount} room zones` : ''}!`);
+    toast.success(`Loaded scene "${scene.sceneTitle}" into ${targetSlot} (Press "Force Sync" to broadcast to players)`, {
+      duration: 4000
+    });
   };
 
   // Quick Save current canvas state to active scene
@@ -3157,30 +3148,32 @@ export default function App() {
 
       setActiveSceneInfo(prev => prev ? ({ ...prev, mapUrl: targetMapUrl }) : null);
 
-      await publishActiveSession({
-        sessionId: 'current',
-        campaignId: activeSceneInfo.campaignId,
-        chapterId: activeSceneInfo.chapterId,
-        sceneId: updatedScene.sceneId,
-        sceneTitle: updatedScene.sceneTitle,
-        mapUrl: updatedScene.mapUrl,
-        mapThumbnailUrl: updatedScene.mapThumbnailUrl,
-        mapWidth: updatedScene.mapWidth,
-        mapHeight: updatedScene.mapHeight,
-        dmNotes: updatedScene.dmNotes,
-        tokens: updatedScene.tokens,
-        gridSize: updatedScene.gridSize,
-        gridOpacity: updatedScene.gridOpacity,
-        isFogVisible: updatedScene.isFogVisible,
-        walls: updatedScene.walls,
-        visionConfig: updatedScene.visionConfig,
-        roomAnnotations: updatedScene.roomAnnotations,
-        effects: updatedScene.effects,
-        boardAnimatedFeatures: updatedScene.boardAnimatedFeatures,
-        boardAnimatedEnabled: updatedScene.boardAnimatedEnabled,
-        boardWeatherEffect: updatedScene.boardWeatherEffect,
-        updatedAt: Date.now()
-      });
+      if (activeMapIdRef.current === liveMapIdRef.current) {
+        await publishActiveSession({
+          sessionId: 'current',
+          campaignId: activeSceneInfo.campaignId,
+          chapterId: activeSceneInfo.chapterId,
+          sceneId: updatedScene.sceneId,
+          sceneTitle: updatedScene.sceneTitle,
+          mapUrl: updatedScene.mapUrl,
+          mapThumbnailUrl: updatedScene.mapThumbnailUrl,
+          mapWidth: updatedScene.mapWidth,
+          mapHeight: updatedScene.mapHeight,
+          dmNotes: updatedScene.dmNotes,
+          tokens: updatedScene.tokens,
+          gridSize: updatedScene.gridSize,
+          gridOpacity: updatedScene.gridOpacity,
+          isFogVisible: updatedScene.isFogVisible,
+          walls: updatedScene.walls,
+          visionConfig: updatedScene.visionConfig,
+          roomAnnotations: updatedScene.roomAnnotations,
+          effects: updatedScene.effects,
+          boardAnimatedFeatures: updatedScene.boardAnimatedFeatures,
+          boardAnimatedEnabled: updatedScene.boardAnimatedEnabled,
+          boardWeatherEffect: updatedScene.boardWeatherEffect,
+          updatedAt: Date.now()
+        });
+      }
 
       if (socketRef.current?.connected && targetMapUrl && (activeMapIdRef.current === liveMapIdRef.current)) {
         socketRef.current.emit('SYNC_IMAGE', targetMapUrl);
@@ -3280,10 +3273,11 @@ export default function App() {
         if (asset.url && !asset.url.startsWith('local:')) {
           setImageFile(asset.url);
         }
-        if (socketRef.current?.connected && (liveMapId === activeMapId)) {
-          socketRef.current.emit('SYNC_IMAGE', asset.url || localPreviewUrl);
+        lastSlotSwitchTimeRef.current = Date.now();
+        if (mapsDataRef.current[activeMapId]) {
+          mapsDataRef.current[activeMapId].imageFile = asset.url || localPreviewUrl;
         }
-        toast.success(`Map "${asset.name}" saved to Firebase`);
+        toast.success(`Map "${asset.name}" saved to Firebase (Press "Force Sync" to broadcast to players)`);
       } catch (err: any) {
         console.error("[Upload] Error uploading map to Firebase:", err);
         setUploadError(err.message || 'Failed to upload map.');
@@ -3369,28 +3363,33 @@ export default function App() {
         };
 
         await saveSceneToCampaign(activeSceneInfo.campaignId, activeSceneInfo.chapterId, updatedScene);
-        await publishActiveSession({
-          sessionId: 'current',
-          campaignId: activeSceneInfo.campaignId,
-          chapterId: activeSceneInfo.chapterId,
-          sceneId: updatedScene.sceneId,
-          sceneTitle: updatedScene.sceneTitle,
-          mapUrl: updatedScene.mapUrl,
-          mapThumbnailUrl: updatedScene.mapThumbnailUrl,
-          mapWidth: updatedScene.mapWidth,
-          mapHeight: updatedScene.mapHeight,
-          dmNotes: updatedScene.dmNotes,
-          tokens: updatedScene.tokens,
-          gridSize: updatedScene.gridSize || gridSize,
-          gridOpacity: updatedScene.gridOpacity ?? gridOpacity,
-          isFogVisible: updatedScene.isFogVisible ?? isFogVisible,
-          walls: updatedScene.walls,
-          visionConfig: updatedScene.visionConfig,
-          roomAnnotations: updatedScene.roomAnnotations,
-          updatedAt: Date.now()
-        });
+        if (activeMapIdRef.current === liveMapIdRef.current) {
+          await publishActiveSession({
+            sessionId: 'current',
+            campaignId: activeSceneInfo.campaignId,
+            chapterId: activeSceneInfo.chapterId,
+            sceneId: updatedScene.sceneId,
+            sceneTitle: updatedScene.sceneTitle,
+            mapUrl: updatedScene.mapUrl,
+            mapThumbnailUrl: updatedScene.mapThumbnailUrl,
+            mapWidth: updatedScene.mapWidth,
+            mapHeight: updatedScene.mapHeight,
+            dmNotes: updatedScene.dmNotes,
+            tokens: updatedScene.tokens,
+            gridSize: updatedScene.gridSize || gridSize,
+            gridOpacity: updatedScene.gridOpacity ?? gridOpacity,
+            isFogVisible: updatedScene.isFogVisible ?? isFogVisible,
+            walls: updatedScene.walls,
+            visionConfig: updatedScene.visionConfig,
+            roomAnnotations: updatedScene.roomAnnotations,
+            updatedAt: Date.now()
+          });
+        }
       }
 
+      if (mapsDataRef.current[activeMapId]) {
+        mapsDataRef.current[activeMapId].imageFile = targetMapUrl;
+      }
       if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) {
         socketRef.current.emit('SYNC_IMAGE', targetMapUrl);
         socketRef.current.emit('SYNC_STATE', {
@@ -3500,10 +3499,11 @@ export default function App() {
     setReveals([]);
     setStageScale(1);
     setStagePos({ x: 0, y: 0 });
-    if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) {
-      socketRef.current.emit("SYNC_IMAGE", targetUrl);
+    lastSlotSwitchTimeRef.current = Date.now();
+    if (mapsDataRef.current[activeMapId]) {
+      mapsDataRef.current[activeMapId].imageFile = targetUrl;
     }
-    toast.success(`Loaded "${mapAsset.name}"`);
+    toast.success(`Loaded "${mapAsset.name}" (Press "Force Sync" to broadcast to players)`);
   };
 
   const handleSelectPresetMap = (preset: PresetBattlemap) => {
@@ -3518,10 +3518,13 @@ export default function App() {
     setReveals([]);
     setStageScale(1);
     setStagePos({ x: 0, y: 0 });
-    if (socketRef.current && (activeMapIdRef.current === liveMapIdRef.current)) {
-      socketRef.current.emit("SYNC_IMAGE", preset.url);
+    lastSlotSwitchTimeRef.current = Date.now();
+    if (mapsDataRef.current[activeMapId]) {
+      mapsDataRef.current[activeMapId].imageFile = preset.url;
+      mapsDataRef.current[activeMapId].walls = [];
+      mapsDataRef.current[activeMapId].roomAnnotations = [];
     }
-    toast.success(`Loaded "${preset.name}" battle map`);
+    toast.success(`Loaded "${preset.name}" battle map (Press "Force Sync" to broadcast to players)`);
   };
 
   const handleDeleteUploadedAsset = async (assetId: string) => {
@@ -3807,30 +3810,32 @@ export default function App() {
           }));
 
           await saveSceneToCampaign(currentActiveScene.campaignId, currentActiveScene.chapterId, updatedScene);
-          await publishActiveSession({
-            sessionId: 'current',
-            campaignId: currentActiveScene.campaignId,
-            chapterId: currentActiveScene.chapterId,
-            sceneId: updatedScene.sceneId,
-            sceneTitle: updatedScene.sceneTitle,
-            mapUrl: updatedScene.mapUrl,
-            mapThumbnailUrl: updatedScene.mapThumbnailUrl,
-            mapWidth: updatedScene.mapWidth,
-            mapHeight: updatedScene.mapHeight,
-            dmNotes: updatedScene.dmNotes,
-            tokens: updatedScene.tokens,
-            gridSize: updatedScene.gridSize,
-            gridOpacity: updatedScene.gridOpacity,
-            isFogVisible: updatedScene.isFogVisible,
-            walls: updatedScene.walls,
-            visionConfig: updatedScene.visionConfig,
-            roomAnnotations: nextAnnotations,
-            effects: updatedScene.effects,
-            boardAnimatedFeatures: updatedScene.boardAnimatedFeatures,
-            boardAnimatedEnabled: updatedScene.boardAnimatedEnabled,
-            boardWeatherEffect: updatedScene.boardWeatherEffect,
-            updatedAt: Date.now()
-          });
+          if (activeMapIdRef.current === liveMapIdRef.current) {
+            await publishActiveSession({
+              sessionId: 'current',
+              campaignId: currentActiveScene.campaignId,
+              chapterId: currentActiveScene.chapterId,
+              sceneId: updatedScene.sceneId,
+              sceneTitle: updatedScene.sceneTitle,
+              mapUrl: updatedScene.mapUrl,
+              mapThumbnailUrl: updatedScene.mapThumbnailUrl,
+              mapWidth: updatedScene.mapWidth,
+              mapHeight: updatedScene.mapHeight,
+              dmNotes: updatedScene.dmNotes,
+              tokens: updatedScene.tokens,
+              gridSize: updatedScene.gridSize,
+              gridOpacity: updatedScene.gridOpacity,
+              isFogVisible: updatedScene.isFogVisible,
+              walls: updatedScene.walls,
+              visionConfig: updatedScene.visionConfig,
+              roomAnnotations: nextAnnotations,
+              effects: updatedScene.effects,
+              boardAnimatedFeatures: updatedScene.boardAnimatedFeatures,
+              boardAnimatedEnabled: updatedScene.boardAnimatedEnabled,
+              boardWeatherEffect: updatedScene.boardWeatherEffect,
+              updatedAt: Date.now()
+            });
+          }
         } catch (campErr) {
           console.warn('[handleSaveZone] Campaign scene sync note:', campErr);
         }
@@ -3948,30 +3953,32 @@ export default function App() {
         }));
 
         await saveSceneToCampaign(activeSceneInfo.campaignId, activeSceneInfo.chapterId, updatedScene);
-        await publishActiveSession({
-          sessionId: 'current',
-          campaignId: activeSceneInfo.campaignId,
-          chapterId: activeSceneInfo.chapterId,
-          sceneId: updatedScene.sceneId,
-          sceneTitle: updatedScene.sceneTitle,
-          mapUrl: updatedScene.mapUrl,
-          mapThumbnailUrl: updatedScene.mapThumbnailUrl,
-          mapWidth: updatedScene.mapWidth,
-          mapHeight: updatedScene.mapHeight,
-          dmNotes: updatedScene.dmNotes,
-          tokens: updatedScene.tokens,
-          gridSize: updatedScene.gridSize,
-          gridOpacity: updatedScene.gridOpacity,
-          isFogVisible: updatedScene.isFogVisible,
-          walls: updatedScene.walls,
-          visionConfig: updatedScene.visionConfig,
-          roomAnnotations: nextAnnotations,
-          effects: updatedScene.effects,
-          boardAnimatedFeatures: updatedScene.boardAnimatedFeatures,
-          boardAnimatedEnabled: updatedScene.boardAnimatedEnabled,
-          boardWeatherEffect: updatedScene.boardWeatherEffect,
-          updatedAt: Date.now()
-        });
+        if (activeMapIdRef.current === liveMapIdRef.current) {
+          await publishActiveSession({
+            sessionId: 'current',
+            campaignId: activeSceneInfo.campaignId,
+            chapterId: activeSceneInfo.chapterId,
+            sceneId: updatedScene.sceneId,
+            sceneTitle: updatedScene.sceneTitle,
+            mapUrl: updatedScene.mapUrl,
+            mapThumbnailUrl: updatedScene.mapThumbnailUrl,
+            mapWidth: updatedScene.mapWidth,
+            mapHeight: updatedScene.mapHeight,
+            dmNotes: updatedScene.dmNotes,
+            tokens: updatedScene.tokens,
+            gridSize: updatedScene.gridSize,
+            gridOpacity: updatedScene.gridOpacity,
+            isFogVisible: updatedScene.isFogVisible,
+            walls: updatedScene.walls,
+            visionConfig: updatedScene.visionConfig,
+            roomAnnotations: nextAnnotations,
+            effects: updatedScene.effects,
+            boardAnimatedFeatures: updatedScene.boardAnimatedFeatures,
+            boardAnimatedEnabled: updatedScene.boardAnimatedEnabled,
+            boardWeatherEffect: updatedScene.boardWeatherEffect,
+            updatedAt: Date.now()
+          });
+        }
       } catch (err) {
         console.warn('[handleDeleteZone] Scene update notice:', err);
       }
@@ -4133,30 +4140,32 @@ export default function App() {
       }));
 
       saveSceneToCampaign(activeSceneInfo.campaignId, activeSceneInfo.chapterId, updatedScene).catch(console.warn);
-      publishActiveSession({
-        sessionId: 'current',
-        campaignId: activeSceneInfo.campaignId,
-        chapterId: activeSceneInfo.chapterId,
-        sceneId: updatedScene.sceneId,
-        sceneTitle: updatedScene.sceneTitle,
-        mapUrl: updatedScene.mapUrl,
-        mapThumbnailUrl: updatedScene.mapThumbnailUrl,
-        mapWidth: updatedScene.mapWidth,
-        mapHeight: updatedScene.mapHeight,
-        dmNotes: updatedScene.dmNotes,
-        tokens: updatedScene.tokens,
-        gridSize: updatedScene.gridSize,
-        gridOpacity: updatedScene.gridOpacity,
-        isFogVisible: updatedScene.isFogVisible,
-        walls: updatedScene.walls,
-        visionConfig: updatedScene.visionConfig,
-        roomAnnotations: nextAnnotations,
-        effects: updatedScene.effects,
-        boardAnimatedFeatures: updatedScene.boardAnimatedFeatures,
-        boardAnimatedEnabled: updatedScene.boardAnimatedEnabled,
-        boardWeatherEffect: updatedScene.boardWeatherEffect,
-        updatedAt: Date.now()
-      }).catch(console.warn);
+      if (activeMapIdRef.current === liveMapIdRef.current) {
+        publishActiveSession({
+          sessionId: 'current',
+          campaignId: activeSceneInfo.campaignId,
+          chapterId: activeSceneInfo.chapterId,
+          sceneId: updatedScene.sceneId,
+          sceneTitle: updatedScene.sceneTitle,
+          mapUrl: updatedScene.mapUrl,
+          mapThumbnailUrl: updatedScene.mapThumbnailUrl,
+          mapWidth: updatedScene.mapWidth,
+          mapHeight: updatedScene.mapHeight,
+          dmNotes: updatedScene.dmNotes,
+          tokens: updatedScene.tokens,
+          gridSize: updatedScene.gridSize,
+          gridOpacity: updatedScene.gridOpacity,
+          isFogVisible: updatedScene.isFogVisible,
+          walls: updatedScene.walls,
+          visionConfig: updatedScene.visionConfig,
+          roomAnnotations: nextAnnotations,
+          effects: updatedScene.effects,
+          boardAnimatedFeatures: updatedScene.boardAnimatedFeatures,
+          boardAnimatedEnabled: updatedScene.boardAnimatedEnabled,
+          boardWeatherEffect: updatedScene.boardWeatherEffect,
+          updatedAt: Date.now()
+        }).catch(console.warn);
+      }
     }
   };
 
@@ -5258,6 +5267,7 @@ export default function App() {
     // Prevent any initial auto-restoration from interfering with switching to empty slots
     hasRestoredInitialSessionRef.current = true;
     isSwitchingMapSlotRef.current = true;
+    lastSlotSwitchTimeRef.current = Date.now();
 
     // Save current active map layer
     mapsDataRef.current[activeMapId] = {
@@ -5362,7 +5372,7 @@ export default function App() {
 
     setTimeout(() => {
       isSwitchingMapSlotRef.current = false;
-    }, 300);
+    }, 800);
 
     const isLive = newMapId === liveMapIdRef.current;
     toast.info(`Switched to slot ${newMapId}${next ? '' : ' (Blank layer)'}${isLive ? ' [Live on Players]' : ' [Private DM Prep]'}`);
@@ -5709,6 +5719,7 @@ export default function App() {
           isPlayerView={false}
           activeMapId={activeMapId}
           liveMapId={liveMapId}
+          onForceSync={handleForceSyncToPlayers}
           handleMapSwitch={handleMapSwitch}
           onClearMapSlot={handleClearMapSlot}
           handleFileUpload={handleFileUpload}
