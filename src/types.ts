@@ -330,3 +330,6 @@ export interface CustomSpecialEffect {
   createdAt: number;
   updatedAt?: number;
 }
+
+export * from './types/aura';
+export * from './types/ally';

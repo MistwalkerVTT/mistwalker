@@ -101,6 +101,8 @@ import {
 } from '../types';
 import { Monster, getSizeMultiplier } from '../types/monster';
 import { DEFAULT_MONSTERS } from '../data/defaultMonsters';
+import { Ally } from '../types/ally';
+import { DEFAULT_ALLIES } from '../data/defaultAllies';
 
 import { PRESET_BATTLEMAPS, PresetBattlemap } from '../data/presetBattlemaps';
 import { toast } from 'sonner';
@@ -190,8 +192,10 @@ interface LeftSidebarProps {
   onOpenLoadCampaign?: () => void;
   onOpenMonsterCompendium?: (initialSearch?: string) => void;
   onOpenCharacterCompendium?: (initialSearch?: string) => void;
+  onOpenAlliesCompendium?: (initialSearch?: string) => void;
   compendiumMonsters?: Monster[];
   compendiumCharacters?: Character[];
+  compendiumAllies?: Ally[];
   selectedTokenIds?: string[];
   activeSceneInfo?: { campaignId: string; chapterId: string; sceneId: string; sceneTitle: string; mapUrl?: string; mapWidth?: number; mapHeight?: number } | null;
   onQuickSave?: () => void;
@@ -327,8 +331,10 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   onOpenLoadCampaign,
   onOpenMonsterCompendium,
   onOpenCharacterCompendium,
+  onOpenAlliesCompendium,
   compendiumMonsters = [],
   compendiumCharacters = [],
+  compendiumAllies = [],
   selectedTokenIds = [],
   activeSceneInfo,
   onQuickSave,
@@ -3759,9 +3765,15 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                   (m.challenge && m.challenge.toLowerCase().includes(searchLower))
                 );
 
-                const allyTokens = availableTokens.filter(t => 
-                  (t.category === 'ally' || (!t.category && ['Spiritual Weapon'].includes(t.name))) &&
-                  (!searchLower || t.name.toLowerCase().includes(searchLower))
+                const allyList: Ally[] = (compendiumAllies && compendiumAllies.length > 0)
+                  ? compendiumAllies
+                  : DEFAULT_ALLIES;
+
+                const allyTokens = allyList.filter(a => 
+                  !searchLower ||
+                  a.name.toLowerCase().includes(searchLower) ||
+                  (a.summonSource && a.summonSource.toLowerCase().includes(searchLower)) ||
+                  (a.type && a.type.toLowerCase().includes(searchLower))
                 );
 
                 const filteredCustomTokens = customTokens.filter(t => 
@@ -3782,9 +3794,11 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                   category?: string,
                   hp?: number,
                   ac?: number,
-                  monsterId?: string
+                  sourceId?: string
                 ) => {
                   const isMonster = category === 'monster' || isMonsterToken({ name, category });
+                  const isAlly = category === 'ally';
+                  const isPlayer = !isMonster && !isAlly;
                   const newToken = {
                     id: `token_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
                     name,
@@ -3796,11 +3810,13 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                     maxHp: hp,
                     currentHp: hp,
                     ac: ac,
-                    isPlayer: !isMonster,
+                    isPlayer: isPlayer,
                     isMonster: isMonster,
-                    category: isMonster ? 'monster' : (category || 'character'),
+                    category: isMonster ? 'monster' : (isAlly ? 'ally' : (category || 'character')),
                     visionEnabled: !isMonster,
-                    visionRadius: isMonster ? 0 : 60
+                    visionRadius: isMonster ? 0 : 60,
+                    ...(isMonster ? { monsterId: sourceId } : {}),
+                    ...(isAlly ? { allyId: sourceId } : {})
                   };
                   setTokens(prev => [...prev, newToken]);
                   toast.success(`Spawned ${name} (${size}x${size})`);
@@ -4312,47 +4328,110 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                                   <Sparkles className="w-3 h-3 text-amber-400" />
                                   Summons & Allies ({allyTokens.length})
                                 </span>
-                                {collapseAllies ? <ChevronRight className="w-3.5 h-3.5 text-amber-400" /> : <ChevronDown className="w-3.5 h-3.5 text-amber-400" />}
-                              </div>
-                              <div className={`grid grid-cols-4 gap-2 ${collapseAllies ? 'hidden' : ''}`}>
-                                {allyTokens.map((tok, idx) => (
-                                  <div
-                                    key={idx}
-                                    draggable={true}
-                                    onDragStart={(e) => {
-                                      const tokenData = {
-                                        name: tok.name,
-                                        url: tok.url,
-                                        size: tok.size || 1,
-                                        isMonster: false,
-                                        category: 'ally'
-                                      };
-                                      e.dataTransfer.setData('application/json', JSON.stringify(tokenData));
-                                      e.dataTransfer.setData('text/plain', tok.name);
-                                      e.dataTransfer.effectAllowed = 'copy';
-                                    }}
-                                    className="group relative flex flex-col items-center gap-1 p-1.5 bg-zinc-850/60 hover:bg-amber-500/15 border border-zinc-750 hover:border-amber-500/40 rounded-xl transition-all active:scale-95 cursor-grab active:cursor-grabbing select-none"
-                                    title={`Drag onto map or click to spawn ${tok.name} (Ally / Summon)`}
-                                  >
+                                <div className="flex items-center gap-2">
+                                  {onOpenAlliesCompendium && (
                                     <button
                                       type="button"
-                                      onClick={() => spawnToken(tok.name, tok.url, tok.size || 1, 'ally')}
-                                      className="w-full flex flex-col items-center gap-1 cursor-pointer"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onOpenAlliesCompendium();
+                                        closeFlyout();
+                                      }}
+                                      className="text-[9px] text-amber-400 hover:text-amber-200 font-mono font-semibold flex items-center gap-1 hover:underline cursor-pointer"
+                                      title="Open Allies Compendium"
                                     >
-                                      <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-amber-500/40 group-hover:border-amber-400 transition-all shadow-sm relative group-hover:scale-105 pointer-events-none">
-                                        <img src={tok.url} alt={tok.name} className="w-full h-full object-cover" />
-                                        {tok.size && tok.size > 1 && (
-                                          <span className="absolute bottom-0 right-0 bg-amber-700 text-white text-[7px] font-bold px-1 rounded-tl">
-                                            {tok.size}x
-                                          </span>
-                                        )}
-                                        <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-amber-400 ring-1 ring-zinc-900" />
-                                      </div>
-                                      <span className="text-[9px] font-mono text-zinc-300 group-hover:text-amber-200 truncate max-w-[50px] text-center font-medium">{tok.name}</span>
+                                      <BookOpen className="w-2.5 h-2.5" />
+                                      Compendium
                                     </button>
-                                  </div>
-                                ))}
+                                  )}
+                                  {collapseAllies ? <ChevronRight className="w-3.5 h-3.5 text-amber-400" /> : <ChevronDown className="w-3.5 h-3.5 text-amber-400" />}
+                                </div>
                               </div>
+                              <div className={`text-[8.5px] text-amber-300/70 font-mono px-0.5 pb-0.5 flex items-center gap-1 ${collapseAllies ? 'hidden' : ''}`}>
+                                <Move className="w-2.5 h-2.5 text-amber-400 shrink-0" />
+                                <span>Drag ally onto map or click to spawn</span>
+                              </div>
+                              <div className={`grid grid-cols-4 gap-2 ${collapseAllies ? 'hidden' : ''}`}>
+                                {allyTokens.map((tok) => {
+                                  const allyMultiplier = getSizeMultiplier(tok.size);
+                                  const avatarUrl = tok.avatarUrl || 'https://images.unsplash.com/photo-1564865878688-9a244444042a?auto=format&fit=crop&w=300&q=80';
+                                  return (
+                                    <div
+                                      key={tok.allyId}
+                                      draggable={true}
+                                      onDragStart={(e) => {
+                                        const tokenData = {
+                                          name: tok.name,
+                                          url: avatarUrl,
+                                          size: allyMultiplier,
+                                          hp: tok.hp,
+                                          maxHp: tok.hp,
+                                          currentHp: tok.hp,
+                                          ac: tok.ac,
+                                          isMonster: false,
+                                          isPlayer: false,
+                                          category: 'ally',
+                                          allyId: tok.allyId
+                                        };
+                                        e.dataTransfer.setData('application/json', JSON.stringify(tokenData));
+                                        e.dataTransfer.setData('text/plain', tok.name);
+                                        e.dataTransfer.effectAllowed = 'copy';
+                                      }}
+                                      className="group relative flex flex-col items-center gap-1 p-1.5 bg-zinc-850/60 hover:bg-amber-500/15 border border-zinc-750 hover:border-amber-500/40 rounded-xl transition-all active:scale-95 cursor-grab active:cursor-grabbing select-none"
+                                      title={`${tok.name} (${tok.size || 'Medium'} • ${allyMultiplier}x${allyMultiplier}) | HP: ${tok.hp} | AC: ${tok.ac}\n${tok.summonSource}\nDrag onto map or click to spawn`}
+                                    >
+                                      {/* Quick Open in Compendium Button */}
+                                      {onOpenAlliesCompendium && (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            onOpenAlliesCompendium(tok.name);
+                                            closeFlyout();
+                                          }}
+                                          className="absolute top-0.5 left-0.5 p-0.5 bg-zinc-900/90 text-amber-400 hover:text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity border border-amber-900/50 z-10 cursor-pointer shadow"
+                                          title={`View ${tok.name} in Compendium`}
+                                        >
+                                          <BookOpen className="w-2.5 h-2.5" />
+                                        </button>
+                                      )}
+
+                                      <button
+                                        type="button"
+                                        onClick={() => spawnToken(tok.name, avatarUrl, allyMultiplier, 'ally', tok.hp, tok.ac, tok.allyId)}
+                                        className="w-full flex flex-col items-center gap-1 cursor-pointer"
+                                      >
+                                        <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-amber-500/40 group-hover:border-amber-400 transition-all shadow-sm relative group-hover:scale-105 pointer-events-none">
+                                          <img src={avatarUrl} alt={tok.name} className="w-full h-full object-cover" />
+                                          {allyMultiplier > 1 && (
+                                            <span className="absolute bottom-0 right-0 bg-amber-700 text-white text-[7px] font-bold px-1 rounded-tl">
+                                              {allyMultiplier}x
+                                            </span>
+                                          )}
+                                          <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-amber-400 ring-1 ring-zinc-900" />
+                                        </div>
+                                        <span className="text-[9px] font-mono text-zinc-300 group-hover:text-amber-200 truncate max-w-[50px] text-center font-medium leading-tight">{tok.name}</span>
+                                        <span className="text-[7.5px] font-mono text-amber-400/80 -mt-0.5 truncate max-w-[52px]">
+                                          {tok.size || 'Med'}
+                                        </span>
+                                      </button>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              {tokenCategoryFilter === 'allies' && onOpenAlliesCompendium && !collapseAllies && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    onOpenAlliesCompendium();
+                                    closeFlyout();
+                                  }}
+                                  className="mt-1 py-1.5 px-2 bg-amber-900/30 hover:bg-amber-900/50 border border-amber-500/30 rounded-lg text-[10px] font-bold text-amber-300 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                                >
+                                  <BookOpen className="w-3 h-3 text-amber-400" />
+                                  Browse More in Allies Compendium
+                                </button>
+                              )}
                             </div>
                           )}
                         </>

@@ -65,6 +65,13 @@ service cloud.firestore {
       allow delete: if isValidId(characterId);
     }
 
+    // Allies & Summons Compendium Collection
+    match /allies/{allyId} {
+      allow read: if true;
+      allow create, update: if isValidId(allyId);
+      allow delete: if isValidId(allyId);
+    }
+
     // Special Effects Collection (Spell & Environmental Animations)
     match /special_effects/{effectId} {
       allow read: if true;

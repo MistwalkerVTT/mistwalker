@@ -54,3 +54,15 @@ export interface Ally {
   createdAt?: number;
   updatedAt?: number;
 }
+
+export const getSizeMultiplier = (size?: string): number => {
+  switch (size?.toLowerCase()) {
+    case 'tiny': return 0.5;
+    case 'small': return 0.8;
+    case 'medium': return 1;
+    case 'large': return 2;
+    case 'huge': return 3;
+    case 'gargantuan': return 4;
+    default: return 1;
+  }
+};

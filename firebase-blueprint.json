@@ -404,6 +404,140 @@
           "type": "number"
         }
       }
+    },
+    "ally": {
+      "collection": "allies",
+      "fields": {
+        "allyId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "size": {
+          "type": "string",
+          "maxLength": 50
+        },
+        "type": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "summonSource": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "alignment": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "ac": {
+          "type": "number"
+        },
+        "acNotes": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "hp": {
+          "type": "number"
+        },
+        "hpFormula": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "speed": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "initiativeBonus": {
+          "type": "number"
+        },
+        "str": { "type": "number" },
+        "dex": { "type": "number" },
+        "con": { "type": "number" },
+        "int": { "type": "number" },
+        "wis": { "type": "number" },
+        "cha": { "type": "number" },
+        "savingThrows": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "skills": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "damageResistances": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "damageVulnerabilities": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "damageImmunities": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "conditionImmunities": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "senses": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "languages": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "challenge": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "proficiencyBonus": {
+          "type": "number"
+        },
+        "avatarUrl": {
+          "type": "string",
+          "maxLength": 500000
+        },
+        "statblockImageUrl": {
+          "type": "string",
+          "maxLength": 500000
+        },
+        "traits": {
+          "type": "array"
+        },
+        "actions": {
+          "type": "array"
+        },
+        "bonusActions": {
+          "type": "array"
+        },
+        "reactions": {
+          "type": "array"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "source": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "category": {
+          "type": "string",
+          "maxLength": 50
+        },
+        "createdAt": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+      }
     }
   }
 }

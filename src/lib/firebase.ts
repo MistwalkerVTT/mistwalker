@@ -209,6 +209,12 @@ export interface SceneToken {
   visionEnabled?: boolean;
   characterId?: string;
   ddbCharacterId?: number | string;
+  auraRadius?: number;
+  auraColor?: string;
+  auraOpacity?: number;
+  auraName?: string;
+  auraPulse?: boolean;
+  auras?: any[];
 }
 
 export interface Scene {
@@ -1611,6 +1617,143 @@ export async function deleteMonster(monsterId: string): Promise<void> {
   const path = `monsters/${monsterId}`;
   try {
     const docRef = doc(db, 'monsters', monsterId);
+    await deleteDoc(docRef);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+    throw error;
+  }
+}
+
+// ----------------------------------------------------
+// Allies & Summons Compendium Operations
+// ----------------------------------------------------
+import { Ally } from '../types/ally';
+export type { Ally, AllyTrait, AllyAction } from '../types/ally';
+
+export async function saveAlly(ally: Ally): Promise<Ally> {
+  const allyId = ally.allyId || `ally_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const path = `allies/${allyId}`;
+  const now = Date.now();
+
+  let avatarUrl = ally.avatarUrl;
+  let statblockImageUrl = ally.statblockImageUrl;
+
+  // Cache large images in IndexedDB and convert via /api/upload-base64 if needed
+  if (typeof statblockImageUrl === 'string' && statblockImageUrl.startsWith('data:')) {
+    try {
+      await saveLocalAsset(`statblock_${allyId}`, statblockImageUrl);
+      const res = await fetch('/api/upload-base64', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ base64: statblockImageUrl, filename: `statblock_${allyId}`, type: 'pdf' })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.url) statblockImageUrl = data.url;
+      } else {
+        statblockImageUrl = `local:statblock_${allyId}`;
+      }
+    } catch {
+      statblockImageUrl = `local:statblock_${allyId}`;
+    }
+  }
+
+  if (typeof avatarUrl === 'string' && avatarUrl.startsWith('data:') && avatarUrl.length > 50000) {
+    try {
+      await saveLocalAsset(`avatar_${allyId}`, avatarUrl);
+      const res = await fetch('/api/upload-base64', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ base64: avatarUrl, filename: `avatar_${allyId}`, type: 'token' })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.url) avatarUrl = data.url;
+      } else {
+        const thumb = await createThumbnailDataUrl(avatarUrl, 160, 0.6);
+        avatarUrl = thumb || `local:avatar_${allyId}`;
+      }
+    } catch {
+      avatarUrl = `local:avatar_${allyId}`;
+    }
+  }
+
+  const cleanAlly: Ally = {
+    ...ally,
+    allyId,
+    avatarUrl,
+    statblockImageUrl,
+    category: 'ally',
+    createdAt: ally.createdAt || now,
+    updatedAt: now
+  };
+
+  try {
+    const docRef = doc(db, 'allies', allyId);
+    let payload = cleanForFirestore(cleanAlly);
+
+    // Safeguard against oversized documents
+    if (JSON.stringify(payload).length > 200000) {
+      payload = {
+        ...payload,
+        statblockImageUrl: payload.statblockImageUrl?.startsWith('data:') ? `local:statblock_${allyId}` : payload.statblockImageUrl,
+        avatarUrl: payload.avatarUrl?.startsWith('data:') ? `local:avatar_${allyId}` : payload.avatarUrl
+      };
+    }
+
+    await setDoc(docRef, payload, { merge: true });
+    return cleanAlly;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+    throw error;
+  }
+}
+
+export async function getAlliesList(): Promise<Ally[]> {
+  const path = 'allies';
+  try {
+    const colRef = collection(db, path);
+    const snap = await getDocs(colRef);
+    const list: Ally[] = snap.docs.map(d => ({
+      ...(d.data() as Ally),
+      allyId: d.data().allyId || d.id
+    }));
+    list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    return list;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, path);
+    return [];
+  }
+}
+
+export function subscribeToAllies(
+  callback: (allies: Ally[]) => void,
+  onError?: (err: any) => void
+): () => void {
+  const path = 'allies';
+  const colRef = collection(db, path);
+  return onSnapshot(
+    colRef,
+    (snap) => {
+      const list: Ally[] = snap.docs.map(d => ({
+        ...(d.data() as Ally),
+        allyId: d.data().allyId || d.id
+      }));
+      list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      callback(list);
+    },
+    (err) => {
+      console.warn('subscribeToAllies error:', err);
+      if (onError) onError(err);
+      handleFirestoreError(err, OperationType.GET, path);
+    }
+  );
+}
+
+export async function deleteAlly(allyId: string): Promise<void> {
+  const path = `allies/${allyId}`;
+  try {
+    const docRef = doc(db, 'allies', allyId);
     await deleteDoc(docRef);
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, path);

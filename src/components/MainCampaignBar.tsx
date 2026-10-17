@@ -42,6 +42,7 @@ interface MainCampaignBarProps {
   onOpenCampaignManager: () => void;
   onOpenMonsterCompendium?: () => void;
   onOpenCharacterCompendium?: () => void;
+  onOpenAlliesCompendium?: () => void;
   onOpenDdbSync?: () => void;
   onOpenDndChatbot?: () => void;
   isFirebaseConnected?: boolean;
@@ -68,6 +69,7 @@ export const MainCampaignBar: React.FC<MainCampaignBarProps> = React.memo(({
   onOpenCampaignManager,
   onOpenMonsterCompendium,
   onOpenCharacterCompendium,
+  onOpenAlliesCompendium,
   onOpenDdbSync,
   onOpenDndChatbot,
   onOpenTutorial,
@@ -373,6 +375,19 @@ export const MainCampaignBar: React.FC<MainCampaignBarProps> = React.memo(({
           >
             <Users className="w-3.5 h-3.5 text-amber-400" />
             <span>Characters</span>
+          </button>
+        )}
+
+        {/* Allies & Summons Compendium Link */}
+        {onOpenAlliesCompendium && (
+          <button
+            id="btn-main-open-allies-compendium"
+            onClick={onOpenAlliesCompendium}
+            className="px-2 py-1 rounded-xl bg-emerald-950/40 hover:bg-emerald-900/50 text-emerald-300 border border-emerald-500/40 text-[11px] font-bold flex items-center gap-1 transition-all"
+            title="Open Allies & Summons Compendium, Druid Summons, Familiars, and Companions"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Allies</span>
           </button>
         )}
 

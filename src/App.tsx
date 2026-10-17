@@ -51,11 +51,14 @@ import { MainCampaignBar } from './components/MainCampaignBar';
 import { DndChatbotModal } from './components/DndChatbotModal';
 import { MonsterCompendiumModal } from './components/MonsterCompendiumModal';
 import { CharacterCompendiumModal } from './components/CharacterCompendiumModal';
+import { AlliesCompendiumModal } from './components/AlliesCompendiumModal';
 import { DdbSyncModal } from './components/DdbSyncModal';
 import { DEFAULT_MONSTERS } from './data/defaultMonsters';
 import { DEFAULT_CHARACTERS, getCharacterTokenUrl, resolveTokenCharacterStats, isDdbMatch } from './data/defaultCharacters';
+import { DEFAULT_ALLIES } from './data/defaultAllies';
 import { Monster, getSizeMultiplier } from './types/monster';
 import { Character } from './types/character';
+import { Ally } from './types/ally';
 import {
   Campaign,
   Scene,
@@ -81,6 +84,7 @@ import {
   cleanupZonesExceptScene,
   subscribeToMonsters,
   subscribeToCharacters,
+  subscribeToAllies,
   saveCharacter
 } from './lib/firebase';
 import { getImageNaturalDimensions, getVideoNaturalDimensions, isVideoAsset, getLocalAsset } from './lib/storageCache';
@@ -171,6 +175,12 @@ interface Token {
   visionColor?: string;
   hidden?: boolean;
   conditions?: string[];
+  auraRadius?: number;
+  auraColor?: string;
+  auraOpacity?: number;
+  auraName?: string;
+  auraPulse?: boolean;
+  auras?: any[];
 }
 
 interface RollResult {
@@ -403,6 +413,22 @@ const TokenImage = React.memo(({
   const pillX = (tokenWidth - pillWidth) / 2;
   const pillY = tokenWidth - 9;
 
+  const activeAuras = useMemo(() => {
+    const list: any[] = [];
+    if (Array.isArray(token.auras) && token.auras.length > 0) {
+      list.push(...token.auras);
+    } else if (token.auraRadius && token.auraRadius > 0) {
+      list.push({
+        radius: token.auraRadius,
+        color: token.auraColor || 'rgba(234, 179, 8, 0.4)',
+        opacity: token.auraOpacity ?? 0.35,
+        pulse: token.auraPulse,
+        name: token.auraName || 'Magical Aura'
+      });
+    }
+    return list;
+  }, [token.auras, token.auraRadius, token.auraColor, token.auraOpacity, token.auraPulse, token.auraName]);
+
   return (
     <Group
       x={token.x}
@@ -477,6 +503,77 @@ const TokenImage = React.memo(({
         onContextMenu(e);
       }}
     >
+      {/* 0. Token Magical Auras (Rendered beneath avatar clip so token stays solid and sharp) */}
+      {activeAuras.map((aura: any, idx: number) => {
+        const auraFt = aura.radius || 10;
+        const auraPixelRadius = radius + (auraFt / 5) * gridSize;
+        const col = aura.color || 'rgba(234, 179, 8, 0.4)';
+        const op = aura.opacity ?? 0.35;
+
+        return (
+          <Group key={`dm-token-aura-${idx}`} listening={false}>
+            {/* Soft luminous aura body */}
+            <Circle
+              x={radius}
+              y={radius}
+              radius={auraPixelRadius}
+              fill={col}
+              opacity={op}
+              perfectDrawEnabled={false}
+            />
+            {/* Outer perimeter dashed boundary ring */}
+            <Circle
+              x={radius}
+              y={radius}
+              radius={auraPixelRadius}
+              stroke={col}
+              strokeWidth={2}
+              dash={[6, 4]}
+              opacity={Math.min(1, op + 0.35)}
+              perfectDrawEnabled={false}
+            />
+            {/* Inner radiant accent ring */}
+            <Circle
+              x={radius}
+              y={radius}
+              radius={Math.max(radius + 2, auraPixelRadius - 2)}
+              stroke={col}
+              strokeWidth={1}
+              opacity={Math.min(1, op + 0.2)}
+              perfectDrawEnabled={false}
+            />
+            {/* Distance label pill on aura perimeter */}
+            {auraFt > 0 && (
+              <Group x={radius} y={radius + auraPixelRadius - 7}>
+                <Rect
+                  x={-14}
+                  y={-6}
+                  width={28}
+                  height={12}
+                  fill="rgba(15, 23, 42, 0.85)"
+                  cornerRadius={3}
+                  stroke={col}
+                  strokeWidth={0.8}
+                  perfectDrawEnabled={false}
+                />
+                <Text
+                  x={-14}
+                  y={-5}
+                  width={28}
+                  align="center"
+                  text={`${auraFt}ft`}
+                  fontSize={8}
+                  fontStyle="bold"
+                  fontFamily="monospace"
+                  fill="#ffffff"
+                  perfectDrawEnabled={false}
+                />
+              </Group>
+            )}
+          </Group>
+        );
+      })}
+
       {/* Selection Glow Indicator */}
       {isSelected && (
         <>
@@ -1165,6 +1262,11 @@ export default function App() {
   const [showDdbModal, setShowDdbModal] = useState(false);
   const [characterCompendiumInitialSearch, setCharacterCompendiumInitialSearch] = useState<string>('');
   const [compendiumCharacters, setCompendiumCharacters] = useState<Character[]>(DEFAULT_CHARACTERS);
+
+  const [showAlliesCompendium, setShowAlliesCompendium] = useState(false);
+  const [alliesCompendiumInitialSearch, setAlliesCompendiumInitialSearch] = useState<string>('');
+  const [compendiumAllies, setCompendiumAllies] = useState<Ally[]>(DEFAULT_ALLIES);
+
   const [isBugReportModalOpen, setIsBugReportModalOpen] = useState<boolean>(false);
   const [isBugManagerModalOpen, setIsBugManagerModalOpen] = useState<boolean>(false);
 
@@ -1355,6 +1457,19 @@ export default function App() {
     return () => unsub();
   }, []);
 
+  useEffect(() => {
+    const unsub = subscribeToAllies((remoteAllies) => {
+      const remoteList = Array.isArray(remoteAllies) ? remoteAllies : [];
+      const remoteIds = new Set(remoteList.map(a => a.allyId));
+      const combined = [
+        ...remoteList,
+        ...DEFAULT_ALLIES.filter(a => !remoteIds.has(a.allyId))
+      ];
+      setCompendiumAllies(combined);
+    });
+    return () => unsub();
+  }, []);
+
   const handleOpenMonsterCompendium = useCallback((initialSearch?: string) => {
     if (initialSearch) {
       setCompendiumInitialSearch(initialSearch);
@@ -1362,6 +1477,15 @@ export default function App() {
       setCompendiumInitialSearch('');
     }
     setShowMonsterCompendium(true);
+  }, []);
+
+  const handleOpenAlliesCompendium = useCallback((initialSearch?: string) => {
+    if (initialSearch) {
+      setAlliesCompendiumInitialSearch(initialSearch);
+    } else {
+      setAlliesCompendiumInitialSearch('');
+    }
+    setShowAlliesCompendium(true);
   }, []);
 
   // HTML5 Drag and Drop handler for tokens dropped onto the tactical battlemap
@@ -2594,6 +2718,42 @@ export default function App() {
     };
     setTokens(prev => [...prev, newToken]);
   }, [getMapDimensions, tokens]);
+
+  const handleSpawnAllyToken = useCallback((tokenData: {
+    name: string;
+    avatarUrl: string;
+    hp: number;
+    ac: number;
+    size: number;
+    category?: 'ally';
+    allyId?: string;
+  }) => {
+    let spawnX = 350 + Math.floor(Math.random() * 80);
+    let spawnY = 350 + Math.floor(Math.random() * 80);
+
+    const existingTokens = tokens.filter(t => Math.abs(t.x - spawnX) < 20 && Math.abs(t.y - spawnY) < 20);
+    const offset = existingTokens.length * 30;
+
+    const newToken: Token = {
+      id: `token_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      name: tokenData.name,
+      url: tokenData.avatarUrl,
+      x: spawnX + offset,
+      y: spawnY + offset,
+      size: tokenData.size || 1,
+      hp: tokenData.hp,
+      maxHp: tokenData.hp,
+      currentHp: tokenData.hp,
+      ac: tokenData.ac,
+      isPlayer: false,
+      isMonster: false,
+      category: 'ally',
+      visionEnabled: true,
+      visionRadius: 60,
+      ...(tokenData.allyId ? { allyId: tokenData.allyId } : {})
+    };
+    setTokens(prev => [...prev, newToken]);
+  }, [tokens]);
   
 
 
@@ -5611,8 +5771,10 @@ export default function App() {
           onOpenLoadCampaign={() => setShowLoadCampaignModal(true)}
           onOpenMonsterCompendium={handleOpenMonsterCompendium}
           onOpenCharacterCompendium={handleOpenCharacterCompendium}
+          onOpenAlliesCompendium={handleOpenAlliesCompendium}
           compendiumMonsters={compendiumMonsters}
           compendiumCharacters={compendiumCharacters}
+          compendiumAllies={compendiumAllies}
           selectedTokenIds={selectedTokenIds}
           activeSceneInfo={activeSceneInfo}
           onQuickSave={handleQuickSaveScene}
@@ -5831,6 +5993,10 @@ export default function App() {
                 onOpenCampaignManager={() => setShowCampaignBuilder(true)}
                 onOpenMonsterCompendium={() => setShowMonsterCompendium(true)}
                 onOpenCharacterCompendium={() => setShowCharacterCompendium(true)}
+                onOpenAlliesCompendium={() => {
+                  setAlliesCompendiumInitialSearch('');
+                  setShowAlliesCompendium(true);
+                }}
                 onOpenDdbSync={() => setShowDdbModal(true)}
                 onOpenDndChatbot={() => setShowDndChatbot(true)}
                 isFirebaseConnected={isFirebaseConnected}
@@ -7583,7 +7749,7 @@ export default function App() {
             
             {tokenMenuTab === 'stats' ? (
               <div className="space-y-2.5">
-                 {/* View Compendium Button (Hero vs Monster) */}
+                 {/* View Compendium Button (Hero vs Ally vs Monster) */}
                  {isCharacter ? (
                    <button
                      id="btn-token-view-hero-compendium"
@@ -7603,6 +7769,26 @@ export default function App() {
                        <span className="truncate">Hero Compendium</span>
                      </div>
                      <ChevronRight className="w-3.5 h-3.5 text-emerald-400/70 group-hover:translate-x-0.5 transition-transform shrink-0" />
+                   </button>
+                 ) : currentToken?.category === 'ally' ? (
+                   <button
+                     id="btn-token-view-allies-compendium"
+                     onClick={() => {
+                       if (currentToken) {
+                         const cleanName = currentToken.name.replace(/\s+\d+$/, '').trim();
+                         setAlliesCompendiumInitialSearch(cleanName || currentToken.name);
+                         setShowAlliesCompendium(true);
+                         setActiveTokenMenu(null);
+                       }
+                     }}
+                     className="w-full flex items-center justify-between py-2 px-2.5 bg-gradient-to-r from-amber-500/15 via-emerald-500/15 to-teal-500/15 hover:from-amber-500/25 hover:to-emerald-500/25 border border-amber-500/40 hover:border-amber-400 text-amber-200 hover:text-amber-100 rounded-lg text-xs font-bold transition-all shadow-sm group cursor-pointer"
+                     title="View Allies Compendium statblock, summon traits, and abilities"
+                   >
+                     <div className="flex items-center gap-2 overflow-hidden">
+                       <Sparkles className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform shrink-0" />
+                       <span className="truncate">Allies Compendium</span>
+                     </div>
+                     <ChevronRight className="w-3.5 h-3.5 text-amber-400/70 group-hover:translate-x-0.5 transition-transform shrink-0" />
                    </button>
                  ) : (
                    <button
@@ -8008,6 +8194,17 @@ export default function App() {
         }}
         onSpawnTokenOnMap={handleSpawnCharacterToken}
         initialSearchQuery={characterCompendiumInitialSearch}
+      />
+
+      {/* Allies & Summons Compendium Modal */}
+      <AlliesCompendiumModal
+        isOpen={showAlliesCompendium}
+        onClose={() => {
+          setShowAlliesCompendium(false);
+          setAlliesCompendiumInitialSearch('');
+        }}
+        onSpawnTokenOnMap={handleSpawnAllyToken}
+        initialSearchQuery={alliesCompendiumInitialSearch}
       />
 
       {/* D&D Beyond Campaign & Live HP Modal */}
