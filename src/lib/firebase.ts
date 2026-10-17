@@ -195,6 +195,9 @@ export interface SceneToken {
   x: number;
   y: number;
   hp?: number;
+  maxHp?: number;
+  currentHp?: number;
+  tempHp?: number;
   ac?: number;
   size?: number;
   isCondition?: boolean;
@@ -204,6 +207,8 @@ export interface SceneToken {
   isMonster?: boolean;
   category?: 'character' | 'monster' | 'ally' | 'custom';
   visionEnabled?: boolean;
+  characterId?: string;
+  ddbCharacterId?: number | string;
 }
 
 export interface Scene {

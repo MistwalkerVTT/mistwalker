@@ -1,17 +1,18 @@
 import { Server } from 'socket.io';
 import { getCobaltToken } from './ddbService';
-import { DdbHpSyncDaemon } from './ddbCampaignService';
+import { DdbHpSyncDaemon, fetchDdbCampaigns } from './ddbCampaignService';
 import { DdbDiceRollEvent, DieResult } from '../src/types/dice';
+import { CHARACTER_TOKEN_IMAGES, getCharacterTokenUrl } from '../src/data/defaultCharacters';
 
 export class DdbGameLogDaemon {
   private static instance: DdbGameLogDaemon;
   private io: Server | null = null;
-  private activeCampaignId: string | null = null;
+  private monitoredCampaignIds = new Set<string>(['3290944', '6738033']);
+  private firstSyncCampaigns = new Set<string>();
   private isPolling = false;
   private pollTimer: NodeJS.Timeout | null = null;
   private processedEntryIds = new Set<string>();
-  private isFirstSync = true;
-  private maxStoredIds = 500;
+  private maxStoredIds = 1000;
   private cachedJwt: string | null = null;
   private jwtExpiresAt = 0;
 
@@ -26,22 +27,41 @@ export class DdbGameLogDaemon {
     this.io = io;
     console.log('[DdbGameLogDaemon] Initialized with Socket.io server.');
     
-    // Automatically monitor default campaign so live rolls start tracking on boot
-    const defaultCampaignId = process.env.DND_BEYOND_CAMPAIGN_ID || '3290944';
-    if (!this.activeCampaignId && defaultCampaignId) {
-      this.setMonitoredCampaign(defaultCampaignId);
+    // Automatically monitor environment campaigns or default campaigns
+    if (process.env.DND_BEYOND_CAMPAIGN_ID) {
+      const ids = process.env.DND_BEYOND_CAMPAIGN_ID.split(',').map(s => s.trim()).filter(Boolean);
+      ids.forEach(id => this.monitoredCampaignIds.add(id));
     }
+
+    console.log(`[DdbGameLogDaemon] Initialized monitoring for campaigns: ${Array.from(this.monitoredCampaignIds).join(', ')}`);
+
+    this.startPolling();
+    this.autoDiscoverCampaigns();
+  }
+
+  public addCampaign(campaignId: string) {
+    if (!campaignId) return;
+    this.monitoredCampaignIds.add(campaignId);
+    console.log(`[DdbGameLogDaemon] Added campaign ${campaignId} to live monitoring. Active campaigns: ${Array.from(this.monitoredCampaignIds).join(', ')}`);
+    this.startPolling();
   }
 
   public setMonitoredCampaign(campaignId: string) {
-    if (this.activeCampaignId === campaignId && this.pollTimer) return;
+    this.addCampaign(campaignId);
+  }
 
-    this.activeCampaignId = campaignId;
-    this.processedEntryIds.clear();
-    this.isFirstSync = true;
-    console.log(`[DdbGameLogDaemon] Monitoring D&D Beyond GameLog for campaign: ${campaignId}`);
-
-    this.startPolling();
+  public async autoDiscoverCampaigns() {
+    try {
+      const campaigns = await fetchDdbCampaigns();
+      for (const c of campaigns) {
+        if (c.id && !this.monitoredCampaignIds.has(c.id)) {
+          console.log(`[DdbGameLogDaemon] Discovered & adding D&D Beyond Campaign: "${c.title}" (${c.id})`);
+          this.monitoredCampaignIds.add(c.id);
+        }
+      }
+    } catch (err: any) {
+      console.warn('[DdbGameLogDaemon] Auto-discovery note:', err.message);
+    }
   }
 
   public startPolling() {
@@ -100,70 +120,78 @@ export class DdbGameLogDaemon {
   }
 
   private async pollCycle() {
-    if (!this.activeCampaignId || this.isPolling || !this.io) return;
+    if (this.monitoredCampaignIds.size === 0 || this.isPolling || !this.io) return;
     this.isPolling = true;
 
     try {
       const jwt = await this.getBearerToken();
       if (!jwt) return;
 
-      const url = `https://game-log-rest-live.dndbeyond.com/v1/getmessages?gameId=${this.activeCampaignId}`;
-      const res = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${jwt}`,
-          'Accept': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
-        }
-      });
+      const campaignIds = Array.from(this.monitoredCampaignIds);
+      for (const campaignId of campaignIds) {
+        try {
+          const url = `https://game-log-rest-live.dndbeyond.com/v1/getmessages?gameId=${campaignId}`;
+          const res = await fetch(url, {
+            headers: {
+              'Authorization': `Bearer ${jwt}`,
+              'Accept': 'application/json',
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+            }
+          });
 
-      if (!res.ok) {
-        if (res.status === 401 || res.status === 403) {
-          // Token expired, invalidate cache
-          this.cachedJwt = null;
-          this.jwtExpiresAt = 0;
-        }
-        return;
-      }
+          if (!res.ok) {
+            if (res.status === 401 || res.status === 403) {
+              // Token expired, invalidate cache
+              this.cachedJwt = null;
+              this.jwtExpiresAt = 0;
+            }
+            continue;
+          }
 
-      const json = await res.json();
-      const entries: any[] = json?.data || [];
+          const json = await res.json();
+          const entries: any[] = json?.data || [];
 
-      // Sort chronological by dateTime or ID
-      entries.sort((a, b) => {
-        const timeA = parseInt(a.dateTime || '0', 10);
-        const timeB = parseInt(b.dateTime || '0', 10);
-        return timeA - timeB;
-      });
+          // Sort chronological by dateTime or ID
+          entries.sort((a, b) => {
+            const timeA = parseInt(a.dateTime || '0', 10);
+            const timeB = parseInt(b.dateTime || '0', 10);
+            return timeA - timeB;
+          });
 
-      if (this.isFirstSync) {
-        // Seed initial history so previous days/hours rolls do not spam the screen on startup
-        for (const entry of entries) {
-          const entryId = String(entry.id || entry.dateTime);
-          if (entryId) {
+          if (!this.firstSyncCampaigns.has(campaignId)) {
+            // Seed initial history so previous days/hours rolls do not spam the screen on startup
+            for (const entry of entries) {
+              const entryId = String(entry.id || entry.dateTime);
+              if (entryId) {
+                this.processedEntryIds.add(entryId);
+              }
+            }
+            this.firstSyncCampaigns.add(campaignId);
+            console.log(`[DdbGameLogDaemon] Initialized history for campaign ${campaignId} (${entries.length} historical rolls indexed). Ready for live rolls!`);
+            continue;
+          }
+
+          // Process new rolls
+          for (const entry of entries) {
+            const entryId = String(entry.id || entry.dateTime);
+            if (!entryId || this.processedEntryIds.has(entryId)) continue;
+
             this.processedEntryIds.add(entryId);
+            if (this.processedEntryIds.size > this.maxStoredIds) {
+              const firstId = this.processedEntryIds.values().next().value;
+              if (firstId) this.processedEntryIds.delete(firstId);
+            }
+
+            // Only process dice roll events
+            if (entry.eventType === 'dice/roll/fulfilled') {
+              const rollEvent = this.parseRollMessage(entry, campaignId);
+              if (rollEvent) {
+                this.broadcastRoll(rollEvent);
+              }
+            }
           }
-        }
-        this.isFirstSync = false;
-        console.log(`[DdbGameLogDaemon] Initialized history for campaign ${this.activeCampaignId} (${this.processedEntryIds.size} historical rolls indexed). Ready for live rolls!`);
-        return;
-      }
-
-      for (const entry of entries) {
-        const entryId = String(entry.id || entry.dateTime);
-        if (!entryId || this.processedEntryIds.has(entryId)) continue;
-
-        this.processedEntryIds.add(entryId);
-        if (this.processedEntryIds.size > this.maxStoredIds) {
-          const firstId = this.processedEntryIds.values().next().value;
-          if (firstId) this.processedEntryIds.delete(firstId);
-        }
-
-        // Only process dice roll events
-        if (entry.eventType === 'dice/roll/fulfilled') {
-          const rollEvent = this.parseRollMessage(entry);
-          if (rollEvent) {
-            this.broadcastRoll(rollEvent);
-          }
+        } catch (campErr: any) {
+          // Continue to next campaign on individual failure
         }
       }
     } catch (err: any) {
@@ -173,12 +201,12 @@ export class DdbGameLogDaemon {
     }
   }
 
-  private parseRollMessage(entry: any): DdbDiceRollEvent | null {
+  private parseRollMessage(entry: any, campaignId?: string): DdbDiceRollEvent | null {
     try {
       const data = entry.data || {};
       const context = data.context || {};
-      const characterName = context.name || 'Adventurer';
-      const characterId = context.entityId ? String(context.entityId) : undefined;
+      const characterName = context.name || entry.name || 'Adventurer';
+      const characterId = (context.entityId || entry.entityId) ? String(context.entityId || entry.entityId) : undefined;
       const action = data.action === 'custom' ? 'Manual Roll' : (data.action || 'Dice Roll');
 
       // Look up cached character portrait and player name
@@ -190,6 +218,12 @@ export class DdbGameLogDaemon {
           if (!avatarUrl && cached.avatarUrl) avatarUrl = cached.avatarUrl;
           if (!playerName && cached.playerName) playerName = cached.playerName;
         }
+      }
+
+      // Fallback to high-res local token portrait mapping if still not found
+      if (!avatarUrl) {
+        const cleanName = characterName.toLowerCase().trim();
+        avatarUrl = CHARACTER_TOKEN_IMAGES[cleanName] || getCharacterTokenUrl(characterName);
       }
 
       const rawRolls = data.rolls || [];
@@ -271,7 +305,7 @@ export class DdbGameLogDaemon {
 
   public getStatus() {
     return {
-      activeCampaignId: this.activeCampaignId,
+      monitoredCampaignIds: Array.from(this.monitoredCampaignIds),
       isPollingActive: !!this.pollTimer,
       processedRollsCount: this.processedEntryIds.size,
       hasCachedJwt: !!this.cachedJwt

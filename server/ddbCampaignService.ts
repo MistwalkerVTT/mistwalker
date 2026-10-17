@@ -436,19 +436,55 @@ export class DdbHpSyncDaemon {
     this.startBackgroundMonitoring();
   }
 
+  public async attachCampaign(campaignId: string) {
+    if (!campaignId) return;
+    try {
+      DdbGameLogDaemon.getInstance().addCampaign(campaignId);
+      const data = await fetchDdbCampaignCharacters(campaignId);
+      for (const c of data.characters) {
+        const existingIdx = this.cachedCharacters.findIndex(x => x.id === c.id);
+        if (existingIdx !== -1) {
+          this.cachedCharacters[existingIdx] = c;
+        } else {
+          this.cachedCharacters.push(c);
+        }
+
+        if (!c.isPrivate) {
+          this.monitoredCharacters.set(c.id, {
+            currentHp: c.currentHp,
+            maxHp: c.maxHp,
+            tempHp: c.tempHp,
+            name: c.name
+          });
+        }
+      }
+      this.ensurePollingStarted();
+      return data;
+    } catch (err) {
+      console.warn(`[DdbHpSyncDaemon] Error attaching campaign ${campaignId}:`, err);
+      return null;
+    }
+  }
+
   public async setMonitoredCampaign(campaignId: string) {
     this.activeCampaignId = campaignId;
     console.log(`[DdbHpSyncDaemon] Monitoring D&D Beyond campaign: ${campaignId}`);
     try {
-      DdbGameLogDaemon.getInstance().setMonitoredCampaign(campaignId);
+      DdbGameLogDaemon.getInstance().addCampaign(campaignId);
     } catch (e) {
       console.warn('[DdbCampaignService] GameLog daemon start note:', e);
     }
     const data = await fetchDdbCampaignCharacters(campaignId);
     
-    this.cachedCharacters = data.characters;
-    this.monitoredCharacters.clear();
+    // Merge into cachedCharacters and monitoredCharacters
     for (const c of data.characters) {
+      const existingIdx = this.cachedCharacters.findIndex(x => x.id === c.id);
+      if (existingIdx !== -1) {
+        this.cachedCharacters[existingIdx] = c;
+      } else {
+        this.cachedCharacters.push(c);
+      }
+
       if (!c.isPrivate) {
         this.monitoredCharacters.set(c.id, {
           currentHp: c.currentHp,
@@ -472,7 +508,7 @@ export class DdbHpSyncDaemon {
       campaignId,
       campaignTitle: data.campaignTitle,
       monitoredCount: this.monitoredCharacters.size,
-      characters: data.characters
+      characters: this.cachedCharacters
     };
   }
 
@@ -486,12 +522,29 @@ export class DdbHpSyncDaemon {
   }
 
   private async startBackgroundMonitoring() {
-    const campaigns = await fetchDdbCampaigns();
-    if (campaigns.length > 0) {
-      // Default to the first campaign found (e.g. 3290944)
-      const primaryCamp = campaigns[0];
-      console.log(`[DdbHpSyncDaemon] Auto-attaching to D&D Beyond Campaign: "${primaryCamp.title}" (${primaryCamp.id})`);
-      await this.setMonitoredCampaign(primaryCamp.id);
+    const campaignIds = new Set<string>(['3290944', '6738033']);
+    if (process.env.DND_BEYOND_CAMPAIGN_ID) {
+      process.env.DND_BEYOND_CAMPAIGN_ID.split(',').map(s => s.trim()).filter(Boolean).forEach(id => campaignIds.add(id));
+    }
+    try {
+      const campaigns = await fetchDdbCampaigns();
+      for (const c of campaigns) {
+        if (c.id) campaignIds.add(c.id);
+      }
+    } catch (err: any) {
+      console.warn('[DdbHpSyncDaemon] Auto-fetch campaigns note:', err.message);
+    }
+
+    console.log(`[DdbHpSyncDaemon] Auto-attaching to D&D Beyond Campaigns: ${Array.from(campaignIds).join(', ')}`);
+    for (const campId of campaignIds) {
+      await this.attachCampaign(campId);
+    }
+
+    if (this.io && this.cachedCharacters.length > 0) {
+      this.io.emit('DDB_CAMPAIGN_SYNC_INIT', {
+        campaignId: Array.from(campaignIds)[0],
+        characters: this.cachedCharacters
+      });
     }
   }
 

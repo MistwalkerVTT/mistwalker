@@ -1293,8 +1293,12 @@ export const DEMO_GV_TOKENS: SceneToken[] = [
     "avatarUrl": "https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/Varrak.png/:/rs=w:1440,h:1440",
     "isPlayer": true,
     "name": "Varrak",
-    "hp": 45,
-    "ac": 16
+    "characterId": "char_varrak",
+    "ddbCharacterId": 146614740,
+    "hp": 59,
+    "maxHp": 59,
+    "currentHp": 59,
+    "ac": 17
   },
   {
     "size": 1,
@@ -1308,8 +1312,11 @@ export const DEMO_GV_TOKENS: SceneToken[] = [
     "category": "character",
     "x": 1500,
     "visionRadius": 60,
-    "hp": 38,
-    "ac": 15
+    "characterId": "char_brannoc",
+    "hp": 44,
+    "maxHp": 44,
+    "currentHp": 44,
+    "ac": 18
   },
   {
     "x": 1550,
@@ -1321,9 +1328,13 @@ export const DEMO_GV_TOKENS: SceneToken[] = [
     "isMonster": false,
     "avatarUrl": "https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/Noctua.png/:/rs=w:1440,h:1440",
     "visionEnabled": true,
-    "name": "Noctua",
+    "name": "Noctua Shadowclaw",
+    "characterId": "char_noctua",
+    "ddbCharacterId": 147334187,
     "y": 1300,
-    "hp": 32,
+    "hp": 39,
+    "maxHp": 39,
+    "currentHp": 39,
     "ac": 14
   },
   {
@@ -1337,9 +1348,13 @@ export const DEMO_GV_TOKENS: SceneToken[] = [
     "id": "f8a7v",
     "visionEnabled": true,
     "isPlayer": true,
+    "characterId": "char_aggie",
+    "ddbCharacterId": 158502126,
     "y": 1300,
-    "hp": 28,
-    "ac": 13
+    "hp": 42,
+    "maxHp": 42,
+    "currentHp": 42,
+    "ac": 16
   },
   {
     "category": "character",
@@ -1353,8 +1368,12 @@ export const DEMO_GV_TOKENS: SceneToken[] = [
     "y": 1300,
     "name": "Rowan",
     "isPlayer": true,
-    "hp": 35,
-    "ac": 15
+    "characterId": "char_rowan",
+    "ddbCharacterId": 146533824,
+    "hp": 38,
+    "maxHp": 38,
+    "currentHp": 38,
+    "ac": 14
   },
   {
     "id": "token_jaymont_sinner",

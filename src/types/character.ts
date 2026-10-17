@@ -54,7 +54,7 @@ export interface CharacterSpellItem {
 
 export interface Character {
   id: string;
-  ddbCharacterId?: string;
+  ddbCharacterId?: string | number;
   name: string;
   race: string;
   classLevel: string; // e.g. "Barbarian 6"
