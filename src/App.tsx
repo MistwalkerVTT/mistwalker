@@ -840,11 +840,23 @@ export default function App() {
   const [socketInstance, setSocketInstance] = useState<any>(null);
   const [isReadingFile, setIsReadingFile] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [activeMapId, setActiveMapId] = useState<'DM1'|'DM2'|'DM3'>('DM1');
+  const [liveMapId, setLiveMapId] = useState<'DM1'|'DM2'|'DM3'>('DM1');
+  const activeMapIdRef = useRef<'DM1'|'DM2'|'DM3'>('DM1');
+  const liveMapIdRef = useRef<'DM1'|'DM2'|'DM3'>('DM1');
+  const isSwitchingMapSlotRef = useRef<boolean>(false);
+  const mapsDataRef = useRef<Record<string, any>>({
+    DM1: null,
+    DM2: null,
+    DM3: null
+  });
+  const hasRestoredInitialSessionRef = useRef<boolean>(false);
+
   const [imageFile, setImageFile] = useState<string | null>(null);
   const [mapType, setMapType] = useState<'image' | 'video'>('image');
   const [image, imageStatus] = useImage(mapType === 'image' ? (imageFile || '') : '');
   const broadcastState = useCallback((_force?: boolean) => {
-    if (socketRef.current?.connected && imageFile) {
+    if (socketRef.current?.connected && imageFile && (activeMapIdRef.current === liveMapIdRef.current)) {
       socketRef.current.emit('SYNC_IMAGE', imageFile);
     }
   }, [imageFile]);
@@ -1122,14 +1134,6 @@ export default function App() {
   const [gridOffsetY, setGridOffsetY] = useState(0);
   const [mapRotation, setMapRotation] = useState(0);
 
-  const [activeMapId, setActiveMapId] = useState<'DM1'|'DM2'|'DM3'>('DM1');
-  const [liveMapId, setLiveMapId] = useState<'DM1'|'DM2'|'DM3'>('DM1');
-  const mapsDataRef = useRef<Record<string, any>>({
-    DM1: null,
-    DM2: null,
-    DM3: null
-  });
-  const hasRestoredInitialSessionRef = useRef<boolean>(false);
 
   const [sidebarMode, setSidebarMode] = useState<'user' | 'ai'>('user');
   const [menuAnchor, setMenuAnchor] = useState({ top: 0, bottom: 0 });
@@ -1276,7 +1280,7 @@ export default function App() {
               if (mapsDataRef.current[currentMap]) {
                 mapsDataRef.current[currentMap].tokens = next;
               }
-              if (socketRef.current?.connected) {
+              if (socketRef.current?.connected && (currentMap === liveMapIdRef.current)) {
                 socketRef.current.emit('SYNC_TOKENS', next);
               }
             }
@@ -1418,7 +1422,10 @@ export default function App() {
 
       setTokens(prev => {
         const next = [...prev, newToken];
-        if (socketRef.current) {
+        if (mapsDataRef.current[activeMapId]) {
+          mapsDataRef.current[activeMapId].tokens = next;
+        }
+        if (socketRef.current && (activeMapIdRef.current === liveMapIdRef.current)) {
           socketRef.current.emit('ADD_TOKEN', newToken);
           socketRef.current.emit('SYNC_TOKENS', next);
         }
@@ -2051,6 +2058,8 @@ export default function App() {
 
   // Real-time synchronization of spell effects, board animated features & weather to Player View
   useEffect(() => {
+    if (isSwitchingMapSlotRef.current) return;
+    if (activeMapIdRef.current !== liveMapIdRef.current) return;
     if (socketRef.current?.connected) {
       socketRef.current.emit('SYNC_STATE', {
         effects,
@@ -2059,12 +2068,15 @@ export default function App() {
         boardWeatherEffect
       });
     }
-  }, [effects, boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect]);
+  }, [effects, boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect, activeMapId, liveMapId]);
 
-  const activeMapIdRef = useRef<string>('DM1');
   useEffect(() => {
     activeMapIdRef.current = activeMapId;
   }, [activeMapId]);
+
+  useEffect(() => {
+    liveMapIdRef.current = liveMapId;
+  }, [liveMapId]);
 
   // Flag to prevent echoing back updates initiated remotely
   const isRemoteUpdateRef = useRef<boolean>(false);
@@ -2078,15 +2090,52 @@ export default function App() {
 
     socket.on('connect', () => {
       console.log('[DM Socket] Connected to server as ID:', socket.id);
-      if (imageFile || activeSceneInfo?.mapUrl) {
+      if (activeMapIdRef.current === liveMapIdRef.current && (imageFile || activeSceneInfo?.mapUrl)) {
         broadcastFullStateRef.current?.();
       }
     });
 
     socket.on('REQUEST_INITIAL_STATE', () => {
-      console.log('[DM Socket] Player requested initial state. Pushing live state if map loaded...');
-      if (imageFile || activeSceneInfo?.mapUrl) {
-        broadcastFullStateRef.current?.();
+      console.log('[DM Socket] Player requested initial state. Pushing live slot state...');
+      const currentSlot = activeMapIdRef.current;
+      const liveSlot = liveMapIdRef.current;
+      if (currentSlot === liveSlot) {
+        if (imageFile || activeSceneInfo?.mapUrl) {
+          broadcastFullStateRef.current?.();
+        }
+      } else {
+        const liveData = mapsDataRef.current[liveSlot];
+        if (liveData && socketRef.current?.connected) {
+          const authUrl = liveData.imageFile || liveData.activeSceneInfo?.mapUrl || '';
+          if (authUrl) {
+            socketRef.current.emit('SYNC_IMAGE', authUrl);
+          }
+          socketRef.current.emit('SYNC_STATE', {
+            imageFile: authUrl,
+            tokens: liveData.tokens || [],
+            walls: liveData.walls || [],
+            gridSize: liveData.gridSize || 50,
+            gridOpacity: liveData.gridOpacity ?? 0.3,
+            gridVisible: liveData.gridVisible ?? true,
+            isFogVisible: liveData.isFogVisible ?? true,
+            reveals: liveData.reveals || [],
+            polygonReveals: liveData.polygonReveals || [],
+            visionConfig: liveData.visionConfig,
+            roomAnnotations: liveData.roomAnnotations || [],
+            mapRotation: liveData.mapRotation || 0,
+            effects: liveData.effects || [],
+            boardAnimatedFeatures: liveData.boardAnimatedFeatures || [],
+            boardAnimatedEnabled: liveData.boardAnimatedEnabled ?? true,
+            boardWeatherEffect: liveData.boardWeatherEffect || 'none',
+            characters: compendiumCharacters,
+            activeSceneInfo: liveData.activeSceneInfo ? {
+              ...liveData.activeSceneInfo,
+              mapUrl: authUrl
+            } : {
+              mapUrl: authUrl
+            }
+          });
+        }
       }
     });
 
@@ -2094,14 +2143,15 @@ export default function App() {
       if (data?.id) {
         isRemoteUpdateRef.current = true;
         console.log('[DM Socket] Live MOVE_TOKEN from player:', data.id, data.x, data.y);
-        setTokens(prev => {
-          const next = prev.map(t => t.id === data.id ? { ...t, x: data.x, y: data.y } : t);
-          const currentMap = activeMapIdRef.current;
-          if (mapsDataRef.current[currentMap]) {
-            mapsDataRef.current[currentMap].tokens = next;
-          }
-          return next;
-        });
+        const liveSlot = liveMapIdRef.current;
+        if (mapsDataRef.current[liveSlot]?.tokens) {
+          mapsDataRef.current[liveSlot].tokens = mapsDataRef.current[liveSlot].tokens.map((t: any) =>
+            t.id === data.id ? { ...t, x: data.x, y: data.y } : t
+          );
+        }
+        if (activeMapIdRef.current === liveSlot) {
+          setTokens(prev => prev.map(t => t.id === data.id ? { ...t, x: data.x, y: data.y } : t));
+        }
       }
     });
 
@@ -2109,10 +2159,12 @@ export default function App() {
       if (Array.isArray(syncedTokens)) {
         isRemoteUpdateRef.current = true;
         console.log('[DM Socket] Live SYNC_TOKENS received:', syncedTokens.length, 'tokens');
-        setTokens(syncedTokens);
-        const currentMap = activeMapIdRef.current;
-        if (mapsDataRef.current[currentMap]) {
-          mapsDataRef.current[currentMap].tokens = syncedTokens;
+        const liveSlot = liveMapIdRef.current;
+        if (mapsDataRef.current[liveSlot]) {
+          mapsDataRef.current[liveSlot].tokens = syncedTokens;
+        }
+        if (activeMapIdRef.current === liveSlot) {
+          setTokens(syncedTokens);
         }
       }
     });
@@ -2120,10 +2172,12 @@ export default function App() {
     socket.on('SYNC_STATE', (state: any) => {
       if (state?.walls && Array.isArray(state.walls)) {
         isRemoteUpdateRef.current = true;
-        setWalls(state.walls);
-        const currentMap = activeMapIdRef.current;
-        if (mapsDataRef.current[currentMap]) {
-          mapsDataRef.current[currentMap].walls = state.walls;
+        const liveSlot = liveMapIdRef.current;
+        if (mapsDataRef.current[liveSlot]) {
+          mapsDataRef.current[liveSlot].walls = state.walls;
+        }
+        if (activeMapIdRef.current === liveSlot) {
+          setWalls(state.walls);
         }
       }
     });
@@ -2131,35 +2185,40 @@ export default function App() {
     socket.on('ADD_EFFECT', (newEffect: any) => {
       if (newEffect?.id) {
         console.log('[DM Socket] Live ADD_EFFECT from player:', newEffect.label || newEffect.type);
-        setEffects(prev => {
-          if (prev.some(e => e.id === newEffect.id)) return prev;
-          const next = [...prev, newEffect];
-          const currentMap = activeMapIdRef.current;
-          if (mapsDataRef.current[currentMap]) {
-            mapsDataRef.current[currentMap].effects = next;
+        const liveSlot = liveMapIdRef.current;
+        if (mapsDataRef.current[liveSlot]) {
+          if (!mapsDataRef.current[liveSlot].effects) mapsDataRef.current[liveSlot].effects = [];
+          if (!mapsDataRef.current[liveSlot].effects.some((e: any) => e.id === newEffect.id)) {
+            mapsDataRef.current[liveSlot].effects.push(newEffect);
           }
-          return next;
-        });
+        }
+        if (activeMapIdRef.current === liveSlot) {
+          setEffects(prev => {
+            if (prev.some(e => e.id === newEffect.id)) return prev;
+            return [...prev, newEffect];
+          });
+        }
         toast.info(`Player cast: ${newEffect.label || 'Spell Effect'}`);
       }
     });
 
     socket.on('REMOVE_EFFECT', (effectId: string) => {
-      setEffects(prev => {
-        const next = prev.filter(e => e.id !== effectId);
-        const currentMap = activeMapIdRef.current;
-        if (mapsDataRef.current[currentMap]) {
-          mapsDataRef.current[currentMap].effects = next;
-        }
-        return next;
-      });
+      const liveSlot = liveMapIdRef.current;
+      if (mapsDataRef.current[liveSlot]?.effects) {
+        mapsDataRef.current[liveSlot].effects = mapsDataRef.current[liveSlot].effects.filter((e: any) => e.id !== effectId);
+      }
+      if (activeMapIdRef.current === liveSlot) {
+        setEffects(prev => prev.filter(e => e.id !== effectId));
+      }
     });
 
     socket.on('CLEAR_EFFECTS', () => {
-      setEffects([]);
-      const currentMap = activeMapIdRef.current;
-      if (mapsDataRef.current[currentMap]) {
-        mapsDataRef.current[currentMap].effects = [];
+      const liveSlot = liveMapIdRef.current;
+      if (mapsDataRef.current[liveSlot]) {
+        mapsDataRef.current[liveSlot].effects = [];
+      }
+      if (activeMapIdRef.current === liveSlot) {
+        setEffects([]);
       }
     });
 
@@ -2278,7 +2337,7 @@ export default function App() {
           if (mapsDataRef.current[currentMap]) {
             mapsDataRef.current[currentMap].tokens = next;
           }
-          if (socketRef.current?.connected) {
+          if (socketRef.current?.connected && (currentMap === liveMapIdRef.current)) {
             socketRef.current.emit('SYNC_TOKENS', next);
           }
         }
@@ -2380,8 +2439,8 @@ export default function App() {
           if (mapsDataRef.current[currentMap]) {
             mapsDataRef.current[currentMap].tokens = next;
           }
-          // Broadcast updated tokens to connected players
-          if (socketRef.current?.connected) {
+          // Broadcast updated tokens to connected players only if currentMap is liveMapId
+          if (socketRef.current?.connected && (currentMap === liveMapIdRef.current)) {
             socketRef.current.emit('SYNC_TOKENS', next);
           }
         }
@@ -2409,6 +2468,10 @@ export default function App() {
       isRemoteUpdateRef.current = false;
       return;
     }
+    // CRITICAL: Do NOT broadcast to players if DM is switching slots or editing a slot that is not the live slot!
+    if (isSwitchingMapSlotRef.current) return;
+    if (activeMapIdRef.current !== liveMapIdRef.current) return;
+
     if (!socketRef.current?.connected) return;
     if (!imageFile && !activeSceneInfo?.mapUrl) return;
 
@@ -2417,10 +2480,42 @@ export default function App() {
     }, 150);
 
     return () => clearTimeout(timer);
-  }, [reveals, polygonReveals, isFogVisible, visionConfig, walls, gridSize, gridOpacity, gridVisible, effects, mapRotation]);
+  }, [reveals, polygonReveals, isFogVisible, visionConfig, walls, gridSize, gridOpacity, gridVisible, effects, mapRotation, activeMapId, liveMapId]);
 
   // Manual "Force Sync to Players" action
   const handleForceSyncToPlayers = useCallback(() => {
+    const currentSlot = activeMapIdRef.current as 'DM1' | 'DM2' | 'DM3';
+    setLiveMapId(currentSlot);
+    liveMapIdRef.current = currentSlot;
+
+    // Save to mapsDataRef so it is always current
+    mapsDataRef.current[currentSlot] = {
+      imageFile,
+      mapType,
+      videoSize,
+      mapRotation,
+      stageScale,
+      stagePos,
+      reveals,
+      polygonReveals,
+      isFogVisible,
+      effects,
+      tokens,
+      gridVisible,
+      gridOpacity,
+      gridSize,
+      gridOffsetX,
+      gridOffsetY,
+      boardAnimatedFeatures,
+      boardAnimatedEnabled,
+      boardWeatherEffect,
+      walls,
+      visionConfig,
+      roomAnnotations,
+      activeSceneInfo,
+      activeDmNotes
+    };
+
     broadcastFullState();
     const dims = getMapDimensions();
     const authoritativeUrl = imageFile || activeSceneInfo?.mapUrl || '';
@@ -2446,8 +2541,8 @@ export default function App() {
         updatedAt: Date.now()
       }).catch(console.warn);
     }
-    toast.success('Force-synced full-resolution map and scene state to all players!');
-  }, [broadcastFullState, getMapDimensions, imageFile, activeSceneInfo, activeDmNotes, tokens, gridSize, gridOpacity, isFogVisible, walls, visionConfig, roomAnnotations]);
+    toast.success(`Force-synced ${currentSlot} to Player View!`);
+  }, [broadcastFullState, getMapDimensions, imageFile, activeSceneInfo, activeDmNotes, tokens, gridSize, gridOpacity, isFogVisible, walls, visionConfig, roomAnnotations, mapType, videoSize, mapRotation, stageScale, stagePos, reveals, polygonReveals, effects, gridVisible, gridOffsetX, gridOffsetY, boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect]);
 
   const handleSpawnMonsterToken = useCallback((tokenData: {
     name: string;
@@ -2761,8 +2856,8 @@ export default function App() {
     // Automatically fit the entire map inside the DM view
     fitWholeMapToScreen(scene.mapWidth, scene.mapHeight);
 
-    // 7. Socket broadcast: immediately emit SYNC_IMAGE and SYNC_STATE with the authoritative full-resolution URL
-    if (socketRef.current?.connected) {
+    // 7. Socket broadcast: immediately emit SYNC_IMAGE and SYNC_STATE only if currently viewing the live slot
+    if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) {
       if (authoritativeMapUrl) {
         socketRef.current.emit('SYNC_IMAGE', authoritativeMapUrl);
       }
@@ -2793,13 +2888,14 @@ export default function App() {
       });
     }
 
-    // 8. Publish active session to Firestore for live player view synchronization
-    publishActiveSession({
-      sessionId: 'current',
-      campaignId,
-      chapterId,
-      sceneId: scene.sceneId,
-      sceneTitle: scene.sceneTitle,
+    // 8. Publish active session to Firestore for live player view synchronization only if live
+    if (activeMapIdRef.current === liveMapIdRef.current) {
+      publishActiveSession({
+        sessionId: 'current',
+        campaignId,
+        chapterId,
+        sceneId: scene.sceneId,
+        sceneTitle: scene.sceneTitle,
       mapUrl: authoritativeMapUrl,
       mapThumbnailUrl: scene.mapThumbnailUrl,
       mapWidth: scene.mapWidth,
@@ -2818,6 +2914,7 @@ export default function App() {
       boardWeatherEffect: loadedWeather,
       updatedAt: Date.now()
     }).catch(err => console.warn('[handleLoadSceneFromCampaign] Firestore activeSession publish warning:', err));
+    }
 
     const wallCount = scene.walls?.length || 0;
     const roomCount = scene.roomAnnotations?.length || 0;
@@ -2915,7 +3012,7 @@ export default function App() {
         updatedAt: Date.now()
       });
 
-      if (socketRef.current?.connected && targetMapUrl) {
+      if (socketRef.current?.connected && targetMapUrl && (activeMapIdRef.current === liveMapIdRef.current)) {
         socketRef.current.emit('SYNC_IMAGE', targetMapUrl);
         socketRef.current.emit('SYNC_STATE', {
           imageFile: targetMapUrl,
@@ -3124,7 +3221,7 @@ export default function App() {
         });
       }
 
-      if (socketRef.current?.connected) {
+      if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) {
         socketRef.current.emit('SYNC_IMAGE', targetMapUrl);
         socketRef.current.emit('SYNC_STATE', {
           imageFile: targetMapUrl,
@@ -3233,7 +3330,7 @@ export default function App() {
     setReveals([]);
     setStageScale(1);
     setStagePos({ x: 0, y: 0 });
-    if (socketRef.current?.connected) {
+    if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) {
       socketRef.current.emit("SYNC_IMAGE", targetUrl);
     }
     toast.success(`Loaded "${mapAsset.name}"`);
@@ -3251,7 +3348,7 @@ export default function App() {
     setReveals([]);
     setStageScale(1);
     setStagePos({ x: 0, y: 0 });
-    if (socketRef.current) {
+    if (socketRef.current && (activeMapIdRef.current === liveMapIdRef.current)) {
       socketRef.current.emit("SYNC_IMAGE", preset.url);
     }
     toast.success(`Loaded "${preset.name}" battle map`);
@@ -4513,7 +4610,7 @@ export default function App() {
         if (selectedTokenIds.includes(t.id)) {
           const newX = t.x + dx * gridSize;
           const newY = t.y + dy * gridSize;
-          if (socketRef.current?.connected) {
+          if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) {
             socketRef.current.emit('MOVE_TOKEN', { id: t.id, x: newX, y: newY });
           }
           return {
@@ -4527,7 +4624,7 @@ export default function App() {
       if (mapsDataRef.current[activeMapId]) {
         mapsDataRef.current[activeMapId].tokens = next;
       }
-      if (socketRef.current?.connected) {
+      if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) {
         socketRef.current.emit('SYNC_TOKENS', next);
       }
       return next;
@@ -4542,7 +4639,7 @@ export default function App() {
         if (mapsDataRef.current[activeMapId]) {
           mapsDataRef.current[activeMapId].tokens = next;
         }
-        if (socketRef.current?.connected) {
+        if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) {
           socketRef.current.emit('SYNC_TOKENS', next);
         }
         return next;
@@ -4574,7 +4671,7 @@ export default function App() {
         toast.info(`${isSecret ? 'Secret Door' : 'Door'} ${nextState.toUpperCase()}`, {
           icon: isSecret ? '🗝️' : '🚪'
         });
-        if (socketRef.current?.connected) {
+        if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) {
           socketRef.current.emit('SYNC_STATE', { walls: updated });
         }
       }
@@ -4934,7 +5031,7 @@ export default function App() {
       mapsDataRef.current[activeMapId].isFogVisible = true;
     }
 
-    if (socketRef.current?.connected) {
+    if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) {
       socketRef.current.emit('SYNC_STATE', {
         reveals: [],
         polygonReveals: [],
@@ -4985,6 +5082,7 @@ export default function App() {
 
     // Prevent any initial auto-restoration from interfering with switching to empty slots
     hasRestoredInitialSessionRef.current = true;
+    isSwitchingMapSlotRef.current = true;
 
     // Save current active map layer
     mapsDataRef.current[activeMapId] = {
@@ -5084,8 +5182,15 @@ export default function App() {
     }
 
     setActiveMapId(newMapId);
+    activeMapIdRef.current = newMapId;
     setActiveMenu(null);
-    toast.info(`Switched to slot ${newMapId}${next ? '' : ' (Blank layer)'}`);
+
+    setTimeout(() => {
+      isSwitchingMapSlotRef.current = false;
+    }, 300);
+
+    const isLive = newMapId === liveMapIdRef.current;
+    toast.info(`Switched to slot ${newMapId}${next ? '' : ' (Blank layer)'}${isLive ? ' [Live on Players]' : ' [Private DM Prep]'}`);
   };
 
   const handleClearMapSlot = (slotId?: 'DM1' | 'DM2' | 'DM3') => {
@@ -5428,6 +5533,7 @@ export default function App() {
         <LeftSidebar
           isPlayerView={false}
           activeMapId={activeMapId}
+          liveMapId={liveMapId}
           handleMapSwitch={handleMapSwitch}
           onClearMapSlot={handleClearMapSlot}
           handleFileUpload={handleFileUpload}
@@ -5735,6 +5841,7 @@ export default function App() {
                 tool={tool}
                 setTool={setTool}
                 activeMapId={activeMapId}
+                liveMapId={liveMapId}
                 onMapSwitch={handleMapSwitch}
               />
             <input
@@ -6383,7 +6490,7 @@ export default function App() {
                         lastTokenMoveEmitTimeRef.current = now;
                         const rawX = e.target.x();
                         const rawY = e.target.y();
-                        if (socketRef.current?.connected) {
+                        if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) {
                           socketRef.current.emit('MOVE_TOKEN', { id: token.id, x: rawX, y: rawY });
                         }
                       }
@@ -6419,7 +6526,7 @@ export default function App() {
                       }
                       dragStartPositionsRef.current = {};
 
-                      if (socketRef.current?.connected) {
+                      if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) {
                         if (selectedTokenIds.length > 1 && selectedTokenIds.includes(token.id)) {
                           selectedTokenIds.forEach(id => {
                             const tok = nextTokens.find(t => t.id === id);
@@ -6448,7 +6555,7 @@ export default function App() {
                       if (mapsDataRef.current[activeMapId]) {
                         mapsDataRef.current[activeMapId].tokens = next;
                       }
-                      if (socketRef.current?.connected) {
+                      if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) {
                         socketRef.current.emit('SYNC_TOKENS', next);
                       }
                     }}

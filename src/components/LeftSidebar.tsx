@@ -110,6 +110,7 @@ import { HelpDrawer } from './HelpDrawer';
 interface LeftSidebarProps {
   isPlayerView?: boolean;
   activeMapId: 'DM1' | 'DM2' | 'DM3';
+  liveMapId?: 'DM1' | 'DM2' | 'DM3';
   handleMapSwitch: (id: 'DM1' | 'DM2' | 'DM3') => void;
   onClearMapSlot?: (id?: 'DM1' | 'DM2' | 'DM3') => void;
   handleFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -254,6 +255,7 @@ type GroupMenuId = 'maps' | 'zones' | 'fog-grid' | 'lighting' | 'combat' | 'fx' 
 export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   isPlayerView,
   activeMapId,
+  liveMapId,
   handleMapSwitch,
   onClearMapSlot,
   handleFileUpload,
@@ -1188,21 +1190,33 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                       )}
                     </div>
                     <div className="grid grid-cols-3 gap-1.5">
-                      {(['DM1', 'DM2', 'DM3'] as const).map((id) => (
-                        <button
-                          key={id}
-                          id={`btn-map-slot-${id}`}
-                          onClick={() => handleMapSwitch(id)}
-                          className={`py-2 px-2 rounded-xl text-xs font-bold font-mono transition-all relative flex flex-col items-center gap-0.5 border cursor-pointer ${
-                            activeMapId === id
-                              ? 'bg-emerald-500/20 border-emerald-500/60 text-emerald-300 shadow-sm'
-                              : 'bg-zinc-800/60 border-zinc-700/50 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
-                          }`}
-                        >
-                          <span>{id}</span>
-                          <span className="text-[8px] font-sans text-zinc-500">Standby</span>
-                        </button>
-                      ))}
+                      {(['DM1', 'DM2', 'DM3'] as const).map((id) => {
+                        const isActive = activeMapId === id;
+                        const isLive = (liveMapId || 'DM1') === id;
+                        return (
+                          <button
+                            key={id}
+                            id={`btn-map-slot-${id}`}
+                            onClick={() => handleMapSwitch(id)}
+                            className={`py-2 px-2 rounded-xl text-xs font-bold font-mono transition-all relative flex flex-col items-center gap-0.5 border cursor-pointer ${
+                              isActive
+                                ? 'bg-emerald-500/20 border-emerald-500/60 text-emerald-300 shadow-sm'
+                                : 'bg-zinc-800/60 border-zinc-700/50 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
+                            }`}
+                            title={`Map Slot ${id}: ${isActive ? 'Editing' : 'Standby'}, ${isLive ? 'Live on Player View' : 'Private'}`}
+                          >
+                            <div className="flex items-center gap-1">
+                              <span>{id}</span>
+                              {isLive && (
+                                <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shadow-[0_0_6px_rgba(96,165,250,0.8)] animate-pulse" />
+                              )}
+                            </div>
+                            <span className={`text-[8px] font-sans ${isLive ? 'text-blue-400 font-semibold' : 'text-zinc-500'}`}>
+                              {isLive ? 'Live on Players' : (isActive ? 'Editing' : 'Standby')}
+                            </span>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
