@@ -768,6 +768,7 @@ const PlayerToken = React.memo(({
     onMoveToken(token.id, snappedX, snappedY);
   };
 
+  const isMonster = isMonsterToken(token) || token.isMonster === true || token.category === 'monster' || token.isPlayer === false;
   const hpRatio = Math.max(0, Math.min(1, stats.currentHp / stats.maxHp));
   const hpColor = hpRatio > 0.5 ? '#10b981' : hpRatio > 0.25 ? '#f59e0b' : '#ef4444';
   const pillWidth = Math.max(68, Math.min(108, tokenPx * 0.94));
@@ -784,19 +785,19 @@ const PlayerToken = React.memo(({
       onDragMove={handleDragMove}
       onDragEnd={handleDragEnd}
       onClick={() => {
-        if (onClaimToken) {
+        if (!isMonster && onClaimToken) {
           onClaimToken(token.id);
         }
       }}
       onTap={() => {
-        if (onClaimToken) {
+        if (!isMonster && onClaimToken) {
           onClaimToken(token.id);
         }
       }}
       onContextMenu={(e: any) => {
         e.evt.preventDefault();
         e.cancelBubble = true;
-        if (onContextMenu) {
+        if (!isMonster && onContextMenu) {
           onContextMenu(token.id, e.evt.clientX, e.evt.clientY);
         }
       }}
@@ -909,56 +910,58 @@ const PlayerToken = React.memo(({
 
       {/* 3. AC Shield Badge on Top-Left: REMOVED per user request */}
 
-      {/* 4. Large, High-Contrast HP Pill Badge directly tied to D&D Beyond & Character Sheet */}
-      <Group x={pillX} y={pillY} listening={false}>
-        {/* Dark slate container badge */}
-        <Rect
-          width={pillWidth}
-          height={pillHeight}
-          fill="rgba(15, 23, 42, 0.96)"
-          stroke={hpRatio <= 0.25 ? "#ef4444" : "#475569"}
-          strokeWidth={hpRatio <= 0.25 ? 1.5 : 1}
-          cornerRadius={5}
-          perfectDrawEnabled={false}
-        />
-        {/* Background HP Track */}
-        <Rect
-          x={3.5}
-          y={14}
-          width={pillWidth - 7}
-          height={4.5}
-          fill="rgba(30, 41, 59, 0.9)"
-          cornerRadius={2.5}
-          perfectDrawEnabled={false}
-        />
-        {/* Filled HP progress bar */}
-        {hpRatio > 0 && (
+      {/* 4. Large, High-Contrast HP Pill Badge directly tied to D&D Beyond & Character Sheet (PLAYERS ONLY - Monsters NEVER show HP in player view) */}
+      {!isMonster && (
+        <Group x={pillX} y={pillY} listening={false}>
+          {/* Dark slate container badge */}
+          <Rect
+            width={pillWidth}
+            height={pillHeight}
+            fill="rgba(15, 23, 42, 0.96)"
+            stroke={hpRatio <= 0.25 ? "#ef4444" : "#475569"}
+            strokeWidth={hpRatio <= 0.25 ? 1.5 : 1}
+            cornerRadius={5}
+            perfectDrawEnabled={false}
+          />
+          {/* Background HP Track */}
           <Rect
             x={3.5}
             y={14}
-            width={Math.max(2, (pillWidth - 7) * hpRatio)}
+            width={pillWidth - 7}
             height={4.5}
-            fill={hpColor}
+            fill="rgba(30, 41, 59, 0.9)"
             cornerRadius={2.5}
             perfectDrawEnabled={false}
           />
-        )}
-        {/* Crisp Monospace HP text */}
-        <Text
-          y={2.5}
-          width={pillWidth}
-          align="center"
-          text={`${stats.currentHp}/${stats.maxHp}${stats.tempHp && stats.tempHp > 0 ? ` (+${stats.tempHp})` : ''}`}
-          fontSize={10}
-          fontStyle="bold"
-          fontFamily="monospace"
-          fill="#ffffff"
-          perfectDrawEnabled={false}
-        />
-      </Group>
+          {/* Filled HP progress bar */}
+          {hpRatio > 0 && (
+            <Rect
+              x={3.5}
+              y={14}
+              width={Math.max(2, (pillWidth - 7) * hpRatio)}
+              height={4.5}
+              fill={hpColor}
+              cornerRadius={2.5}
+              perfectDrawEnabled={false}
+            />
+          )}
+          {/* Crisp Monospace HP text */}
+          <Text
+            y={2.5}
+            width={pillWidth}
+            align="center"
+            text={`${stats.currentHp}/${stats.maxHp}${stats.tempHp && stats.tempHp > 0 ? ` (+${stats.tempHp})` : ''}`}
+            fontSize={10}
+            fontStyle="bold"
+            fontFamily="monospace"
+            fill="#ffffff"
+            perfectDrawEnabled={false}
+          />
+        </Group>
+      )}
 
-      {/* 5. Token Name Label & Conditions (Cleanly spaced below the larger HP badge) */}
-      <Group y={tokenPx + 16} listening={false}>
+      {/* 5. Token Name Label & Conditions (Cleanly spaced below the larger HP badge or token) */}
+      <Group y={tokenPx + (isMonster ? 4 : 16)} listening={false}>
         <Text
           text={token.name}
           width={tokenPx + 60}
@@ -1067,7 +1070,11 @@ export default function PlayerView() {
 
   // Claimed Token Data & Character Stats
   const claimedToken = useMemo(() => {
-    return tokens.find(t => t.id === claimedTokenId);
+    const found = tokens.find(t => t.id === claimedTokenId);
+    if (!found) return null;
+    const isMonster = isMonsterToken(found) || found.isMonster === true || found.category === 'monster' || found.isPlayer === false;
+    if (isMonster) return null;
+    return found;
   }, [tokens, claimedTokenId]);
 
   const claimedStats = useMemo(() => {
@@ -1800,6 +1807,11 @@ export default function PlayerView() {
 
   // Seize / Claim Character Action
   const handleClaimToken = useCallback((tokenId: string) => {
+    const target = tokensRef.current.find(t => t.id === tokenId);
+    if (target) {
+      const isMonster = isMonsterToken(target) || target.isMonster === true || target.category === 'monster' || target.isPlayer === false;
+      if (isMonster) return;
+    }
     setClaimedTokenId(tokenId);
     if (typeof window !== 'undefined') {
       localStorage.setItem('mistwalker_player_claimed_token', tokenId);
@@ -1815,6 +1827,11 @@ export default function PlayerView() {
   }, []);
 
   const handleDragStartToken = useCallback((id: string) => {
+    const target = tokensRef.current.find(t => t.id === id);
+    if (target) {
+      const isMonster = isMonsterToken(target) || target.isMonster === true || target.category === 'monster' || target.isPlayer === false;
+      if (isMonster) return;
+    }
     activeDraggingTokenIdRef.current = id;
     setClaimedTokenId(id);
     if (typeof window !== 'undefined') {
@@ -1846,8 +1863,12 @@ export default function PlayerView() {
     }, 150);
   }, []);
 
-  // Open right-click context menu for tokens
+  // Open right-click context menu for tokens (PLAYERS ONLY - Monsters NEVER show context menu or HP in player view)
   const handleOpenTokenContextMenu = useCallback((id: string, clientX: number, clientY: number) => {
+    const target = tokensRef.current.find(t => t.id === id);
+    if (!target) return;
+    const isMonster = isMonsterToken(target) || target.isMonster === true || target.category === 'monster' || target.isPlayer === false;
+    if (isMonster) return;
     setActiveTokenMenu({ id, x: clientX, y: clientY });
   }, []);
 
@@ -2483,6 +2504,7 @@ export default function PlayerView() {
       !isMonsterToken(t) &&
       !t.isMonster &&
       t.category !== 'monster' &&
+      t.isPlayer !== false &&
       (t.isPlayer || t.category === 'character' || t.id === claimedTokenId)
     );
   }, [tokens, claimedTokenId]);
@@ -3136,6 +3158,7 @@ export default function PlayerView() {
               ) : (
                 candidateTokens.map((t) => {
                   const isSelected = claimedTokenId === t.id;
+                  const isMon = isMonsterToken(t) || t.isMonster === true || t.category === 'monster' || t.isPlayer === false;
                   const tStats = resolveTokenCharacterStats(t, compendiumCharacters);
                   return (
                     <div
@@ -3161,8 +3184,12 @@ export default function PlayerView() {
                         <div>
                           <div className="text-xs font-bold text-zinc-100">{t.name}</div>
                           <div className="text-[10px] text-zinc-400 font-mono flex items-center gap-2 mt-0.5">
-                            <span className="text-emerald-400 font-semibold">HP {tStats.currentHp}/{tStats.maxHp}</span>
-                            <span>•</span>
+                            {!isMon && (
+                              <>
+                                <span className="text-emerald-400 font-semibold">HP {tStats.currentHp}/{tStats.maxHp}</span>
+                                <span>•</span>
+                              </>
+                            )}
                             <span className="text-sky-400 font-semibold">AC {tStats.ac}</span>
                           </div>
                         </div>
@@ -3611,6 +3638,8 @@ export default function PlayerView() {
       {activeTokenMenu && (() => {
         const currentToken = tokens.find(t => t.id === activeTokenMenu.id);
         if (!currentToken || !isTokenVisibleToPlayer(currentToken)) return null;
+        const isMonster = isMonsterToken(currentToken) || currentToken.isMonster === true || currentToken.category === 'monster' || currentToken.isPlayer === false;
+        if (isMonster) return null;
 
         const matchingChar = compendiumCharacters?.find(c => 
           c.id === currentToken.id || c.name.toLowerCase() === currentToken.name.toLowerCase()

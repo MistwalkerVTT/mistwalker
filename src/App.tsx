@@ -394,6 +394,7 @@ const TokenImage = React.memo(({
     };
   }, [token, characters, matchedCombatant]);
 
+  const isMonster = isMonsterToken(token) || token.isMonster === true || token.category === 'monster' || token.isPlayer === false;
   const tokenWidth = gridSize * token.size;
   const radius = tokenWidth / 2;
   const hpColor = stats.hpRatio > 0.5 ? '#10b981' : stats.hpRatio > 0.25 ? '#f59e0b' : '#ef4444';
@@ -557,88 +558,92 @@ const TokenImage = React.memo(({
       />
 
       {/* 3. AC Shield Badge on Top-Left */}
-      <Group x={12} y={12} listening={false}>
-        <Circle
-          radius={11}
-          fill="#0f172a"
-          stroke="#38bdf8"
-          strokeWidth={1.5}
-          perfectDrawEnabled={false}
-        />
-        <Text
-          x={-11}
-          y={-9}
-          width={22}
-          align="center"
-          text="AC"
-          fontSize={6}
-          fontStyle="bold"
-          fill="#38bdf8"
-          perfectDrawEnabled={false}
-        />
-        <Text
-          x={-11}
-          y={-2}
-          width={22}
-          align="center"
-          text={`${stats.ac}`}
-          fontSize={10}
-          fontStyle="bold"
-          fill="#ffffff"
-          perfectDrawEnabled={false}
-        />
-      </Group>
+      {(!isPlayerView || !isMonster) && (
+        <Group x={12} y={12} listening={false}>
+          <Circle
+            radius={11}
+            fill="#0f172a"
+            stroke="#38bdf8"
+            strokeWidth={1.5}
+            perfectDrawEnabled={false}
+          />
+          <Text
+            x={-11}
+            y={-9}
+            width={22}
+            align="center"
+            text="AC"
+            fontSize={6}
+            fontStyle="bold"
+            fill="#38bdf8"
+            perfectDrawEnabled={false}
+          />
+          <Text
+            x={-11}
+            y={-2}
+            width={22}
+            align="center"
+            text={`${stats.ac}`}
+            fontSize={10}
+            fontStyle="bold"
+            fill="#ffffff"
+            perfectDrawEnabled={false}
+          />
+        </Group>
+      )}
 
-      {/* 4. Large, High-Contrast HP Pill Badge directly tied to D&D Beyond & Character Sheet */}
-      <Group x={pillX} y={pillY} listening={false}>
-        {/* Dark slate container badge */}
-        <Rect
-          width={pillWidth}
-          height={pillHeight}
-          fill="rgba(15, 23, 42, 0.96)"
-          stroke={stats.hpRatio <= 0.25 ? "#ef4444" : "#475569"}
-          strokeWidth={stats.hpRatio <= 0.25 ? 1.5 : 1}
-          cornerRadius={5}
-          perfectDrawEnabled={false}
-        />
-        {/* Background HP Track */}
-        <Rect
-          x={3.5}
-          y={14}
-          width={pillWidth - 7}
-          height={4.5}
-          fill="rgba(30, 41, 59, 0.9)"
-          cornerRadius={2.5}
-          perfectDrawEnabled={false}
-        />
-        {/* Filled HP progress bar */}
-        {stats.hpRatio > 0 && (
+      {/* 4. Large, High-Contrast HP Pill Badge directly tied to D&D Beyond & Character Sheet (Monsters NEVER show HP in player view) */}
+      {(!isPlayerView || !isMonster) && (
+        <Group x={pillX} y={pillY} listening={false}>
+          {/* Dark slate container badge */}
+          <Rect
+            width={pillWidth}
+            height={pillHeight}
+            fill="rgba(15, 23, 42, 0.96)"
+            stroke={stats.hpRatio <= 0.25 ? "#ef4444" : "#475569"}
+            strokeWidth={stats.hpRatio <= 0.25 ? 1.5 : 1}
+            cornerRadius={5}
+            perfectDrawEnabled={false}
+          />
+          {/* Background HP Track */}
           <Rect
             x={3.5}
             y={14}
-            width={Math.max(2, (pillWidth - 7) * stats.hpRatio)}
+            width={pillWidth - 7}
             height={4.5}
-            fill={hpColor}
+            fill="rgba(30, 41, 59, 0.9)"
             cornerRadius={2.5}
             perfectDrawEnabled={false}
           />
-        )}
-        {/* Crisp Monospace HP text */}
-        <Text
-          y={2.5}
-          width={pillWidth}
-          align="center"
-          text={`${stats.currentHp}/${stats.maxHp}${stats.tempHp && stats.tempHp > 0 ? ` (+${stats.tempHp})` : ''}`}
-          fontSize={10}
-          fontStyle="bold"
-          fontFamily="monospace"
-          fill="#ffffff"
-          perfectDrawEnabled={false}
-        />
-      </Group>
+          {/* Filled HP progress bar */}
+          {stats.hpRatio > 0 && (
+            <Rect
+              x={3.5}
+              y={14}
+              width={Math.max(2, (pillWidth - 7) * stats.hpRatio)}
+              height={4.5}
+              fill={hpColor}
+              cornerRadius={2.5}
+              perfectDrawEnabled={false}
+            />
+          )}
+          {/* Crisp Monospace HP text */}
+          <Text
+            y={2.5}
+            width={pillWidth}
+            align="center"
+            text={`${stats.currentHp}/${stats.maxHp}${stats.tempHp && stats.tempHp > 0 ? ` (+${stats.tempHp})` : ''}`}
+            fontSize={10}
+            fontStyle="bold"
+            fontFamily="monospace"
+            fill="#ffffff"
+            perfectDrawEnabled={false}
+          />
+        </Group>
+      )}
 
-      {/* 5. Token Name Label & Conditions (Cleanly spaced below the larger HP badge) */}
-      <Group y={tokenWidth + 16} listening={false}>
+      {/* 5. Token Name Label & Conditions (Cleanly spaced below the larger HP badge or token) */}
+      <Group y={tokenWidth + ((isPlayerView && isMonster) ? 4 : 16)} listening={false}>
         <Text
           text={token.name}
           fontSize={12}

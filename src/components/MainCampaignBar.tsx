@@ -52,6 +52,7 @@ interface MainCampaignBarProps {
   tool?: string;
   setTool?: (tool: string) => void;
   activeMapId?: 'DM1' | 'DM2' | 'DM3';
+  liveMapId?: 'DM1' | 'DM2' | 'DM3';
   onMapSwitch?: (id: 'DM1' | 'DM2' | 'DM3') => void;
   onOpenTutorial?: () => void;
 }
@@ -78,6 +79,7 @@ export const MainCampaignBar: React.FC<MainCampaignBarProps> = React.memo(({
   tool,
   setTool,
   activeMapId,
+  liveMapId,
   onMapSwitch
 }) => {
   // Find active campaign name
@@ -148,21 +150,31 @@ export const MainCampaignBar: React.FC<MainCampaignBarProps> = React.memo(({
       {onMapSwitch && (
         <div className="flex items-center p-0.5 rounded-xl bg-zinc-900/90 border border-zinc-750 shrink-0 shadow-inner gap-0.5">
           <span className="text-[9px] uppercase font-bold font-mono text-zinc-500 px-1.5 select-none">Layer:</span>
-          {(['DM1', 'DM2', 'DM3'] as const).map((slotId) => (
-            <button
-              key={slotId}
-              id={`btn-mainbar-slot-${slotId}`}
-              onClick={() => onMapSwitch(slotId)}
-              className={`px-2 py-1 rounded-lg text-[10px] font-mono font-bold transition-all cursor-pointer ${
-                activeMapId === slotId
-                  ? 'bg-emerald-500 text-zinc-950 shadow-sm font-black'
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
-              }`}
-              title={`Switch to Map Layer ${slotId}${activeMapId === slotId ? ' (Active)' : ' (Click to switch)'}`}
-            >
-              {slotId}
-            </button>
-          ))}
+          {(['DM1', 'DM2', 'DM3'] as const).map((slotId) => {
+            const isActive = activeMapId === slotId;
+            const isLive = (liveMapId || 'DM1') === slotId;
+            return (
+              <button
+                key={slotId}
+                id={`btn-mainbar-slot-${slotId}`}
+                onClick={() => onMapSwitch(slotId)}
+                className={`px-2 py-1 rounded-lg text-[10px] font-mono font-bold transition-all cursor-pointer relative flex items-center gap-1 ${
+                  isActive
+                    ? 'bg-emerald-500 text-zinc-950 shadow-sm font-black'
+                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
+                }`}
+                title={`Map Layer ${slotId}${isActive ? ' (Viewing Now)' : ''}${isLive ? ' — [Live on Player View]' : ' — [Private DM Prep]'}`}
+              >
+                <span>{slotId}</span>
+                {isLive && (
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-zinc-950 ring-1 ring-emerald-300 animate-pulse' : 'bg-blue-400 shadow-[0_0_6px_rgba(96,165,250,0.8)] animate-pulse'}`}
+                    title="Live on Player View"
+                  />
+                )}
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -304,11 +316,19 @@ export const MainCampaignBar: React.FC<MainCampaignBarProps> = React.memo(({
           <button
             id="btn-main-force-sync-players"
             onClick={onForceSync}
-            className="px-2.5 py-1 rounded-xl bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 border border-blue-500/40 text-[11px] font-bold flex items-center gap-1.5 transition-all shadow-md active:scale-95 cursor-pointer"
-            title="Force Sync to Players: Immediately broadcast full-resolution battlemap and scene state to all player screens"
+            className={`px-2.5 py-1 rounded-xl text-[11px] font-bold flex items-center gap-1.5 transition-all shadow-md active:scale-95 cursor-pointer ${
+              activeMapId && liveMapId && activeMapId !== liveMapId
+                ? 'bg-blue-600 hover:bg-blue-500 text-white border border-blue-400 ring-2 ring-blue-500/50 shadow-blue-900/50 animate-pulse'
+                : 'bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 border border-blue-500/40'
+            }`}
+            title={`Force Sync to Players: Broadcast current map slot (${activeMapId || 'DM1'}) to all player screens. Currently, players are seeing ${liveMapId || 'DM1'}.`}
           >
             <Radio className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
-            <span>Force Sync to Players</span>
+            <span>
+              {activeMapId && liveMapId && activeMapId !== liveMapId
+                ? `Force Sync (${activeMapId} → Players)`
+                : 'Force Sync to Players'}
+            </span>
           </button>
         )}
 
