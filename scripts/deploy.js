@@ -36,9 +36,36 @@ async function triggerDeploy() {
     throw new Error(`Failed to trigger deploy: HTTP ${res.status} ${text}`);
   }
 
-  const data = await res.json();
-  const deployId = data.id;
-  console.log(`📦 Deploy initiated: ${deployId} (Status: ${data.status})`);
+  let deployId;
+  let status = 'initiated';
+  const text = await res.text();
+  if (text && text.trim()) {
+    try {
+      const data = JSON.parse(text);
+      deployId = data.id || data.deploy?.id;
+      status = data.status || status;
+    } catch {
+      // Body was not JSON
+    }
+  }
+
+  if (!deployId) {
+    // Render returned 202 Accepted with empty body; fetch latest deploy
+    const listRes = await fetch(`https://api.render.com/v1/services/${SERVICE_ID}/deploys?limit=1`, {
+      headers: { 'Authorization': `Bearer ${API_KEY}`, 'Accept': 'application/json' }
+    });
+    if (listRes.ok) {
+      const listData = await listRes.json();
+      deployId = listData[0]?.deploy?.id || listData[0]?.id;
+      status = listData[0]?.deploy?.status || listData[0]?.status || status;
+    }
+  }
+
+  if (!deployId) {
+    throw new Error('Failed to retrieve deploy ID from Render');
+  }
+
+  console.log(`📦 Deploy initiated: ${deployId} (Status: ${status})`);
   return deployId;
 }
 
