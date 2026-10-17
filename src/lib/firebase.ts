@@ -225,6 +225,10 @@ export interface Scene {
   boardAnimatedFeatures?: AnimatedFeature[];
   boardAnimatedEnabled?: boolean;
   boardWeatherEffect?: WeatherEffectType;
+  pdfUrl?: string;
+  pdfFilename?: string;
+  pdfSection?: string;
+  pdfPage?: number;
 }
 
 export interface Chapter {

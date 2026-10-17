@@ -48,7 +48,7 @@ import {
 import { toast } from 'sonner';
 import { isVideoAsset, saveLocalAsset } from '../lib/storageCache';
 import { SceneTokenPlacementCanvas } from './SceneTokenPlacementCanvas';
-import { UploadedAsset, WallSegment, VisionConfig, RoomAnnotation, ChapterPdfDigest } from '../types';
+import { UploadedAsset, WallSegment, VisionConfig, RoomAnnotation, ChapterPdfDigest, ChapterSceneAssociation } from '../types';
 import { PRESET_BATTLEMAPS, PresetBattlemap } from '../data/presetBattlemaps';
 import { digestChapterPdf } from '../services/aiService';
 import { CampaignPdfImporterModal } from './CampaignPdfImporterModal';
@@ -504,7 +504,7 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
     return candidate;
   };
 
-  // 3b. Duplicate Scene within Chapter
+  // 3b. Duplicate Scene within Chapter (preserves exact wall and zone coordinates + PDF linkage)
   const handleDuplicateScene = async (
     sceneToDuplicate: Scene,
     chapterId?: string,
@@ -556,24 +556,94 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
     const newSceneId = 'scene-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 6);
     const newSceneTitle = generateCopyTitle(sceneToDuplicate.sceneTitle, targetChap.scenes);
 
-    // Deep clone tokens with unique IDs
-    const clonedTokens: SceneToken[] = (sceneToDuplicate.tokens || []).map((t, idx) => ({
+    // Source fidelity: If duplicating the active scene, capture latest on-canvas components
+    const isActiveScene = activeSceneInfo?.sceneId === sceneToDuplicate.sceneId;
+    const isSelectedScene = selectedSceneId === sceneToDuplicate.sceneId;
+
+    // 1. Tokens in exact positions
+    const sourceTokens = (isSelectedScene && editedSceneTokens.length > 0)
+      ? editedSceneTokens
+      : (sceneToDuplicate.tokens || []);
+
+    const clonedTokens: SceneToken[] = sourceTokens.map((t, idx) => ({
       ...t,
-      id: `tok-${Date.now().toString(36)}-${idx}-${Math.random().toString(36).substring(2, 6)}`
+      id: `tok-${Date.now().toString(36)}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
+      x: Number(t.x),
+      y: Number(t.y),
+      size: typeof t.size === 'number' ? t.size : 1
     }));
 
-    // Deep clone walls with unique IDs
-    const clonedWalls: WallSegment[] = (sceneToDuplicate.walls || []).map((w, idx) => ({
+    // 2. Walls in exact positions (preserve p1 and p2 coordinate precision verbatim)
+    const sourceWalls = (isActiveScene && currentWalls && currentWalls.length > 0)
+      ? currentWalls
+      : (sceneToDuplicate.walls || []);
+
+    const clonedWalls: WallSegment[] = sourceWalls.map((w, idx) => ({
       ...w,
-      id: `wall-${Date.now().toString(36)}-${idx}-${Math.random().toString(36).substring(2, 6)}`
+      id: `wall-${Date.now().toString(36)}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
+      p1: { x: Number(w.p1.x), y: Number(w.p1.y) },
+      p2: { x: Number(w.p2.x), y: Number(w.p2.y) },
+      wallType: w.wallType,
+      doorState: w.doorState
     }));
 
-    // Deep clone room annotations with unique IDs and updated sceneId
-    const clonedRooms: RoomAnnotation[] = (sceneToDuplicate.roomAnnotations || []).map((r, idx) => ({
+    // 3. Zones / Room annotations in exact positions with PDF connection intact
+    const sourceRooms = (isActiveScene && currentRoomAnnotations && currentRoomAnnotations.length > 0)
+      ? currentRoomAnnotations
+      : (sceneToDuplicate.roomAnnotations || []);
+
+    const clonedRooms: RoomAnnotation[] = sourceRooms.map((r, idx) => ({
       ...r,
       id: `room-${Date.now().toString(36)}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
-      sceneId: newSceneId
+      campaignId: cId,
+      sceneId: newSceneId,
+      label: r.label,
+      roomNumber: r.roomNumber,
+      roomName: r.roomName,
+      bounds: {
+        x: Number(r.bounds.x),
+        y: Number(r.bounds.y),
+        width: Number(r.bounds.width),
+        height: Number(r.bounds.height)
+      },
+      polygonPoints: r.polygonPoints ? r.polygonPoints.map(p => Number(p)) : undefined,
+      boxedText: r.boxedText || '',
+      dmNotes: r.dmNotes || '',
+      color: r.color,
+      pdfSection: r.pdfSection,
+      pdfPage: r.pdfPage,
+      monsters: r.monsters ? JSON.parse(JSON.stringify(r.monsters)) : [],
+      hiddenMonsterNames: r.hiddenMonsterNames ? [...r.hiddenMonsterNames] : [],
+      createdAt: Date.now(),
+      updatedAt: Date.now()
     }));
+
+    // 4. PDF Connection linkage: preserve chapter-level PDF references on the scene
+    const scenePdfUrl = sceneToDuplicate.pdfUrl || targetChap.pdfUrl;
+    const scenePdfFilename = sceneToDuplicate.pdfFilename || targetChap.pdfFilename;
+    const scenePdfSection = sceneToDuplicate.pdfSection;
+    const scenePdfPage = sceneToDuplicate.pdfPage;
+
+    // 5. Update Chapter PDF Digest scene mappings to include the new duplicated scene
+    let updatedPdfDigest: ChapterPdfDigest | undefined = targetChap.pdfDigest
+      ? JSON.parse(JSON.stringify(targetChap.pdfDigest))
+      : undefined;
+
+    if (updatedPdfDigest && Array.isArray(updatedPdfDigest.scenes)) {
+      const existingPdfScene = updatedPdfDigest.scenes.find(
+        (sc: ChapterSceneAssociation) =>
+          (sc.sceneId && sc.sceneId === sceneToDuplicate.sceneId) ||
+          (sc.sceneTitle && sc.sceneTitle.toLowerCase() === sceneToDuplicate.sceneTitle.toLowerCase())
+      );
+      if (existingPdfScene) {
+        const clonedPdfScene: ChapterSceneAssociation = {
+          ...JSON.parse(JSON.stringify(existingPdfScene)),
+          sceneId: newSceneId,
+          sceneTitle: newSceneTitle
+        };
+        updatedPdfDigest.scenes.push(clonedPdfScene);
+      }
+    }
 
     const duplicatedScene: Scene = {
       ...sceneToDuplicate,
@@ -583,18 +653,24 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
       mapThumbnailUrl: sceneToDuplicate.mapThumbnailUrl,
       mapWidth: sceneToDuplicate.mapWidth,
       mapHeight: sceneToDuplicate.mapHeight,
-      dmNotes: sceneToDuplicate.dmNotes || '',
+      dmNotes: (isSelectedScene && editedDmNotes) ? editedDmNotes : (sceneToDuplicate.dmNotes || ''),
       tokens: clonedTokens,
       walls: clonedWalls,
       roomAnnotations: clonedRooms,
-      gridSize: sceneToDuplicate.gridSize || 50,
-      gridOpacity: sceneToDuplicate.gridOpacity ?? 0.25,
-      isFogVisible: sceneToDuplicate.isFogVisible ?? true,
-      visionConfig: sceneToDuplicate.visionConfig ? { ...sceneToDuplicate.visionConfig } : undefined,
+      gridSize: sceneToDuplicate.gridSize || currentGridSize || 50,
+      gridOpacity: sceneToDuplicate.gridOpacity ?? currentGridOpacity ?? 0.25,
+      isFogVisible: sceneToDuplicate.isFogVisible ?? currentIsFogVisible ?? true,
+      visionConfig: (isActiveScene && currentVisionConfig)
+        ? JSON.parse(JSON.stringify(currentVisionConfig))
+        : (sceneToDuplicate.visionConfig ? JSON.parse(JSON.stringify(sceneToDuplicate.visionConfig)) : undefined),
       effects: sceneToDuplicate.effects ? JSON.parse(JSON.stringify(sceneToDuplicate.effects)) : undefined,
       boardAnimatedFeatures: sceneToDuplicate.boardAnimatedFeatures ? JSON.parse(JSON.stringify(sceneToDuplicate.boardAnimatedFeatures)) : undefined,
       boardAnimatedEnabled: sceneToDuplicate.boardAnimatedEnabled,
-      boardWeatherEffect: sceneToDuplicate.boardWeatherEffect
+      boardWeatherEffect: sceneToDuplicate.boardWeatherEffect,
+      pdfUrl: scenePdfUrl,
+      pdfFilename: scenePdfFilename,
+      pdfSection: scenePdfSection,
+      pdfPage: scenePdfPage
     };
 
     // Place the duplicate directly after the original scene
@@ -607,7 +683,13 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
     }
 
     const updatedChapters = targetCamp.chapters.map(ch =>
-      ch.chapterId === targetChap.chapterId ? { ...ch, scenes: updatedScenes } : ch
+      ch.chapterId === targetChap.chapterId
+        ? {
+            ...ch,
+            scenes: updatedScenes,
+            pdfDigest: updatedPdfDigest || ch.pdfDigest
+          }
+        : ch
     );
 
     const updatedCamp: Campaign = {
@@ -626,9 +708,9 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
     setIsSaving(true);
     try {
       await saveCampaignDoc(updatedCamp);
-      toast.success(`Duplicated "${sceneToDuplicate.sceneTitle}" as "${newSceneTitle}"`);
-      setSaveSuccessMessage(`Duplicated scene "${newSceneTitle}"`);
-      setTimeout(() => setSaveSuccessMessage(null), 3000);
+      toast.success(`Duplicated "${sceneToDuplicate.sceneTitle}" with exact walls, zones, and PDF connection`);
+      setSaveSuccessMessage(`Duplicated scene "${newSceneTitle}" with walls, zones, and PDF links`);
+      setTimeout(() => setSaveSuccessMessage(null), 3500);
     } catch (err) {
       console.error('Error duplicating scene:', err);
       toast.error('Failed to save duplicated scene to cloud');
