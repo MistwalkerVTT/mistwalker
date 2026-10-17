@@ -501,7 +501,8 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
         pdfSection: editPdfSection.trim(),
         pdfPage: isNaN(parsedPage as number) ? undefined : parsedPage,
         color: editColor,
-        monsters: manualMonsters
+        monsters: manualMonsters,
+        hiddenMonsterNames: hiddenMonsterNames
       };
 
       // Write to Firestore across collections

@@ -69,6 +69,7 @@ interface CampaignBuilderModalProps {
   activeSceneInfo: { campaignId: string; chapterId: string; sceneId: string } | null;
   savedMaps?: UploadedAsset[];
   onOpenDndChatbot?: () => void;
+  currentActiveDmNotes?: string;
 }
 
 export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
@@ -85,7 +86,8 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
   onLoadScene,
   activeSceneInfo,
   savedMaps = [],
-  onOpenDndChatbot
+  onOpenDndChatbot,
+  currentActiveDmNotes
 }) => {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -348,10 +350,14 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
     if (selectedScene) {
       setEditedTitle(selectedScene.sceneTitle);
       setEditedMapUrl(selectedScene.mapUrl);
-      setEditedDmNotes(selectedScene.dmNotes || '');
+      const isCurrentlyActiveScene = activeSceneInfo?.sceneId === selectedScene.sceneId;
+      const initialNotes = isCurrentlyActiveScene && currentActiveDmNotes !== undefined
+        ? currentActiveDmNotes
+        : (selectedScene.dmNotes || '');
+      setEditedDmNotes(initialNotes);
       setEditedSceneTokens(selectedScene.tokens || []);
     }
-  }, [selectedScene]);
+  }, [selectedScene, activeSceneInfo, currentActiveDmNotes]);
 
   // Toggle tree expansion
   const toggleCampaignExpand = (id: string) => {
@@ -560,8 +566,29 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
     const isActiveScene = activeSceneInfo?.sceneId === sceneToDuplicate.sceneId;
     const isSelectedScene = selectedSceneId === sceneToDuplicate.sceneId;
 
-    // 1. Tokens in exact positions
-    const sourceTokens = (isSelectedScene && editedSceneTokens.length > 0)
+    // 1. Tokens in exact positions (including monster tokens with full HP, AC, category, stats)
+    const sourceTokens: SceneToken[] = (isActiveScene && currentTokens && currentTokens.length > 0)
+      ? currentTokens.map(t => {
+          const tok: SceneToken = {
+            id: t.id,
+            name: t.name || 'Token',
+            avatarUrl: t.url || t.avatarUrl || '',
+            x: Math.round(t.x || 0),
+            y: Math.round(t.y || 0),
+            size: typeof t.size === 'number' ? t.size : 1
+          };
+          if (typeof t.hp === 'number' && !isNaN(t.hp)) tok.hp = t.hp;
+          if (typeof t.ac === 'number' && !isNaN(t.ac)) tok.ac = t.ac;
+          if (typeof t.isCondition === 'boolean') tok.isCondition = t.isCondition;
+          if (typeof (t as any).isPlayer === 'boolean') tok.isPlayer = (t as any).isPlayer;
+          if (typeof (t as any).isMonster === 'boolean') (tok as any).isMonster = (t as any).isMonster;
+          if ((t as any).category) (tok as any).category = (t as any).category;
+          if (typeof (t as any).visionRadius === 'number') tok.visionRadius = (t as any).visionRadius;
+          if (typeof (t as any).visionAngle === 'number') tok.visionAngle = (t as any).visionAngle;
+          if (typeof (t as any).visionEnabled === 'boolean') (tok as any).visionEnabled = (t as any).visionEnabled;
+          return tok;
+        })
+      : (isSelectedScene && editedSceneTokens.length > 0)
       ? editedSceneTokens
       : (sceneToDuplicate.tokens || []);
 
@@ -570,7 +597,16 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
       id: `tok-${Date.now().toString(36)}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
       x: Number(t.x),
       y: Number(t.y),
-      size: typeof t.size === 'number' ? t.size : 1
+      size: typeof t.size === 'number' ? t.size : 1,
+      hp: t.hp,
+      ac: t.ac,
+      isCondition: t.isCondition,
+      isPlayer: t.isPlayer,
+      isMonster: (t as any).isMonster,
+      category: (t as any).category,
+      visionRadius: (t as any).visionRadius,
+      visionAngle: (t as any).visionAngle,
+      visionEnabled: (t as any).visionEnabled
     }));
 
     // 2. Walls in exact positions (preserve p1 and p2 coordinate precision verbatim)
@@ -587,7 +623,7 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
       doorState: w.doorState
     }));
 
-    // 3. Zones / Room annotations in exact positions with PDF connection intact
+    // 3. Zones / Room annotations in exact positions with PDF connection intact & monster preloads
     const sourceRooms = (isActiveScene && currentRoomAnnotations && currentRoomAnnotations.length > 0)
       ? currentRoomAnnotations
       : (sceneToDuplicate.roomAnnotations || []);
@@ -645,28 +681,51 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
       }
     }
 
-    const duplicatedScene: Scene = {
+    const effectiveDmNotes = isSelectedScene
+      ? (editedDmNotes !== undefined ? editedDmNotes : (sceneToDuplicate.dmNotes || ''))
+      : (isActiveScene && currentActiveDmNotes !== undefined)
+      ? currentActiveDmNotes
+      : (sceneToDuplicate.dmNotes || '');
+
+    // 6. Update and permanently persist the source scene version with all latest monster & DM notes changes
+    const updatedSourceScene: Scene = {
       ...sceneToDuplicate,
+      sceneTitle: (isSelectedScene && editedTitle.trim()) ? editedTitle.trim() : sceneToDuplicate.sceneTitle,
+      dmNotes: effectiveDmNotes,
+      tokens: sourceTokens,
+      walls: sourceWalls,
+      roomAnnotations: sourceRooms,
+      visionConfig: (isActiveScene && currentVisionConfig)
+        ? currentVisionConfig
+        : sceneToDuplicate.visionConfig,
+      pdfUrl: scenePdfUrl,
+      pdfFilename: scenePdfFilename,
+      pdfSection: scenePdfSection,
+      pdfPage: scenePdfPage,
+      updatedAt: Date.now()
+    };
+
+    // 7. Create the duplicated scene carrying all those exact changes
+    const duplicatedScene: Scene = {
+      ...updatedSourceScene,
       sceneId: newSceneId,
       sceneTitle: newSceneTitle,
-      mapUrl: sceneToDuplicate.mapUrl || '',
-      mapThumbnailUrl: sceneToDuplicate.mapThumbnailUrl,
-      mapWidth: sceneToDuplicate.mapWidth,
-      mapHeight: sceneToDuplicate.mapHeight,
-      dmNotes: (isSelectedScene && editedDmNotes) ? editedDmNotes : (sceneToDuplicate.dmNotes || ''),
+      mapUrl: updatedSourceScene.mapUrl || '',
+      mapThumbnailUrl: updatedSourceScene.mapThumbnailUrl,
+      mapWidth: updatedSourceScene.mapWidth,
+      mapHeight: updatedSourceScene.mapHeight,
+      dmNotes: effectiveDmNotes,
       tokens: clonedTokens,
       walls: clonedWalls,
       roomAnnotations: clonedRooms,
-      gridSize: sceneToDuplicate.gridSize || currentGridSize || 50,
-      gridOpacity: sceneToDuplicate.gridOpacity ?? currentGridOpacity ?? 0.25,
-      isFogVisible: sceneToDuplicate.isFogVisible ?? currentIsFogVisible ?? true,
-      visionConfig: (isActiveScene && currentVisionConfig)
-        ? JSON.parse(JSON.stringify(currentVisionConfig))
-        : (sceneToDuplicate.visionConfig ? JSON.parse(JSON.stringify(sceneToDuplicate.visionConfig)) : undefined),
-      effects: sceneToDuplicate.effects ? JSON.parse(JSON.stringify(sceneToDuplicate.effects)) : undefined,
-      boardAnimatedFeatures: sceneToDuplicate.boardAnimatedFeatures ? JSON.parse(JSON.stringify(sceneToDuplicate.boardAnimatedFeatures)) : undefined,
-      boardAnimatedEnabled: sceneToDuplicate.boardAnimatedEnabled,
-      boardWeatherEffect: sceneToDuplicate.boardWeatherEffect,
+      gridSize: updatedSourceScene.gridSize || currentGridSize || 50,
+      gridOpacity: updatedSourceScene.gridOpacity ?? currentGridOpacity ?? 0.25,
+      isFogVisible: updatedSourceScene.isFogVisible ?? currentIsFogVisible ?? true,
+      visionConfig: updatedSourceScene.visionConfig ? JSON.parse(JSON.stringify(updatedSourceScene.visionConfig)) : undefined,
+      effects: updatedSourceScene.effects ? JSON.parse(JSON.stringify(updatedSourceScene.effects)) : undefined,
+      boardAnimatedFeatures: updatedSourceScene.boardAnimatedFeatures ? JSON.parse(JSON.stringify(updatedSourceScene.boardAnimatedFeatures)) : undefined,
+      boardAnimatedEnabled: updatedSourceScene.boardAnimatedEnabled,
+      boardWeatherEffect: updatedSourceScene.boardWeatherEffect,
       pdfUrl: scenePdfUrl,
       pdfFilename: scenePdfFilename,
       pdfSection: scenePdfSection,
@@ -677,6 +736,9 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
     const originalIndex = targetChap.scenes.findIndex(s => s.sceneId === sceneToDuplicate.sceneId);
     const updatedScenes = [...targetChap.scenes];
     if (originalIndex !== -1) {
+      // Save changes to that version of the scene
+      updatedScenes[originalIndex] = updatedSourceScene;
+      // Duplicate those exact changes right after it
       updatedScenes.splice(originalIndex + 1, 0, duplicatedScene);
     } else {
       updatedScenes.push(duplicatedScene);
@@ -704,6 +766,30 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
     setSelectedChapterId(targetChap.chapterId);
     setSelectedSceneId(duplicatedScene.sceneId);
     setExpandedChapters(prev => ({ ...prev, [targetChap.chapterId]: true }));
+
+    // If source scene was active on live canvas, sync published session
+    if (isActiveScene) {
+      publishActiveSession({
+        sessionId: 'current',
+        campaignId: targetCamp.campaignId,
+        chapterId: targetChap.chapterId,
+        sceneId: updatedSourceScene.sceneId,
+        sceneTitle: updatedSourceScene.sceneTitle,
+        mapUrl: updatedSourceScene.mapUrl,
+        mapThumbnailUrl: updatedSourceScene.mapThumbnailUrl,
+        mapWidth: updatedSourceScene.mapWidth,
+        mapHeight: updatedSourceScene.mapHeight,
+        dmNotes: updatedSourceScene.dmNotes,
+        tokens: updatedSourceScene.tokens,
+        gridSize: updatedSourceScene.gridSize,
+        gridOpacity: updatedSourceScene.gridOpacity,
+        isFogVisible: updatedSourceScene.isFogVisible,
+        walls: updatedSourceScene.walls,
+        visionConfig: updatedSourceScene.visionConfig,
+        roomAnnotations: updatedSourceScene.roomAnnotations,
+        updatedAt: Date.now()
+      }).catch(console.warn);
+    }
 
     setIsSaving(true);
     try {
@@ -1002,14 +1088,20 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
           const tok: SceneToken = {
             id: t.id,
             name: t.name || 'Token',
-            avatarUrl: t.url || '',
+            avatarUrl: t.url || t.avatarUrl || '',
             x: Math.round(t.x || 0),
             y: Math.round(t.y || 0),
-            size: t.size ?? 1
+            size: typeof t.size === 'number' ? t.size : 1
           };
           if (typeof t.hp === 'number' && !isNaN(t.hp)) tok.hp = t.hp;
           if (typeof t.ac === 'number' && !isNaN(t.ac)) tok.ac = t.ac;
           if (typeof t.isCondition === 'boolean') tok.isCondition = t.isCondition;
+          if (typeof (t as any).isPlayer === 'boolean') tok.isPlayer = (t as any).isPlayer;
+          if (typeof (t as any).isMonster === 'boolean') (tok as any).isMonster = (t as any).isMonster;
+          if ((t as any).category) (tok as any).category = (t as any).category;
+          if (typeof (t as any).visionRadius === 'number') tok.visionRadius = (t as any).visionRadius;
+          if (typeof (t as any).visionAngle === 'number') tok.visionAngle = (t as any).visionAngle;
+          if (typeof (t as any).visionEnabled === 'boolean') (tok as any).visionEnabled = (t as any).visionEnabled;
           return tok;
         })
       : editedSceneTokens;

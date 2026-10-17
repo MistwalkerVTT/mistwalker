@@ -3098,17 +3098,20 @@ export default function App() {
           roomAnnotations: roomAnnotations,
           tokens: tokens.map((t: any) => ({
             id: t.id,
-            name: t.name,
-            avatarUrl: t.url,
-            x: t.x,
-            y: t.y,
-            size: t.size || 1,
+            name: t.name || 'Token',
+            avatarUrl: t.url || t.avatarUrl || '',
+            x: Math.round(t.x || 0),
+            y: Math.round(t.y || 0),
+            size: typeof t.size === 'number' ? t.size : 1,
             hp: t.hp,
             ac: t.ac,
             isCondition: t.isCondition,
             visionRadius: t.visionRadius,
             visionAngle: t.visionAngle,
-            isPlayer: t.isPlayer
+            visionEnabled: t.visionEnabled,
+            isPlayer: t.isPlayer,
+            isMonster: t.isMonster,
+            category: t.category
           }))
         };
 
@@ -3481,28 +3484,39 @@ export default function App() {
             ? imageFile
             : (currentActiveScene.mapUrl || imageFile || '');
 
+          const camp = campaignsList.find(c => c.campaignId === currentActiveScene.campaignId);
+          const chap = camp?.chapters?.find(ch => ch.chapterId === currentActiveScene.chapterId);
+          const existingScene = chap?.scenes?.find(s => s.sceneId === currentActiveScene.sceneId);
+
           const updatedScene: Scene = {
+            ...(existingScene || {}),
             sceneId: currentActiveScene.sceneId,
             sceneTitle: currentActiveScene.sceneTitle,
             mapUrl: targetMapUrl,
-            mapThumbnailUrl: currentActiveScene.mapThumbnailUrl,
+            mapThumbnailUrl: currentActiveScene.mapThumbnailUrl || existingScene?.mapThumbnailUrl,
             mapWidth: currentActiveScene.mapWidth || currentDims.width,
             mapHeight: currentActiveScene.mapHeight || currentDims.height,
             dmNotes: activeDmNotes,
-            tokens: tokens.map(t => ({
-              id: t.id,
-              name: t.name || 'Token',
-              avatarUrl: t.url || '',
-              x: Math.round(t.x || 0),
-              y: Math.round(t.y || 0),
-              size: t.size ?? 1,
-              hp: t.hp,
-              ac: t.ac,
-              isCondition: t.isCondition,
-              isPlayer: t.isPlayer,
-              isMonster: (t as any).isMonster,
-              category: (t as any).category
-            })),
+            tokens: tokens.map(t => {
+              const tok: SceneToken = {
+                id: t.id,
+                name: t.name || 'Token',
+                avatarUrl: t.url || (t as any).avatarUrl || '',
+                x: Math.round(t.x || 0),
+                y: Math.round(t.y || 0),
+                size: typeof t.size === 'number' ? t.size : 1
+              };
+              if (typeof t.hp === 'number' && !isNaN(t.hp)) tok.hp = t.hp;
+              if (typeof t.ac === 'number' && !isNaN(t.ac)) tok.ac = t.ac;
+              if (typeof t.isCondition === 'boolean') tok.isCondition = t.isCondition;
+              if (typeof (t as any).isPlayer === 'boolean') tok.isPlayer = (t as any).isPlayer;
+              if (typeof (t as any).isMonster === 'boolean') (tok as any).isMonster = (t as any).isMonster;
+              if ((t as any).category) (tok as any).category = (t as any).category;
+              if (typeof (t as any).visionRadius === 'number') tok.visionRadius = (t as any).visionRadius;
+              if (typeof (t as any).visionAngle === 'number') tok.visionAngle = (t as any).visionAngle;
+              if (typeof (t as any).visionEnabled === 'boolean') (tok as any).visionEnabled = (t as any).visionEnabled;
+              return tok;
+            }),
             gridSize: gridSize ?? 50,
             gridOpacity: gridOpacity ?? 0.25,
             isFogVisible: isFogVisible ?? true,
@@ -3512,7 +3526,12 @@ export default function App() {
             effects: effects,
             boardAnimatedFeatures: boardAnimatedFeatures,
             boardAnimatedEnabled: boardAnimatedEnabled,
-            boardWeatherEffect: boardWeatherEffect
+            boardWeatherEffect: boardWeatherEffect,
+            pdfUrl: existingScene?.pdfUrl,
+            pdfFilename: existingScene?.pdfFilename,
+            pdfSection: existingScene?.pdfSection,
+            pdfPage: existingScene?.pdfPage,
+            updatedAt: Date.now()
           };
 
           // Optimistically update in-memory campaigns list
@@ -3606,22 +3625,39 @@ export default function App() {
           ? imageFile
           : (activeSceneInfo.mapUrl || imageFile || '');
 
+        const camp = campaignsList.find(c => c.campaignId === activeSceneInfo.campaignId);
+        const chap = camp?.chapters?.find(ch => ch.chapterId === activeSceneInfo.chapterId);
+        const existingScene = chap?.scenes?.find(s => s.sceneId === activeSceneInfo.sceneId);
+
         const updatedScene: Scene = {
+          ...(existingScene || {}),
           sceneId: activeSceneInfo.sceneId,
           sceneTitle: activeSceneInfo.sceneTitle,
           mapUrl: targetMapUrl,
-          mapThumbnailUrl: activeSceneInfo.mapThumbnailUrl,
+          mapThumbnailUrl: activeSceneInfo.mapThumbnailUrl || existingScene?.mapThumbnailUrl,
           mapWidth: activeSceneInfo.mapWidth || currentDims.width,
           mapHeight: activeSceneInfo.mapHeight || currentDims.height,
           dmNotes: activeDmNotes,
-          tokens: tokens.map(t => ({
-            id: t.id,
-            name: t.name || 'Token',
-            avatarUrl: t.url || '',
-            x: Math.round(t.x || 0),
-            y: Math.round(t.y || 0),
-            size: t.size ?? 1
-          })),
+          tokens: tokens.map(t => {
+            const tok: SceneToken = {
+              id: t.id,
+              name: t.name || 'Token',
+              avatarUrl: t.url || (t as any).avatarUrl || '',
+              x: Math.round(t.x || 0),
+              y: Math.round(t.y || 0),
+              size: typeof t.size === 'number' ? t.size : 1
+            };
+            if (typeof t.hp === 'number' && !isNaN(t.hp)) tok.hp = t.hp;
+            if (typeof t.ac === 'number' && !isNaN(t.ac)) tok.ac = t.ac;
+            if (typeof t.isCondition === 'boolean') tok.isCondition = t.isCondition;
+            if (typeof (t as any).isPlayer === 'boolean') tok.isPlayer = (t as any).isPlayer;
+            if (typeof (t as any).isMonster === 'boolean') (tok as any).isMonster = (t as any).isMonster;
+            if ((t as any).category) (tok as any).category = (t as any).category;
+            if (typeof (t as any).visionRadius === 'number') tok.visionRadius = (t as any).visionRadius;
+            if (typeof (t as any).visionAngle === 'number') tok.visionAngle = (t as any).visionAngle;
+            if (typeof (t as any).visionEnabled === 'boolean') (tok as any).visionEnabled = (t as any).visionEnabled;
+            return tok;
+          }),
           gridSize: gridSize ?? 50,
           gridOpacity: gridOpacity ?? 0.25,
           isFogVisible: isFogVisible ?? true,
@@ -3631,7 +3667,12 @@ export default function App() {
           effects: effects,
           boardAnimatedFeatures: boardAnimatedFeatures,
           boardAnimatedEnabled: boardAnimatedEnabled,
-          boardWeatherEffect: boardWeatherEffect
+          boardWeatherEffect: boardWeatherEffect,
+          pdfUrl: existingScene?.pdfUrl,
+          pdfFilename: existingScene?.pdfFilename,
+          pdfSection: existingScene?.pdfSection,
+          pdfPage: existingScene?.pdfPage,
+          updatedAt: Date.now()
         };
 
         // Optimistically update in-memory campaigns list
@@ -3762,29 +3803,76 @@ export default function App() {
         ? imageFile
         : (activeSceneInfo.mapUrl || imageFile || '');
 
-      const updatedScene: Scene = {
-        sceneId: activeSceneInfo.sceneId,
-        sceneTitle: activeSceneInfo.sceneTitle,
-        mapUrl: targetMapUrl,
-        mapThumbnailUrl: activeSceneInfo.mapThumbnailUrl,
-        mapWidth: activeSceneInfo.mapWidth || currentDims.width,
-        mapHeight: activeSceneInfo.mapHeight || currentDims.height,
-        dmNotes: activeDmNotes,
-        tokens: tokens.map(t => ({
+      const sceneTokensToSave: SceneToken[] = tokens.map(t => {
+        const tok: SceneToken = {
           id: t.id,
           name: t.name || 'Token',
           avatarUrl: t.url || '',
           x: Math.round(t.x || 0),
           y: Math.round(t.y || 0),
           size: t.size ?? 1
-        })),
+        };
+        if (typeof t.hp === 'number' && !isNaN(t.hp)) tok.hp = t.hp;
+        if (typeof t.ac === 'number' && !isNaN(t.ac)) tok.ac = t.ac;
+        if (typeof t.isCondition === 'boolean') tok.isCondition = t.isCondition;
+        if (typeof (t as any).isPlayer === 'boolean') tok.isPlayer = (t as any).isPlayer;
+        if (typeof (t as any).isMonster === 'boolean') (tok as any).isMonster = (t as any).isMonster;
+        if ((t as any).category) (tok as any).category = (t as any).category;
+        if (typeof (t as any).visionRadius === 'number') tok.visionRadius = (t as any).visionRadius;
+        if (typeof (t as any).visionAngle === 'number') tok.visionAngle = (t as any).visionAngle;
+        if (typeof (t as any).visionEnabled === 'boolean') (tok as any).visionEnabled = (t as any).visionEnabled;
+        return tok;
+      });
+
+      const camp = campaignsList.find(c => c.campaignId === activeSceneInfo.campaignId);
+      const chap = camp?.chapters?.find(ch => ch.chapterId === activeSceneInfo.chapterId);
+      const existingScene = chap?.scenes?.find(s => s.sceneId === activeSceneInfo.sceneId);
+
+      const updatedScene: Scene = {
+        ...(existingScene || {}),
+        sceneId: activeSceneInfo.sceneId,
+        sceneTitle: activeSceneInfo.sceneTitle,
+        mapUrl: targetMapUrl,
+        mapThumbnailUrl: activeSceneInfo.mapThumbnailUrl || existingScene?.mapThumbnailUrl,
+        mapWidth: activeSceneInfo.mapWidth || currentDims.width,
+        mapHeight: activeSceneInfo.mapHeight || currentDims.height,
+        dmNotes: activeDmNotes,
+        tokens: sceneTokensToSave,
         gridSize: gridSize ?? 50,
         gridOpacity: gridOpacity ?? 0.25,
         isFogVisible: isFogVisible ?? true,
         walls,
         visionConfig,
-        roomAnnotations: nextAnnotations
+        roomAnnotations: nextAnnotations,
+        effects,
+        boardAnimatedFeatures,
+        boardAnimatedEnabled,
+        boardWeatherEffect,
+        pdfUrl: existingScene?.pdfUrl,
+        pdfFilename: existingScene?.pdfFilename,
+        pdfSection: existingScene?.pdfSection,
+        pdfPage: existingScene?.pdfPage,
+        updatedAt: Date.now()
       };
+
+      // Optimistically update in-memory campaigns list
+      setCampaignsList(prev => prev.map(c => {
+        if (c.campaignId === activeSceneInfo.campaignId) {
+          return {
+            ...c,
+            chapters: c.chapters.map(ch => {
+              if (ch.chapterId === activeSceneInfo.chapterId) {
+                return {
+                  ...ch,
+                  scenes: ch.scenes.map(sc => sc.sceneId === activeSceneInfo.sceneId ? updatedScene : sc)
+                };
+              }
+              return ch;
+            })
+          };
+        }
+        return c;
+      }));
 
       saveSceneToCampaign(activeSceneInfo.campaignId, activeSceneInfo.chapterId, updatedScene).catch(console.warn);
       publishActiveSession({
@@ -3805,6 +3893,10 @@ export default function App() {
         walls: updatedScene.walls,
         visionConfig: updatedScene.visionConfig,
         roomAnnotations: nextAnnotations,
+        effects: updatedScene.effects,
+        boardAnimatedFeatures: updatedScene.boardAnimatedFeatures,
+        boardAnimatedEnabled: updatedScene.boardAnimatedEnabled,
+        boardWeatherEffect: updatedScene.boardWeatherEffect,
         updatedAt: Date.now()
       }).catch(console.warn);
     }
@@ -8138,6 +8230,7 @@ export default function App() {
         onLoadScene={handleLoadSceneFromCampaign}
         activeSceneInfo={activeSceneInfo}
         savedMaps={uploadedMaps}
+        currentActiveDmNotes={activeDmNotes}
       />
 
       {/* Save to Campaign Modal */}

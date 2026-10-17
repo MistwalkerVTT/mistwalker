@@ -198,13 +198,19 @@ export const SaveToCampaignModal: React.FC<SaveToCampaignModalProps> = ({
         ? currentMapUrl
         : (activeSceneInfo?.mapUrl || currentMapUrl || '');
 
+      // Look up existing scene if updating
+      const existingScene = saveMode === 'update_current' && activeSceneInfo
+        ? campaigns.find(c => c.campaignId === activeSceneInfo.campaignId)?.chapters.find(ch => ch.chapterId === activeSceneInfo.chapterId)?.scenes.find(s => s.sceneId === activeSceneInfo.sceneId)
+        : undefined;
+
       const sceneToSave: Scene = {
+        ...(existingScene || {}),
         sceneId: targetSceneId,
         sceneTitle: sceneTitle.trim(),
         mapUrl: targetMapUrl,
-        mapThumbnailUrl: embeddedThumbnail || activeSceneInfo?.mapThumbnailUrl,
-        mapWidth: currentMapWidth || activeSceneInfo?.mapWidth,
-        mapHeight: currentMapHeight || activeSceneInfo?.mapHeight,
+        mapThumbnailUrl: embeddedThumbnail || activeSceneInfo?.mapThumbnailUrl || existingScene?.mapThumbnailUrl,
+        mapWidth: currentMapWidth || activeSceneInfo?.mapWidth || existingScene?.mapWidth,
+        mapHeight: currentMapHeight || activeSceneInfo?.mapHeight || existingScene?.mapHeight,
         dmNotes: dmNotes.trim(),
         tokens: sceneTokensToSave,
         gridSize: currentGridSize ?? 50,
@@ -216,7 +222,11 @@ export const SaveToCampaignModal: React.FC<SaveToCampaignModalProps> = ({
         effects: currentEffects || [],
         boardAnimatedFeatures: currentBoardAnimatedFeatures || [],
         boardAnimatedEnabled: currentBoardAnimatedEnabled !== undefined ? currentBoardAnimatedEnabled : true,
-        boardWeatherEffect: currentBoardWeatherEffect || 'none'
+        boardWeatherEffect: currentBoardWeatherEffect || 'none',
+        pdfUrl: existingScene?.pdfUrl,
+        pdfFilename: existingScene?.pdfFilename,
+        pdfSection: existingScene?.pdfSection,
+        pdfPage: existingScene?.pdfPage
       };
 
       let finalCampaignId = selectedCampaignId;
