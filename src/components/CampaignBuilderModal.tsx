@@ -28,7 +28,8 @@ import {
   Image as ImageIcon,
   AlertTriangle,
   Video,
-  Share2
+  Share2,
+  GripVertical
 } from 'lucide-react';
 import {
   Campaign,
@@ -105,6 +106,25 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
   // Expanded folders in tree view
   const [expandedCampaigns, setExpandedCampaigns] = useState<Record<string, boolean>>({});
   const [expandedChapters, setExpandedChapters] = useState<Record<string, boolean>>({});
+
+  // Drag and Drop state for moving scenes between chapter folders
+  const [draggedSceneInfo, setDraggedSceneInfo] = useState<{
+    sceneId: string;
+    sceneTitle: string;
+    sourceChapterId: string;
+    sourceCampaignId: string;
+  } | null>(null);
+  const [dragOverChapterId, setDragOverChapterId] = useState<string | null>(null);
+  const [dragOverSceneId, setDragOverSceneId] = useState<string | null>(null);
+  const [dragDropPosition, setDragDropPosition] = useState<'before' | 'after' | null>(null);
+  const hoverExpandTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const clearHoverExpandTimer = () => {
+    if (hoverExpandTimerRef.current) {
+      clearTimeout(hoverExpandTimerRef.current);
+      hoverExpandTimerRef.current = null;
+    }
+  };
 
   // Editing state
   const [isEditingScene, setIsEditingScene] = useState<boolean>(false);
@@ -419,7 +439,7 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
     const newScene: Scene = {
       sceneId: 'scene-' + Date.now().toString(36),
       sceneTitle: newSceneTitle.trim(),
-      mapUrl: currentMapUrl || 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1920&q=80',
+      mapUrl: (currentMapUrl && !currentMapUrl.startsWith('blob:')) ? currentMapUrl : 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1920&q=80',
       dmNotes: '',
       tokens: [],
       gridSize: currentGridSize || 50,
@@ -470,6 +490,278 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
     }
   };
 
+  // Drag and Drop helpers for moving scenes between chapters
+  const parseDragData = (e: React.DragEvent) => {
+    try {
+      const raw = e.dataTransfer.getData('application/x-mistwalker-scene');
+      if (raw) return JSON.parse(raw);
+    } catch {
+      // Ignore parse error
+    }
+    return null;
+  };
+
+  const handleChapterDragOver = (e: React.DragEvent, chapId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverChapterId !== chapId) {
+      setDragOverChapterId(chapId);
+    }
+    // Spring-loaded folder: auto-expand if hovering for 600ms
+    if (!expandedChapters[chapId] && !hoverExpandTimerRef.current) {
+      hoverExpandTimerRef.current = setTimeout(() => {
+        setExpandedChapters(prev => ({ ...prev, [chapId]: true }));
+        hoverExpandTimerRef.current = null;
+      }, 600);
+    }
+  };
+
+  const handleChapterDragLeave = (e: React.DragEvent, chapId: string) => {
+    e.stopPropagation();
+    clearHoverExpandTimer();
+    if (dragOverChapterId === chapId) {
+      setDragOverChapterId(null);
+    }
+  };
+
+  const handleMoveSceneToChapter = async (
+    dragInfo: { sceneId: string; sourceChapterId: string; sourceCampaignId: string } | null,
+    targetChapterId: string,
+    targetCampaignId: string,
+    targetSceneId?: string,
+    insertPosition?: 'before' | 'after'
+  ) => {
+    clearHoverExpandTimer();
+    setDragOverChapterId(null);
+    setDragOverSceneId(null);
+    setDragDropPosition(null);
+
+    if (!dragInfo) return;
+    const { sceneId, sourceChapterId, sourceCampaignId } = dragInfo;
+
+    // If dropped in the exact same spot in the same chapter, do nothing
+    if (sourceChapterId === targetChapterId && (!targetSceneId || targetSceneId === sceneId)) {
+      return;
+    }
+
+    // 1. Locate source campaign
+    const sourceCamp = campaigns.find(c => c.campaignId === sourceCampaignId);
+    if (!sourceCamp) {
+      toast.error('Source campaign not found');
+      return;
+    }
+
+    // 2. Locate source chapter
+    const sourceChap = sourceCamp.chapters.find(ch => ch.chapterId === sourceChapterId);
+    if (!sourceChap) {
+      toast.error('Source chapter not found');
+      return;
+    }
+
+    // 3. Locate scene to move
+    const sceneToMove = sourceChap.scenes.find(s => s.sceneId === sceneId);
+    if (!sceneToMove) {
+      toast.error('Scene not found in source chapter');
+      return;
+    }
+
+    // CRITICAL: Ensure scene's mapUrl is preserved verbatim and never replaced with a blob or canvas map
+    if (sceneToMove.mapUrl && sceneToMove.mapUrl.startsWith('blob:')) {
+      console.warn('[DragDrop] Moved scene has a blob URL, preserving without blob');
+    }
+
+    // Clone the scene object with all its exact battlemap, token, and room data intact
+    const preservedScene: Scene = {
+      ...sceneToMove,
+      mapUrl: sceneToMove.mapUrl || '',
+      mapThumbnailUrl: sceneToMove.mapThumbnailUrl,
+      mapWidth: sceneToMove.mapWidth,
+      mapHeight: sceneToMove.mapHeight,
+      tokens: sceneToMove.tokens || [],
+      walls: sceneToMove.walls || [],
+      roomAnnotations: sceneToMove.roomAnnotations || []
+    };
+
+    // 4. Handle same campaign vs cross campaign
+    if (sourceCampaignId === targetCampaignId) {
+      const updatedChapters = sourceCamp.chapters.map(ch => {
+        // If this is the source chapter and not target, remove the scene
+        if (ch.chapterId === sourceChapterId && sourceChapterId !== targetChapterId) {
+          return {
+            ...ch,
+            scenes: ch.scenes.filter(s => s.sceneId !== sceneId)
+          };
+        }
+        // If this is the target chapter and not source, add the scene
+        if (ch.chapterId === targetChapterId && sourceChapterId !== targetChapterId) {
+          const newScenes = [...ch.scenes];
+          if (targetSceneId) {
+            const idx = newScenes.findIndex(s => s.sceneId === targetSceneId);
+            if (idx !== -1) {
+              newScenes.splice(insertPosition === 'before' ? idx : idx + 1, 0, preservedScene);
+            } else {
+              newScenes.push(preservedScene);
+            }
+          } else {
+            newScenes.push(preservedScene);
+          }
+          return {
+            ...ch,
+            scenes: newScenes
+          };
+        }
+        // If reordering within the same chapter
+        if (ch.chapterId === targetChapterId && sourceChapterId === targetChapterId) {
+          const filtered = ch.scenes.filter(s => s.sceneId !== sceneId);
+          if (targetSceneId) {
+            const idx = filtered.findIndex(s => s.sceneId === targetSceneId);
+            if (idx !== -1) {
+              filtered.splice(insertPosition === 'before' ? idx : idx + 1, 0, preservedScene);
+            } else {
+              filtered.push(preservedScene);
+            }
+          } else {
+            filtered.push(preservedScene);
+          }
+          return {
+            ...ch,
+            scenes: filtered
+          };
+        }
+        return ch;
+      });
+
+      const updatedCamp: Campaign = {
+        ...sourceCamp,
+        chapters: updatedChapters,
+        updatedAt: Date.now()
+      };
+
+      // Optimistically update state
+      setCampaigns(prev => prev.map(c => c.campaignId === updatedCamp.campaignId ? updatedCamp : c));
+      setExpandedChapters(prev => ({ ...prev, [targetChapterId]: true }));
+      if (selectedSceneId === sceneId) {
+        setSelectedChapterId(targetChapterId);
+      }
+
+      setIsSaving(true);
+      try {
+        await saveCampaignDoc(updatedCamp);
+        const targetChapTitle = sourceCamp.chapters.find(ch => ch.chapterId === targetChapterId)?.chapterTitle || 'Chapter';
+        toast.success(`Moved "${preservedScene.sceneTitle}" into "${targetChapTitle}"`);
+
+        // If the moved scene is currently active on the VTT canvas, keep activeSession synced with new chapter
+        if (activeSceneInfo?.sceneId === preservedScene.sceneId) {
+          await publishActiveSession({
+            sessionId: 'current',
+            campaignId: sourceCamp.campaignId,
+            chapterId: targetChapterId,
+            sceneId: preservedScene.sceneId,
+            sceneTitle: preservedScene.sceneTitle,
+            mapUrl: preservedScene.mapUrl,
+            dmNotes: preservedScene.dmNotes || '',
+            tokens: preservedScene.tokens || [],
+            gridSize: preservedScene.gridSize || 50,
+            gridOpacity: preservedScene.gridOpacity ?? 0.25,
+            isFogVisible: preservedScene.isFogVisible ?? true,
+            walls: preservedScene.walls,
+            visionConfig: preservedScene.visionConfig,
+            roomAnnotations: preservedScene.roomAnnotations,
+            updatedAt: Date.now()
+          });
+        }
+      } catch (err) {
+        console.error('Error saving campaign after moving scene:', err);
+        toast.error('Failed to save scene movement to cloud');
+        await loadCampaigns();
+      } finally {
+        setIsSaving(false);
+      }
+    } else {
+      // Cross-campaign move
+      const targetCamp = campaigns.find(c => c.campaignId === targetCampaignId);
+      if (!targetCamp) return;
+
+      const updatedSourceChapters = sourceCamp.chapters.map(ch => {
+        if (ch.chapterId === sourceChapterId) {
+          return { ...ch, scenes: ch.scenes.filter(s => s.sceneId !== sceneId) };
+        }
+        return ch;
+      });
+
+      const updatedTargetChapters = targetCamp.chapters.map(ch => {
+        if (ch.chapterId === targetChapterId) {
+          const newScenes = [...ch.scenes];
+          if (targetSceneId) {
+            const idx = newScenes.findIndex(s => s.sceneId === targetSceneId);
+            if (idx !== -1) {
+              newScenes.splice(insertPosition === 'before' ? idx : idx + 1, 0, preservedScene);
+            } else {
+              newScenes.push(preservedScene);
+            }
+          } else {
+            newScenes.push(preservedScene);
+          }
+          return { ...ch, scenes: newScenes };
+        }
+        return ch;
+      });
+
+      const updatedSourceCamp = { ...sourceCamp, chapters: updatedSourceChapters, updatedAt: Date.now() };
+      const updatedTargetCamp = { ...targetCamp, chapters: updatedTargetChapters, updatedAt: Date.now() };
+
+      setCampaigns(prev => prev.map(c => {
+        if (c.campaignId === updatedSourceCamp.campaignId) return updatedSourceCamp;
+        if (c.campaignId === updatedTargetCamp.campaignId) return updatedTargetCamp;
+        return c;
+      }));
+
+      setExpandedCampaigns(prev => ({ ...prev, [targetCampaignId]: true }));
+      setExpandedChapters(prev => ({ ...prev, [targetChapterId]: true }));
+      if (selectedSceneId === sceneId) {
+        setSelectedCampaignId(targetCampaignId);
+        setSelectedChapterId(targetChapterId);
+      }
+
+      setIsSaving(true);
+      try {
+        await Promise.all([
+          saveCampaignDoc(updatedSourceCamp),
+          saveCampaignDoc(updatedTargetCamp)
+        ]);
+        const targetChapTitle = targetCamp.chapters.find(ch => ch.chapterId === targetChapterId)?.chapterTitle || 'Chapter';
+        toast.success(`Moved "${preservedScene.sceneTitle}" into "${targetChapTitle}"`);
+
+        if (activeSceneInfo?.sceneId === preservedScene.sceneId) {
+          await publishActiveSession({
+            sessionId: 'current',
+            campaignId: targetCampaignId,
+            chapterId: targetChapterId,
+            sceneId: preservedScene.sceneId,
+            sceneTitle: preservedScene.sceneTitle,
+            mapUrl: preservedScene.mapUrl,
+            dmNotes: preservedScene.dmNotes || '',
+            tokens: preservedScene.tokens || [],
+            gridSize: preservedScene.gridSize || 50,
+            gridOpacity: preservedScene.gridOpacity ?? 0.25,
+            isFogVisible: preservedScene.isFogVisible ?? true,
+            walls: preservedScene.walls,
+            visionConfig: preservedScene.visionConfig,
+            roomAnnotations: preservedScene.roomAnnotations,
+            updatedAt: Date.now()
+          });
+        }
+      } catch (err) {
+        console.error('Error saving cross-campaign scene move:', err);
+        toast.error('Failed to save scene movement to cloud');
+        await loadCampaigns();
+      } finally {
+        setIsSaving(false);
+      }
+    }
+  };
+
   // 4. Save Scene Changes back to Firestore
   const handleSaveSceneChanges = async (useCanvasTokens: boolean = false) => {
     if (!selectedCampaign || !selectedChapter || !selectedScene) return;
@@ -493,10 +785,14 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
       : editedSceneTokens;
 
     const matchedMap = internalSavedMaps.find(m => m.url === editedMapUrl);
+    const rawMapUrl = editedMapUrl.trim() || selectedScene.mapUrl;
+    // CRITICAL: Never allow a blob: URL to be saved as the mapUrl
+    const safeMapUrl = rawMapUrl.startsWith('blob:') ? selectedScene.mapUrl : rawMapUrl;
+
     const updatedScene: Scene = {
       ...selectedScene,
       sceneTitle: editedTitle.trim() || selectedScene.sceneTitle,
-      mapUrl: editedMapUrl.trim() || selectedScene.mapUrl,
+      mapUrl: safeMapUrl,
       mapThumbnailUrl: matchedMap?.thumbnailUrl || selectedScene.mapThumbnailUrl,
       mapWidth: matchedMap?.width || selectedScene.mapWidth,
       mapHeight: matchedMap?.height || selectedScene.mapHeight,
