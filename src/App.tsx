@@ -406,7 +406,8 @@ const TokenImage = React.memo(({
     };
   }, [token, characters, matchedCombatant]);
 
-  const isMonster = isMonsterToken(token) || token.isMonster === true || token.category === 'monster' || token.isPlayer === false;
+  const isAlly = token.category === 'ally' || !!(token as any).allyId;
+  const isMonster = !isAlly && (isMonsterToken(token) || token.isMonster === true || token.category === 'monster' || token.isPlayer === false);
   const tokenWidth = gridSize * token.size;
   const radius = tokenWidth / 2;
   const hpColor = stats.hpRatio > 0.5 ? '#10b981' : stats.hpRatio > 0.25 ? '#f59e0b' : '#ef4444';
@@ -628,7 +629,7 @@ const TokenImage = React.memo(({
           <Rect
             width={tokenWidth}
             height={tokenWidth}
-            fill={token.isPlayer ? '#1e3a8a' : '#7f1d1d'}
+            fill={token.isPlayer ? '#1e3a8a' : (token.category === 'ally' || (token as any).allyId) ? '#713f12' : '#7f1d1d'}
             perfectDrawEnabled={false}
           />
         )}
@@ -644,13 +645,15 @@ const TokenImage = React.memo(({
             ? "#f59e0b"
             : token.isCondition
             ? "#ef4444"
+            : (token.category === 'ally' || (token as any).allyId)
+            ? "#eab308"
             : (isMonsterToken(token) || token.isMonster || token.category === 'monster' || token.isPlayer === false)
             ? "#f43f5e"
             : "#10b981"
         }
-        strokeWidth={isSelected ? 3.5 : 2.5}
-        shadowColor={isSelected ? "#f59e0b" : undefined}
-        shadowBlur={isSelected ? 8 : 0}
+        strokeWidth={isSelected ? 3.5 : (token.category === 'ally' || (token as any).allyId) ? 3 : 2.5}
+        shadowColor={isSelected ? "#f59e0b" : (token.category === 'ally' || (token as any).allyId) ? "#eab308" : undefined}
+        shadowBlur={isSelected ? 8 : (token.category === 'ally' || (token as any).allyId) ? 6 : 0}
         shadowForStrokeEnabled={false}
         perfectDrawEnabled={false}
         listening={false}
@@ -4958,7 +4961,9 @@ export default function App() {
   const handleUpdateTokenVision = useCallback((tokenId: string, updates: { visionRadius?: number; visionAngle?: number }) => {
     setTokens(prev => prev.map(t => {
       if (t.id === tokenId) {
-        if (isMonsterToken(t) || t.isMonster === true || t.category === 'monster' || t.isPlayer === false) {
+        const isAlly = t.category === 'ally' || !!(t as any).allyId;
+        const isMonster = !isAlly && (isMonsterToken(t) || t.isMonster === true || t.category === 'monster' || t.isPlayer === false);
+        if (isMonster) {
           return {
             ...t,
             isMonster: true,
@@ -4982,18 +4987,20 @@ export default function App() {
     const toDuplicate = tokens.filter(t => selectedTokenIds.includes(t.id));
     if (toDuplicate.length === 0) return;
     const newTokens: Token[] = toDuplicate.map(t => {
-      const isMonster = isMonsterToken(t) || t.isMonster === true || t.category === 'monster' || t.isPlayer === false;
+      const isAlly = t.category === 'ally' || !!(t as any).allyId;
+      const isMonster = !isAlly && (isMonsterToken(t) || t.isMonster === true || t.category === 'monster' || t.isPlayer === false);
       return {
         ...t,
         id: Math.random().toString(36).substr(2, 9),
         name: `${t.name} (Copy)`,
         x: t.x + gridSize,
         y: t.y + gridSize,
-        isPlayer: !isMonster,
+        isPlayer: !isMonster && !isAlly,
         isMonster: isMonster,
-        category: isMonster ? 'monster' : (t.category || 'character'),
+        category: isMonster ? 'monster' : (isAlly ? 'ally' : (t.category || 'character')),
         visionEnabled: !isMonster,
-        visionRadius: isMonster ? 0 : (t.visionRadius ?? 60)
+        visionRadius: isMonster ? 0 : (t.visionRadius ?? 60),
+        ...(t.allyId ? { allyId: t.allyId } : {})
       };
     });
     setTokens(prev => [...prev, ...newTokens]);

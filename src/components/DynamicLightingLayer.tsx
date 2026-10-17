@@ -144,14 +144,15 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
     // Monster tokens strictly do NOT get vision and never pierce or remove fog of war
     const activeVisionTokens = tokens.filter((t) => {
       if (t.hidden && isPlayerView) return false;
-      if (isMonsterToken(t)) return false;
+      const isAlly = t.category === 'ally' || !!(t as any).allyId;
+      if (!isAlly && isMonsterToken(t)) return false;
       if (t.isMonster === true) return false;
       if (t.category === 'monster') return false;
-      if (t.isPlayer === false) return false;
+      if (!isAlly && t.isPlayer === false) return false;
       if (t.visionEnabled === false) return false;
       if (typeof t.visionRadius === 'number' && t.visionRadius <= 0) return false;
       if (t.visionEnabled !== undefined) return t.visionEnabled;
-      return t.isPlayer === true || t.category === 'character' || (claimedTokenId && t.id === claimedTokenId);
+      return t.isPlayer === true || t.category === 'character' || isAlly || (claimedTokenId && t.id === claimedTokenId);
     });
 
     const sources: VisionSource[] = [];

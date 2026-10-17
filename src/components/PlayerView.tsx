@@ -774,7 +774,8 @@ const PlayerToken = React.memo(({
     onMoveToken(token.id, snappedX, snappedY);
   };
 
-  const isMonster = isMonsterToken(token) || token.isMonster === true || token.category === 'monster' || token.isPlayer === false;
+  const isAlly = token.category === 'ally' || !!(token as any).allyId;
+  const isMonster = !isAlly && (isMonsterToken(token) || token.isMonster === true || token.category === 'monster' || token.isPlayer === false);
   const hpRatio = Math.max(0, Math.min(1, stats.currentHp / stats.maxHp));
   const hpColor = hpRatio > 0.5 ? '#10b981' : hpRatio > 0.25 ? '#f59e0b' : '#ef4444';
   const pillWidth = Math.max(68, Math.min(108, tokenPx * 0.94));
@@ -961,14 +962,14 @@ const PlayerToken = React.memo(({
             <Rect
               width={tokenPx}
               height={tokenPx}
-              fill={token.isPlayer ? '#1e3a8a' : '#7f1d1d'}
+              fill={token.isPlayer ? '#1e3a8a' : isAlly ? '#713f12' : '#7f1d1d'}
               perfectDrawEnabled={false}
             />
             <Circle
               x={radius}
               y={radius}
               radius={radius * 0.72}
-              fill={token.isPlayer ? '#1d4ed8' : '#991b1b'}
+              fill={token.isPlayer ? '#1d4ed8' : isAlly ? '#eab308' : '#991b1b'}
               perfectDrawEnabled={false}
             />
             <Text
@@ -987,15 +988,15 @@ const PlayerToken = React.memo(({
         )}
       </Group>
 
-      {/* 2. Outer Circular Border Ring */}
+      {/* 2. Outer Circular Border Ring (Allies are bright yellow, Players blue, Monsters red) */}
       <Circle
         x={radius}
         y={radius}
         radius={radius}
-        stroke={isClaimed ? '#10b981' : token.isPlayer ? '#38bdf8' : '#ef4444'}
-        strokeWidth={isClaimed ? 3.5 : 2.5}
-        shadowColor={isClaimed ? '#10b981' : undefined}
-        shadowBlur={isClaimed ? 8 : 0}
+        stroke={isClaimed ? '#10b981' : isAlly ? '#eab308' : token.isPlayer ? '#38bdf8' : '#ef4444'}
+        strokeWidth={isClaimed ? 3.5 : isAlly ? 3 : 2.5}
+        shadowColor={isClaimed ? '#10b981' : isAlly ? '#eab308' : undefined}
+        shadowBlur={isClaimed ? 8 : isAlly ? 6 : 0}
         shadowForStrokeEnabled={false}
         perfectDrawEnabled={false}
         listening={false}
@@ -1003,16 +1004,16 @@ const PlayerToken = React.memo(({
 
       {/* 3. AC Shield Badge on Top-Left: REMOVED per user request */}
 
-      {/* 4. Large, High-Contrast HP Pill Badge directly tied to D&D Beyond & Character Sheet (PLAYERS ONLY - Monsters NEVER show HP in player view) */}
-      {!isMonster && (
+      {/* 4. Large, High-Contrast HP Pill Badge directly tied to D&D Beyond & Character Sheet (PLAYERS & ALLIES ONLY - Monsters NEVER show HP in player view) */}
+      {(!isMonster || isAlly) && (
         <Group x={pillX} y={pillY} listening={false}>
           {/* Dark slate container badge */}
           <Rect
             width={pillWidth}
             height={pillHeight}
             fill="rgba(15, 23, 42, 0.96)"
-            stroke={hpRatio <= 0.25 ? "#ef4444" : "#475569"}
-            strokeWidth={hpRatio <= 0.25 ? 1.5 : 1}
+            stroke={isAlly ? "#eab308" : (hpRatio <= 0.25 ? "#ef4444" : "#475569")}
+            strokeWidth={isAlly ? 1.5 : (hpRatio <= 0.25 ? 1.5 : 1)}
             cornerRadius={5}
             perfectDrawEnabled={false}
           />
@@ -1165,7 +1166,8 @@ export default function PlayerView() {
   const claimedToken = useMemo(() => {
     const found = tokens.find(t => t.id === claimedTokenId);
     if (!found) return null;
-    const isMonster = isMonsterToken(found) || found.isMonster === true || found.category === 'monster' || found.isPlayer === false;
+    const isAlly = found.category === 'ally' || !!(found as any).allyId;
+    const isMonster = !isAlly && (isMonsterToken(found) || found.isMonster === true || found.category === 'monster' || found.isPlayer === false);
     if (isMonster) return null;
     return found;
   }, [tokens, claimedTokenId]);
@@ -1905,7 +1907,8 @@ export default function PlayerView() {
   const handleClaimToken = useCallback((tokenId: string) => {
     const target = tokensRef.current.find(t => t.id === tokenId);
     if (target) {
-      const isMonster = isMonsterToken(target) || target.isMonster === true || target.category === 'monster' || target.isPlayer === false;
+      const isAlly = target.category === 'ally' || !!(target as any).allyId;
+      const isMonster = !isAlly && (isMonsterToken(target) || target.isMonster === true || target.category === 'monster' || target.isPlayer === false);
       if (isMonster) return;
     }
     setClaimedTokenId(tokenId);
@@ -1925,7 +1928,8 @@ export default function PlayerView() {
   const handleDragStartToken = useCallback((id: string) => {
     const target = tokensRef.current.find(t => t.id === id);
     if (target) {
-      const isMonster = isMonsterToken(target) || target.isMonster === true || target.category === 'monster' || target.isPlayer === false;
+      const isAlly = target.category === 'ally' || !!(target as any).allyId;
+      const isMonster = !isAlly && (isMonsterToken(target) || target.isMonster === true || target.category === 'monster' || target.isPlayer === false);
       if (isMonster) return;
     }
     activeDraggingTokenIdRef.current = id;
@@ -1963,7 +1967,8 @@ export default function PlayerView() {
   const handleOpenTokenContextMenu = useCallback((id: string, clientX: number, clientY: number) => {
     const target = tokensRef.current.find(t => t.id === id);
     if (!target) return;
-    const isMonster = isMonsterToken(target) || target.isMonster === true || target.category === 'monster' || target.isPlayer === false;
+    const isAlly = target.category === 'ally' || !!(target as any).allyId;
+    const isMonster = !isAlly && (isMonsterToken(target) || target.isMonster === true || target.category === 'monster' || target.isPlayer === false);
     if (isMonster) return;
     setActiveTokenMenu({ id, x: clientX, y: clientY });
   }, []);
@@ -2474,10 +2479,11 @@ export default function PlayerView() {
     // The player's own claimed token is always visible to them
     if (t.id === claimedTokenId) return true;
 
-    const isMonster = isMonsterToken(t) || t.isMonster === true || t.category === 'monster' || t.isPlayer === false;
+    const isAlly = t.category === 'ally' || !!(t as any).allyId;
+    const isMonster = !isAlly && (isMonsterToken(t) || t.isMonster === true || t.category === 'monster' || t.isPlayer === false);
 
-    // All active player characters and party members are visible to players on the board
-    if (!isMonster && (t.isPlayer === true || t.category === 'character' || t.id === claimedTokenId)) {
+    // All active player characters, party members, and friendly summons/allies are visible to players on the board
+    if (isAlly || (!isMonster && (t.isPlayer === true || t.category === 'character' || t.id === claimedTokenId))) {
       return true;
     }
 
@@ -2593,15 +2599,14 @@ export default function PlayerView() {
     return false;
   }, [claimedTokenId, isFogVisible, reveals, polygonReveals, visionConfig.enabled, activeFovPolygons]);
 
-  // Candidate Tokens for Claiming (Only non-monster player characters)
+  // Candidate Tokens for Claiming (Only non-monster player characters and friendly summons)
   const candidateTokens = useMemo(() => {
     return tokens.filter(t =>
       !(t as any).hidden &&
       !isMonsterToken(t) &&
       !t.isMonster &&
       t.category !== 'monster' &&
-      t.isPlayer !== false &&
-      (t.isPlayer || t.category === 'character' || t.id === claimedTokenId)
+      (t.isPlayer || t.category === 'character' || t.category === 'ally' || !!(t as any).allyId || t.id === claimedTokenId)
     );
   }, [tokens, claimedTokenId]);
 
@@ -3254,7 +3259,8 @@ export default function PlayerView() {
               ) : (
                 candidateTokens.map((t) => {
                   const isSelected = claimedTokenId === t.id;
-                  const isMon = isMonsterToken(t) || t.isMonster === true || t.category === 'monster' || t.isPlayer === false;
+                  const isAlly = t.category === 'ally' || !!(t as any).allyId;
+                  const isMon = !isAlly && (isMonsterToken(t) || t.isMonster === true || t.category === 'monster' || t.isPlayer === false);
                   const tStats = resolveTokenCharacterStats(t, compendiumCharacters);
                   return (
                     <div
@@ -3734,7 +3740,8 @@ export default function PlayerView() {
       {activeTokenMenu && (() => {
         const currentToken = tokens.find(t => t.id === activeTokenMenu.id);
         if (!currentToken || !isTokenVisibleToPlayer(currentToken)) return null;
-        const isMonster = isMonsterToken(currentToken) || currentToken.isMonster === true || currentToken.category === 'monster' || currentToken.isPlayer === false;
+        const isAlly = currentToken.category === 'ally' || !!(currentToken as any).allyId;
+        const isMonster = !isAlly && (isMonsterToken(currentToken) || currentToken.isMonster === true || currentToken.category === 'monster' || currentToken.isPlayer === false);
         if (isMonster) return null;
 
         const matchingChar = compendiumCharacters?.find(c => 

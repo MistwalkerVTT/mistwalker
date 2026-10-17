@@ -53,8 +53,9 @@ export interface AvailableTokenItem {
   size?: number;
 }
 
-export const isMonsterToken = (token?: { name?: string; isPlayer?: boolean; isMonster?: boolean; category?: string } | null): boolean => {
+export const isMonsterToken = (token?: { name?: string; isPlayer?: boolean; isMonster?: boolean; category?: string; allyId?: string } | null): boolean => {
   if (!token) return false;
+  if (token.category === 'ally' || (token as any).allyId) return false;
   if (token.isMonster === true) return true;
   if (token.category === 'monster') return true;
   if (token.isPlayer === false) return true;
