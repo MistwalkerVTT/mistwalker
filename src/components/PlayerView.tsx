@@ -3272,7 +3272,7 @@ export default function PlayerView() {
         }}
       >
         {/* Layer 1: Background Map Image or Video */}
-        <Layer ref={bgLayerRef}>
+        <Layer ref={bgLayerRef} listening={false}>
           {isVideo && videoElement ? (
             <KonvaImage
               image={videoElement}

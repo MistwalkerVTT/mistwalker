@@ -1119,6 +1119,13 @@ function drawToxicEffect(
 // ---------------------------------------------------------------------------
 // CORE ANIMATED FEATURES & WEATHER RENDER PIPELINE
 // ---------------------------------------------------------------------------
+// Performance Cache: Memoized scaled walls and torch visibility polygons to avoid 60fps raycasting
+let cachedWallsRef: WallSegment[] | null = null;
+let cachedScaleX = 0;
+let cachedScaleY = 0;
+let cachedScaledWalls: WallSegment[] = [];
+const torchPolyCache = new Map<string, VisibilityPolygon | null>();
+
 export function renderAnimatedFeaturesToCanvas(
   ctx: CanvasRenderingContext2D,
   width: number,
@@ -1131,17 +1138,28 @@ export function renderAnimatedFeaturesToCanvas(
   dt: number,
   t: number
 ): Particle[] {
-  // Pre-scale walls into overlay canvas coordinates for field of vision raycasting
+  // Pre-scale walls into overlay canvas coordinates (memoized across frames)
   const scaleX = mapDimensions && mapDimensions.width > 0 ? width / mapDimensions.width : 1;
   const scaleY = mapDimensions && mapDimensions.height > 0 ? height / mapDimensions.height : 1;
   const hasWalls = Boolean(walls && walls.length > 0 && mapDimensions && mapDimensions.width > 0);
-  const scaledWalls: WallSegment[] = hasWalls
-    ? walls.map(w => ({
+
+  let scaledWalls: WallSegment[] = [];
+  if (hasWalls) {
+    if (walls === cachedWallsRef && scaleX === cachedScaleX && scaleY === cachedScaleY) {
+      scaledWalls = cachedScaledWalls;
+    } else {
+      scaledWalls = walls.map(w => ({
         ...w,
         p1: { x: w.p1.x * scaleX, y: w.p1.y * scaleY },
         p2: { x: w.p2.x * scaleX, y: w.p2.y * scaleY }
-      }))
-    : [];
+      }));
+      cachedWallsRef = walls;
+      cachedScaleX = scaleX;
+      cachedScaleY = scaleY;
+      cachedScaledWalls = scaledWalls;
+      torchPolyCache.clear();
+    }
+  }
 
   const currentParticles = [...particles];
 
@@ -1202,16 +1220,23 @@ export function renderAnimatedFeaturesToCanvas(
       let torchVisibilityPoly: VisibilityPolygon | null = null;
       if (hasWalls) {
         const ambientR = r * 1.35;
-        torchVisibilityPoly = computeVisibilityPolygon(
-          {
-            id: feat.id,
-            x: cx,
-            y: cy,
-            radiusPx: ambientR
-          },
-          scaledWalls,
-          { width, height }
-        );
+        const cacheKey = `${feat.id}_${Math.round(cx)}_${Math.round(cy)}_${Math.round(ambientR)}_${Math.round(width)}x${Math.round(height)}_${walls.length}`;
+        if (torchPolyCache.has(cacheKey)) {
+          torchVisibilityPoly = torchPolyCache.get(cacheKey)!;
+        } else {
+          torchVisibilityPoly = computeVisibilityPolygon(
+            {
+              id: feat.id,
+              x: cx,
+              y: cy,
+              radiusPx: ambientR
+            },
+            scaledWalls,
+            { width, height }
+          );
+          if (torchPolyCache.size > 200) torchPolyCache.clear();
+          torchPolyCache.set(cacheKey, torchVisibilityPoly);
+        }
       }
 
       drawTorchEffect(ctx, feat, cx, cy, r, intensity, spd, t, torchVisibilityPoly);

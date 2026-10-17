@@ -1,9 +1,9 @@
-import {StrictMode} from 'react';
-import {createRoot} from 'react-dom/client';
-import App from './App.tsx';
+import { StrictMode, lazy, Suspense } from 'react';
+import { createRoot } from 'react-dom/client';
 import './index.css';
 
-import PlayerView from './components/PlayerView.tsx';
+const App = lazy(() => import('./App.tsx'));
+const PlayerView = lazy(() => import('./components/PlayerView.tsx'));
 
 // Global safeguard for CanvasRenderingContext2D.prototype.drawImage to prevent
 // uncaught fatal exceptions when an image/canvas element has width or height of 0.
@@ -31,7 +31,16 @@ const isPlayerView = searchParams ? (searchParams.get('view') === 'player' || se
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {isPlayerView ? <PlayerView /> : <App />}
+    <Suspense fallback={
+      <div className="flex items-center justify-center h-screen bg-zinc-950 text-amber-400 font-mono text-sm">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+          <span>Loading MistWalker...</span>
+        </div>
+      </div>
+    }>
+      {isPlayerView ? <PlayerView /> : <App />}
+    </Suspense>
   </StrictMode>,
 );
 

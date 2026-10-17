@@ -50,9 +50,22 @@ export function distanceBetween(x1: number, y1: number, x2: number, y2: number):
  * Fast ray-casting algorithm to test whether a 2D point (px, py) lies inside a polygon [x0, y0, x1, y1, ...]
  */
 export function isPointInPolygon(px: number, py: number, poly: number[]): boolean {
-  let inside = false;
   const len = poly.length;
   if (len < 6) return false;
+
+  // Fast AABB bounding box rejection
+  let minX = poly[0], maxX = poly[0], minY = poly[1], maxY = poly[1];
+  for (let i = 2; i < len; i += 2) {
+    const x = poly[i];
+    const y = poly[i + 1];
+    if (x < minX) minX = x;
+    else if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    else if (y > maxY) maxY = y;
+  }
+  if (px < minX || px > maxX || py < minY || py > maxY) return false;
+
+  let inside = false;
   for (let i = 0, j = len - 2; i < len; j = i, i += 2) {
     const xi = poly[i], yi = poly[i + 1];
     const xj = poly[j], yj = poly[j + 1];
@@ -152,11 +165,54 @@ export function computeVisibilityPolygon(
   const dirAngleRad = (dirAngleDeg * Math.PI) / 180;
   const halfConeRad = ((coneAngleDeg / 2) * Math.PI) / 180;
 
-  // 1. Filter walls that occlude and are within maxRadius + small margin
+  // 1. Fast AABB Bounding Box pre-filter before expensive point-to-segment math
+  const margin = maxRadius + 12;
+  const bbMinX = cx - margin;
+  const bbMaxX = cx + margin;
+  const bbMinY = cy - margin;
+  const bbMaxY = cy + margin;
+
   const occludingWalls = walls.filter((wall) => {
     if (!isWallOccluding(wall)) return false;
-    return distanceToSegment(cx, cy, wall.p1, wall.p2) <= maxRadius + 12;
+    const wMinX = wall.p1.x < wall.p2.x ? wall.p1.x : wall.p2.x;
+    const wMaxX = wall.p1.x > wall.p2.x ? wall.p1.x : wall.p2.x;
+    if (wMaxX < bbMinX || wMinX > bbMaxX) return false;
+    const wMinY = wall.p1.y < wall.p2.y ? wall.p1.y : wall.p2.y;
+    const wMaxY = wall.p1.y > wall.p2.y ? wall.p1.y : wall.p2.y;
+    if (wMaxY < bbMinY || wMinY > bbMaxY) return false;
+    return distanceToSegment(cx, cy, wall.p1, wall.p2) <= margin;
   });
+
+  // FAST PATH: If no occluding walls are within range, generate an analytic circle/cone in O(1)
+  if (occludingWalls.length === 0) {
+    const points: number[] = [];
+    const steps = isOmnidirectional ? 36 : Math.max(16, Math.round((coneAngleDeg / 360) * 36));
+    const minAngle = isOmnidirectional ? -Math.PI : dirAngleRad - halfConeRad;
+    const maxAngle = isOmnidirectional ? Math.PI : dirAngleRad + halfConeRad;
+    const angleStep = (maxAngle - minAngle) / steps;
+
+    if (!isOmnidirectional) {
+      points.push(cx, cy);
+    }
+    for (let i = 0; i <= steps; i++) {
+      const a = minAngle + i * angleStep;
+      let px = cx + Math.cos(a) * maxRadius;
+      let py = cy + Math.sin(a) * maxRadius;
+      if (mapBounds) {
+        if (px < 0) px = 0;
+        else if (px > mapBounds.width) px = mapBounds.width;
+        if (py < 0) py = 0;
+        else if (py > mapBounds.height) py = mapBounds.height;
+      }
+      points.push(px, py);
+    }
+    return {
+      sourceId: source.id,
+      points,
+      center: { x: cx, y: cy },
+      radius: maxRadius
+    };
+  }
 
   // 2. Gather unique angles for raycasting
   const angleSet = new Set<number>();

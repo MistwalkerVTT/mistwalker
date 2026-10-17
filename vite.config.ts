@@ -24,5 +24,31 @@ export default defineConfig(({mode}) => {
         ignored: ['**/uploads/**']
       }
     },
+    build: {
+      chunkSizeWarningLimit: 1200,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes('node_modules')) {
+              if (id.includes('konva') || id.includes('react-konva') || id.includes('use-image')) {
+                return 'vendor-konva';
+              }
+              if (id.includes('firebase')) {
+                return 'vendor-firebase';
+              }
+              if (id.includes('pdfjs-dist')) {
+                return 'vendor-pdf';
+              }
+              if (id.includes('lucide-react')) {
+                return 'vendor-lucide';
+              }
+              if (id.includes('@google/genai')) {
+                return 'vendor-genai';
+              }
+            }
+          }
+        }
+      }
+    },
   };
 });
