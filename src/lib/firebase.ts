@@ -774,9 +774,15 @@ export async function deleteCampaignDoc(campaignId: string): Promise<void> {
 export async function publishActiveSession(sessionData: ActiveSessionData): Promise<void> {
   const path = `activeSession/current`;
   try {
+    let safeMapUrl = sessionData.mapUrl;
+    if (safeMapUrl && safeMapUrl.startsWith('blob:')) {
+      const uploaded = await uploadBlobUrlToServer(safeMapUrl, sessionData.sceneTitle || sessionData.sceneId || 'map');
+      safeMapUrl = !uploaded.startsWith('blob:') ? uploaded : (sessionData.mapThumbnailUrl || '');
+    }
     const docRef = doc(db, 'activeSession', 'current');
     const payload = cleanForFirestore({
       ...sessionData,
+      mapUrl: safeMapUrl,
       updatedAt: Date.now(),
       updatedBy: auth.currentUser?.uid || 'dm'
     });
@@ -933,6 +939,12 @@ async function sanitizeSceneForStorage(scene: Scene): Promise<Scene> {
 
     // If server upload not possible, fallback to local reference to avoid exceeding 1MB limit
     updatedScene.mapUrl = `local:scene_${updatedScene.sceneId}`;
+  }
+
+  // 3. Never allow a browser-local blob: URL to be stored in Firestore
+  if (updatedScene.mapUrl && updatedScene.mapUrl.startsWith('blob:')) {
+    const uploaded = await uploadBlobUrlToServer(updatedScene.mapUrl, updatedScene.sceneTitle || updatedScene.sceneId || 'map');
+    updatedScene.mapUrl = !uploaded.startsWith('blob:') ? uploaded : (updatedScene.mapThumbnailUrl || '');
   }
 
   return updatedScene;
@@ -1182,6 +1194,30 @@ export const testImageAccessible = testMediaAccessible;
  * 4. local: storage identifier
  * 5. Scene mapThumbnailUrl as fallback for images
  */
+async function uploadBlobUrlToServer(blobUrl: string, nameHint = 'map'): Promise<string> {
+  if (!blobUrl || !blobUrl.startsWith('blob:')) return blobUrl;
+  try {
+    const resp = await fetch(blobUrl);
+    if (!resp.ok) return blobUrl;
+    const blob = await resp.blob();
+    const ext = blob.type.includes('png') ? '.png' : blob.type.includes('webp') ? '.webp' : blob.type.includes('mp4') ? '.mp4' : '.jpg';
+    const cleanName = (nameHint || 'map').replace(/[^a-zA-Z0-9_\-]/g, '_');
+    const formData = new FormData();
+    formData.append('file', blob, `${cleanName}${ext}`);
+    const upRes = await fetch('/api/upload', { method: 'POST', body: formData });
+    if (upRes.ok) {
+      const data = await upRes.json();
+      if (data?.url && !data.url.startsWith('blob:')) {
+        console.log(`[resolveMapSource] Auto-uploaded local blob to server: ${data.url}`);
+        return data.url;
+      }
+    }
+  } catch (err) {
+    console.warn('[resolveMapSource] Could not upload blob to server:', err);
+  }
+  return blobUrl;
+}
+
 export async function resolveMapSource(
   scene: Scene,
   uploadedAssetsList: UploadedAsset[] = []
@@ -1193,7 +1229,7 @@ export async function resolveMapSource(
     (uploadedAssetsList.some(a => (a.url === scene.mapUrl || a.assetId === scene.sceneId) && a.fileType === 'video'));
 
   // 0. Auto-recovery for known Guildhouse maps when URL is missing or stale
-  if (scene.sceneId === 'scene-muimqdr3' || (scene.sceneTitle && scene.sceneTitle.toLowerCase().includes('2nd floor'))) {
+  if (scene.sceneId === 'scene-muimqdr3' || (scene.sceneTitle && scene.sceneTitle.toLowerCase().includes('2nd floor') && scene.sceneTitle.toLowerCase().includes('guild'))) {
     const isStale = !scene.mapUrl || scene.mapUrl.startsWith('blob:') || scene.mapUrl === scene.mapThumbnailUrl;
     if (isStale) {
       console.log(`[resolveMapSource] Auto-resolving Guildhouse 2nd Floor map for scene "${scene.sceneTitle}"`);
@@ -1207,55 +1243,82 @@ export async function resolveMapSource(
     }
   }
 
-  // 1. Check client IndexedDB FIRST for full-resolution cached version
+  // 1. FIRST: Check if scene.mapUrl is already an accessible server or HTTP URL (works across all computers!)
+  if (scene.mapUrl && (scene.mapUrl.startsWith('/') || scene.mapUrl.startsWith('http')) && !scene.mapUrl.startsWith('blob:') && scene.mapUrl !== scene.mapThumbnailUrl) {
+    const isAccessible = await testMediaAccessible(scene.mapUrl);
+    if (isAccessible) {
+      return scene.mapUrl;
+    }
+  }
+
+  // 2. SECOND: Check matched asset in uploadedAssets library for an accessible server or HTTP URL
+  if (uploadedAssetsList && uploadedAssetsList.length > 0) {
+    const matched = uploadedAssetsList.find(a =>
+      (a.thumbnailUrl && scene.mapThumbnailUrl && a.thumbnailUrl === scene.mapThumbnailUrl && a.url && !a.url.startsWith('blob:')) ||
+      (a.assetId && (a.assetId === scene.sceneId || (scene.mapUrl && scene.mapUrl.includes(a.assetId)))) ||
+      (a.url && scene.mapUrl && a.url === scene.mapUrl && !a.url.startsWith('blob:')) ||
+      (a.name && (
+        (scene.sceneTitle && a.name.toLowerCase().trim() === scene.sceneTitle.toLowerCase().trim()) ||
+        (scene.mapUrl && !scene.mapUrl.startsWith('blob:') && a.name.toLowerCase().includes(scene.mapUrl.toLowerCase())) ||
+        (scene.sceneTitle && (a.name.toLowerCase().includes(scene.sceneTitle.toLowerCase()) || scene.sceneTitle.toLowerCase().includes(a.name.toLowerCase())))
+      ))
+    );
+    if (matched && matched.url && (matched.url.startsWith('/') || matched.url.startsWith('http')) && !matched.url.startsWith('blob:')) {
+      const isAccessible = await testMediaAccessible(matched.url);
+      if (isAccessible) {
+        return matched.url;
+      }
+    }
+  }
+
+  // 3. THIRD: Check client IndexedDB for full-resolution cached version (and auto-upload any blob: to server!)
   try {
     const cachedScene = await getLocalAsset(`scene_${scene.sceneId}`);
     if (cachedScene) {
       console.log(`[resolveMapSource] Restored full-res map from IndexedDB for scene "${scene.sceneTitle}"`);
-      return cachedScene;
+      return await uploadBlobUrlToServer(cachedScene, scene.sceneTitle || scene.sceneId);
     }
   } catch (e) {
     // ignore
   }
 
-  // 1b. Check client IndexedDB for cached file under mapUrl, asset key, or filename
   if (scene.mapUrl) {
     try {
       const assetKey = scene.mapUrl.startsWith('local:') ? scene.mapUrl.replace('local:', '') : scene.mapUrl;
       const cachedByUrl = await getLocalAsset(assetKey);
       if (cachedByUrl) {
-        return cachedByUrl;
+        return await uploadBlobUrlToServer(cachedByUrl, scene.sceneTitle || scene.sceneId);
       }
       const filename = scene.mapUrl.split('/').pop()?.split('?')[0];
       if (filename) {
         const cachedByFilename = await getLocalAsset(filename);
-        if (cachedByFilename) return cachedByFilename;
+        if (cachedByFilename) {
+          return await uploadBlobUrlToServer(cachedByFilename, filename);
+        }
       }
     } catch (e) {
       // ignore
     }
   }
 
-  // 1c. Check client IndexedDB by sceneTitle
   if (scene.sceneTitle) {
     try {
       const cachedByTitle = await getLocalAsset(scene.sceneTitle);
-      if (cachedByTitle) return cachedByTitle;
+      if (cachedByTitle) {
+        return await uploadBlobUrlToServer(cachedByTitle, scene.sceneTitle);
+      }
     } catch (e) {
       // ignore
     }
   }
 
-  // 2. Check matched asset in uploadedAssets library (and retrieve its full-res IndexedDB file)
+  // 4. Check matched asset's IndexedDB cache if server URL wasn't accessible yet
   if (uploadedAssetsList && uploadedAssetsList.length > 0) {
-    const matched = uploadedAssetsList.find(a => 
+    const matched = uploadedAssetsList.find(a =>
+      (a.thumbnailUrl && scene.mapThumbnailUrl && a.thumbnailUrl === scene.mapThumbnailUrl) ||
       (a.assetId && (a.assetId === scene.sceneId || (scene.mapUrl && scene.mapUrl.includes(a.assetId)))) ||
       (a.url && scene.mapUrl && a.url === scene.mapUrl) ||
-      (a.name && (
-        (scene.sceneTitle && a.name.toLowerCase().trim() === scene.sceneTitle.toLowerCase().trim()) ||
-        (scene.mapUrl && a.name.toLowerCase().includes(scene.mapUrl.toLowerCase())) ||
-        (scene.sceneTitle && (a.name.toLowerCase().includes(scene.sceneTitle.toLowerCase()) || scene.sceneTitle.toLowerCase().includes(a.name.toLowerCase())))
-      ))
+      (a.name && scene.sceneTitle && (a.name.toLowerCase().includes(scene.sceneTitle.toLowerCase()) || scene.sceneTitle.toLowerCase().includes(a.name.toLowerCase())))
     );
     if (matched) {
       try {
@@ -1263,59 +1326,37 @@ export async function resolveMapSource(
                             (matched.url ? await getLocalAsset(matched.url) : null) ||
                             (matched.name ? await getLocalAsset(matched.name) : null);
         if (cachedAsset) {
-          console.log(`[resolveMapSource] Restored full-res map from IndexedDB matched asset "${matched.name}"`);
-          return cachedAsset;
+          return await uploadBlobUrlToServer(cachedAsset, matched.name || matched.assetId);
         }
       } catch (e) {
         // ignore
       }
-
-      if (matched.url && (matched.url.startsWith('/') || matched.url.startsWith('http'))) {
-        const isAccessible = await testMediaAccessible(matched.url);
-        if (isAccessible) return matched.url;
+      if (matched.url && !matched.url.startsWith('blob:') && !matched.url.startsWith('local:')) {
+        return matched.url;
       }
     }
   }
 
-  // 3. If HTTP/server URL (e.g. /uploads/ or https://)
-  if (scene.mapUrl && (scene.mapUrl.startsWith('/') || scene.mapUrl.startsWith('http')) && scene.mapUrl !== scene.mapThumbnailUrl) {
+  // 5. If HTTP/server URL or data URL
+  if (scene.mapUrl && (scene.mapUrl.startsWith('/') || scene.mapUrl.startsWith('http') || scene.mapUrl.startsWith('data:')) && !scene.mapUrl.startsWith('blob:') && scene.mapUrl !== scene.mapThumbnailUrl) {
     return scene.mapUrl;
   }
 
-  // 4. If data URL, use it directly
-  if (scene.mapUrl && scene.mapUrl.startsWith('data:') && scene.mapUrl !== scene.mapThumbnailUrl) {
-    return scene.mapUrl;
-  }
-
-  // If blob URL, verify if it is active in the current window before returning
+  // 6. If blob URL is active in the current window, auto-upload it to server so remote Player Views can load it
   if (scene.mapUrl && scene.mapUrl.startsWith('blob:') && scene.mapUrl !== scene.mapThumbnailUrl) {
     const isBlobActive = await testMediaAccessible(scene.mapUrl);
     if (isBlobActive) {
-      return scene.mapUrl;
+      return await uploadBlobUrlToServer(scene.mapUrl, scene.sceneTitle || scene.sceneId);
     }
     console.warn(`[resolveMapSource] Stale blob URL detected for scene "${scene.sceneTitle}": ${scene.mapUrl}. Seeking fallback.`);
   }
 
-  // 5. For video scenes: if mapUrl is defined, keep mapUrl rather than downgrading to static thumbnail
-  if (isVideo && scene.mapUrl && scene.mapUrl !== scene.mapThumbnailUrl) {
-    return scene.mapUrl;
+  // 7. Fallback to scene mapThumbnailUrl (base64 data URL) so remote displays never get a broken blob URL
+  if (scene.mapThumbnailUrl) {
+    return scene.mapThumbnailUrl;
   }
 
-  // 6. Check uploadedAssetsList as fallback if scene.mapUrl was missing or equal to mapThumbnailUrl
-  if (uploadedAssetsList && uploadedAssetsList.length > 0) {
-    const matched = uploadedAssetsList.find(a => 
-      a.url && a.url !== scene.mapThumbnailUrl && !a.url.startsWith('local:') && (
-        (a.assetId && (a.assetId === scene.sceneId || (scene.mapUrl && scene.mapUrl.includes(a.assetId)))) ||
-        (a.name && scene.sceneTitle && a.name.toLowerCase().trim() === scene.sceneTitle.toLowerCase().trim())
-      )
-    );
-    if (matched && matched.url) {
-      return matched.url;
-    }
-  }
-
-  // 7. Return primary full-resolution mapUrl only if distinct from thumbnail
-  if (scene.mapUrl && scene.mapUrl !== scene.mapThumbnailUrl) {
+  if (scene.mapUrl && !scene.mapUrl.startsWith('blob:')) {
     return scene.mapUrl;
   }
   return '';

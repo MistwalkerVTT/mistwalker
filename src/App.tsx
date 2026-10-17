@@ -2145,14 +2145,46 @@ export default function App() {
     }
   }, [image, imageFile, activeSceneInfo?.sceneId, videoSize, fitWholeMapToScreen]);
 
+  // Automatically convert any local blob: map URL into a persistent server /uploads/ URL so remote Player Views can load it
+  useEffect(() => {
+    if (!imageFile || !imageFile.startsWith('blob:')) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const resp = await fetch(imageFile);
+        if (!resp.ok || cancelled) return;
+        const blob = await resp.blob();
+        const ext = blob.type.includes('png') ? '.png' : blob.type.includes('webp') ? '.webp' : blob.type.includes('mp4') ? '.mp4' : '.jpg';
+        const formData = new FormData();
+        formData.append('file', blob, `battlemap_${Date.now()}${ext}`);
+        const upRes = await fetch('/api/upload', { method: 'POST', body: formData });
+        if (upRes.ok && !cancelled) {
+          const data = await upRes.json();
+          if (data?.url && !data.url.startsWith('blob:')) {
+            console.log('[App] Converted local blob map to server URL:', data.url);
+            setImageFile(data.url);
+            setActiveSceneInfo(prev => prev ? { ...prev, mapUrl: data.url } : prev);
+          }
+        }
+      } catch (err) {
+        console.warn('[App] Could not auto-upload blob map:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [imageFile]);
+
   // Full-state synchronization helper for emitting authoritative map, tokens, and lighting to Player View
   const broadcastFullState = useCallback((customMapUrl?: string) => {
     if (!socketRef.current?.connected) return;
     const dims = getMapDimensions();
-    const authoritativeUrl = customMapUrl || imageFile || activeSceneInfo?.mapUrl || '';
+    const rawUrl = customMapUrl || imageFile || activeSceneInfo?.mapUrl || '';
+    const nonBlobSceneUrl = (activeSceneInfo?.mapUrl && !activeSceneInfo.mapUrl.startsWith('blob:'))
+      ? activeSceneInfo.mapUrl
+      : (activeSceneInfo?.mapThumbnailUrl || '');
+    const authoritativeUrl = rawUrl.startsWith('blob:') ? (nonBlobSceneUrl || rawUrl) : rawUrl;
     if (!authoritativeUrl && tokens.length === 0) return;
 
-    if (authoritativeUrl) {
+    if (authoritativeUrl && !authoritativeUrl.startsWith('blob:')) {
       socketRef.current.emit('SYNC_IMAGE', authoritativeUrl);
     }
     socketRef.current.emit('SYNC_STATE', {

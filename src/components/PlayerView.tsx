@@ -80,6 +80,7 @@ import {
   VisionSource,
   VisibilityPolygon
 } from '../lib/visionEngine';
+import { subscribeToActiveSession } from '../lib/firebase';
 
 interface Token {
   id: string;
@@ -1410,7 +1411,7 @@ export default function PlayerView() {
 
     // 1. SYNC_IMAGE
     socket.on('SYNC_IMAGE', (url: string) => {
-      if (url) {
+      if (url && !url.startsWith('blob:')) {
         console.log('[PlayerView] SYNC_IMAGE received:', url.slice(0, 80));
         setImageFile(url);
       }
@@ -1421,10 +1422,14 @@ export default function PlayerView() {
       if (!state) return;
       console.log('[PlayerView] SYNC_STATE received:', state);
 
-      if (state.imageFile) {
-        setImageFile(state.imageFile);
-      } else if (state.activeSceneInfo?.mapUrl) {
-        setImageFile(state.activeSceneInfo.mapUrl);
+      const candidateUrl = (state.imageFile && !state.imageFile.startsWith('blob:'))
+        ? state.imageFile
+        : ((state.activeSceneInfo?.mapUrl && !state.activeSceneInfo.mapUrl.startsWith('blob:'))
+            ? state.activeSceneInfo.mapUrl
+            : ((state.activeSceneInfo as any)?.mapThumbnailUrl || (!state.imageFile?.startsWith('blob:') ? state.imageFile : null)));
+
+      if (candidateUrl) {
+        setImageFile(candidateUrl);
       }
 
       if (state.characters && Array.isArray(state.characters)) {
@@ -1905,6 +1910,55 @@ export default function PlayerView() {
       socket.disconnect();
     };
   }, [isAudioMuted]);
+
+  // Real-time Firestore activeSession/current subscription so remote Player Views always receive state across server restarts or different networks
+  useEffect(() => {
+    const unsub = subscribeToActiveSession((sess) => {
+      if (!sess) return;
+      const validUrl = (sess.mapUrl && !sess.mapUrl.startsWith('blob:'))
+        ? sess.mapUrl
+        : (sess.mapThumbnailUrl || '');
+      if (validUrl) {
+        setImageFile(prev => (!prev || prev.startsWith('blob:')) ? validUrl : prev);
+      }
+      if (sess.tokens && Array.isArray(sess.tokens)) {
+        setTokens(prev => {
+          if (prev.length > 0) return prev;
+          const normalized = sess.tokens.map(normalizeToken);
+          tokensRef.current = normalized;
+          return normalized;
+        });
+      }
+      if (sess.walls && Array.isArray(sess.walls)) {
+        setWalls(prev => prev.length > 0 ? prev : sess.walls);
+      }
+      if (sess.gridSize) setGridSize(prev => prev || sess.gridSize!);
+      if (sess.gridOpacity !== undefined) setGridOpacity(sess.gridOpacity);
+      if (sess.isFogVisible !== undefined) setIsFogVisible(sess.isFogVisible);
+      if (sess.visionConfig) setVisionConfig(sess.visionConfig);
+      if (sess.sceneId || sess.sceneTitle || validUrl) {
+        setActiveSceneInfo(prev => prev || {
+          sceneId: sess.sceneId,
+          sceneTitle: sess.sceneTitle,
+          mapUrl: validUrl,
+          mapWidth: sess.mapWidth,
+          mapHeight: sess.mapHeight,
+        });
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  // Automatic fallback to embedded scene thumbnail if primary map URL fails to load on a remote device
+  useEffect(() => {
+    if (imageStatus === 'failed' && imageFile) {
+      const fallbackThumb = (activeSceneInfo as any)?.mapThumbnailUrl;
+      if (fallbackThumb && imageFile !== fallbackThumb) {
+        console.log('[PlayerView] Primary map URL failed; falling back to embedded scene thumbnail.');
+        setImageFile(fallbackThumb);
+      }
+    }
+  }, [imageStatus, imageFile, activeSceneInfo]);
 
   // Seize / Claim Character Action
   const handleClaimToken = useCallback((tokenId: string) => {

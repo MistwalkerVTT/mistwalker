@@ -353,6 +353,59 @@ async function startServer() {
     updatedAt: Date.now()
   };
 
+  // Hydrate initial VTT state from Firestore activeSession/current on server startup
+  (async () => {
+    try {
+      const configPath = path.resolve(process.cwd(), 'firebase-applet-config.json');
+      if (fs.existsSync(configPath)) {
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        const { initializeApp, getApps } = await import('firebase/app');
+        const { getFirestore, doc, getDoc } = await import('firebase/firestore');
+        const fbApp = getApps().length ? getApps()[0] : initializeApp(config);
+        const db = getFirestore(fbApp, config.firestoreDatabaseId);
+        const sessSnap = await getDoc(doc(db, 'activeSession', 'current'));
+        if (sessSnap.exists() && !activeVttState.imageFile) {
+          const sess = sessSnap.data();
+          const mapUrl = (sess.mapUrl && !String(sess.mapUrl).startsWith('blob:'))
+            ? sess.mapUrl
+            : (sess.mapThumbnailUrl || null);
+          if (mapUrl) {
+            activeVttState = {
+              ...activeVttState,
+              imageFile: mapUrl,
+              mapDimensions: {
+                width: sess.mapWidth || 1920,
+                height: sess.mapHeight || 1080
+              },
+              tokens: Array.isArray(sess.tokens) ? sess.tokens : [],
+              walls: Array.isArray(sess.walls) ? sess.walls : [],
+              isFogVisible: sess.isFogVisible !== undefined ? sess.isFogVisible : true,
+              gridSize: sess.gridSize || 50,
+              gridOpacity: sess.gridOpacity ?? 0.3,
+              visionConfig: sess.visionConfig || activeVttState.visionConfig,
+              roomAnnotations: Array.isArray(sess.roomAnnotations) ? sess.roomAnnotations : [],
+              effects: Array.isArray(sess.effects) ? sess.effects : [],
+              activeSceneInfo: {
+                campaignId: sess.campaignId,
+                chapterId: sess.chapterId,
+                sceneId: sess.sceneId,
+                sceneTitle: sess.sceneTitle,
+                mapUrl: mapUrl,
+                mapThumbnailUrl: sess.mapThumbnailUrl,
+                mapWidth: sess.mapWidth || 1920,
+                mapHeight: sess.mapHeight || 1080
+              },
+              updatedAt: sess.updatedAt || Date.now()
+            };
+            console.log(`[Server] Hydrated activeVttState from Firestore: "${sess.sceneTitle}" (${mapUrl.slice(0, 80)})`);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[Server] Initial Firestore state hydration notice:', err);
+    }
+  })();
+
   // Socket.io connection & synchronization handlers
   io.on("connection", (socket) => {
     console.log(`[Server] User connected: ${socket.id}`);
@@ -380,7 +433,7 @@ async function startServer() {
 
     // Authoritative image change synchronization
     socket.on("SYNC_IMAGE", (url: string) => {
-      if (!url) return;
+      if (!url || url.startsWith('blob:')) return;
       console.log(`[Server] SYNC_IMAGE received: ${url.slice(0, 80)}`);
       activeVttState.imageFile = url;
       if (activeVttState.activeSceneInfo) {
@@ -399,14 +452,21 @@ async function startServer() {
         return;
       }
 
-      console.log(`[Server] SYNC_STATE received. imageFile: ${state.imageFile?.slice(0, 80) || 'none'}`);
+      const incomingUrl = (state.imageFile && !String(state.imageFile).startsWith('blob:'))
+        ? state.imageFile
+        : ((state.activeSceneInfo?.mapUrl && !String(state.activeSceneInfo.mapUrl).startsWith('blob:'))
+            ? state.activeSceneInfo.mapUrl
+            : (state.activeSceneInfo?.mapThumbnailUrl || activeVttState.imageFile));
+
+      console.log(`[Server] SYNC_STATE received. imageFile: ${incomingUrl?.slice(0, 80) || 'none'}`);
       activeVttState = {
         ...activeVttState,
         ...state,
+        imageFile: incomingUrl || activeVttState.imageFile,
         updatedAt: Date.now()
       };
-      if (state.imageFile) {
-        activeVttState.imageFile = state.imageFile;
+      if (activeVttState.activeSceneInfo && incomingUrl) {
+        activeVttState.activeSceneInfo.mapUrl = incomingUrl;
       }
       if (state.activeSceneInfo?.mapWidth && state.activeSceneInfo?.mapHeight) {
         activeVttState.mapDimensions = {
