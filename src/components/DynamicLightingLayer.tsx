@@ -8,6 +8,7 @@ import {
   snapPointToGrid,
   isPointInPolygon,
   segmentsIntersect,
+  isLineOfSightBlocked,
   isWallOccluding
 } from '../lib/visionEngine';
 
@@ -151,8 +152,16 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
       if (!isAlly && t.isPlayer === false) return false;
       if (t.visionEnabled === false) return false;
       if (typeof t.visionRadius === 'number' && t.visionRadius <= 0) return false;
+
+      // In Player View with a claimed character, only the claimed character (and its summons/allies) provides vision
+      if (isPlayerView && claimedTokenId) {
+        if (t.id === claimedTokenId) return true;
+        if (isAlly && (t as any).ownerId === claimedTokenId) return true;
+        return false;
+      }
+
       if (t.visionEnabled !== undefined) return t.visionEnabled;
-      return t.isPlayer === true || t.category === 'character' || isAlly || (claimedTokenId && t.id === claimedTokenId);
+      return t.isPlayer === true || t.category === 'character' || isAlly;
     });
 
     const sources: VisionSource[] = [];
@@ -189,7 +198,7 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
               const dist = Math.hypot(tX - tx, tY - ty);
               const maxRange = (((t.visionRadius || 60) / 5) * gridSize) + 60;
               if (dist > maxRange) return false;
-              return !walls.some(w => isWallOccluding(w) && segmentsIntersect({ x: tX, y: tY }, { x: tx, y: ty }, w.p1, w.p2));
+              return !isLineOfSightBlocked({ x: tX, y: tY }, { x: tx, y: ty }, walls);
             });
             if (!hasLosToPlayer) {
               const inLegacyReveal = reveals.some(r => Math.hypot(tx - r.x, ty - r.y) <= r.radius) ||
@@ -417,22 +426,18 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
             ctx.fill();
           }
 
-          // 4. Active Dynamic FOV Vision Polygons (Local Bounding-Box Gaussian Feathering + Strict Wall Containment)
+          // 4. Active Dynamic FOV Vision Polygons (Strict Wall Containment with Smooth Radial Gradient Falloff)
           if (visionConfig.enabled && activeFovPolygons.length > 0) {
             const dimMultiplier = typeof visionConfig.dimVisionOpacity === 'number'
               ? Math.max(0.1, Math.min(0.9, visionConfig.dimVisionOpacity))
               : 0.55;
 
-            // Reusable scratch canvas for tight bounding-box feathering
+            // Reusable scratch canvas for tight bounding-box carving
             if (!localScratchCanvasRef.current) {
               localScratchCanvasRef.current = document.createElement('canvas');
             }
             const scratchCanvas = localScratchCanvasRef.current;
-
-            // Soft blur radius for fog feathering
-            const blurRadius = Math.max(6, Math.min(14, Math.round(gridSize * 0.16)));
-            const pad = Math.max(24, blurRadius * 2 + 10);
-            const extDist = Math.max(36, blurRadius * 3 + 12);
+            const pad = 8;
 
             for (const fov of activeFovPolygons) {
               if (!fov.points || fov.points.length < 6) continue;
@@ -442,7 +447,7 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
               const maxR = fov.radius;
               if (maxR <= 0) continue;
 
-              // Compute tight local bounding box for this light source (+ blur padding)
+              // Compute tight local bounding box for this light source (+ minimal padding)
               const minX = Math.max(0, Math.floor(cx - maxR - pad));
               const minY = Math.max(0, Math.floor(cy - maxR - pad));
               const maxX = Math.min(mapDimensions.width, Math.ceil(cx + maxR + pad));
@@ -466,9 +471,17 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
               scratchCtx.save();
               scratchCtx.translate(-minX, -minY);
 
-              // 4a. Draw the softened visibility polygon with Gaussian blur on the local bounding box
-              scratchCtx.filter = `blur(${blurRadius}px)`;
+              // 4a. STRICT WALL CONTAINMENT: Clip directly to the visibility polygon!
+              // Guaranteed by 2D geometry: NOT A SINGLE PIXEL can ever be carved outside fov.points!
+              scratchCtx.beginPath();
+              scratchCtx.moveTo(fov.points[0], fov.points[1]);
+              for (let i = 2; i < fov.points.length; i += 2) {
+                scratchCtx.lineTo(fov.points[i], fov.points[i + 1]);
+              }
+              scratchCtx.closePath();
+              scratchCtx.clip();
 
+              // 4b. Draw smooth radial gradient falloff inside the clipped polygon
               const fovGrad = scratchCtx.createRadialGradient(cx, cy, 0, cx, cy, maxR);
               fovGrad.addColorStop(0, 'rgba(255, 255, 255, 1)');
               fovGrad.addColorStop(0.35, 'rgba(255, 255, 255, 1)');
@@ -481,56 +494,10 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
 
               scratchCtx.fillStyle = fovGrad;
               scratchCtx.beginPath();
-              scratchCtx.moveTo(fov.points[0], fov.points[1]);
-              for (let i = 2; i < fov.points.length; i += 2) {
-                scratchCtx.lineTo(fov.points[i], fov.points[i + 1]);
-              }
-              scratchCtx.closePath();
+              scratchCtx.arc(cx, cy, maxR, 0, Math.PI * 2);
               scratchCtx.fill();
 
-              scratchCtx.filter = 'none';
-
-              // 4b. Clear any blur that spilled behind occluding walls into adjacent rooms
-              scratchCtx.save();
-              scratchCtx.globalCompositeOperation = 'destination-out';
-              scratchCtx.fillStyle = '#000000';
-
-              for (const wall of walls) {
-                if (!isWallOccluding(wall)) continue;
-
-                // Fast AABB check: skip walls completely outside this local bounding box
-                if (
-                  Math.max(wall.p1.x, wall.p2.x) < minX ||
-                  Math.min(wall.p1.x, wall.p2.x) > maxX ||
-                  Math.max(wall.p1.y, wall.p2.y) < minY ||
-                  Math.min(wall.p1.y, wall.p2.y) > maxY
-                ) {
-                  continue;
-                }
-
-                const dx1 = wall.p1.x - cx;
-                const dy1 = wall.p1.y - cy;
-                const dx2 = wall.p2.x - cx;
-                const dy2 = wall.p2.y - cy;
-                const len1 = Math.hypot(dx1, dy1) || 1;
-                const len2 = Math.hypot(dx2, dy2) || 1;
-
-                const p1ExtX = wall.p1.x + (dx1 / len1) * extDist;
-                const p1ExtY = wall.p1.y + (dy1 / len1) * extDist;
-                const p2ExtX = wall.p2.x + (dx2 / len2) * extDist;
-                const p2ExtY = wall.p2.y + (dy2 / len2) * extDist;
-
-                scratchCtx.beginPath();
-                scratchCtx.moveTo(wall.p1.x, wall.p1.y);
-                scratchCtx.lineTo(wall.p2.x, wall.p2.y);
-                scratchCtx.lineTo(p2ExtX, p2ExtY);
-                scratchCtx.lineTo(p1ExtX, p1ExtY);
-                scratchCtx.closePath();
-                scratchCtx.fill();
-              }
-              scratchCtx.restore();
-
-              scratchCtx.restore(); // restore translate
+              scratchCtx.restore(); // restore translate & clip
 
               // 4c. Carve this local vision source directly into the main fog layer with destination-out
               ctx.drawImage(scratchCanvas, 0, 0, boxW, boxH, minX, minY, boxW, boxH);
@@ -545,29 +512,39 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
 
   const ambientLightingLayer = visionConfig.enabled && activeFovPolygons.length > 0 && (
     <Layer id="dynamic-lighting-ambient" listening={false}>
-      {visionSources.map((src) => (
-        <Circle
-          key={`light-glow-${src.id}`}
-          x={src.x}
-          y={src.y}
-          radius={src.radiusPx}
-          fillRadialGradientStartPoint={{ x: 0, y: 0 }}
-          fillRadialGradientStartRadius={0}
-          fillRadialGradientEndPoint={{ x: 0, y: 0 }}
-          fillRadialGradientEndRadius={src.radiusPx}
-          fillRadialGradientColorStops={[
-            0,
-            'rgba(255, 220, 140, 0.18)',
-            0.5,
-            'rgba(255, 180, 80, 0.08)',
-            1,
-            'rgba(0, 0, 0, 0)'
-          ]}
-          opacity={0.85}
-          listening={false}
-          perfectDrawEnabled={false}
-        />
-      ))}
+      {activeFovPolygons.map((fov) => {
+        const src = visionSources.find(s => s.id === fov.sourceId);
+        if (!src || !fov.points || fov.points.length < 6) return null;
+        return (
+          <Shape
+            key={`light-glow-${src.id}`}
+            listening={false}
+            sceneFunc={(context) => {
+              const ctx = context._context;
+              if (!ctx) return;
+              ctx.save();
+              ctx.beginPath();
+              ctx.moveTo(fov.points[0], fov.points[1]);
+              for (let i = 2; i < fov.points.length; i += 2) {
+                ctx.lineTo(fov.points[i], fov.points[i + 1]);
+              }
+              ctx.closePath();
+              ctx.clip();
+
+              const grad = ctx.createRadialGradient(src.x, src.y, 0, src.x, src.y, src.radiusPx);
+              grad.addColorStop(0, 'rgba(255, 220, 140, 0.18)');
+              grad.addColorStop(0.5, 'rgba(255, 180, 80, 0.08)');
+              grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+              ctx.fillStyle = grad;
+              ctx.beginPath();
+              ctx.arc(src.x, src.y, src.radiusPx, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.restore();
+            }}
+          />
+        );
+      })}
     </Layer>
   );
 

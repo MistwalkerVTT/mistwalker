@@ -75,6 +75,7 @@ import {
   isPointInPolygon,
   distanceBetween,
   segmentsIntersect,
+  isLineOfSightBlocked,
   isWallOccluding,
   VisionSource,
   VisibilityPolygon
@@ -2396,8 +2397,17 @@ export default function PlayerView() {
       if (isMonsterToken(t) || t.isMonster === true || t.category === 'monster' || t.isPlayer === false) return false;
       if (t.visionEnabled === false) return false;
       if (typeof t.visionRadius === 'number' && t.visionRadius <= 0) return false;
+
+      // In Player View with a claimed token, only the claimed token (and its summons/allies) provides vision
+      if (claimedTokenId) {
+        if (t.id === claimedTokenId) return true;
+        const isAlly = t.category === 'ally' || !!(t as any).allyId;
+        if (isAlly && (t as any).ownerId === claimedTokenId) return true;
+        return false;
+      }
+
       if (t.visionEnabled !== undefined) return t.visionEnabled;
-      return t.isPlayer === true || t.category === 'character' || (claimedTokenId && t.id === claimedTokenId);
+      return t.isPlayer === true || t.category === 'character';
     });
 
     const sources: VisionSource[] = [];
@@ -2435,7 +2445,7 @@ export default function PlayerView() {
             const visionFeet = typeof t.visionRadius === 'number' ? t.visionRadius : 60;
             const maxSight = ((visionFeet / 5) * gridSize) + 60;
             if (d > maxSight) return false;
-            return !walls.some(w => isWallOccluding(w) && segmentsIntersect({ x: tCenterX, y: tCenterY }, { x: tx, y: ty }, w.p1, w.p2));
+            return !isLineOfSightBlocked({ x: tCenterX, y: tCenterY }, { x: tx, y: ty }, walls);
           });
 
           if (!isTorchSeenByPlayer) {
@@ -2477,34 +2487,22 @@ export default function PlayerView() {
     if (!isFogVisible) return true;
 
     // The player's own claimed token is always visible to them
-    if (t.id === claimedTokenId) return true;
+    if (claimedTokenId && t.id === claimedTokenId) return true;
 
-    const isAlly = t.category === 'ally' || !!(t as any).allyId;
-    const isMonster = !isAlly && (isMonsterToken(t) || t.isMonster === true || t.category === 'monster' || t.isPlayer === false);
-
-    // All active player characters, party members, and friendly summons/allies are visible to players on the board
-    if (isAlly || (!isMonster && (t.isPlayer === true || t.category === 'character' || t.id === claimedTokenId))) {
-      return true;
-    }
-
-    // For any monster, enemy, or non-claimed token, check if it's within revealed areas
     const tokenPx = gridSize * (t.size || 1);
     const radius = tokenPx / 2;
     const cx = t.x + radius;
     const cy = t.y + radius;
 
-    // WALL OCCLUSION CHECK: In player view, a token behind an occluding wall from all player vision sources is NEVER visible!
-    const activeVisionCenters = activeFovPolygons.map(fov => fov.center);
-    if (activeVisionCenters.length > 0) {
-      const canAnyPlayerSeeTarget = activeVisionCenters.some(src => {
-        return !walls.some(w => isWallOccluding(w) && segmentsIntersect(src, { x: cx, y: cy }, w.p1, w.p2));
-      });
-
-      // If all lines of sight from active players are occluded by walls, target is strictly NOT visible
-      if (!canAnyPlayerSeeTarget) {
-        return false;
-      }
-    }
+    // Multi-point sampling across token body (center + 4 cardinal offsets)
+    const sampleOffset = radius * 0.6;
+    const samplePoints = [
+      { x: cx, y: cy },
+      { x: cx - sampleOffset, y: cy },
+      { x: cx + sampleOffset, y: cy },
+      { x: cx, y: cy - sampleOffset },
+      { x: cx, y: cy + sampleOffset },
+    ];
 
     // 1. Check circle brush reveals
     for (const rev of reveals) {
@@ -2513,23 +2511,38 @@ export default function PlayerView() {
       }
     }
 
-    // 2. Check polygon reveals
+    // 2. Check polygon room reveals
     for (const poly of polygonReveals) {
-      if (poly.length >= 6 && isPointInPolygon(cx, cy, poly)) {
-        return true;
+      if (poly.length >= 6) {
+        for (const pt of samplePoints) {
+          if (isPointInPolygon(pt.x, pt.y, poly)) {
+            return true;
+          }
+        }
       }
     }
 
-    // 3. Check active dynamic FOV line-of-sight
+    // 3. Check active dynamic FOV line-of-sight against player vision sources
     if (visionConfig.enabled && activeFovPolygons.length > 0) {
       for (const fov of activeFovPolygons) {
-        if (fov.points.length >= 6 && isPointInPolygon(cx, cy, fov.points)) {
+        if (!fov.points || fov.points.length < 6) continue;
+
+        const d = distanceBetween(fov.center.x, fov.center.y, cx, cy);
+        if (d > fov.radius + radius) continue;
+
+        // Token must be inside the observer's FOV polygon
+        const isInsideFov = samplePoints.some(pt => isPointInPolygon(pt.x, pt.y, fov.points));
+        if (!isInsideFov) continue;
+
+        // Direct line-of-sight must NOT be occluded by any wall
+        const hasClearLos = samplePoints.some(pt => !isLineOfSightBlocked(fov.center, pt, walls));
+        if (hasClearLos) {
           return true;
         }
       }
     }
 
-    // If not in active vision or manual reveal, the token is in the fog -> NEVER visible
+    // If not in active vision or manual reveal, the token is behind a wall or in the fog -> NEVER visible
     return false;
   }, [isFogVisible, claimedTokenId, gridSize, reveals, polygonReveals, visionConfig.enabled, activeFovPolygons, walls]);
 
@@ -2586,10 +2599,11 @@ export default function PlayerView() {
     if (visionConfig.enabled && activeFovPolygons.length > 0) {
       for (const fov of activeFovPolygons) {
         if (fov.points.length >= 6) {
-          for (const pt of testPoints) {
-            if (isPointInPolygon(pt.x, pt.y, fov.points)) {
-              return true;
-            }
+          const isInsideFov = testPoints.some(pt => isPointInPolygon(pt.x, pt.y, fov.points));
+          if (!isInsideFov) continue;
+          const hasClearLos = testPoints.some(pt => !isLineOfSightBlocked(fov.center, pt, walls));
+          if (hasClearLos) {
+            return true;
           }
         }
       }
@@ -2597,7 +2611,7 @@ export default function PlayerView() {
 
     // If no part of the effect is in revealed areas or active vision -> NOT visible
     return false;
-  }, [claimedTokenId, isFogVisible, reveals, polygonReveals, visionConfig.enabled, activeFovPolygons]);
+  }, [claimedTokenId, isFogVisible, reveals, polygonReveals, visionConfig.enabled, activeFovPolygons, walls]);
 
   // Candidate Tokens for Claiming (Only non-monster player characters and friendly summons)
   const candidateTokens = useMemo(() => {

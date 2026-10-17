@@ -98,11 +98,6 @@ export function distanceToSegment(
  * Ray starts at (cx, cy) in direction (dx, dy).
  * Returns distance t along the ray (if hit between 0 and maxRadius), or null.
  */
-/**
- * Raycast intersection against a 2D line segment.
- * Ray starts at (cx, cy) in direction (dx, dy).
- * Returns distance t along the ray (if hit between 0 and maxRadius), or null.
- */
 function getRaySegmentIntersection(
   cx: number,
   cy: number,
@@ -126,7 +121,8 @@ function getRaySegmentIntersection(
   const t2 = (v1x * v3x + v1y * v3y) / dot;
 
   // Endpoint tolerance ensures rays passing near connected wall corners never slip through microscopic cracks
-  const t2Tol = 0.008;
+  const wallLen = Math.hypot(v2x, v2y) || 1;
+  const t2Tol = Math.max(0.015, 2.0 / wallLen);
   if (t1 >= 0 && t1 <= maxDistance && t2 >= -t2Tol && t2 <= 1 + t2Tol) {
     return {
       x: cx + t1 * dx,
@@ -135,6 +131,50 @@ function getRaySegmentIntersection(
     };
   }
   return null;
+}
+
+/**
+ * Checks if direct line of sight from p1 to p2 is blocked by any occluding wall segment.
+ * Uses high-precision intersection math with adaptive endpoint tolerance so rays passing near
+ * corners or closed doors are reliably occluded.
+ */
+export function isLineOfSightBlocked(
+  p1: { x: number; y: number },
+  p2: { x: number; y: number },
+  walls: WallSegment[]
+): boolean {
+  const dx1 = p2.x - p1.x;
+  const dy1 = p2.y - p1.y;
+
+  for (const wall of walls) {
+    if (!isWallOccluding(wall)) continue;
+
+    const dx2 = wall.p2.x - wall.p1.x;
+    const dy2 = wall.p2.y - wall.p1.y;
+    const det = dx1 * dy2 - dy1 * dx2;
+    const wallLen = Math.hypot(dx2, dy2) || 1;
+    const uTol = Math.max(0.02, 2.5 / wallLen);
+
+    if (Math.abs(det) < 1e-7) {
+      const cross = (wall.p1.x - p1.x) * dy1 - (wall.p1.y - p1.y) * dx1;
+      if (Math.abs(cross) < 1.0) {
+        const denom = dx1 * dx1 + dy1 * dy1 || 1;
+        const t0 = ((wall.p1.x - p1.x) * dx1 + (wall.p1.y - p1.y) * dy1) / denom;
+        const t1 = ((wall.p2.x - p1.x) * dx1 + (wall.p2.y - p1.y) * dy1) / denom;
+        if (Math.max(t0, t1) > 0.01 && Math.min(t0, t1) < 0.99) return true;
+      }
+      continue;
+    }
+
+    const t = ((wall.p1.x - p1.x) * dy2 - (wall.p1.y - p1.y) * dx2) / det;
+    const u = ((wall.p1.x - p1.x) * dy1 - (wall.p1.y - p1.y) * dx1) / det;
+
+    if (t > 0.005 && t < 0.995 && u >= -uTol && u <= 1 + uTol) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 /**
@@ -214,6 +254,37 @@ export function computeVisibilityPolygon(
     };
   }
 
+  // 1b. Weld near-endpoints within SNAP_TOL (5.0px) so imperfect hand-drawn corners or doors never leak rays
+  const SNAP_TOL = 5.0;
+  const processedWalls = occludingWalls.map(w => ({
+    ...w,
+    p1: { ...w.p1 },
+    p2: { ...w.p2 }
+  }));
+
+  for (let i = 0; i < processedWalls.length; i++) {
+    for (let j = i + 1; j < processedWalls.length; j++) {
+      const w1 = processedWalls[i];
+      const w2 = processedWalls[j];
+      if (distanceBetween(w1.p1.x, w1.p1.y, w2.p1.x, w2.p1.y) <= SNAP_TOL) {
+        w2.p1.x = w1.p1.x;
+        w2.p1.y = w1.p1.y;
+      }
+      if (distanceBetween(w1.p1.x, w1.p1.y, w2.p2.x, w2.p2.y) <= SNAP_TOL) {
+        w2.p2.x = w1.p1.x;
+        w2.p2.y = w1.p1.y;
+      }
+      if (distanceBetween(w1.p2.x, w1.p2.y, w2.p1.x, w2.p1.y) <= SNAP_TOL) {
+        w2.p1.x = w1.p2.x;
+        w2.p1.y = w1.p2.y;
+      }
+      if (distanceBetween(w1.p2.x, w1.p2.y, w2.p2.x, w2.p2.y) <= SNAP_TOL) {
+        w2.p2.x = w1.p2.x;
+        w2.p2.y = w1.p2.y;
+      }
+    }
+  }
+
   // 2. Gather unique angles for raycasting
   const angleSet = new Set<number>();
 
@@ -230,7 +301,7 @@ export function computeVisibilityPolygon(
 
   // Add ray angles towards wall endpoints and interior wall points
   const eps = 0.0001;
-  for (const wall of occludingWalls) {
+  for (const wall of processedWalls) {
     // Also sample wall midpoints to guarantee long walls form flat, straight lines
     const midX = (wall.p1.x + wall.p2.x) / 2;
     const midY = (wall.p1.y + wall.p2.y) / 2;
@@ -293,7 +364,7 @@ export function computeVisibilityPolygon(
       }
     }
 
-    for (const wall of occludingWalls) {
+    for (const wall of processedWalls) {
       const hit = getRaySegmentIntersection(cx, cy, dx, dy, closestT, wall.p1, wall.p2);
       if (hit && hit.t < closestT) {
         closestT = hit.t;
@@ -304,10 +375,10 @@ export function computeVisibilityPolygon(
     }
 
     // Sub-pixel pullback: If the ray was terminated by an occluding wall,
-    // place the vertex slightly (0.5px) in front of the wall towards the vision origin.
+    // place the vertex slightly (0.75px) in front of the wall towards the vision origin.
     // This strictly prevents float rounding or antialiasing from bleeding onto the other side of the wall.
     if (hitOccludingWall && closestT > 1) {
-      const buffer = Math.min(0.5, closestT * 0.005);
+      const buffer = Math.min(0.75, closestT * 0.005);
       hitX = cx + dx * (closestT - buffer);
       hitY = cy + dy * (closestT - buffer);
     }
@@ -407,6 +478,8 @@ export function findNearestWall(
 
 /**
  * Checks if two line segments (p1-p2 and p3-p4) intersect in 2D space.
+ * Uses high-precision intersection with adaptive endpoint tolerance so rays
+ * passing near corners or door frames are reliably detected.
  */
 export function segmentsIntersect(
   p1: { x: number; y: number },
@@ -414,14 +487,27 @@ export function segmentsIntersect(
   p3: { x: number; y: number },
   p4: { x: number; y: number }
 ): boolean {
-  const ccw = (
-    a: { x: number; y: number },
-    b: { x: number; y: number },
-    c: { x: number; y: number }
-  ) => (c.y - a.y) * (b.x - a.x) > (b.y - a.y) * (c.x - a.x);
+  const dx1 = p2.x - p1.x;
+  const dy1 = p2.y - p1.y;
+  const dx2 = p4.x - p3.x;
+  const dy2 = p4.y - p3.y;
+  const det = dx1 * dy2 - dy1 * dx2;
+  const len2 = Math.hypot(dx2, dy2) || 1;
+  const uTol = Math.max(0.02, 2.5 / len2);
 
-  return (
-    ccw(p1, p3, p4) !== ccw(p2, p3, p4) &&
-    ccw(p1, p2, p3) !== ccw(p1, p2, p4)
-  );
+  if (Math.abs(det) < 1e-7) {
+    const cross = (p3.x - p1.x) * dy1 - (p3.y - p1.y) * dx1;
+    if (Math.abs(cross) < 1.0) {
+      const denom = dx1 * dx1 + dy1 * dy1 || 1;
+      const t0 = ((p3.x - p1.x) * dx1 + (p3.y - p1.y) * dy1) / denom;
+      const t1 = ((p4.x - p1.x) * dx1 + (p4.y - p1.y) * dy1) / denom;
+      return Math.max(t0, t1) > 0.005 && Math.min(t0, t1) < 0.995;
+    }
+    return false;
+  }
+
+  const t = ((p3.x - p1.x) * dy2 - (p3.y - p1.y) * dx2) / det;
+  const u = ((p3.x - p1.x) * dy1 - (p3.y - p1.y) * dx1) / det;
+
+  return t > 0.005 && t < 0.995 && u >= -uTol && u <= 1 + uTol;
 }
