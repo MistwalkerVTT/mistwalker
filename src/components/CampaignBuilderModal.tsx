@@ -1636,6 +1636,7 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
                             camp.chapters.map((chap) => {
                               const isChapExpanded = !!expandedChapters[chap.chapterId];
                               const isChapSelected = selectedChapterId === chap.chapterId;
+                              const isDropTargetChapter = dragOverChapterId === chap.chapterId && draggedSceneInfo?.sourceChapterId !== chap.chapterId;
 
                               return (
                                 <div key={chap.chapterId} className="space-y-0.5">
@@ -1647,8 +1648,18 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
                                       setSelectedSceneId(null);
                                       toggleChapterExpand(chap.chapterId);
                                     }}
+                                    onDragOver={(e) => handleChapterDragOver(e, chap.chapterId)}
+                                    onDragLeave={(e) => handleChapterDragLeave(e, chap.chapterId)}
+                                    onDrop={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      const data = draggedSceneInfo || parseDragData(e);
+                                      handleMoveSceneToChapter(data, chap.chapterId, camp.campaignId);
+                                    }}
                                     className={`group flex items-center justify-between px-2 py-1 rounded-xl cursor-pointer transition-all ${
-                                      isChapSelected && !selectedSceneId
+                                      isDropTargetChapter
+                                        ? 'bg-blue-600/30 text-blue-200 border-2 border-dashed border-blue-400 font-semibold ring-2 ring-blue-500/20'
+                                        : isChapSelected && !selectedSceneId
                                         ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40 font-semibold'
                                         : isChapSelected
                                         ? 'bg-blue-500/10 text-blue-300 border border-blue-500/20'
@@ -1675,6 +1686,11 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
                                         <Folder className="w-3.5 h-3.5 text-blue-400 shrink-0" />
                                       )}
                                       <span className="text-[11px] font-medium truncate">{chap.chapterTitle}</span>
+                                      {isDropTargetChapter && (
+                                        <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-blue-500 text-white font-bold animate-pulse shrink-0">
+                                          Drop here
+                                        </span>
+                                      )}
                                     </div>
 
                                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1706,10 +1722,38 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
 
                                   {/* Scenes Node List */}
                                   {isChapExpanded && (
-                                    <div className="pl-4 space-y-0.5 border-l border-zinc-800/80 ml-3">
+                                    <div
+                                      onDragOver={(e) => handleChapterDragOver(e, chap.chapterId)}
+                                      onDragLeave={(e) => handleChapterDragLeave(e, chap.chapterId)}
+                                      onDrop={(e) => {
+                                        if (e.target === e.currentTarget) {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                          const data = draggedSceneInfo || parseDragData(e);
+                                          handleMoveSceneToChapter(data, chap.chapterId, camp.campaignId);
+                                        }
+                                      }}
+                                      className={`pl-4 space-y-0.5 border-l border-zinc-800/80 ml-3 transition-colors ${
+                                        isDropTargetChapter ? 'border-l-blue-400 bg-blue-500/5 rounded-r-lg' : ''
+                                      }`}
+                                    >
                                       {chap.scenes.length === 0 ? (
-                                        <div className="py-1 px-2 text-[10px] text-zinc-500 italic flex items-center justify-between">
-                                          <span>No scenes</span>
+                                        <div
+                                          onDragOver={(e) => handleChapterDragOver(e, chap.chapterId)}
+                                          onDragLeave={(e) => handleChapterDragLeave(e, chap.chapterId)}
+                                          onDrop={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            const data = draggedSceneInfo || parseDragData(e);
+                                            handleMoveSceneToChapter(data, chap.chapterId, camp.campaignId);
+                                          }}
+                                          className={`py-2 px-2 text-[10px] rounded-lg transition-all flex items-center justify-between ${
+                                            isDropTargetChapter
+                                              ? 'bg-blue-500/20 border-2 border-dashed border-blue-400 text-blue-300'
+                                              : 'text-zinc-500 italic'
+                                          }`}
+                                        >
+                                          <span>{isDropTargetChapter ? 'Drop scene into this chapter' : 'No scenes'}</span>
                                           <button
                                             onClick={() => {
                                               setSelectedCampaignId(camp.campaignId);
@@ -1728,22 +1772,81 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
                                           {chap.scenes.map((scene) => {
                                             const isSceneSelected = selectedSceneId === scene.sceneId;
                                             const isLiveOnVTT = activeSceneInfo?.sceneId === scene.sceneId;
+                                            const isBeingDragged = draggedSceneInfo?.sceneId === scene.sceneId;
+                                            const isDragOverThis = dragOverSceneId === scene.sceneId;
 
                                             return (
                                               <div
                                                 key={scene.sceneId}
+                                                draggable={true}
+                                                onDragStart={(e) => {
+                                                  e.stopPropagation();
+                                                  const info = {
+                                                    sceneId: scene.sceneId,
+                                                    sceneTitle: scene.sceneTitle,
+                                                    sourceChapterId: chap.chapterId,
+                                                    sourceCampaignId: camp.campaignId
+                                                  };
+                                                  setDraggedSceneInfo(info);
+                                                  e.dataTransfer.setData('application/x-mistwalker-scene', JSON.stringify(info));
+                                                  e.dataTransfer.effectAllowed = 'move';
+                                                }}
+                                                onDragEnd={() => {
+                                                  clearHoverExpandTimer();
+                                                  setDraggedSceneInfo(null);
+                                                  setDragOverChapterId(null);
+                                                  setDragOverSceneId(null);
+                                                  setDragDropPosition(null);
+                                                }}
+                                                onDragOver={(e) => {
+                                                  e.preventDefault();
+                                                  e.stopPropagation();
+                                                  e.dataTransfer.dropEffect = 'move';
+                                                  const rect = e.currentTarget.getBoundingClientRect();
+                                                  const midY = rect.top + rect.height / 2;
+                                                  const pos: 'before' | 'after' = e.clientY < midY ? 'before' : 'after';
+                                                  setDragOverChapterId(chap.chapterId);
+                                                  setDragOverSceneId(scene.sceneId);
+                                                  setDragDropPosition(pos);
+                                                }}
+                                                onDragLeave={(e) => {
+                                                  e.stopPropagation();
+                                                  if (dragOverSceneId === scene.sceneId) {
+                                                    setDragOverSceneId(null);
+                                                    setDragDropPosition(null);
+                                                  }
+                                                }}
+                                                onDrop={(e) => {
+                                                  e.preventDefault();
+                                                  e.stopPropagation();
+                                                  const data = draggedSceneInfo || parseDragData(e);
+                                                  const pos = dragDropPosition || 'after';
+                                                  handleMoveSceneToChapter(data, chap.chapterId, camp.campaignId, scene.sceneId, pos);
+                                                }}
                                                 onClick={() => {
                                                   setSelectedCampaignId(camp.campaignId);
                                                   setSelectedChapterId(chap.chapterId);
                                                   setSelectedSceneId(scene.sceneId);
                                                 }}
-                                                className={`group flex items-center justify-between px-2 py-1 rounded-xl cursor-pointer transition-all ${
-                                                  isSceneSelected
+                                                className={`group relative flex items-center justify-between px-2 py-1 rounded-xl cursor-pointer transition-all ${
+                                                  isBeingDragged
+                                                    ? 'opacity-30 border border-dashed border-zinc-600 bg-zinc-950/60'
+                                                    : isSceneSelected
                                                     ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-semibold'
                                                     : 'hover:bg-zinc-900/60 text-zinc-400'
                                                 }`}
                                               >
+                                                {/* Reorder Drop Target Highlight Bar */}
+                                                {isDragOverThis && !isBeingDragged && (
+                                                  <div
+                                                    className={`absolute left-0 right-0 h-0.5 bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.8)] z-10 pointer-events-none ${
+                                                      dragDropPosition === 'before' ? 'top-0 -translate-y-1/2' : 'bottom-0 translate-y-1/2'
+                                                    }`}
+                                                  />
+                                                )}
+
                                                 <div className="flex items-center gap-1.5 min-w-0">
+                                                  <GripVertical className="w-3 h-3 text-zinc-600 group-hover:text-zinc-400 shrink-0 cursor-grab active:cursor-grabbing" title="Drag to move or reorder" />
                                                   <MapPin className="w-3 h-3 text-emerald-400 shrink-0" />
                                                   <span className="text-[11px] truncate">{scene.sceneTitle}</span>
                                                   {scene.roomAnnotations && scene.roomAnnotations.length > 0 && (
@@ -1806,11 +1909,23 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
                                               setNewSceneTitle('');
                                               setShowAddSceneModal(true);
                                             }}
-                                            className="w-full flex items-center gap-1.5 px-2 py-1 text-[10px] font-mono text-zinc-500 hover:text-emerald-400 hover:bg-zinc-900/60 rounded-lg transition-colors border border-dashed border-zinc-800/80 hover:border-emerald-500/40 mt-1"
-                                            title="Add another scene underneath"
+                                            onDragOver={(e) => handleChapterDragOver(e, chap.chapterId)}
+                                            onDragLeave={(e) => handleChapterDragLeave(e, chap.chapterId)}
+                                            onDrop={(e) => {
+                                              e.preventDefault();
+                                              e.stopPropagation();
+                                              const data = draggedSceneInfo || parseDragData(e);
+                                              handleMoveSceneToChapter(data, chap.chapterId, camp.campaignId);
+                                            }}
+                                            className={`w-full flex items-center gap-1.5 px-2 py-1 text-[10px] font-mono rounded-lg transition-colors border border-dashed mt-1 ${
+                                              isDropTargetChapter
+                                                ? 'bg-blue-500/20 text-blue-300 border-blue-400'
+                                                : 'text-zinc-500 hover:text-emerald-400 hover:bg-zinc-900/60 border-zinc-800/80 hover:border-emerald-500/40'
+                                            }`}
+                                            title="Add another scene underneath, or drop scene here"
                                           >
                                             <Plus className="w-3 h-3 text-emerald-400" />
-                                            <span>+ Add Scene Underneath</span>
+                                            <span>{isDropTargetChapter ? '+ Drop Scene At End' : '+ Add Scene Underneath'}</span>
                                           </button>
                                         </>
                                       )}
