@@ -398,6 +398,8 @@ async function startServer() {
               updatedAt: sess.updatedAt || Date.now()
             };
             console.log(`[Server] Hydrated activeVttState from Firestore: "${sess.sceneTitle}" (${mapUrl.slice(0, 80)})`);
+            io.emit("SYNC_STATE", activeVttState);
+            io.emit("SYNC_IMAGE", mapUrl);
           }
         }
       }

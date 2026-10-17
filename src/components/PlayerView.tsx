@@ -1105,7 +1105,8 @@ export default function PlayerView() {
     height: typeof window !== 'undefined' ? window.innerHeight : 1080,
   });
 
-  // Dual-strategy battlemap image loading (anonymous CORS with fallback)
+  // Map Background State & Dual-strategy battlemap image loading (anonymous CORS with fallback)
+  const [imageFile, setImageFile] = useState<string | null>(null);
   const [imgWithCors, statusWithCors] = useImage(imageFile || '', 'anonymous');
   const [imgNoCors, statusNoCors] = useImage(statusWithCors === 'failed' ? (imageFile || '') : '');
   const image = statusWithCors === 'loaded' ? imgWithCors : (statusNoCors === 'loaded' ? imgNoCors : (imgWithCors || imgNoCors));
@@ -1912,38 +1913,46 @@ export default function PlayerView() {
   }, [isAudioMuted]);
 
   // Real-time Firestore activeSession/current subscription so remote Player Views always receive state across server restarts or different networks
+  const lastFirestoreSceneRef = useRef<string | null>(null);
   useEffect(() => {
     const unsub = subscribeToActiveSession((sess) => {
       if (!sess) return;
       const validUrl = (sess.mapUrl && !sess.mapUrl.startsWith('blob:'))
         ? sess.mapUrl
         : (sess.mapThumbnailUrl || '');
+      const sceneChanged = Boolean(sess.sceneId && sess.sceneId !== lastFirestoreSceneRef.current);
+      if (sess.sceneId) {
+        lastFirestoreSceneRef.current = sess.sceneId;
+      }
       if (validUrl) {
-        setImageFile(prev => (!prev || prev.startsWith('blob:')) ? validUrl : prev);
+        setImageFile(prev => (sceneChanged || !prev || prev.startsWith('blob:')) ? validUrl : prev);
       }
       if (sess.tokens && Array.isArray(sess.tokens)) {
         setTokens(prev => {
-          if (prev.length > 0) return prev;
+          if (!sceneChanged && prev.length > 0) return prev;
           const normalized = sess.tokens.map(normalizeToken);
           tokensRef.current = normalized;
           return normalized;
         });
       }
       if (sess.walls && Array.isArray(sess.walls)) {
-        setWalls(prev => prev.length > 0 ? prev : sess.walls);
+        setWalls(prev => (!sceneChanged && prev.length > 0) ? prev : sess.walls);
       }
-      if (sess.gridSize) setGridSize(prev => prev || sess.gridSize!);
+      if (sess.gridSize) setGridSize(prev => (sceneChanged || !prev) ? sess.gridSize! : prev);
       if (sess.gridOpacity !== undefined) setGridOpacity(sess.gridOpacity);
       if (sess.isFogVisible !== undefined) setIsFogVisible(sess.isFogVisible);
       if (sess.visionConfig) setVisionConfig(sess.visionConfig);
       if (sess.sceneId || sess.sceneTitle || validUrl) {
-        setActiveSceneInfo(prev => prev || {
+        setActiveSceneInfo(prev => (sceneChanged || !prev) ? {
+          campaignId: sess.campaignId,
+          chapterId: sess.chapterId,
           sceneId: sess.sceneId,
           sceneTitle: sess.sceneTitle,
           mapUrl: validUrl,
+          mapThumbnailUrl: sess.mapThumbnailUrl,
           mapWidth: sess.mapWidth,
           mapHeight: sess.mapHeight,
-        });
+        } as any : prev);
       }
     });
     return () => unsub();
@@ -2342,27 +2351,39 @@ export default function PlayerView() {
     });
   }, []);
 
-  // Natural Map Dimensions - Prioritize natural loaded image dimensions
+  // Natural Map Dimensions - Use true natural dimensions of full-res maps, or scene dimensions while loading / for <1000px thumbnails
   const naturalW = image?.width || (image as any)?.naturalWidth || 0;
   const naturalH = image?.height || (image as any)?.naturalHeight || 0;
-  let baseMapW = naturalW > 0 ? naturalW : (activeSceneInfo?.mapWidth || dimensions.width);
-  let baseMapH = naturalH > 0 ? naturalH : (activeSceneInfo?.mapHeight || dimensions.height);
+  const sceneW = activeSceneInfo?.mapWidth || 0;
+  const sceneH = activeSceneInfo?.mapHeight || 0;
+  let baseMapW = naturalW > 0
+    ? ((naturalW < 1000 && sceneW > naturalW) ? sceneW : naturalW)
+    : (sceneW || dimensions.width);
+  let baseMapH = naturalH > 0
+    ? ((naturalH < 1000 && sceneH > naturalH) ? sceneH : naturalH)
+    : (sceneH || dimensions.height);
 
-  // Guard against outdated or shrunk map dimensions when tokens or walls exist outside bounds
-  if (tokens.length > 0) {
-    for (const t of tokens) {
-      const right = (t.x || 0) + ((t.size || 1) * gridSize) + 100;
-      const bottom = (t.y || 0) + ((t.size || 1) * gridSize) + 100;
-      if (right > baseMapW) baseMapW = right;
-      if (bottom > baseMapH) baseMapH = bottom;
-    }
-  }
-  if (walls.length > 0) {
+  // If no explicit scene dimensions exist and walls extend beyond a thumbnail, scale proportionally
+  if (sceneW <= 0 && sceneH <= 0 && walls.length > 0 && baseMapW > 0 && baseMapH > 0) {
+    let maxWallX = 0;
+    let maxWallY = 0;
     for (const w of walls) {
-      if (w.p1.x > baseMapW) baseMapW = w.p1.x + 50;
-      if (w.p2.x > baseMapW) baseMapW = w.p2.x + 50;
-      if (w.p1.y > baseMapH) baseMapH = w.p1.y + 50;
-      if (w.p2.y > baseMapH) baseMapH = w.p2.y + 50;
+      if (w.p1.x > maxWallX) maxWallX = w.p1.x;
+      if (w.p2.x > maxWallX) maxWallX = w.p2.x;
+      if (w.p1.y > maxWallY) maxWallY = w.p1.y;
+      if (w.p2.y > maxWallY) maxWallY = w.p2.y;
+    }
+    if (maxWallX > baseMapW * 1.15 || maxWallY > baseMapH * 1.15) {
+      const aspect = baseMapW / baseMapH;
+      const neededW = maxWallX + 328;
+      const neededH = maxWallY + 121;
+      if (neededW / neededH > aspect) {
+        baseMapW = Math.round(neededW);
+        baseMapH = Math.round(neededW / aspect);
+      } else {
+        baseMapH = Math.round(neededH);
+        baseMapW = Math.round(neededH * aspect);
+      }
     }
   }
 
@@ -2385,25 +2406,61 @@ export default function PlayerView() {
     // Exact scale factor where 1 grid square = 1 physical inch on a 32" TV
     const tvScale = Math.max(0.1, Math.min(ppi32 / effectiveGrid, 5));
 
-    // Center on claimed token or active party player token
-    const tokenList = targetTokens || tokens;
-    const primaryToken = tokenList.find(t => t.id === claimedTokenId) ||
-                         tokenList.find(t => t.isPlayer) ||
-                         tokenList.find(t => t.category === 'character' || t.category === 'ally') ||
-                         tokenList[0];
-
     const currentW = targetMapW || 1920;
     const currentH = targetMapH || 1080;
 
-    let startX = 0;
-    let startY = 0;
-    if (primaryToken && typeof primaryToken.x === 'number' && typeof primaryToken.y === 'number') {
-      const tokenCenterOffset = ((primaryToken.size || 1) * effectiveGrid) / 2;
-      startX = (window.innerWidth / 2) - (primaryToken.x + tokenCenterOffset) * tvScale;
-      startY = (window.innerHeight / 2) - (primaryToken.y + tokenCenterOffset) * tvScale;
-    } else if (currentW > 0 && currentH > 0) {
-      startX = (window.innerWidth - currentW * tvScale) / 2;
-      startY = (window.innerHeight - currentH * tvScale) / 2;
+    // Filter to tokens that are actually inside the active map bounds so off-map ghost tokens never pull the camera into empty void
+    const tokenList = targetTokens || tokens;
+    const isTokenOnMap = (t: any) =>
+      t &&
+      typeof t.x === 'number' &&
+      typeof t.y === 'number' &&
+      t.x >= -effectiveGrid * 2 &&
+      t.x <= currentW + effectiveGrid * 2 &&
+      t.y >= -effectiveGrid * 2 &&
+      t.y <= currentH + effectiveGrid * 2;
+
+    const inBoundsParty = tokenList.filter((t: any) => {
+      if (!isTokenOnMap(t)) return false;
+      const isAlly = t.category === 'ally' || !!t.allyId;
+      const isMon = !isAlly && (isMonsterToken(t) || t.isMonster === true || t.category === 'monster' || t.isPlayer === false);
+      return !isMon || isAlly || t.isPlayer === true || t.category === 'character';
+    });
+
+    const claimedInBounds = claimedTokenId
+      ? tokenList.find((t: any) => t.id === claimedTokenId && isTokenOnMap(t))
+      : null;
+
+    const vpW = window.innerWidth || 1920;
+    const vpH = window.innerHeight || 1080;
+
+    let startX = (vpW - currentW * tvScale) / 2;
+    let startY = (vpH - currentH * tvScale) / 2;
+
+    if (claimedInBounds) {
+      const tokenCenterOffset = ((claimedInBounds.size || 1) * effectiveGrid) / 2;
+      startX = (vpW / 2) - (claimedInBounds.x + tokenCenterOffset) * tvScale;
+      startY = (vpH / 2) - (claimedInBounds.y + tokenCenterOffset) * tvScale;
+    } else if (inBoundsParty.length > 0) {
+      // Center on the party centroid
+      const avgX = inBoundsParty.reduce((sum: number, t: any) => sum + t.x + (((t.size || 1) * effectiveGrid) / 2), 0) / inBoundsParty.length;
+      const avgY = inBoundsParty.reduce((sum: number, t: any) => sum + t.y + (((t.size || 1) * effectiveGrid) / 2), 0) / inBoundsParty.length;
+      startX = (vpW / 2) - avgX * tvScale;
+      startY = (vpH / 2) - avgY * tvScale;
+    }
+
+    // Clamp stage position so the battlemap always fills the screen and never pans into empty off-map void
+    const mapScreenW = currentW * tvScale;
+    const mapScreenH = currentH * tvScale;
+    if (mapScreenW <= vpW) {
+      startX = (vpW - mapScreenW) / 2;
+    } else {
+      startX = Math.min(0, Math.max(vpW - mapScreenW, startX));
+    }
+    if (mapScreenH <= vpH) {
+      startY = (vpH - mapScreenH) / 2;
+    } else {
+      startY = Math.min(0, Math.max(vpH - mapScreenH, startY));
     }
 
     setStageScale(tvScale);
@@ -2433,13 +2490,25 @@ export default function PlayerView() {
     }
   }, [activeSceneInfo?.sceneId, imageFile, gridSize, applyTvScale, tokens]);
 
-  // When tokens arrive or load after scene setup, auto-center on party once
+  // When tokens or map dimensions arrive after scene setup, auto-center on party
   useEffect(() => {
-    if (!hasCenteredOnPartyRef.current && tokens.length > 0 && (image || naturalW > 0 || targetMapW > 0)) {
-      hasCenteredOnPartyRef.current = true;
+    if (tokens.length > 0 && (image || naturalW > 0 || targetMapW > 0)) {
+      if (!hasCenteredOnPartyRef.current) {
+        hasCenteredOnPartyRef.current = true;
+        applyTvScale(gridSize, tokens);
+      }
+    }
+  }, [tokens, image, naturalW, targetMapW, targetMapH, gridSize, applyTvScale]);
+
+  // Re-calibrate when authoritative map dimensions finish loading
+  const lastCalibratedDimsRef = useRef<string>('');
+  useEffect(() => {
+    const dimsKey = `${targetMapW}x${targetMapH}`;
+    if (targetMapW > 0 && targetMapH > 0 && dimsKey !== lastCalibratedDimsRef.current) {
+      lastCalibratedDimsRef.current = dimsKey;
       applyTvScale(gridSize, tokens);
     }
-  }, [tokens, image, naturalW, targetMapW, gridSize, applyTvScale]);
+  }, [targetMapW, targetMapH, gridSize, tokens, applyTvScale]);
 
   // When claiming a token, center camera directly on it
   useEffect(() => {
@@ -2567,7 +2636,13 @@ export default function PlayerView() {
   // Compute active FOV polygons for player vision
   const activeFovPolygons = useMemo<VisibilityPolygon[]>(() => {
     if (!visionConfig.enabled || playerVisionSources.length === 0) return [];
-    const mapBounds = { width: targetMapW, height: targetMapH };
+    let boundW = targetMapW;
+    let boundH = targetMapH;
+    for (const src of playerVisionSources) {
+      if (src.x + src.radiusPx > boundW) boundW = src.x + src.radiusPx + 100;
+      if (src.y + src.radiusPx > boundH) boundH = src.y + src.radiusPx + 100;
+    }
+    const mapBounds = { width: boundW, height: boundH };
     return playerVisionSources.map((source) =>
       computeVisibilityPolygon(source, walls, mapBounds)
     );

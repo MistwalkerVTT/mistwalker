@@ -2072,9 +2072,15 @@ export default function App() {
     let baseHeight = mapType === 'image' ? (image ? image.height : dimensions.height) : (videoSize.height || dimensions.height);
 
     // If a loaded image is present with valid natural dimensions, use its true pixel size
+    // (or scale up to scene dimensions if the loaded image is a <1000px recovered thumbnail)
     if (mapType === 'image' && image && image.width > 0 && image.height > 0) {
-      baseWidth = image.width;
-      baseHeight = image.height;
+      if (image.width < 1000 && activeSceneInfo?.mapWidth && activeSceneInfo.mapWidth > image.width) {
+        baseWidth = activeSceneInfo.mapWidth;
+        baseHeight = activeSceneInfo.mapHeight || image.height;
+      } else {
+        baseWidth = image.width;
+        baseHeight = image.height;
+      }
     } else if (activeSceneInfo?.mapWidth && activeSceneInfo?.mapHeight && activeSceneInfo.mapWidth > 0 && activeSceneInfo.mapHeight > 0) {
       baseWidth = activeSceneInfo.mapWidth;
       baseHeight = activeSceneInfo.mapHeight;
