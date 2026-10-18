@@ -73,8 +73,35 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
   const [hoveredWallId, setHoveredWallId] = useState<string | null>(null);
 
   // Persistent memory of explored polygons across token movements
-  const [exploredPolygons, setExploredPolygons] = useState<number[][]>([]);
+  const [exploredPolygons, setExploredPolygons] = useState<number[][]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = localStorage.getItem('mistwalker_explored_polygons_backup_v1');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) return parsed.slice(-150);
+      }
+    } catch {
+      // ignore
+    }
+    return [];
+  });
   const lastRecordedPosBySourceRef = useRef<Record<string, { x: number; y: number }>>({});
+
+  // Debounced auto-save of explored exploration memory to localStorage
+  useEffect(() => {
+    if (exploredPolygons.length === 0) return;
+    const timer = setTimeout(() => {
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('mistwalker_explored_polygons_backup_v1', JSON.stringify(exploredPolygons.slice(-150)));
+        } catch {
+          // ignore quota
+        }
+      }
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [exploredPolygons]);
 
   // Reusable local scratch canvas for tight bounding-box blur (60 FPS high-performance feathering)
   const localScratchCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -226,6 +253,13 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
   useEffect(() => {
     setExploredPolygons([]);
     lastRecordedPosBySourceRef.current = {};
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem('mistwalker_explored_polygons_backup_v1');
+      } catch {
+        // ignore
+      }
+    }
   }, [fogResetKey, isFogVisible, visionConfig.enabled, visionConfig.explorationMemory]);
 
   // Accumulate exploration memory per token only when that specific token moves significantly

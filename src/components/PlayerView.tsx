@@ -846,11 +846,17 @@ const PlayerToken = React.memo(({
       onMouseDown={(e: any) => {
         if (!isCondition && !isAimingSpell && e.evt?.button !== 2) {
           e.cancelBubble = true;
+          if (e.evt) {
+            e.evt.stopPropagation?.();
+          }
         }
       }}
       onTouchStart={(e: any) => {
         if (!isCondition && !isAimingSpell) {
           e.cancelBubble = true;
+          if (e.evt) {
+            e.evt.stopPropagation?.();
+          }
         }
       }}
       onDragStart={handleDragStart}
@@ -859,6 +865,9 @@ const PlayerToken = React.memo(({
       onClick={(e: any) => {
         if (!isAimingSpell) {
           e.cancelBubble = true;
+          if (e.evt) {
+            e.evt.stopPropagation?.();
+          }
           if (!isMonster && !isCondition && onClaimToken) {
             onClaimToken(token.id);
           }
@@ -867,6 +876,9 @@ const PlayerToken = React.memo(({
       onTap={(e: any) => {
         if (!isAimingSpell) {
           e.cancelBubble = true;
+          if (e.evt) {
+            e.evt.stopPropagation?.();
+          }
           if (!isMonster && !isCondition && onClaimToken) {
             onClaimToken(token.id);
           }
@@ -875,6 +887,9 @@ const PlayerToken = React.memo(({
       onContextMenu={(e: any) => {
         e.evt.preventDefault();
         e.cancelBubble = true;
+        if (e.evt) {
+          e.evt.stopPropagation?.();
+        }
         if (!isMonster && !isCondition && onContextMenu) {
           onContextMenu(token.id, e.evt.clientX, e.evt.clientY);
         }
@@ -1170,7 +1185,21 @@ const PlayerToken = React.memo(({
   );
 });
 
+const loadPlayerBackupState = () => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem('mistwalker_player_state_backup_v1');
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+};
+
 export default function PlayerView() {
+  const initialBackupRef = useRef(loadPlayerBackupState());
+  const initialBackup = initialBackupRef.current;
+
   const socketRef = useRef<Socket | null>(null);
   const [socketInstance, setSocketInstance] = useState<Socket | null>(null);
   const bgLayerRef = useRef<any>(null);
@@ -1182,34 +1211,34 @@ export default function PlayerView() {
   });
 
   // Map Background State & Dual-strategy battlemap image loading (anonymous CORS with fallback)
-  const [imageFile, setImageFile] = useState<string | null>(null);
+  const [imageFile, setImageFile] = useState<string | null>(() => initialBackup?.imageFile || null);
   const [imgWithCors, statusWithCors] = useImage(imageFile || '', 'anonymous');
   const [imgNoCors, statusNoCors] = useImage(statusWithCors === 'failed' ? (imageFile || '') : '');
   const image = statusWithCors === 'loaded' ? imgWithCors : (statusNoCors === 'loaded' ? imgNoCors : (imgWithCors || imgNoCors));
   const imageStatus = statusWithCors === 'loaded' ? 'loaded' : (statusNoCors === 'loaded' ? 'loaded' : (statusWithCors === 'failed' && statusNoCors === 'failed' ? 'failed' : 'loading'));
-  const [mapRotation, setMapRotation] = useState(0);
+  const [mapRotation, setMapRotation] = useState<number>(() => initialBackup?.mapRotation || 0);
 
   // Canvas Layers & Vision State
-  const [tokens, setTokens] = useState<Token[]>([]);
-  const [walls, setWalls] = useState<WallSegment[]>([]);
-  const [reveals, setReveals] = useState<Array<{ x: number; y: number; radius: number }>>([]);
-  const [polygonReveals, setPolygonReveals] = useState<number[][]>([]);
-  const [isFogVisible, setIsFogVisible] = useState(true);
-  const [fogResetKey, setFogResetKey] = useState<number>(0);
-  const [effects, setEffects] = useState<SpellEffect[]>([]);
-  const [boardAnimatedFeatures, setBoardAnimatedFeatures] = useState<AnimatedFeature[]>([]);
-  const [boardAnimatedEnabled, setBoardAnimatedEnabled] = useState<boolean>(true);
-  const [boardWeatherEffect, setBoardWeatherEffect] = useState<WeatherEffectType>('none');
+  const [tokens, setTokens] = useState<Token[]>(() => Array.isArray(initialBackup?.tokens) ? initialBackup.tokens : []);
+  const [walls, setWalls] = useState<WallSegment[]>(() => Array.isArray(initialBackup?.walls) ? initialBackup.walls : []);
+  const [reveals, setReveals] = useState<Array<{ x: number; y: number; radius: number }>>(() => Array.isArray(initialBackup?.reveals) ? initialBackup.reveals : []);
+  const [polygonReveals, setPolygonReveals] = useState<number[][]>(() => Array.isArray(initialBackup?.polygonReveals) ? initialBackup.polygonReveals : []);
+  const [isFogVisible, setIsFogVisible] = useState<boolean>(() => initialBackup?.isFogVisible !== undefined ? initialBackup.isFogVisible : true);
+  const [fogResetKey, setFogResetKey] = useState<number>(() => initialBackup?.fogResetKey || 0);
+  const [effects, setEffects] = useState<SpellEffect[]>(() => Array.isArray(initialBackup?.effects) ? initialBackup.effects : []);
+  const [boardAnimatedFeatures, setBoardAnimatedFeatures] = useState<AnimatedFeature[]>(() => Array.isArray(initialBackup?.boardAnimatedFeatures) ? initialBackup.boardAnimatedFeatures : []);
+  const [boardAnimatedEnabled, setBoardAnimatedEnabled] = useState<boolean>(() => initialBackup?.boardAnimatedEnabled !== undefined ? initialBackup.boardAnimatedEnabled : true);
+  const [boardWeatherEffect, setBoardWeatherEffect] = useState<WeatherEffectType>(() => initialBackup?.boardWeatherEffect || 'none');
 
   // Grid Settings
-  const [gridVisible, setGridVisible] = useState(true);
-  const [gridOpacity, setGridOpacity] = useState(0.3);
-  const [gridSize, setGridSize] = useState(50);
-  const [gridOffsetX, setGridOffsetX] = useState(0);
-  const [gridOffsetY, setGridOffsetY] = useState(0);
+  const [gridVisible, setGridVisible] = useState<boolean>(() => initialBackup?.gridVisible !== undefined ? initialBackup.gridVisible : true);
+  const [gridOpacity, setGridOpacity] = useState<number>(() => initialBackup?.gridOpacity !== undefined ? initialBackup.gridOpacity : 0.3);
+  const [gridSize, setGridSize] = useState<number>(() => initialBackup?.gridSize || 50);
+  const [gridOffsetX, setGridOffsetX] = useState<number>(() => initialBackup?.gridOffsetX || 0);
+  const [gridOffsetY, setGridOffsetY] = useState<number>(() => initialBackup?.gridOffsetY || 0);
 
   // Vision Config (doors, darkness, memory)
-  const [visionConfig, setVisionConfig] = useState<VisionConfig>({
+  const [visionConfig, setVisionConfig] = useState<VisionConfig>(() => initialBackup?.visionConfig || {
     enabled: true,
     explorationMemory: true,
     darknessOpacity: 1.0,
@@ -1220,8 +1249,8 @@ export default function PlayerView() {
   });
 
   // Stage Pan & Zoom
-  const [stageScale, setStageScale] = useState(1);
-  const [stagePos, setStagePos] = useState({ x: 0, y: 0 });
+  const [stageScale, setStageScale] = useState<number>(() => initialBackup?.stageScale || 1);
+  const [stagePos, setStagePos] = useState<{ x: number; y: number }>(() => initialBackup?.stagePos || { x: 0, y: 0 });
 
   // Connection & Active Scene
   const [isConnected, setIsConnected] = useState(false);
@@ -1233,7 +1262,7 @@ export default function PlayerView() {
     mapWidth?: number;
     mapHeight?: number;
     mapUrl?: string;
-  } | null>(null);
+  } | null>(() => initialBackup?.activeSceneInfo || null);
 
   // Character Seizing / Claiming
   const [claimedTokenId, setClaimedTokenId] = useState<string | null>(() => {
@@ -1326,7 +1355,7 @@ export default function PlayerView() {
   const [customAuraOpacityInput, setCustomAuraOpacityInput] = useState<number>(0.35);
 
   // Combat State
-  const [combatState, setCombatState] = useState<CombatState>({
+  const [combatState, setCombatState] = useState<CombatState>(() => initialBackup?.combatState || {
     combatants: [],
     round: 1,
     turnIndex: 0,
@@ -2114,7 +2143,7 @@ export default function PlayerView() {
 
   const [isDraggingToken, setIsDraggingToken] = useState(false);
 
-  // Seize / Claim Character Action
+  // Seize / Claim Character Action (Pure state selection with zero camera reaction)
   const handleClaimToken = useCallback((tokenId: string) => {
     const target = tokensRef.current.find(t => t.id === tokenId);
     if (target) {
@@ -2125,11 +2154,6 @@ export default function PlayerView() {
       if (typeof window !== 'undefined' && target.name) {
         localStorage.setItem('mistwalker_player_claimed_name', target.name);
       }
-    }
-    if (stageRef.current) {
-      const sx = stageRef.current.x();
-      const sy = stageRef.current.y();
-      setStagePos(prev => (prev.x === sx && prev.y === sy) ? prev : { x: sx, y: sy });
     }
     if (claimedTokenIdRef.current !== tokenId) {
       claimedTokenIdRef.current = tokenId;
@@ -2162,11 +2186,6 @@ export default function PlayerView() {
         localStorage.setItem('mistwalker_player_claimed_name', target.name);
       }
     }
-    if (stageRef.current) {
-      const sx = stageRef.current.x();
-      const sy = stageRef.current.y();
-      setStagePos(prev => (prev.x === sx && prev.y === sy) ? prev : { x: sx, y: sy });
-    }
     activeDraggingTokenIdRef.current = id;
     setIsDraggingToken(true);
     setActiveTokenMenu(null);
@@ -2189,11 +2208,6 @@ export default function PlayerView() {
   // Snapped or keyboard token movement handler (emits MOVE_TOKEN only so it never overwrites DM tokens/conditions)
   const handleMoveToken = useCallback((id: string, newX: number, newY: number) => {
     setIsDraggingToken(false);
-    if (stageRef.current) {
-      const sx = stageRef.current.x();
-      const sy = stageRef.current.y();
-      setStagePos(prev => (prev.x === sx && prev.y === sy) ? prev : { x: sx, y: sy });
-    }
     const currentTokens = tokensRef.current;
     const nextTokens = currentTokens.map(t => t.id === id ? { ...t, x: newX, y: newY } : t);
     tokensRef.current = nextTokens;
@@ -2660,8 +2674,8 @@ export default function PlayerView() {
   }, [applyTvScale]);
 
   // Auto-calibrate 1"x1" scale for 32" TV and center on party when scene changes
-  const lastCalibratedSceneRef = useRef<string | null>(null);
-  const hasCenteredOnPartyRef = useRef<boolean>(false);
+  const lastCalibratedSceneRef = useRef<string | null>(initialBackup?.activeSceneInfo?.sceneId || initialBackup?.imageFile || null);
+  const hasCenteredOnPartyRef = useRef<boolean>(Boolean(initialBackup?.stageScale && initialBackup?.stagePos));
 
   useEffect(() => {
     if (activeDraggingTokenIdRef.current) return;
@@ -2685,7 +2699,7 @@ export default function PlayerView() {
   }, [tokens.length, image, naturalW, targetMapW, targetMapH, gridSize, applyTvScale]);
 
   // Re-calibrate when authoritative map dimensions finish loading
-  const lastCalibratedDimsRef = useRef<string>('');
+  const lastCalibratedDimsRef = useRef<string>(initialBackup?.targetMapW && initialBackup?.targetMapH ? `${initialBackup.targetMapW}x${initialBackup.targetMapH}` : '');
   useEffect(() => {
     if (activeDraggingTokenIdRef.current) return;
     const dimsKey = `${targetMapW}x${targetMapH}`;
@@ -2694,6 +2708,96 @@ export default function PlayerView() {
       applyTvScale(gridSize, tokensRef.current);
     }
   }, [targetMapW, targetMapH, gridSize, applyTvScale]);
+
+  // Continuous debounced state snapshot saving to localStorage for instant crash recovery
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (typeof window === 'undefined') return;
+      try {
+        const stateToSave = {
+          imageFile,
+          mapRotation,
+          tokens,
+          walls,
+          reveals,
+          polygonReveals,
+          isFogVisible,
+          fogResetKey,
+          effects,
+          boardAnimatedFeatures,
+          boardAnimatedEnabled,
+          boardWeatherEffect,
+          gridVisible,
+          gridOpacity,
+          gridSize,
+          gridOffsetX,
+          gridOffsetY,
+          visionConfig,
+          stageScale,
+          stagePos,
+          activeSceneInfo,
+          combatState,
+          claimedTokenId,
+          targetMapW,
+          targetMapH,
+          timestamp: Date.now()
+        };
+        localStorage.setItem('mistwalker_player_state_backup_v1', JSON.stringify(stateToSave));
+      } catch (err) {
+        // Safe against storage quota
+      }
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [
+    imageFile, mapRotation, tokens, walls, reveals, polygonReveals, isFogVisible, fogResetKey,
+    effects, boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect, gridVisible,
+    gridOpacity, gridSize, gridOffsetX, gridOffsetY, visionConfig, stageScale, stagePos,
+    activeSceneInfo, combatState, claimedTokenId, targetMapW, targetMapH
+  ]);
+
+  // Synchronous beforeunload snapshot
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      try {
+        const stateToSave = {
+          imageFile,
+          mapRotation,
+          tokens,
+          walls,
+          reveals,
+          polygonReveals,
+          isFogVisible,
+          fogResetKey,
+          effects,
+          boardAnimatedFeatures,
+          boardAnimatedEnabled,
+          boardWeatherEffect,
+          gridVisible,
+          gridOpacity,
+          gridSize,
+          gridOffsetX,
+          gridOffsetY,
+          visionConfig,
+          stageScale,
+          stagePos,
+          activeSceneInfo,
+          combatState,
+          claimedTokenId,
+          targetMapW,
+          targetMapH,
+          timestamp: Date.now()
+        };
+        localStorage.setItem('mistwalker_player_state_backup_v1', JSON.stringify(stateToSave));
+      } catch {}
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [
+    imageFile, mapRotation, tokens, walls, reveals, polygonReveals, isFogVisible, fogResetKey,
+    effects, boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect, gridVisible,
+    gridOpacity, gridSize, gridOffsetX, gridOffsetY, visionConfig, stageScale, stagePos,
+    activeSceneInfo, combatState, claimedTokenId, targetMapW, targetMapH
+  ]);
 
 
   const handleSelectDicePreset = useCallback((preset: DiceColorPreset) => {

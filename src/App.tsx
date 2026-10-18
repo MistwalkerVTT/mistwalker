@@ -977,26 +977,40 @@ const getImageTransform = (width: number, height: number, rotation: number) => {
   }
 };
 
+const loadDmBackupState = () => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem('mistwalker_dm_state_backup_v1');
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+};
+
 export default function App() {
+  const initialDmBackupRef = useRef(loadDmBackupState());
+  const initialDmBackup = initialDmBackupRef.current;
+
   const socketRef = useRef<any>(null);
   const [socketInstance, setSocketInstance] = useState<any>(null);
   const [isReadingFile, setIsReadingFile] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [activeMapId, setActiveMapId] = useState<'DM1'|'DM2'|'DM3'>('DM1');
-  const [liveMapId, setLiveMapId] = useState<'DM1'|'DM2'|'DM3'>('DM1');
-  const activeMapIdRef = useRef<'DM1'|'DM2'|'DM3'>('DM1');
-  const liveMapIdRef = useRef<'DM1'|'DM2'|'DM3'>('DM1');
+  const [activeMapId, setActiveMapId] = useState<'DM1'|'DM2'|'DM3'>(() => initialDmBackup?.activeMapId || 'DM1');
+  const [liveMapId, setLiveMapId] = useState<'DM1'|'DM2'|'DM3'>(() => initialDmBackup?.liveMapId || 'DM1');
+  const activeMapIdRef = useRef<'DM1'|'DM2'|'DM3'>(initialDmBackup?.activeMapId || 'DM1');
+  const liveMapIdRef = useRef<'DM1'|'DM2'|'DM3'>(initialDmBackup?.liveMapId || 'DM1');
   const isSwitchingMapSlotRef = useRef<boolean>(false);
   const lastSlotSwitchTimeRef = useRef<number>(0);
-  const mapsDataRef = useRef<Record<string, any>>({
+  const mapsDataRef = useRef<Record<string, any>>(initialDmBackup?.mapsData || {
     DM1: null,
     DM2: null,
     DM3: null
   });
-  const hasRestoredInitialSessionRef = useRef<boolean>(false);
+  const hasRestoredInitialSessionRef = useRef<boolean>(Boolean(initialDmBackup?.imageFile || initialDmBackup?.activeSceneInfo));
 
-  const [imageFile, setImageFile] = useState<string | null>(null);
-  const [mapType, setMapType] = useState<'image' | 'video'>('image');
+  const [imageFile, setImageFile] = useState<string | null>(() => initialDmBackup?.imageFile || null);
+  const [mapType, setMapType] = useState<'image' | 'video'>(() => initialDmBackup?.mapType || 'image');
   const [image, imageStatus] = useImage(mapType === 'image' ? (imageFile || '') : '');
   const broadcastState = useCallback((_force?: boolean) => {
     if (socketRef.current?.connected && imageFile && (activeMapIdRef.current === liveMapIdRef.current)) {
@@ -1085,7 +1099,7 @@ export default function App() {
     };
   }, [videoElement]);
 
-  const [videoSize, setVideoSize] = useState({ width: 0, height: 0 });
+  const [videoSize, setVideoSize] = useState(() => initialDmBackup?.videoSize || { width: 0, height: 0 });
 
   useEffect(() => {
     if (videoElement) {
@@ -1133,14 +1147,14 @@ export default function App() {
     }
   }, [videoElement]);
 
-  const [reveals, setReveals] = useState<RevealPoint[]>([]);
-  const [polygonReveals, setPolygonReveals] = useState<number[][]>([]);
+  const [reveals, setReveals] = useState<RevealPoint[]>(() => Array.isArray(initialDmBackup?.reveals) ? initialDmBackup.reveals : []);
+  const [polygonReveals, setPolygonReveals] = useState<number[][]>(() => Array.isArray(initialDmBackup?.polygonReveals) ? initialDmBackup.polygonReveals : []);
   const [currentPolygonPoints, setCurrentPolygonPoints] = useState<number[]>([]);
-  const [fogResetKey, setFogResetKey] = useState<number>(0);
-  const [tokens, setTokens] = useState<Token[]>([]);
+  const [fogResetKey, setFogResetKey] = useState<number>(() => initialDmBackup?.fogResetKey || 0);
+  const [tokens, setTokens] = useState<Token[]>(() => Array.isArray(initialDmBackup?.tokens) ? initialDmBackup.tokens : []);
   const [selectedToken, setSelectedToken] = useState<any>(null);
   const [brushSize, setBrushSize] = useState(50);
-  const [isFogVisible, setIsFogVisible] = useState(true);
+  const [isFogVisible, setIsFogVisible] = useState<boolean>(() => initialDmBackup?.isFogVisible !== undefined ? initialDmBackup.isFogVisible : true);
   const [tool, setToolState] = useState<string>('pan');
   const [isSpacePressed, setIsSpacePressed] = useState<boolean>(false);
   const spacePanActiveRef = useRef<boolean>(false);
@@ -1181,7 +1195,7 @@ export default function App() {
 
   // Dynamic Lighting & Walls State
   const [campaignMode, setCampaignMode] = useState<CampaignMode>('run');
-  const [walls, setWalls] = useState<WallSegment[]>([]);
+  const [walls, setWalls] = useState<WallSegment[]>(() => Array.isArray(initialDmBackup?.walls) ? initialDmBackup.walls : []);
   const [selectedWallId, setSelectedWallId] = useState<string | null>(null);
   const [wallDrawStart, setWallDrawStart] = useState<{ x: number; y: number } | null>(null);
   const [wallEraseDragStart, setWallEraseDragStart] = useState<{ x: number; y: number } | null>(null);
@@ -1189,7 +1203,7 @@ export default function App() {
   const [activeWallType, setActiveWallType] = useState<WallType>('normal');
   const [activeDoorState, setActiveDoorState] = useState<DoorState>('closed');
   const [snapToGridWalls, setSnapToGridWalls] = useState<boolean>(false);
-  const [visionConfig, setVisionConfig] = useState<VisionConfig>({
+  const [visionConfig, setVisionConfig] = useState<VisionConfig>(() => initialDmBackup?.visionConfig || {
     enabled: true,
     explorationMemory: true,
     darknessOpacity: 1.0,
@@ -1224,7 +1238,7 @@ export default function App() {
   const [measureEnd, setMeasureEnd] = useState<{ x: number, y: number } | null>(null);
   const [measureType, setMeasureType] = useState<'line' | 'square' | 'cone' | 'rectangle' | 'circle'>('line');
   const [isMeasuring, setIsMeasuring] = useState(false);
-  const [effects, setEffects] = useState<Effect[]>([]);
+  const [effects, setEffects] = useState<Effect[]>(() => Array.isArray(initialDmBackup?.effects) ? initialDmBackup.effects : []);
   const [selectedCustomEffect, setSelectedCustomEffect] = useState<CustomSpecialEffect | null>(null);
   const activeEffectIdRef = useRef<string | null>(null);
   const [activeEffectId, setActiveEffectId] = useState<string | null>(null);
@@ -1233,7 +1247,7 @@ export default function App() {
     data: ContextMenuData;
     position: { x: number; y: number };
   } | null>(null);
-  const [stageScale, setStageScale] = useState(1);
+  const [stageScale, setStageScale] = useState<number>(() => initialDmBackup?.stageScale || 1);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const tutorial = useTutorial();
 
@@ -1254,13 +1268,13 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  const [stagePos, setStagePos] = useState({ x: 0, y: 0 });
-  const [gridVisible, setGridVisible] = useState(true);
-  const [gridOpacity, setGridOpacity] = useState(0.3);
-  const [gridSize, setGridSize] = useState(50);
-  const [gridOffsetX, setGridOffsetX] = useState(0);
-  const [gridOffsetY, setGridOffsetY] = useState(0);
-  const [mapRotation, setMapRotation] = useState(0);
+  const [stagePos, setStagePos] = useState<{ x: number; y: number }>(() => initialDmBackup?.stagePos || { x: 0, y: 0 });
+  const [gridVisible, setGridVisible] = useState<boolean>(() => initialDmBackup?.gridVisible !== undefined ? initialDmBackup.gridVisible : true);
+  const [gridOpacity, setGridOpacity] = useState<number>(() => initialDmBackup?.gridOpacity !== undefined ? initialDmBackup.gridOpacity : 0.3);
+  const [gridSize, setGridSize] = useState<number>(() => initialDmBackup?.gridSize || 50);
+  const [gridOffsetX, setGridOffsetX] = useState<number>(() => initialDmBackup?.gridOffsetX || 0);
+  const [gridOffsetY, setGridOffsetY] = useState<number>(() => initialDmBackup?.gridOffsetY || 0);
+  const [mapRotation, setMapRotation] = useState<number>(() => initialDmBackup?.mapRotation || 0);
 
 
   const [sidebarMode, setSidebarMode] = useState<'user' | 'ai'>('user');
@@ -1595,7 +1609,7 @@ export default function App() {
   }, [stagePos, stageScale, gridSize, compendiumCharacters]);
 
   const [campaignsList, setCampaignsList] = useState<Campaign[]>([]);
-  const [activeDmNotes, setActiveDmNotes] = useState<string>('');
+  const [activeDmNotes, setActiveDmNotes] = useState<string>(() => initialDmBackup?.activeDmNotes || '');
   const [isQuickSaving, setIsQuickSaving] = useState<boolean>(false);
   const [isQuotaExceeded, setIsQuotaExceeded] = useState(false);
   const [activeSceneInfo, setActiveSceneInfo] = useState<{
@@ -1607,7 +1621,7 @@ export default function App() {
     mapThumbnailUrl?: string;
     mapWidth?: number;
     mapHeight?: number;
-  } | null>(null);
+  } | null>(() => initialDmBackup?.activeSceneInfo || null);
 
   // Connection and Quota state listeners
   useEffect(() => {
@@ -1615,7 +1629,7 @@ export default function App() {
       setIsQuotaExceeded(exceeded);
     });
   }, []);
-  const [showCombatTracker, setShowCombatTracker] = useState(false);
+  const [showCombatTracker, setShowCombatTracker] = useState<boolean>(() => initialDmBackup?.showCombatTracker || false);
   const [isCombatTrackerMinimized, setIsCombatTrackerMinimized] = useState(false);
   const [tokenMenuTab, setTokenMenuTab] = useState<'stats' | 'conditions' | 'auras'>('stats');
   const [customAuraRadiusInput, setCustomAuraRadiusInput] = useState<number>(10);
@@ -1623,9 +1637,9 @@ export default function App() {
   const [customAuraOpacityInput, setCustomAuraOpacityInput] = useState<number>(0.35);
 
   // Environmental Animated FX & Weather State on Main Board (Uploaded & Generated Maps)
-  const [boardAnimatedFeatures, setBoardAnimatedFeatures] = useState<AnimatedFeature[]>([]);
-  const [boardAnimatedEnabled, setBoardAnimatedEnabled] = useState(true);
-  const [boardWeatherEffect, setBoardWeatherEffect] = useState<WeatherEffectType>('none');
+  const [boardAnimatedFeatures, setBoardAnimatedFeatures] = useState<AnimatedFeature[]>(() => Array.isArray(initialDmBackup?.boardAnimatedFeatures) ? initialDmBackup.boardAnimatedFeatures : []);
+  const [boardAnimatedEnabled, setBoardAnimatedEnabled] = useState<boolean>(() => initialDmBackup?.boardAnimatedEnabled !== undefined ? initialDmBackup.boardAnimatedEnabled : true);
+  const [boardWeatherEffect, setBoardWeatherEffect] = useState<WeatherEffectType>(() => initialDmBackup?.boardWeatherEffect || 'none');
   const [boardPlacingAnimatedType, setBoardPlacingAnimatedType] = useState<AnimatedFeatureType | null>(null);
   const [boardPlacingTemplate, setBoardPlacingTemplate] = useState<Partial<AnimatedFeature> | null>(null);
   const [showBoardAnimatedControls, setShowBoardAnimatedControls] = useState(false);
@@ -1642,7 +1656,7 @@ export default function App() {
   const isShiftPanActive = isShiftPressed && Boolean(boardPlacingAnimatedType || boardPolygonDrawingState?.isDrawing);
 
   // Campaign Map Zones & Interactive Hotspots State
-  const [roomAnnotations, setRoomAnnotations] = useState<RoomAnnotation[]>([]);
+  const [roomAnnotations, setRoomAnnotations] = useState<RoomAnnotation[]>(() => Array.isArray(initialDmBackup?.roomAnnotations) ? initialDmBackup.roomAnnotations : []);
   const [currentZonePolygonPoints, setCurrentZonePolygonPoints] = useState<number[]>([]);
   const [isZoneEditorOpen, setIsZoneEditorOpen] = useState(false);
   const [editingZone, setEditingZone] = useState<RoomAnnotation | null>(null);
@@ -1825,9 +1839,9 @@ export default function App() {
   };
   
   // Lifted Combat Tracker State
-  const [combatTrackerCombatants, setCombatTrackerCombatants] = useState<Combatant[]>([]);
-  const [combatTrackerRound, setCombatTrackerRound] = useState(1);
-  const [combatTrackerTurnIndex, setCombatTrackerTurnIndex] = useState(0);
+  const [combatTrackerCombatants, setCombatTrackerCombatants] = useState<Combatant[]>(() => Array.isArray(initialDmBackup?.combatTrackerCombatants) ? initialDmBackup.combatTrackerCombatants : []);
+  const [combatTrackerRound, setCombatTrackerRound] = useState<number>(() => initialDmBackup?.combatTrackerRound || 1);
+  const [combatTrackerTurnIndex, setCombatTrackerTurnIndex] = useState<number>(() => initialDmBackup?.combatTrackerTurnIndex || 0);
 
   const sortedCombatTrackerCombatants = useMemo(() => {
     return [...combatTrackerCombatants].sort((a, b) => {
@@ -2167,7 +2181,7 @@ export default function App() {
   }, [dimensions, getMapDimensions, mapRotation]);
 
   // Auto-fit whenever a new map or scene loads in DM view
-  const lastFittedAssetRef = useRef<string | null>(null);
+  const lastFittedAssetRef = useRef<string | null>(initialDmBackup?.activeSceneInfo?.sceneId || initialDmBackup?.imageFile || null);
   useEffect(() => {
     const currentAssetKey = activeSceneInfo?.sceneId || imageFile || (image ? `${image.src}_${image.width}x${image.height}` : null);
     if (currentAssetKey && currentAssetKey !== lastFittedAssetRef.current && (image || videoSize.width > 0)) {
@@ -2175,6 +2189,112 @@ export default function App() {
       fitWholeMapToScreen(image?.width || videoSize.width, image?.height || videoSize.height);
     }
   }, [image, imageFile, activeSceneInfo?.sceneId, videoSize, fitWholeMapToScreen]);
+
+  // Continuous debounced state snapshot saving to localStorage for instant DM crash recovery
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (typeof window === 'undefined') return;
+      try {
+        const stateToSave = {
+          activeMapId: activeMapIdRef.current,
+          liveMapId: liveMapIdRef.current,
+          mapsData: mapsDataRef.current,
+          imageFile: (imageFile && !imageFile.startsWith('blob:')) ? imageFile : null,
+          mapType,
+          videoSize,
+          mapRotation,
+          stageScale,
+          stagePos,
+          tokens,
+          walls,
+          reveals,
+          polygonReveals,
+          isFogVisible,
+          fogResetKey,
+          visionConfig,
+          gridVisible,
+          gridOpacity,
+          gridSize,
+          gridOffsetX,
+          gridOffsetY,
+          roomAnnotations,
+          activeSceneInfo,
+          activeDmNotes,
+          effects,
+          boardAnimatedFeatures,
+          boardAnimatedEnabled,
+          boardWeatherEffect,
+          combatTrackerCombatants,
+          combatTrackerRound,
+          combatTrackerTurnIndex,
+          showCombatTracker,
+          timestamp: Date.now()
+        };
+        localStorage.setItem('mistwalker_dm_state_backup_v1', JSON.stringify(stateToSave));
+      } catch (err) {
+        // Safe against storage quota
+      }
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [
+    imageFile, mapType, videoSize, mapRotation, stageScale, stagePos, tokens, walls,
+    reveals, polygonReveals, isFogVisible, fogResetKey, visionConfig, gridVisible,
+    gridOpacity, gridSize, gridOffsetX, gridOffsetY, roomAnnotations, activeSceneInfo,
+    activeDmNotes, effects, boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect,
+    combatTrackerCombatants, combatTrackerRound, combatTrackerTurnIndex, showCombatTracker
+  ]);
+
+  // Synchronous beforeunload snapshot
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      try {
+        const stateToSave = {
+          activeMapId: activeMapIdRef.current,
+          liveMapId: liveMapIdRef.current,
+          mapsData: mapsDataRef.current,
+          imageFile: (imageFile && !imageFile.startsWith('blob:')) ? imageFile : null,
+          mapType,
+          videoSize,
+          mapRotation,
+          stageScale,
+          stagePos,
+          tokens,
+          walls,
+          reveals,
+          polygonReveals,
+          isFogVisible,
+          fogResetKey,
+          visionConfig,
+          gridVisible,
+          gridOpacity,
+          gridSize,
+          gridOffsetX,
+          gridOffsetY,
+          roomAnnotations,
+          activeSceneInfo,
+          activeDmNotes,
+          effects,
+          boardAnimatedFeatures,
+          boardAnimatedEnabled,
+          boardWeatherEffect,
+          combatTrackerCombatants,
+          combatTrackerRound,
+          combatTrackerTurnIndex,
+          showCombatTracker,
+          timestamp: Date.now()
+        };
+        localStorage.setItem('mistwalker_dm_state_backup_v1', JSON.stringify(stateToSave));
+      } catch {}
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [
+    imageFile, mapType, videoSize, mapRotation, stageScale, stagePos, tokens, walls,
+    reveals, polygonReveals, isFogVisible, fogResetKey, visionConfig, gridVisible,
+    gridOpacity, gridSize, gridOffsetX, gridOffsetY, roomAnnotations, activeSceneInfo,
+    activeDmNotes, effects, boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect,
+    combatTrackerCombatants, combatTrackerRound, combatTrackerTurnIndex, showCombatTracker
+  ]);
 
   // Automatically convert any local blob: map URL into a persistent server /uploads/ URL so remote Player Views can load it
   useEffect(() => {
@@ -2468,6 +2588,24 @@ export default function App() {
     });
 
     socket.on('SYNC_STATE', (state: any) => {
+      if (!hasRestoredInitialSessionRef.current && state && (state.imageFile || state.activeSceneInfo?.mapUrl)) {
+        hasRestoredInitialSessionRef.current = true;
+        const authUrl = state.imageFile || state.activeSceneInfo?.mapUrl;
+        if (authUrl && !authUrl.startsWith('blob:')) {
+          setImageFile(authUrl);
+        }
+        if (state.tokens && Array.isArray(state.tokens)) setTokens(state.tokens);
+        if (state.walls && Array.isArray(state.walls)) setWalls(state.walls);
+        if (state.gridSize) setGridSize(state.gridSize);
+        if (state.gridOpacity !== undefined) setGridOpacity(state.gridOpacity);
+        if (state.gridVisible !== undefined) setGridVisible(state.gridVisible);
+        if (state.isFogVisible !== undefined) setIsFogVisible(state.isFogVisible);
+        if (state.reveals) setReveals(state.reveals);
+        if (state.polygonReveals) setPolygonReveals(state.polygonReveals);
+        if (state.visionConfig) setVisionConfig(state.visionConfig);
+        if (state.activeSceneInfo) setActiveSceneInfo(state.activeSceneInfo);
+        return;
+      }
       if (state?.walls && Array.isArray(state.walls)) {
         const liveSlot = liveMapIdRef.current;
         if (mapsDataRef.current[liveSlot]) {
