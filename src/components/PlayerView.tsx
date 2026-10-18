@@ -710,7 +710,8 @@ const PlayerToken = React.memo(({
   onDragMoveToken,
   onDragStartToken,
   onClaimToken,
-  onContextMenu
+  onContextMenu,
+  isAimingSpell = false
 }: {
   token: Token;
   gridSize: number;
@@ -722,6 +723,7 @@ const PlayerToken = React.memo(({
   onDragStartToken?: (id: string) => void;
   onClaimToken?: (id: string) => void;
   onContextMenu?: (id: string, clientX: number, clientY: number) => void;
+  isAimingSpell?: boolean;
 }) => {
   // Directly tie AC and HP to character sheet
   const stats = useMemo(() => {
@@ -781,13 +783,15 @@ const PlayerToken = React.memo(({
   const radius = tokenPx / 2;
   const lastEmitTimeRef = useRef<number>(0);
 
-  const handleDragStart = () => {
+  const handleDragStart = (e: any) => {
+    e.cancelBubble = true;
     if (!isMonster && !isCondition && onDragStartToken) {
       onDragStartToken(token.id);
     }
   };
 
   const handleDragMove = (e: any) => {
+    e.cancelBubble = true;
     const now = Date.now();
     if (now - lastEmitTimeRef.current > 30) {
       lastEmitTimeRef.current = now;
@@ -800,6 +804,7 @@ const PlayerToken = React.memo(({
   };
 
   const handleDragEnd = (e: any) => {
+    e.cancelBubble = true;
     const rawX = e.target.x();
     const rawY = e.target.y();
     // Snap to grid
@@ -836,18 +841,35 @@ const PlayerToken = React.memo(({
     <Group
       x={token.x}
       y={token.y}
-      draggable={!isCondition}
+      name="token"
+      draggable={!isCondition && !isAimingSpell}
+      onMouseDown={(e: any) => {
+        if (!isCondition && !isAimingSpell && e.evt?.button !== 2) {
+          e.cancelBubble = true;
+        }
+      }}
+      onTouchStart={(e: any) => {
+        if (!isCondition && !isAimingSpell) {
+          e.cancelBubble = true;
+        }
+      }}
       onDragStart={handleDragStart}
       onDragMove={handleDragMove}
       onDragEnd={handleDragEnd}
-      onClick={() => {
-        if (!isMonster && !isCondition && onClaimToken) {
-          onClaimToken(token.id);
+      onClick={(e: any) => {
+        if (!isAimingSpell) {
+          e.cancelBubble = true;
+          if (!isMonster && !isCondition && onClaimToken) {
+            onClaimToken(token.id);
+          }
         }
       }}
-      onTap={() => {
-        if (!isMonster && !isCondition && onClaimToken) {
-          onClaimToken(token.id);
+      onTap={(e: any) => {
+        if (!isAimingSpell) {
+          e.cancelBubble = true;
+          if (!isMonster && !isCondition && onClaimToken) {
+            onClaimToken(token.id);
+          }
         }
       }}
       onContextMenu={(e: any) => {
@@ -858,6 +880,15 @@ const PlayerToken = React.memo(({
         }
       }}
     >
+      {/* Solid hit target across entire token circle so transparent avatar pixels or border clicks never fall through to Stage */}
+      <Circle
+        x={radius}
+        y={radius}
+        radius={radius + 3}
+        fill="rgba(0,0,0,0.001)"
+        perfectDrawEnabled={false}
+      />
+
       {/* 0. Token Magical Auras (Rendered beneath avatar so token stays solid and sharp) */}
       {activeAuras.map((aura, idx) => {
         const auraFt = aura.radius || 10;
@@ -1039,7 +1070,7 @@ const PlayerToken = React.memo(({
 
       {/* 4. Large, High-Contrast HP Pill Badge directly tied to D&D Beyond & Character Sheet (PLAYERS & ALLIES ONLY - Monsters & Condition tokens NEVER show HP in player view) */}
       {!isCondition && (!isMonster || isAlly) && (
-        <Group x={pillX} y={pillY} listening={false}>
+        <Group x={pillX} y={pillY}>
           {/* Dark slate container badge */}
           <Rect
             width={pillWidth}
@@ -2081,6 +2112,8 @@ export default function PlayerView() {
     }
   }, [imageStatus, imageFile, activeSceneInfo]);
 
+  const [isDraggingToken, setIsDraggingToken] = useState(false);
+
   // Seize / Claim Character Action
   const handleClaimToken = useCallback((tokenId: string) => {
     const target = tokensRef.current.find(t => t.id === tokenId);
@@ -2093,14 +2126,24 @@ export default function PlayerView() {
         localStorage.setItem('mistwalker_player_claimed_name', target.name);
       }
     }
-    setClaimedTokenId(tokenId);
+    if (stageRef.current) {
+      const sx = stageRef.current.x();
+      const sy = stageRef.current.y();
+      setStagePos(prev => (prev.x === sx && prev.y === sy) ? prev : { x: sx, y: sy });
+    }
+    if (claimedTokenIdRef.current !== tokenId) {
+      claimedTokenIdRef.current = tokenId;
+      setClaimedTokenId(tokenId);
+    }
     if (typeof window !== 'undefined') {
       localStorage.setItem('mistwalker_player_claimed_token', tokenId);
     }
+    setActiveTokenMenu(null);
     setShowClaimMenu(false);
   }, []);
 
   const handleReleaseToken = useCallback(() => {
+    claimedTokenIdRef.current = null;
     setClaimedTokenId(null);
     if (typeof window !== 'undefined') {
       localStorage.removeItem('mistwalker_player_claimed_token');
@@ -2119,8 +2162,18 @@ export default function PlayerView() {
         localStorage.setItem('mistwalker_player_claimed_name', target.name);
       }
     }
+    if (stageRef.current) {
+      const sx = stageRef.current.x();
+      const sy = stageRef.current.y();
+      setStagePos(prev => (prev.x === sx && prev.y === sy) ? prev : { x: sx, y: sy });
+    }
     activeDraggingTokenIdRef.current = id;
-    setClaimedTokenId(id);
+    setIsDraggingToken(true);
+    setActiveTokenMenu(null);
+    if (claimedTokenIdRef.current !== id) {
+      claimedTokenIdRef.current = id;
+      setClaimedTokenId(id);
+    }
     if (typeof window !== 'undefined') {
       localStorage.setItem('mistwalker_player_claimed_token', id);
     }
@@ -2135,6 +2188,12 @@ export default function PlayerView() {
 
   // Snapped or keyboard token movement handler (emits MOVE_TOKEN only so it never overwrites DM tokens/conditions)
   const handleMoveToken = useCallback((id: string, newX: number, newY: number) => {
+    setIsDraggingToken(false);
+    if (stageRef.current) {
+      const sx = stageRef.current.x();
+      const sy = stageRef.current.y();
+      setStagePos(prev => (prev.x === sx && prev.y === sy) ? prev : { x: sx, y: sy });
+    }
     const currentTokens = tokensRef.current;
     const nextTokens = currentTokens.map(t => t.id === id ? { ...t, x: newX, y: newY } : t);
     tokensRef.current = nextTokens;
@@ -2513,6 +2572,8 @@ export default function PlayerView() {
 
   // Calibrate 1"x1" physical grid scale for a 32-inch 16:9 TV
   const applyTvScale = useCallback((targetGridSize?: number, targetTokens?: any[]) => {
+    if (activeDraggingTokenIdRef.current) return;
+
     // 32-inch 16:9 TV PPI calculation
     const screenW = window.screen?.width || window.innerWidth || 1920;
     const screenH = window.screen?.height || window.innerHeight || 1080;
@@ -2530,7 +2591,7 @@ export default function PlayerView() {
     const currentH = targetMapH || 1080;
 
     // Filter to tokens that are actually inside the active map bounds so off-map ghost tokens never pull the camera into empty void
-    const tokenList = targetTokens || tokens;
+    const tokenList = targetTokens || tokensRef.current;
     const isTokenOnMap = (t: any) =>
       t &&
       typeof t.x === 'number' &&
@@ -2547,8 +2608,9 @@ export default function PlayerView() {
       return !isMon || isAlly || t.isPlayer === true || t.category === 'character';
     });
 
-    const claimedInBounds = claimedTokenId
-      ? tokenList.find((t: any) => t.id === claimedTokenId && isTokenOnMap(t))
+    const currentClaimedId = claimedTokenIdRef.current;
+    const claimedInBounds = currentClaimedId
+      ? tokenList.find((t: any) => t.id === currentClaimedId && isTokenOnMap(t))
       : null;
 
     const vpW = window.innerWidth || 1920;
@@ -2585,7 +2647,7 @@ export default function PlayerView() {
 
     setStageScale(tvScale);
     setStagePos({ x: startX, y: startY });
-  }, [gridSize, tokens, claimedTokenId, targetMapW, targetMapH]);
+  }, [gridSize, targetMapW, targetMapH]);
 
   // Zoom handlers
   const handleZoom = useCallback((factor: number) => {
@@ -2597,45 +2659,41 @@ export default function PlayerView() {
     toast.info('Reset to 1" grid scale for 32" TV');
   }, [applyTvScale]);
 
-  // Auto-calibrate 1"x1" scale for 32" TV and center on party
+  // Auto-calibrate 1"x1" scale for 32" TV and center on party when scene changes
   const lastCalibratedSceneRef = useRef<string | null>(null);
   const hasCenteredOnPartyRef = useRef<boolean>(false);
 
   useEffect(() => {
+    if (activeDraggingTokenIdRef.current) return;
     const sceneKey = activeSceneInfo?.sceneId || imageFile;
     if (sceneKey && sceneKey !== lastCalibratedSceneRef.current) {
       lastCalibratedSceneRef.current = sceneKey;
       hasCenteredOnPartyRef.current = false;
-      applyTvScale(gridSize, tokens);
+      applyTvScale(gridSize, tokensRef.current);
     }
-  }, [activeSceneInfo?.sceneId, imageFile, gridSize, applyTvScale, tokens]);
+  }, [activeSceneInfo?.sceneId, imageFile, gridSize, applyTvScale]);
 
-  // When tokens or map dimensions arrive after scene setup, auto-center on party
+  // When tokens or map dimensions arrive after scene setup, auto-center on party once
   useEffect(() => {
+    if (activeDraggingTokenIdRef.current) return;
     if (tokens.length > 0 && (image || naturalW > 0 || targetMapW > 0)) {
       if (!hasCenteredOnPartyRef.current) {
         hasCenteredOnPartyRef.current = true;
-        applyTvScale(gridSize, tokens);
+        applyTvScale(gridSize, tokensRef.current);
       }
     }
-  }, [tokens, image, naturalW, targetMapW, targetMapH, gridSize, applyTvScale]);
+  }, [tokens.length, image, naturalW, targetMapW, targetMapH, gridSize, applyTvScale]);
 
   // Re-calibrate when authoritative map dimensions finish loading
   const lastCalibratedDimsRef = useRef<string>('');
   useEffect(() => {
+    if (activeDraggingTokenIdRef.current) return;
     const dimsKey = `${targetMapW}x${targetMapH}`;
     if (targetMapW > 0 && targetMapH > 0 && dimsKey !== lastCalibratedDimsRef.current) {
       lastCalibratedDimsRef.current = dimsKey;
-      applyTvScale(gridSize, tokens);
+      applyTvScale(gridSize, tokensRef.current);
     }
-  }, [targetMapW, targetMapH, gridSize, tokens, applyTvScale]);
-
-  // When claiming a token, center camera directly on it
-  useEffect(() => {
-    if (claimedTokenId && tokens.some(t => t.id === claimedTokenId)) {
-      applyTvScale(gridSize, tokens);
-    }
-  }, [claimedTokenId]);
+  }, [targetMapW, targetMapH, gridSize, applyTvScale]);
 
 
   const handleSelectDicePreset = useCallback((preset: DiceColorPreset) => {
@@ -3712,14 +3770,19 @@ export default function PlayerView() {
         scaleY={stageScale}
         x={stagePos.x}
         y={stagePos.y}
-        draggable={!activePlayerTool}
+        draggable={!activePlayerTool && !isDraggingToken}
         className={activePlayerTool ? 'cursor-crosshair' : 'cursor-default'}
         onContextMenu={(e) => e.evt.preventDefault()}
         onMouseDown={handleStageMouseDown}
         onMouseMove={handleStageMouseMove}
         onMouseUp={handleStageMouseUp}
+        onDragMove={(e) => {
+          if (e.target === e.target.getStage() && !activeDraggingTokenIdRef.current) {
+            setStagePos({ x: e.target.x(), y: e.target.y() });
+          }
+        }}
         onDragEnd={(e) => {
-          if (e.target === e.target.getStage()) {
+          if (e.target === e.target.getStage() && !activeDraggingTokenIdRef.current) {
             setStagePos({ x: e.target.x(), y: e.target.y() });
           }
         }}
@@ -4074,6 +4137,7 @@ export default function PlayerView() {
                 onDragStartToken={handleDragStartToken}
                 onClaimToken={handleClaimToken}
                 onContextMenu={handleOpenTokenContextMenu}
+                isAimingSpell={Boolean(activePlayerTool)}
               />
           ))}
         </Layer>

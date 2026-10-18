@@ -451,29 +451,44 @@ const TokenImage = React.memo(({
       y={token.y}
       name="token"
       draggable={!isSpacePressed}
+      onMouseDown={(e) => {
+        if (!isSpacePressed && e.evt?.button !== 2) {
+          e.cancelBubble = true;
+        }
+      }}
+      onTouchStart={(e) => {
+        if (!isSpacePressed) {
+          e.cancelBubble = true;
+        }
+      }}
       onClick={(e) => {
         if (isSpacePressed) return;
+        e.cancelBubble = true;
         if (onClick) {
           onClick(e);
         }
       }}
       onTap={(e) => {
         if (isSpacePressed) return;
+        e.cancelBubble = true;
         if (onClick) {
           onClick(e);
         }
       }}
       onDblClick={(e) => {
+        e.cancelBubble = true;
         if (onDblClick) {
           onDblClick(e);
         }
       }}
       onDblTap={(e) => {
+        e.cancelBubble = true;
         if (onDblClick) {
           onDblClick(e);
         }
       }}
       onDragStart={(e) => {
+        e.cancelBubble = true;
         const stage = e.target.getStage();
         if (stage) stage.container().style.cursor = 'move';
         if (onDragStart) {
@@ -481,6 +496,7 @@ const TokenImage = React.memo(({
         }
       }}
       onDragMove={(e) => {
+        e.cancelBubble = true;
         const stage = e.target.getStage();
         if (stage) stage.container().style.cursor = 'move';
         if (onDragMove) {
@@ -488,6 +504,7 @@ const TokenImage = React.memo(({
         }
       }}
       onDragEnd={(e) => {
+        e.cancelBubble = true;
         const stage = e.target.getStage();
         if (stage) {
           stage.container().style.cursor = (isSpacePressed || tool === 'pan') ? 'grab' : tool === 'select' ? 'default' : 'crosshair';
@@ -516,9 +533,19 @@ const TokenImage = React.memo(({
       }}
       onContextMenu={(e) => {
         e.evt.preventDefault();
+        e.cancelBubble = true;
         onContextMenu(e);
       }}
     >
+      {/* Solid hit target across entire token circle so transparent avatar pixels or border clicks never fall through to Stage */}
+      <Circle
+        x={radius}
+        y={radius}
+        radius={radius + 3}
+        fill="rgba(0,0,0,0.001)"
+        perfectDrawEnabled={false}
+      />
+
       {/* 0. Token Magical Auras (Rendered beneath avatar clip so token stays solid and sharp) */}
       {activeAuras.map((aura: any, idx: number) => {
         const auraFt = aura.radius || 10;
@@ -674,7 +701,7 @@ const TokenImage = React.memo(({
 
       {/* 3. AC Shield Badge on Top-Left */}
       {!token.isCondition && (!isPlayerView || !isMonster) && (
-        <Group x={12} y={12} listening={false}>
+        <Group x={12} y={12}>
           <Circle
             radius={11}
             fill="#0f172a"
@@ -709,7 +736,7 @@ const TokenImage = React.memo(({
 
       {/* 4. Large, High-Contrast HP Pill Badge directly tied to D&D Beyond & Character Sheet (Monsters NEVER show HP in player view) */}
       {!token.isCondition && (!isPlayerView || !isMonster) && (
-        <Group x={pillX} y={pillY} listening={false}>
+        <Group x={pillX} y={pillY}>
           {/* Dark slate container badge */}
           <Rect
             width={pillWidth}
@@ -1122,6 +1149,7 @@ export default function App() {
   const isAutoSwitchedFromPanRef = useRef<boolean>(false);
   const isHoveringTokenRef = useRef<boolean>(false);
   const isDraggingTokenRef = useRef<boolean>(false);
+  const [isDraggingToken, setIsDraggingToken] = useState<boolean>(false);
   const hoverLeaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastTokenMoveEmitTimeRef = useRef<number>(0);
 
@@ -1137,26 +1165,10 @@ export default function App() {
       hoverLeaveTimeoutRef.current = null;
     }
     isHoveringTokenRef.current = true;
-    if (tool === 'pan') {
-      isAutoSwitchedFromPanRef.current = true;
-      setToolState('select');
-    }
-  }, [tool, isSpacePressed]);
+  }, [isSpacePressed]);
 
   const handleTokenHoverLeave = useCallback(() => {
     isHoveringTokenRef.current = false;
-    if (isDraggingTokenRef.current) return;
-    if (isAutoSwitchedFromPanRef.current) {
-      if (hoverLeaveTimeoutRef.current) {
-        clearTimeout(hoverLeaveTimeoutRef.current);
-      }
-      hoverLeaveTimeoutRef.current = setTimeout(() => {
-        if (!isHoveringTokenRef.current && !isDraggingTokenRef.current && isAutoSwitchedFromPanRef.current) {
-          setToolState('pan');
-          isAutoSwitchedFromPanRef.current = false;
-        }
-      }, 70);
-    }
   }, []);
 
   useEffect(() => {
@@ -4434,9 +4446,6 @@ export default function App() {
     }
 
     if (isInteractive) {
-      if ((tool === 'pan' || isSpacePressed || isShiftPanActive) && stageRef.current) {
-        stageRef.current.stopDrag();
-      }
       return;
     }
 
@@ -6278,14 +6287,9 @@ export default function App() {
                   });
                 }
               }}
-              draggable={tool === 'pan' || isSpacePressed || isShiftPanActive}
-              onDragStart={(e) => {
-                if (e.target !== stageRef.current && (tool === 'pan' || isSpacePressed || isShiftPanActive)) {
-                  stageRef.current.stopDrag();
-                }
-              }}
+              draggable={(tool === 'pan' || isSpacePressed || isShiftPanActive) && !isDraggingToken}
               onDragMove={(e) => {
-                if (e.target === stageRef.current) {
+                if (e.target === stageRef.current && !isDraggingTokenRef.current) {
                   const newX = e.target.x();
                   const newY = e.target.y();
                   const fx = document.getElementById('main-animated-fx-overlay');
@@ -6293,10 +6297,11 @@ export default function App() {
                     fx.style.left = `${newX}px`;
                     fx.style.top = `${newY}px`;
                   }
+                  setStagePos({ x: newX, y: newY });
                 }
               }}
               onDragEnd={(e) => {
-                if (e.target === stageRef.current) {
+                if (e.target === stageRef.current && !isDraggingTokenRef.current) {
                   const newX = e.target.x();
                   const newY = e.target.y();
                   const fx = document.getElementById('main-animated-fx-overlay');
@@ -6842,6 +6847,12 @@ export default function App() {
                     onMouseEnter={handleTokenHoverEnter}
                     onMouseLeave={handleTokenHoverLeave}
                     onClick={(e: any) => {
+                      setActiveMenu(null);
+                      if (stageRef.current) {
+                        const sx = stageRef.current.x();
+                        const sy = stageRef.current.y();
+                        setStagePos(prev => (prev.x === sx && prev.y === sy) ? prev : { x: sx, y: sy });
+                      }
                       if (tool === 'select' || tool === 'pan' || isAutoSwitchedFromPanRef.current) {
                         if (e.evt?.shiftKey) {
                           setSelectedTokenIds(prev => 
@@ -6861,9 +6872,12 @@ export default function App() {
                     }}
                     onDragStart={() => {
                       isDraggingTokenRef.current = true;
-                      if (tool === 'pan') {
-                        isAutoSwitchedFromPanRef.current = true;
-                        setToolState('select');
+                      setIsDraggingToken(true);
+                      setActiveMenu(null);
+                      if (stageRef.current) {
+                        const sx = stageRef.current.x();
+                        const sy = stageRef.current.y();
+                        setStagePos(prev => (prev.x === sx && prev.y === sy) ? prev : { x: sx, y: sy });
                       }
                       if (!selectedTokenIds.includes(token.id)) {
                         setSelectedTokenIds([token.id]);
@@ -6889,6 +6903,12 @@ export default function App() {
                     }}
                     onDragEnd={(e: any) => {
                       isDraggingTokenRef.current = false;
+                      setIsDraggingToken(false);
+                      if (stageRef.current) {
+                        const sx = stageRef.current.x();
+                        const sy = stageRef.current.y();
+                        setStagePos(prev => (prev.x === sx && prev.y === sy) ? prev : { x: sx, y: sy });
+                      }
                       const snappedX = Math.floor((e.target.x() - gridOffsetX) / gridSize) * gridSize + gridOffsetX;
                       const snappedY = Math.floor((e.target.y() - gridOffsetY) / gridSize) * gridSize + gridOffsetY;
                       
@@ -6928,16 +6948,6 @@ export default function App() {
                           socketRef.current.emit('MOVE_TOKEN', { id: token.id, x: snappedX, y: snappedY });
                         }
                         socketRef.current.emit('SYNC_TOKENS', nextTokens);
-                      }
-
-                      if (isAutoSwitchedFromPanRef.current) {
-                        if (hoverLeaveTimeoutRef.current) clearTimeout(hoverLeaveTimeoutRef.current);
-                        hoverLeaveTimeoutRef.current = setTimeout(() => {
-                          if (!isHoveringTokenRef.current && !isDraggingTokenRef.current && isAutoSwitchedFromPanRef.current) {
-                            setToolState('pan');
-                            isAutoSwitchedFromPanRef.current = false;
-                          }
-                        }, 70);
                       }
                     }}
                     onDelete={() => {
