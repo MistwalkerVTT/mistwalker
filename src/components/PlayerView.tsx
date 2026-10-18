@@ -706,6 +706,7 @@ const PlayerToken = React.memo(({
   isClaimed,
   characters,
   combatants,
+  stageScale = 1,
   onMoveToken,
   onDragMoveToken,
   onDragStartToken,
@@ -718,6 +719,7 @@ const PlayerToken = React.memo(({
   isClaimed: boolean;
   characters?: Character[];
   combatants?: Combatant[];
+  stageScale?: number;
   onMoveToken: (id: string, x: number, y: number) => void;
   onDragMoveToken?: (id: string, x: number, y: number) => void;
   onDragStartToken?: (id: string) => void;
@@ -814,12 +816,43 @@ const PlayerToken = React.memo(({
     onMoveToken(token.id, snappedX, snappedY);
   };
 
-  const hpRatio = Math.max(0, Math.min(1, stats.currentHp / Math.max(1, stats.maxHp)));
+  const displayCurrentHp = token.currentHp !== undefined
+    ? token.currentHp
+    : (token.hp !== undefined ? token.hp : (matchedCombatant?.currentHp !== undefined ? matchedCombatant.currentHp : stats.currentHp));
+
+  const displayMaxHp = token.maxHp !== undefined
+    ? token.maxHp
+    : (matchedCombatant?.maxHp !== undefined ? matchedCombatant.maxHp : stats.maxHp);
+
+  const displayTempHp = token.tempHp !== undefined
+    ? token.tempHp
+    : (stats.tempHp || 0);
+
+  const hpRatio = Math.max(0, Math.min(1, displayCurrentHp / Math.max(1, displayMaxHp)));
   const hpColor = hpRatio > 0.5 ? '#10b981' : hpRatio > 0.25 ? '#f59e0b' : '#ef4444';
-  const pillWidth = Math.max(68, Math.min(108, tokenPx * 0.94));
-  const pillHeight = 22;
+
+  // Responsive zoom-compensated sizing so HP text is bold and readable across the room at any zoom
+  const effectiveScale = Math.max(0.25, Math.min(2.5, stageScale || 1));
+  const minScreenFontSize = 13.5;
+  const zoomCompensatedFont = minScreenFontSize / Math.min(1, effectiveScale);
+  const baseFontSize = Math.max(13, Math.round(tokenPx * 0.20));
+  const hpFontSize = Math.max(13, Math.min(26, Math.max(baseFontSize, Math.round(zoomCompensatedFont))));
+
+  const minPillWidth = Math.max(76, Math.round(hpFontSize * 5.4));
+  const pillWidth = Math.max(minPillWidth, Math.min(Math.round(tokenPx * 1.1), Math.max(minPillWidth, 200)));
+  const pillHeight = Math.round(hpFontSize * 1.6 + 6);
   const pillX = (tokenPx - pillWidth) / 2;
-  const pillY = tokenPx - 9;
+  const pillY = tokenPx - Math.round(pillHeight * 0.35);
+
+  const barHeight = Math.max(4, Math.round(pillHeight * 0.18));
+  const barY = Math.round(pillHeight - barHeight - 4.5);
+  const barPadding = 4;
+  const barWidth = pillWidth - (barPadding * 2);
+
+  const nameY = (isMonster || isCondition)
+    ? tokenPx + 4
+    : pillY + pillHeight + 3;
+  const nameFontSize = Math.max(12, Math.min(20, Math.round(hpFontSize * 0.85)));
 
   const activeAuras: TokenAura[] = useMemo(() => {
     const list: TokenAura[] = [];
@@ -1093,65 +1126,73 @@ const PlayerToken = React.memo(({
             fill="rgba(15, 23, 42, 0.96)"
             stroke={isAlly ? "#eab308" : (hpRatio <= 0.25 ? "#ef4444" : "#475569")}
             strokeWidth={isAlly ? 1.5 : (hpRatio <= 0.25 ? 1.5 : 1)}
-            cornerRadius={5}
+            cornerRadius={Math.max(4, Math.round(pillHeight * 0.2))}
+            shadowColor="#000000"
+            shadowBlur={4}
+            shadowOpacity={0.7}
+            shadowOffsetY={2}
             perfectDrawEnabled={false}
           />
           {/* Background HP Track */}
           <Rect
-            x={3.5}
-            y={14}
-            width={pillWidth - 7}
-            height={4.5}
+            x={barPadding}
+            y={barY}
+            width={barWidth}
+            height={barHeight}
             fill="rgba(30, 41, 59, 0.9)"
-            cornerRadius={2.5}
+            cornerRadius={Math.round(barHeight / 2)}
             perfectDrawEnabled={false}
           />
           {/* Filled HP progress bar */}
           {hpRatio > 0 && (
             <Rect
-              x={3.5}
-              y={14}
-              width={Math.max(2, (pillWidth - 7) * hpRatio)}
-              height={4.5}
+              x={barPadding}
+              y={barY}
+              width={Math.max(2, barWidth * hpRatio)}
+              height={barHeight}
               fill={hpColor}
-              cornerRadius={2.5}
+              cornerRadius={Math.round(barHeight / 2)}
               perfectDrawEnabled={false}
             />
           )}
           {/* Crisp Monospace HP text */}
           <Text
-            y={2.5}
+            y={Math.max(2, Math.round((barY - hpFontSize) / 2))}
             width={pillWidth}
             align="center"
-            text={`${stats.currentHp}/${stats.maxHp}${stats.tempHp && stats.tempHp > 0 ? ` (+${stats.tempHp})` : ''}`}
-            fontSize={10}
+            text={`${displayCurrentHp}/${displayMaxHp}${displayTempHp > 0 ? ` (+${displayTempHp})` : ''}`}
+            fontSize={hpFontSize}
             fontStyle="bold"
             fontFamily="monospace"
             fill="#ffffff"
+            shadowColor="#000000"
+            shadowBlur={2}
             perfectDrawEnabled={false}
           />
         </Group>
       )}
 
       {/* 5. Token Name Label & Conditions (Cleanly spaced below the larger HP badge or token) */}
-      <Group y={tokenPx + ((isMonster || isCondition) ? 4 : 16)} listening={false}>
+      <Group y={nameY} listening={false}>
         <Text
           text={token.name}
           width={tokenPx + 60}
           x={-30}
           align="center"
           fill="white"
-          fontSize={11.5}
+          fontSize={nameFontSize}
           fontStyle="bold"
+          shadowColor="#000000"
+          shadowBlur={3}
           perfectDrawEnabled={false}
         />
         {mergedConditions.length > 0 && (
-          <Group y={15}>
+          <Group y={nameFontSize + 4}>
             <Rect
               x={-30}
               y={-1}
               width={tokenPx + 60}
-              height={14}
+              height={Math.max(14, nameFontSize + 2)}
               fill="rgba(15, 23, 42, 0.88)"
               stroke="rgba(244, 63, 94, 0.55)"
               strokeWidth={1}
@@ -1160,7 +1201,7 @@ const PlayerToken = React.memo(({
             />
             <Text
               text={mergedConditions.join(', ')}
-              fontSize={9.5}
+              fontSize={Math.max(9.5, nameFontSize - 2)}
               fontStyle="bold"
               fontFamily="monospace"
               fill="#fb7185"
@@ -1181,7 +1222,9 @@ const PlayerToken = React.memo(({
     prevProps.gridSize === nextProps.gridSize &&
     prevProps.isClaimed === nextProps.isClaimed &&
     prevProps.characters === nextProps.characters &&
-    prevProps.combatants === nextProps.combatants
+    prevProps.combatants === nextProps.combatants &&
+    prevProps.stageScale === nextProps.stageScale &&
+    prevProps.isAimingSpell === nextProps.isAimingSpell
   );
 });
 
@@ -4233,6 +4276,7 @@ export default function PlayerView() {
                 key={token.id}
                 token={token}
                 gridSize={gridSize}
+                stageScale={stageScale}
                 characters={compendiumCharacters}
                 combatants={combatState.combatants}
                 isClaimed={claimedTokenId === token.id}
