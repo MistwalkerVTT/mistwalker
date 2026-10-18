@@ -93,16 +93,23 @@ export const DiceTableOverlay: React.FC<Props> = ({
         // Fallback for roll without explicit dice array
         const notation = rollData.diceNotation || rollData.formula || '1d20';
         const match = notation.match(/([0-9]*)d([0-9]+)/i);
+        const count = match && match[1] ? Math.max(1, Math.min(10, parseInt(match[1], 10))) : 1;
         const sides = match ? parseInt(match[2], 10) : 20;
         const dieType = resolveType(undefined, sides);
         const total = rollData.total ?? sides;
 
-        requests.push({
-          type: dieType,
-          result: Math.min(sides, Math.max(1, total)),
-          isCritical: sides === 20 && total === 20,
-          isFumble: sides === 20 && total === 1
-        });
+        let remTotal = total;
+        for (let i = 0; i < count; i++) {
+          const avg = Math.round(remTotal / (count - i));
+          const val = Math.max(1, Math.min(sides, avg || 1));
+          remTotal -= val;
+          requests.push({
+            type: dieType,
+            result: val,
+            isCritical: sides === 20 && val === 20,
+            isFumble: sides === 20 && val === 1
+          });
+        }
       }
 
       console.log('[DiceTableOverlay] 🎲 Rolling predetermined 3D dice:', requests);

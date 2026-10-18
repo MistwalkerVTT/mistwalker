@@ -25,8 +25,8 @@ export const RollSummaryToast: React.FC<Props> = ({ roll, onDismiss }) => {
 
   if (!roll || !isVisible) return null;
 
-  const isCrit = roll.isCritical || roll.dice.some(d => d.sides === 20 && d.result === 20);
-  const isFumble = roll.isFumble || roll.dice.some(d => d.sides === 20 && d.result === 1);
+  const isCrit = roll.isCritical || (roll.dice?.some(d => d.sides === 20 && d.result === 20) ?? false);
+  const isFumble = roll.isFumble || (roll.dice?.some(d => d.sides === 20 && d.result === 1) ?? false);
 
   return (
     <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[90] pointer-events-auto select-none animate-in fade-in slide-in-from-top-4 duration-300">
@@ -92,7 +92,7 @@ export const RollSummaryToast: React.FC<Props> = ({ roll, onDismiss }) => {
 
           <div className="text-[10px] font-mono text-zinc-400 flex items-center gap-1.5 mt-0.5">
             <span>Formula: {roll.formula}</span>
-            {roll.dice.length > 0 && (
+            {roll.dice && roll.dice.length > 0 && (
               <span className="text-zinc-500">
                 ({roll.dice.map(d => d.result).join(', ')})
               </span>

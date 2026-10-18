@@ -177,6 +177,21 @@ export class ThreeDiceEngine {
     this.currentTheme = theme;
     clearDiceTextureCache();
     this.buildMaterials(theme);
+
+    // If dice are currently rolling or resting on table, update their materials immediately
+    for (const die of this.activeDice) {
+      const parts = die.id.split('-');
+      const key = this.resolveDieKey(parts[1] || 'd20');
+      if (key === 'd6') {
+        const d6Mats = createD6Materials(this.currentTheme);
+        d6Mats.forEach(m => { m.transparent = true; m.opacity = this.fadeOpacity; });
+        die.mesh.material = d6Mats;
+      } else if (this.materials[key]) {
+        const mat = this.materials[key].clone();
+        mat.opacity = this.fadeOpacity;
+        die.mesh.material = mat;
+      }
+    }
   }
 
   public getTheme(): DiceThemeOptions {
@@ -184,7 +199,8 @@ export class ThreeDiceEngine {
   }
 
   private buildMaterials(theme: DiceThemeOptions) {
-    if (this.materials) {
+    // Only dispose old unused materials if no active dice are using them
+    if (this.materials && this.activeDice.length === 0) {
       Object.values(this.materials).forEach(mat => {
         if (mat.map) {
           mat.map.dispose();
@@ -234,6 +250,7 @@ export class ThreeDiceEngine {
 
   public roll(diceRequests: DieRollRequest[], onFinished?: () => void) {
     this.clearDice();
+    this.canvas.style.opacity = '1';
     this.onRollFinishedCallback = onFinished;
     this.allSettledTime = null;
     this.isFadingOut = false;
@@ -343,120 +360,159 @@ export class ThreeDiceEngine {
   private renderLoop = (time: number) => {
     if (!this.isRunning) return;
 
-    const dt = Math.min((time - this.lastTime) / 1000, 0.1);
-    this.lastTime = time;
+    try {
+      const dt = Math.min((time - this.lastTime) / 1000, 0.1);
+      this.lastTime = time;
 
-    // Step physics
-    this.physics.step(dt);
+      // Step physics
+      this.physics.step(dt);
 
-    const now = performance.now();
-    let allDiceAreSettled = this.activeDice.length > 0;
+      const now = performance.now();
+      let allDiceAreSettled = this.activeDice.length > 0;
+      let earliestSpawn = Infinity;
 
-    // Update each active die
-    for (const die of this.activeDice) {
-      const elapsed = (now - die.spawnTime) / 1000;
+      // Update each active die
+      for (const die of this.activeDice) {
+        if (die.spawnTime < earliestSpawn) earliestSpawn = die.spawnTime;
+        const elapsed = (now - die.spawnTime) / 1000;
 
-      if (!die.settled) {
-        // Phase 1 (0 to 1.0s): High-speed chaotic physical tumbling
-        if (elapsed < 1.0) {
-          die.mesh.position.copy(die.body.position as any);
-          die.mesh.quaternion.copy(die.body.quaternion as any);
-          allDiceAreSettled = false;
-        }
-        // Phase 2 (1.0s to 1.8s): Slerp guiding towards predetermined resting face
-        else if (elapsed < 1.8) {
-          allDiceAreSettled = false;
+        if (!die.settled) {
+          // Phase 1 (0 to 1.0s): High-speed chaotic physical tumbling
+          if (elapsed < 1.0) {
+            die.mesh.position.copy(die.body.position as any);
+            die.mesh.quaternion.copy(die.body.quaternion as any);
+            allDiceAreSettled = false;
+          }
+          // Phase 2 (1.0s to 1.8s): Slerp guiding towards predetermined resting face
+          else if (elapsed < 1.8) {
+            allDiceAreSettled = false;
 
-          // Increase physics damping to simulate tabletop friction
-          die.body.angularDamping = 0.88;
-          die.body.linearDamping = 0.78;
+            // Increase physics damping to simulate tabletop friction
+            die.body.angularDamping = 0.88;
+            die.body.linearDamping = 0.78;
 
-          const currentQ = new THREE.Quaternion(
-            die.body.quaternion.x,
-            die.body.quaternion.y,
-            die.body.quaternion.z,
-            die.body.quaternion.w
-          );
-
-          const progress = (elapsed - 1.0) / 0.8;
-          currentQ.slerp(die.targetQuaternion, progress * 0.28);
-          die.body.quaternion.set(currentQ.x, currentQ.y, currentQ.z, currentQ.w);
-
-          die.mesh.position.copy(die.body.position as any);
-          die.mesh.quaternion.copy(currentQ);
-        }
-        // Phase 3 (1.8s+): Settling on exact predetermined face
-        else {
-          const speed = die.body.velocity.length();
-          const angSpeed = die.body.angularVelocity.length();
-
-          if (speed < 0.25 && angSpeed < 0.35 || elapsed > 2.2) {
-            die.settled = true;
-            die.settleTime = now;
-            die.body.velocity.set(0, 0, 0);
-            die.body.angularVelocity.set(0, 0, 0);
-
-            // Settle flat on the table at exact inRadius height
-            die.body.position.y = die.bundle.inRadius;
-            die.body.quaternion.set(
-              die.targetQuaternion.x,
-              die.targetQuaternion.y,
-              die.targetQuaternion.z,
-              die.targetQuaternion.w
+            const currentQ = new THREE.Quaternion(
+              die.body.quaternion.x,
+              die.body.quaternion.y,
+              die.body.quaternion.z,
+              die.body.quaternion.w
             );
 
-            // Snap final mesh orientation exactly to target face
+            const progress = (elapsed - 1.0) / 0.8;
+            currentQ.slerp(die.targetQuaternion, progress * 0.28);
+            die.body.quaternion.set(currentQ.x, currentQ.y, currentQ.z, currentQ.w);
+
             die.mesh.position.copy(die.body.position as any);
-            die.mesh.quaternion.copy(die.targetQuaternion);
-          } else {
-            allDiceAreSettled = false;
-            die.mesh.position.copy(die.body.position as any);
+            die.mesh.quaternion.copy(currentQ);
+          }
+          // Phase 3 (1.8s+): Settling on exact predetermined face
+          else {
+            const speed = die.body.velocity.length();
+            const angSpeed = die.body.angularVelocity.length();
+
+            if ((speed < 0.25 && angSpeed < 0.35) || elapsed > 2.2) {
+              die.settled = true;
+              die.settleTime = now;
+              // Make physics body static so gravity and collisions cannot cause jitter or bounce
+              die.body.type = CANNON.Body.STATIC;
+              die.body.velocity.set(0, 0, 0);
+              die.body.angularVelocity.set(0, 0, 0);
+
+              // Settle flat on the table at exact inRadius height
+              die.body.position.y = die.bundle.inRadius;
+              die.body.quaternion.set(
+                die.targetQuaternion.x,
+                die.targetQuaternion.y,
+                die.targetQuaternion.z,
+                die.targetQuaternion.w
+              );
+
+              // Snap final mesh orientation exactly to target face
+              die.mesh.position.set(die.body.position.x, die.bundle.inRadius, die.body.position.z);
+              die.mesh.quaternion.copy(die.targetQuaternion);
+            } else {
+              allDiceAreSettled = false;
+              die.mesh.position.copy(die.body.position as any);
+              die.mesh.quaternion.copy(die.targetQuaternion);
+            }
+          }
+        } else {
+          // Die is settled flat on table - maintain steady resting position & orientation
+          die.mesh.position.set(die.body.position.x, die.bundle.inRadius, die.body.position.z);
+          die.mesh.quaternion.copy(die.targetQuaternion);
+        }
+      }
+
+      // Safety watchdog: force settle any die still tumbling after 5 seconds
+      if (now - earliestSpawn > 5000) {
+        for (const die of this.activeDice) {
+          if (!die.settled) {
+            die.settled = true;
+            die.body.type = CANNON.Body.STATIC;
+            die.mesh.position.set(die.body.position.x, die.bundle.inRadius, die.body.position.z);
             die.mesh.quaternion.copy(die.targetQuaternion);
           }
         }
-      } else {
-        // Die is settled flat on table
-        die.mesh.position.copy(die.body.position as any);
-        die.mesh.quaternion.copy(die.targetQuaternion);
-      }
-    }
-
-    // Check if all dice have settled
-    if (allDiceAreSettled && this.activeDice.length > 0) {
-      if (!this.allSettledTime) {
-        this.allSettledTime = now;
+        allDiceAreSettled = true;
       }
 
-      // Hold settled dice for 2.8 seconds so players can inspect faces
-      const settledDuration = (now - this.allSettledTime) / 1000;
-      if (settledDuration > 2.8) {
-        this.isFadingOut = true;
-      }
-    }
+      // Check if all dice have settled
+      if (allDiceAreSettled && this.activeDice.length > 0) {
+        if (!this.allSettledTime) {
+          this.allSettledTime = now;
+        }
 
-    // Smoothly fade out dice opacity over 0.6 seconds
-    if (this.isFadingOut) {
-      this.fadeOpacity = Math.max(0, this.fadeOpacity - dt * 2.2);
-
-      for (const die of this.activeDice) {
-        if (Array.isArray(die.mesh.material)) {
-          die.mesh.material.forEach(m => { m.opacity = this.fadeOpacity; });
-        } else {
-          die.mesh.material.opacity = this.fadeOpacity;
+        // Hold settled dice for 2.6 seconds so players can clearly inspect faces
+        const settledDuration = (now - this.allSettledTime) / 1000;
+        if (settledDuration > 2.6) {
+          this.isFadingOut = true;
         }
       }
 
-      if (this.fadeOpacity <= 0) {
-        this.clearDice();
-        this.isRunning = false;
-        this.onRollFinishedCallback?.();
-        this.renderer.clear();
-        return;
+      // Safety watchdog: force fadeout if overall roll exceeded 7.5 seconds
+      if (now - earliestSpawn > 7500) {
+        this.isFadingOut = true;
       }
-    }
 
-    this.renderer.render(this.scene, this.camera);
-    this.animFrameId = requestAnimationFrame(this.renderLoop);
+      // Smoothly fade out dice opacity over ~0.6 seconds
+      if (this.isFadingOut) {
+        this.fadeOpacity = Math.max(0, this.fadeOpacity - dt * 2.2);
+
+        // Sync canvas style opacity with material opacity
+        this.canvas.style.opacity = String(this.fadeOpacity);
+
+        for (const die of this.activeDice) {
+          if (Array.isArray(die.mesh.material)) {
+            die.mesh.material.forEach(m => { m.opacity = this.fadeOpacity; });
+          } else {
+            die.mesh.material.opacity = this.fadeOpacity;
+          }
+        }
+
+        // Fadeout complete: clean up and clear canvas
+        if (this.fadeOpacity <= 0 || (now - earliestSpawn > 9000)) {
+          this.clearDice();
+          this.canvas.style.opacity = '0';
+          this.renderer.render(this.scene, this.camera);
+          this.renderer.clear();
+          this.isRunning = false;
+          this.onRollFinishedCallback?.();
+          return;
+        }
+      }
+
+      this.renderer.render(this.scene, this.camera);
+      this.animFrameId = requestAnimationFrame(this.renderLoop);
+    } catch (err) {
+      console.warn('[ThreeDiceEngine] renderLoop recovered from error:', err);
+      // Clean up safely on error so dice never get stuck permanently
+      this.clearDice();
+      this.canvas.style.opacity = '0';
+      this.renderer.render(this.scene, this.camera);
+      this.renderer.clear();
+      this.isRunning = false;
+      this.onRollFinishedCallback?.();
+    }
   };
 
   public clearDice() {

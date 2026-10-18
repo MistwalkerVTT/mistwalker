@@ -9,17 +9,57 @@ export interface DieGeometryBundle {
   inRadius: number;
 }
 
-function makeCannonConvex(geometry: THREE.BufferGeometry): CANNON.ConvexPolyhedron {
+function makeCannonConvex(geometry: THREE.BufferGeometry, precision = 1e-4): CANNON.ConvexPolyhedron {
   const pos = geometry.attributes.position;
-  const vertices: CANNON.Vec3[] = [];
+  const uniqueVertices: CANNON.Vec3[] = [];
+  const vertexMap = new Map<string, number>();
   const faces: number[][] = [];
+
   for (let i = 0; i < pos.count; i++) {
-    vertices.push(new CANNON.Vec3(pos.getX(i), pos.getY(i), pos.getZ(i)));
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const z = pos.getZ(i);
+    const key = Math.round(x / precision) + '_' + Math.round(y / precision) + '_' + Math.round(z / precision);
+    let index = vertexMap.get(key);
+    if (index === undefined) {
+      index = uniqueVertices.length;
+      vertexMap.set(key, index);
+      uniqueVertices.push(new CANNON.Vec3(x, y, z));
+    }
+    const faceIndex = Math.floor(i / 3);
+    const vertexInFace = i % 3;
+    if (!faces[faceIndex]) faces[faceIndex] = [];
+    faces[faceIndex][vertexInFace] = index;
   }
-  for (let f = 0; f < pos.count / 3; f++) {
-    faces.push([f * 3, f * 3 + 1, f * 3 + 2]);
+
+  // Ensure all face normals point outward from shape center (CCW winding around outward normal)
+  const validFaces: number[][] = [];
+  for (const f of faces) {
+    if (f.length === 3 && f[0] !== f[1] && f[1] !== f[2] && f[0] !== f[2]) {
+      const v0 = uniqueVertices[f[0]];
+      const v1 = uniqueVertices[f[1]];
+      const v2 = uniqueVertices[f[2]];
+      const e01 = new CANNON.Vec3();
+      const e02 = new CANNON.Vec3();
+      v1.vsub(v0, e01);
+      v2.vsub(v0, e02);
+      const n = new CANNON.Vec3();
+      e01.cross(e02, n);
+      const center = new CANNON.Vec3(
+        (v0.x + v1.x + v2.x) / 3,
+        (v0.y + v1.y + v2.y) / 3,
+        (v0.z + v1.z + v2.z) / 3
+      );
+      if (n.dot(center) < 0) {
+        // Reverse winding to ensure outward CCW normal
+        validFaces.push([f[0], f[2], f[1]]);
+      } else {
+        validFaces.push(f);
+      }
+    }
   }
-  return new CANNON.ConvexPolyhedron({ vertices, faces });
+
+  return new CANNON.ConvexPolyhedron({ vertices: uniqueVertices, faces: validFaces });
 }
 
 /**
@@ -238,7 +278,7 @@ export function createD4Bundle(radius = 1.45): DieGeometryBundle {
     cannonShape,
     getRestingQuaternion,
     radius,
-    inRadius: radius * 0.3333
+    inRadius: radius
   };
 }
 
@@ -362,7 +402,7 @@ export function createD10Bundle(radius = 1.35, isPercentile = false): DieGeometr
     cannonShape,
     getRestingQuaternion,
     radius,
-    inRadius: radius * 0.65
+    inRadius: radius * 0.92
   };
 }
 
