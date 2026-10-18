@@ -1401,6 +1401,11 @@ export function resolveMonster(
   const parenLastWord = parenWords.length > 1 && parenWords[parenWords.length - 1].length >= 4
     ? parenWords[parenWords.length - 1]
     : null;
+  const cleanCandidate = candidate.replace(/\(.*?\)/g, '').trim();
+  const candidateWords = cleanCandidate.split(/\s+/).filter(Boolean);
+  const candidateLastWord = candidateWords.length > 1 && candidateWords[candidateWords.length - 1].length >= 4
+    ? candidateWords[candidateWords.length - 1]
+    : null;
 
   // Prefer entries with local /uploads/ avatars over external compendium URLs when duplicates exist
   const allAvailable = [...compendium, ...SRD_MONSTERS].sort((a, b) => {
@@ -1413,8 +1418,9 @@ export function resolveMonster(
   const matchCandidates = [
     candidate,
     parenType,
-    candidate.replace(/\(.*?\)/g, '').trim(),
-    parenLastWord
+    cleanCandidate,
+    parenLastWord,
+    candidateLastWord
   ].filter(Boolean) as string[];
 
   let found: Monster | undefined;
