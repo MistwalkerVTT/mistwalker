@@ -144,6 +144,7 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
     // In player view and DM view, show shared party vision for all active player/ally tokens
     // Monster tokens strictly do NOT get vision and never pierce or remove fog of war
     const activeVisionTokens = tokens.filter((t) => {
+      if ((t as any).isCondition) return false;
       if (t.hidden && isPlayerView) return false;
       const isAlly = t.category === 'ally' || !!(t as any).allyId;
       const isMonster = !isAlly && (isMonsterToken(t) || t.isMonster === true || t.category === 'monster' || t.isPlayer === false);

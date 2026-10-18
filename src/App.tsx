@@ -54,6 +54,7 @@ import { CharacterCompendiumModal } from './components/CharacterCompendiumModal'
 import { AlliesCompendiumModal } from './components/AlliesCompendiumModal';
 import { DdbSyncModal } from './components/DdbSyncModal';
 import { DEFAULT_MONSTERS } from './data/defaultMonsters';
+import { repairMonsterToken } from './data/srdMonstersCatalog';
 import { DEFAULT_CHARACTERS, getCharacterTokenUrl, resolveTokenCharacterStats, isDdbMatch } from './data/defaultCharacters';
 import { DEFAULT_ALLIES } from './data/defaultAllies';
 import { Monster, getSizeMultiplier } from './types/monster';
@@ -375,9 +376,21 @@ const TokenImage = React.memo(({
     if (!combatants || combatants.length === 0) return null;
     return combatants.find((c: any) =>
       c.id === token.id ||
+      c.tokenId === token.id ||
       (c.name && token.name && c.name.toLowerCase().trim() === token.name.toLowerCase().trim())
     );
   }, [combatants, token.id, token.name]);
+
+  const mergedConditions = useMemo(() => {
+    const set = new Set<string>();
+    if (Array.isArray(token.conditions)) {
+      token.conditions.forEach((c: string) => { if (c) set.add(c); });
+    }
+    if (Array.isArray(matchedCombatant?.conditions)) {
+      matchedCombatant.conditions.forEach((c: string) => { if (c) set.add(c); });
+    }
+    return Array.from(set);
+  }, [token.conditions, matchedCombatant]);
 
   const stats = useMemo(() => {
     const fromSheet = resolveTokenCharacterStats(token, characters);
@@ -407,7 +420,7 @@ const TokenImage = React.memo(({
   }, [token, characters, matchedCombatant]);
 
   const isAlly = token.category === 'ally' || !!(token as any).allyId;
-  const isMonster = !isAlly && (isMonsterToken(token) || token.isMonster === true || token.category === 'monster' || token.isPlayer === false);
+  const isMonster = !isAlly && !token.isCondition && (isMonsterToken(token) || token.isMonster === true || token.category === 'monster' || token.isPlayer === false);
   const tokenWidth = gridSize * token.size;
   const radius = tokenWidth / 2;
   const hpColor = stats.hpRatio > 0.5 ? '#10b981' : stats.hpRatio > 0.25 ? '#f59e0b' : '#ef4444';
@@ -660,7 +673,7 @@ const TokenImage = React.memo(({
       />
 
       {/* 3. AC Shield Badge on Top-Left */}
-      {(!isPlayerView || !isMonster) && (
+      {!token.isCondition && (!isPlayerView || !isMonster) && (
         <Group x={12} y={12} listening={false}>
           <Circle
             radius={11}
@@ -695,7 +708,7 @@ const TokenImage = React.memo(({
       )}
 
       {/* 4. Large, High-Contrast HP Pill Badge directly tied to D&D Beyond & Character Sheet (Monsters NEVER show HP in player view) */}
-      {(!isPlayerView || !isMonster) && (
+      {!token.isCondition && (!isPlayerView || !isMonster) && (
         <Group x={pillX} y={pillY} listening={false}>
           {/* Dark slate container badge */}
           <Rect
@@ -745,7 +758,7 @@ const TokenImage = React.memo(({
       )}
 
       {/* 5. Token Name Label & Conditions (Cleanly spaced below the larger HP badge or token) */}
-      <Group y={tokenWidth + ((isPlayerView && isMonster) ? 4 : 16)} listening={false}>
+      <Group y={tokenWidth + ((token.isCondition || (isPlayerView && isMonster)) ? 4 : 16)} listening={false}>
         <Text
           text={token.name}
           fontSize={12}
@@ -755,9 +768,9 @@ const TokenImage = React.memo(({
           width={tokenWidth}
           perfectDrawEnabled={false}
         />
-        {token.conditions && token.conditions.length > 0 && (
+        {mergedConditions.length > 0 && (
           <Text
-            text={token.conditions.join(', ')}
+            text={mergedConditions.join(', ')}
             fontSize={9.5}
             fontStyle="bold"
             fontFamily="monospace"
@@ -2179,6 +2192,42 @@ export default function App() {
     return () => { cancelled = true; };
   }, [imageFile]);
 
+  const prepareTokensForSync = useCallback((rawTokens: Token[], monstersList: Monster[], combatantsList: Combatant[]) => {
+    if (!Array.isArray(rawTokens)) return [];
+    return rawTokens.map(t => {
+      const repaired = repairMonsterToken(t, monstersList) as Token;
+      const matchedCombatant = Array.isArray(combatantsList)
+        ? combatantsList.find((c: any) =>
+            c.id === repaired.id ||
+            c.tokenId === repaired.id ||
+            (c.name && repaired.name && c.name.toLowerCase().trim() === repaired.name.toLowerCase().trim())
+          )
+        : null;
+      if (matchedCombatant && Array.isArray(matchedCombatant.conditions) && matchedCombatant.conditions.length > 0) {
+        const merged = Array.from(new Set([...(repaired.conditions || []), ...matchedCombatant.conditions]));
+        return { ...repaired, conditions: merged };
+      }
+      return repaired;
+    });
+  }, []);
+
+  // Automatically repair any monster tokens on the board that have fallback Guard icons or wrong sizes
+  useEffect(() => {
+    setTokens(prev => {
+      if (!Array.isArray(prev) || prev.length === 0) return prev;
+      let changed = false;
+      const next = prev.map(t => {
+        const repaired = repairMonsterToken(t, compendiumMonsters) as Token;
+        if (repaired.url !== t.url || repaired.size !== t.size || repaired.ac !== t.ac || repaired.maxHp !== t.maxHp) {
+          changed = true;
+          return repaired;
+        }
+        return t;
+      });
+      return changed ? next : prev;
+    });
+  }, [compendiumMonsters]);
+
   // Full-state synchronization helper for emitting authoritative map, tokens, and lighting to Player View
   const broadcastFullState = useCallback((customMapUrl?: string) => {
     if (!socketRef.current?.connected) return;
@@ -2190,16 +2239,20 @@ export default function App() {
     const authoritativeUrl = rawUrl.startsWith('blob:') ? (nonBlobSceneUrl || rawUrl) : rawUrl;
     if (!authoritativeUrl && tokens.length === 0) return;
 
+    const syncedTokens = prepareTokensForSync(tokens, compendiumMonsters, combatTrackerCombatants);
+
     if (authoritativeUrl && !authoritativeUrl.startsWith('blob:')) {
       socketRef.current.emit('SYNC_IMAGE', authoritativeUrl);
     }
     socketRef.current.emit('SYNC_STATE', {
       imageFile: authoritativeUrl,
-      tokens: tokens,
+      tokens: syncedTokens,
       walls: walls,
       gridSize: gridSize,
       gridOpacity: gridOpacity,
       gridVisible: gridVisible,
+      gridOffsetX: gridOffsetX,
+      gridOffsetY: gridOffsetY,
       isFogVisible: isFogVisible,
       fogResetKey: fogResetKey,
       reveals: reveals,
@@ -2212,6 +2265,10 @@ export default function App() {
       boardAnimatedEnabled: boardAnimatedEnabled,
       boardWeatherEffect: boardWeatherEffect,
       characters: compendiumCharacters,
+      combatants: sortedCombatTrackerCombatants,
+      combatRound: combatTrackerRound,
+      combatTurnIndex: combatTrackerTurnIndex,
+      showCombatTracker: showCombatTracker,
       activeSceneInfo: activeSceneInfo ? {
         ...activeSceneInfo,
         mapUrl: authoritativeUrl,
@@ -2223,12 +2280,38 @@ export default function App() {
         mapHeight: dims.height,
       }
     });
-  }, [getMapDimensions, imageFile, activeSceneInfo, tokens, walls, gridSize, gridOpacity, gridVisible, isFogVisible, fogResetKey, reveals, polygonReveals, visionConfig, roomAnnotations, mapRotation, effects, boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect, compendiumCharacters]);
+  }, [getMapDimensions, imageFile, activeSceneInfo, tokens, compendiumMonsters, combatTrackerCombatants, prepareTokensForSync, walls, gridSize, gridOpacity, gridVisible, gridOffsetX, gridOffsetY, isFogVisible, fogResetKey, reveals, polygonReveals, visionConfig, roomAnnotations, mapRotation, effects, boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect, compendiumCharacters, sortedCombatTrackerCombatants, combatTrackerRound, combatTrackerTurnIndex, showCombatTracker]);
 
   const broadcastFullStateRef = useRef<() => void>(() => {});
   useEffect(() => {
     broadcastFullStateRef.current = broadcastFullState;
   }, [broadcastFullState]);
+
+  // Flag to prevent echoing back token updates initiated remotely by players
+  const isRemoteTokenUpdateRef = useRef<boolean>(false);
+  const isInitialTokenMountRef = useRef<boolean>(true);
+
+  // Real-time synchronization of DM token updates (conditions, monster spawns, edits, deletions) to Player View
+  useEffect(() => {
+    const currentSlot = activeMapIdRef.current;
+    if (mapsDataRef.current[currentSlot]) {
+      mapsDataRef.current[currentSlot].tokens = tokens;
+    }
+    if (isInitialTokenMountRef.current) {
+      isInitialTokenMountRef.current = false;
+      return;
+    }
+    if (isRemoteTokenUpdateRef.current) {
+      isRemoteTokenUpdateRef.current = false;
+      return;
+    }
+    if (isSwitchingMapSlotRef.current || (Date.now() - lastSlotSwitchTimeRef.current < 1500)) return;
+    if (currentSlot !== liveMapIdRef.current) return;
+    if (socketRef.current?.connected) {
+      const syncedTokens = prepareTokensForSync(tokens, compendiumMonsters, combatTrackerCombatants);
+      socketRef.current.emit('SYNC_TOKENS', syncedTokens);
+    }
+  }, [tokens, compendiumMonsters, combatTrackerCombatants, prepareTokensForSync]);
 
   // Real-time synchronization of spell effects, board animated features & weather to Player View
   useEffect(() => {
@@ -2264,7 +2347,7 @@ export default function App() {
 
     socket.on('connect', () => {
       console.log('[DM Socket] Connected to server as ID:', socket.id);
-      if (activeMapIdRef.current === liveMapIdRef.current && (imageFile || activeSceneInfo?.mapUrl)) {
+      if (activeMapIdRef.current === liveMapIdRef.current) {
         broadcastFullStateRef.current?.();
       }
     });
@@ -2274,9 +2357,7 @@ export default function App() {
       const currentSlot = activeMapIdRef.current;
       const liveSlot = liveMapIdRef.current;
       if (currentSlot === liveSlot) {
-        if (imageFile || activeSceneInfo?.mapUrl) {
-          broadcastFullStateRef.current?.();
-        }
+        broadcastFullStateRef.current?.();
       } else {
         const liveData = mapsDataRef.current[liveSlot];
         if (liveData && socketRef.current?.connected) {
@@ -2286,11 +2367,13 @@ export default function App() {
           }
           socketRef.current.emit('SYNC_STATE', {
             imageFile: authUrl,
-            tokens: liveData.tokens || [],
+            tokens: (liveData.tokens || []).map((t: any) => repairMonsterToken(t)),
             walls: liveData.walls || [],
             gridSize: liveData.gridSize || 50,
             gridOpacity: liveData.gridOpacity ?? 0.3,
             gridVisible: liveData.gridVisible ?? true,
+            gridOffsetX: liveData.gridOffsetX || 0,
+            gridOffsetY: liveData.gridOffsetY || 0,
             isFogVisible: liveData.isFogVisible ?? true,
             reveals: liveData.reveals || [],
             polygonReveals: liveData.polygonReveals || [],
@@ -2323,7 +2406,36 @@ export default function App() {
           );
         }
         if (activeMapIdRef.current === liveSlot) {
+          isRemoteTokenUpdateRef.current = true;
           setTokens(prev => prev.map(t => t.id === data.id ? { ...t, x: data.x, y: data.y } : t));
+        }
+      }
+    });
+
+    socket.on('UPDATE_TOKEN', (data: { id: string; updates: Partial<Token> }) => {
+      if (data?.id && data.updates) {
+        const liveSlot = liveMapIdRef.current;
+        if (mapsDataRef.current[liveSlot]?.tokens) {
+          mapsDataRef.current[liveSlot].tokens = mapsDataRef.current[liveSlot].tokens.map((t: any) =>
+            t.id === data.id ? repairMonsterToken({ ...t, ...data.updates }) : t
+          );
+        }
+        if (activeMapIdRef.current === liveSlot) {
+          isRemoteTokenUpdateRef.current = true;
+          setTokens(prev => prev.map(t => t.id === data.id ? (repairMonsterToken({ ...t, ...data.updates }) as Token) : t));
+        }
+      }
+    });
+
+    socket.on('DELETE_TOKEN', (data: { id: string }) => {
+      if (data?.id) {
+        const liveSlot = liveMapIdRef.current;
+        if (mapsDataRef.current[liveSlot]?.tokens) {
+          mapsDataRef.current[liveSlot].tokens = mapsDataRef.current[liveSlot].tokens.filter((t: any) => t.id !== data.id);
+        }
+        if (activeMapIdRef.current === liveSlot) {
+          isRemoteTokenUpdateRef.current = true;
+          setTokens(prev => prev.filter(t => t.id !== data.id));
         }
       }
     });
@@ -2331,12 +2443,14 @@ export default function App() {
     socket.on('SYNC_TOKENS', (syncedTokens: Token[]) => {
       if (Array.isArray(syncedTokens)) {
         console.log('[DM Socket] Live SYNC_TOKENS received:', syncedTokens.length, 'tokens');
+        const repaired = syncedTokens.map(t => repairMonsterToken(t) as Token);
         const liveSlot = liveMapIdRef.current;
         if (mapsDataRef.current[liveSlot]) {
-          mapsDataRef.current[liveSlot].tokens = syncedTokens;
+          mapsDataRef.current[liveSlot].tokens = repaired;
         }
         if (activeMapIdRef.current === liveSlot) {
-          setTokens(syncedTokens);
+          isRemoteTokenUpdateRef.current = true;
+          setTokens(repaired);
         }
       }
     });
@@ -2667,6 +2781,9 @@ export default function App() {
     isSwitchingMapSlotRef.current = false;
     lastSlotSwitchTimeRef.current = 0;
 
+    const syncedTokens = prepareTokensForSync(tokens, compendiumMonsters, combatTrackerCombatants);
+    setTokens(syncedTokens);
+
     // Save to mapsDataRef so it is always current
     mapsDataRef.current[currentSlot] = {
       imageFile,
@@ -2679,7 +2796,7 @@ export default function App() {
       polygonReveals,
       isFogVisible,
       effects,
-      tokens,
+      tokens: syncedTokens,
       gridVisible,
       gridOpacity,
       gridSize,
@@ -2696,6 +2813,16 @@ export default function App() {
     };
 
     broadcastFullState();
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('SYNC_TOKENS', syncedTokens);
+      socketRef.current.emit('SYNC_COMBAT_STATE', {
+        combatants: sortedCombatTrackerCombatants,
+        round: combatTrackerRound,
+        turnIndex: combatTrackerTurnIndex,
+        showCombatTracker: showCombatTracker
+      });
+    }
+
     const dims = getMapDimensions();
     const authoritativeUrl = imageFile || activeSceneInfo?.mapUrl || '';
     if (activeSceneInfo) {
@@ -2710,7 +2837,7 @@ export default function App() {
         mapWidth: activeSceneInfo.mapWidth || dims.width,
         mapHeight: activeSceneInfo.mapHeight || dims.height,
         dmNotes: activeDmNotes,
-        tokens: tokens as any,
+        tokens: syncedTokens as any,
         gridSize: gridSize,
         gridOpacity: gridOpacity,
         isFogVisible: isFogVisible,
@@ -2721,7 +2848,7 @@ export default function App() {
       }).catch(console.warn);
     }
     toast.success(`Force-synced ${currentSlot} to Player View!`);
-  }, [broadcastFullState, getMapDimensions, imageFile, activeSceneInfo, activeDmNotes, tokens, gridSize, gridOpacity, isFogVisible, walls, visionConfig, roomAnnotations, mapType, videoSize, mapRotation, stageScale, stagePos, reveals, polygonReveals, effects, gridVisible, gridOffsetX, gridOffsetY, boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect]);
+  }, [broadcastFullState, getMapDimensions, imageFile, activeSceneInfo, activeDmNotes, tokens, compendiumMonsters, combatTrackerCombatants, prepareTokensForSync, sortedCombatTrackerCombatants, combatTrackerRound, combatTrackerTurnIndex, showCombatTracker, gridSize, gridOpacity, isFogVisible, walls, visionConfig, roomAnnotations, mapType, videoSize, mapRotation, stageScale, stagePos, reveals, polygonReveals, effects, gridVisible, gridOffsetX, gridOffsetY, boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect]);
 
   const handleSpawnMonsterToken = useCallback((tokenData: {
     name: string;
@@ -2732,8 +2859,8 @@ export default function App() {
     polygonPoints?: number[];
   }) => {
     // Start with default position
-    let spawnX = 350 + Math.floor(Math.random() * 80);
-    let spawnY = 350 + Math.floor(Math.random() * 80);
+    let baseSpawnX = 350;
+    let baseSpawnY = 350;
 
     if (tokenData.polygonPoints && tokenData.polygonPoints.length >= 6) {
       const { width: mapW, height: mapH } = getMapDimensions();
@@ -2745,34 +2872,43 @@ export default function App() {
           sumX += tokenData.polygonPoints[i];
           sumY += tokenData.polygonPoints[i + 1];
         }
-        spawnX = (sumX / count / 100) * mapW;
-        spawnY = (sumY / count / 100) * mapH;
+        baseSpawnX = Math.round((sumX / count / 100) * mapW);
+        baseSpawnY = Math.round((sumY / count / 100) * mapH);
       }
+    } else {
+      baseSpawnX = 350 + Math.floor(Math.random() * 80);
+      baseSpawnY = 350 + Math.floor(Math.random() * 80);
     }
 
-    // Offset spawn position based on existing tokens to prevent stacking
-    const existingTokens = tokens.filter(t => Math.abs(t.x - spawnX) < 20 && Math.abs(t.y - spawnY) < 20);
-    const offset = existingTokens.length * 30;
-    
-    const newToken: Token = {
-      id: `token_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      name: tokenData.name,
-      url: tokenData.avatarUrl,
-      x: spawnX + offset,
-      y: spawnY + offset,
-      size: tokenData.size || 1,
-      hp: tokenData.hp,
-      maxHp: tokenData.hp,
-      currentHp: tokenData.hp,
-      ac: tokenData.ac,
-      isPlayer: false,
-      isMonster: true,
-      category: 'monster',
-      visionEnabled: false,
-      visionRadius: 0
-    };
-    setTokens(prev => [...prev, newToken]);
-  }, [getMapDimensions, tokens]);
+    setTokens(prev => {
+      const step = Math.max(45, gridSize || 50);
+      const nearbyCount = prev.filter(t => Math.abs(t.x - baseSpawnX) < step * 2.5 && Math.abs(t.y - baseSpawnY) < step * 2.5).length;
+      const col = nearbyCount % 3;
+      const row = Math.floor(nearbyCount / 3);
+      const offsetX = col * step;
+      const offsetY = row * step;
+
+      const rawToken: Token = {
+        id: `token_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        name: tokenData.name,
+        url: tokenData.avatarUrl,
+        x: baseSpawnX + offsetX,
+        y: baseSpawnY + offsetY,
+        size: tokenData.size || 1,
+        hp: tokenData.hp,
+        maxHp: tokenData.hp,
+        currentHp: tokenData.hp,
+        ac: tokenData.ac,
+        isPlayer: false,
+        isMonster: true,
+        category: 'monster',
+        visionEnabled: false,
+        visionRadius: 0
+      };
+      const repaired = repairMonsterToken(rawToken, compendiumMonsters) as Token;
+      return [...prev, repaired];
+    });
+  }, [getMapDimensions, gridSize, compendiumMonsters]);
 
   const handleSpawnAllyToken = useCallback((tokenData: {
     name: string;
@@ -2783,32 +2919,36 @@ export default function App() {
     category?: 'ally';
     allyId?: string;
   }) => {
-    let spawnX = 350 + Math.floor(Math.random() * 80);
-    let spawnY = 350 + Math.floor(Math.random() * 80);
+    const baseSpawnX = 350 + Math.floor(Math.random() * 80);
+    const baseSpawnY = 350 + Math.floor(Math.random() * 80);
 
-    const existingTokens = tokens.filter(t => Math.abs(t.x - spawnX) < 20 && Math.abs(t.y - spawnY) < 20);
-    const offset = existingTokens.length * 30;
+    setTokens(prev => {
+      const step = Math.max(45, gridSize || 50);
+      const nearbyCount = prev.filter(t => Math.abs(t.x - baseSpawnX) < step * 2.5 && Math.abs(t.y - baseSpawnY) < step * 2.5).length;
+      const offsetX = (nearbyCount % 3) * step;
+      const offsetY = Math.floor(nearbyCount / 3) * step;
 
-    const newToken: Token = {
-      id: `token_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      name: tokenData.name,
-      url: tokenData.avatarUrl,
-      x: spawnX + offset,
-      y: spawnY + offset,
-      size: tokenData.size || 1,
-      hp: tokenData.hp,
-      maxHp: tokenData.hp,
-      currentHp: tokenData.hp,
-      ac: tokenData.ac,
-      isPlayer: false,
-      isMonster: false,
-      category: 'ally',
-      visionEnabled: true,
-      visionRadius: 60,
-      ...(tokenData.allyId ? { allyId: tokenData.allyId } : {})
-    };
-    setTokens(prev => [...prev, newToken]);
-  }, [tokens]);
+      const newToken: Token = {
+        id: `token_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        name: tokenData.name,
+        url: tokenData.avatarUrl,
+        x: baseSpawnX + offsetX,
+        y: baseSpawnY + offsetY,
+        size: tokenData.size || 1,
+        hp: tokenData.hp,
+        maxHp: tokenData.hp,
+        currentHp: tokenData.hp,
+        ac: tokenData.ac,
+        isPlayer: false,
+        isMonster: false,
+        category: 'ally',
+        visionEnabled: true,
+        visionRadius: 60,
+        ...(tokenData.allyId ? { allyId: tokenData.allyId } : {})
+      };
+      return [...prev, newToken];
+    });
+  }, [gridSize]);
   
 
 
@@ -2945,24 +3085,33 @@ export default function App() {
     let loadedTokens: any[] = [];
     if (tokenSource && Array.isArray(tokenSource)) {
       loadedTokens = tokenSource.map((t: any) => {
-        const isMonster = t.isMonster === true || t.category === 'monster' || t.isPlayer === false || isMonsterToken(t);
-        return {
+        const isCond = Boolean(t.isCondition);
+        const isAlly = t.category === 'ally' || Boolean(t.allyId);
+        const isMonster = !isCond && !isAlly && (t.isMonster === true || t.category === 'monster' || t.isPlayer === false || isMonsterToken(t));
+        const rawTok = {
+          ...t,
           id: t.id,
           name: t.name,
           url: t.avatarUrl || t.url || 'https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/Varrak.png/:/rs=w:1440,h:1440',
           x: t.x || 300,
           y: t.y || 300,
-          size: t.size || 1,
+          size: t.size || (isCond ? 0.5 : 1),
           hp: t.hp,
+          maxHp: t.maxHp ?? t.hp,
+          currentHp: t.currentHp ?? t.hp,
+          tempHp: t.tempHp,
           ac: t.ac,
-          isCondition: t.isCondition,
-          isPlayer: !isMonster,
+          conditions: Array.isArray(t.conditions) ? t.conditions : undefined,
+          hidden: t.hidden,
+          isCondition: isCond,
+          isPlayer: !isMonster && !isAlly && !isCond,
           isMonster: isMonster,
-          category: isMonster ? 'monster' : (t.category || 'character'),
-          visionEnabled: !isMonster,
-          visionRadius: isMonster ? 0 : (t.visionRadius ?? 60),
+          category: isCond ? 'custom' : isMonster ? 'monster' : isAlly ? 'ally' : (t.category || 'character'),
+          visionEnabled: isCond || isMonster ? false : (t.visionEnabled ?? true),
+          visionRadius: isCond || isMonster ? 0 : (t.visionRadius ?? 60),
           visionAngle: t.visionAngle
         };
+        return repairMonsterToken(rawTok, compendiumMonsters);
       });
       setTokens(loadedTokens);
     }
@@ -3138,7 +3287,12 @@ export default function App() {
           size: t.size ?? 1
         };
         if (typeof t.hp === 'number' && !isNaN(t.hp)) tok.hp = t.hp;
+        if (typeof t.maxHp === 'number' && !isNaN(t.maxHp)) (tok as any).maxHp = t.maxHp;
+        if (typeof t.currentHp === 'number' && !isNaN(t.currentHp)) (tok as any).currentHp = t.currentHp;
+        if (typeof t.tempHp === 'number' && !isNaN(t.tempHp)) (tok as any).tempHp = t.tempHp;
         if (typeof t.ac === 'number' && !isNaN(t.ac)) tok.ac = t.ac;
+        if (Array.isArray(t.conditions) && t.conditions.length > 0) (tok as any).conditions = t.conditions;
+        if (typeof t.hidden === 'boolean') (tok as any).hidden = t.hidden;
         if (typeof t.isCondition === 'boolean') tok.isCondition = t.isCondition;
         if (typeof (t as any).visionRadius === 'number') tok.visionRadius = (t as any).visionRadius;
         if (typeof (t as any).visionAngle === 'number') tok.visionAngle = (t as any).visionAngle;
@@ -7396,7 +7550,14 @@ export default function App() {
           isMinimized={isCombatTrackerMinimized}
           setIsMinimized={setIsCombatTrackerMinimized}
           tokens={tokens}
-          onUpdateToken={(id, updates) => setTokens(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t))}
+          onUpdateToken={(id, updates) => {
+            const matchedComb = combatTrackerCombatants.find(c => c.id === id || (c as any).tokenId === id);
+            setTokens(prev => prev.map(t => {
+              const isMatch = t.id === id ||
+                (matchedComb && ((matchedComb as any).tokenId === t.id || (matchedComb.name && t.name && matchedComb.name.toLowerCase().trim() === t.name.toLowerCase().trim())));
+              return isMatch ? { ...t, ...updates } : t;
+            }));
+          }}
           onPanToToken={(id) => setSelectedTokenIds([id])}
         />
       )}
@@ -8022,6 +8183,15 @@ export default function App() {
                             ? activeConditions.filter(c => c !== cond)
                             : [...activeConditions, cond];
                           setTokens(prev => prev.map(t => t.id === activeTokenMenu.id ? { ...t, conditions: nextConditions } : t));
+                          if (currentToken) {
+                            setCombatTrackerCombatants(prev => prev.map(c =>
+                              c.id === currentToken.id ||
+                              (c as any).tokenId === currentToken.id ||
+                              (c.name && currentToken.name && c.name.toLowerCase().trim() === currentToken.name.toLowerCase().trim())
+                                ? { ...c, conditions: nextConditions }
+                                : c
+                            ));
+                          }
                         }}
                         className={`px-2 py-1.5 rounded-lg text-left text-[11px] font-mono font-bold transition-all flex items-center justify-between border cursor-pointer ${
                           isActive 

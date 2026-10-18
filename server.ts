@@ -11,6 +11,7 @@ import { ddbRouter } from "./server/ddbRoutes";
 import cors from "cors";
 import { DdbHpSyncDaemon } from "./server/ddbCampaignService";
 import { DdbGameLogDaemon } from "./server/ddbGameLogDaemon";
+import { repairMonsterToken } from "./src/data/srdMonstersCatalog";
 
 
 
@@ -377,7 +378,7 @@ async function startServer() {
                 width: sess.mapWidth || 1920,
                 height: sess.mapHeight || 1080
               },
-              tokens: Array.isArray(sess.tokens) ? sess.tokens : [],
+              tokens: Array.isArray(sess.tokens) ? sess.tokens.map((t: any) => repairMonsterToken(t)) : [],
               walls: Array.isArray(sess.walls) ? sess.walls : [],
               isFogVisible: sess.isFogVisible !== undefined ? sess.isFogVisible : true,
               gridSize: sess.gridSize || 50,
@@ -427,10 +428,8 @@ async function startServer() {
       if (activeVttState.imageFile) {
         socket.emit("SYNC_IMAGE", activeVttState.imageFile);
       }
-      // ONLY notify other clients if the server has no map or scene state yet
-      if (!activeVttState.imageFile && !activeVttState.activeSceneInfo) {
-        socket.broadcast.emit("REQUEST_INITIAL_STATE");
-      }
+      // Always notify connected DM clients so they can push their freshest live state
+      socket.broadcast.emit("REQUEST_INITIAL_STATE");
     });
 
     // Authoritative image change synchronization
@@ -483,10 +482,15 @@ async function startServer() {
             ? state.activeSceneInfo.mapUrl
             : (state.activeSceneInfo?.mapThumbnailUrl || activeVttState.imageFile));
 
-      console.log(`[Server] SYNC_STATE received. imageFile: ${incomingUrl?.slice(0, 80) || 'none'}`);
+      const repairedTokens = Array.isArray(state.tokens)
+        ? state.tokens.map((t: any) => repairMonsterToken(t))
+        : activeVttState.tokens;
+
+      console.log(`[Server] SYNC_STATE received. imageFile: ${incomingUrl?.slice(0, 80) || 'none'}, tokens: ${repairedTokens?.length || 0}`);
       activeVttState = {
         ...activeVttState,
         ...state,
+        tokens: repairedTokens,
         imageFile: incomingUrl || activeVttState.imageFile,
         updatedAt: Date.now()
       };
@@ -503,7 +507,32 @@ async function startServer() {
     });
 
     socket.on("ADD_TOKEN", (token: any) => {
-      socket.broadcast.emit("ADD_TOKEN", token);
+      if (token?.id && Array.isArray(activeVttState.tokens)) {
+        const repaired = repairMonsterToken(token);
+        if (!activeVttState.tokens.some((t: any) => t.id === repaired.id)) {
+          activeVttState.tokens.push(repaired);
+        }
+        socket.broadcast.emit("ADD_TOKEN", repaired);
+      } else {
+        socket.broadcast.emit("ADD_TOKEN", token);
+      }
+    });
+
+    socket.on("UPDATE_TOKEN", (data: { id: string; updates: Record<string, any> }) => {
+      if (data?.id && data.updates && Array.isArray(activeVttState.tokens)) {
+        activeVttState.tokens = activeVttState.tokens.map((t: any) =>
+          t.id === data.id ? repairMonsterToken({ ...t, ...data.updates }) : t
+        );
+        socket.broadcast.emit("UPDATE_TOKEN", data);
+      }
+    });
+
+    socket.on("DELETE_TOKEN", (data: { id: string } | string) => {
+      const targetId = typeof data === 'string' ? data : data?.id;
+      if (targetId && Array.isArray(activeVttState.tokens)) {
+        activeVttState.tokens = activeVttState.tokens.filter((t: any) => t.id !== targetId);
+        socket.broadcast.emit("DELETE_TOKEN", { id: targetId });
+      }
     });
 
     socket.on("SYNC_SHAKE", (val: any) => {
@@ -543,12 +572,35 @@ async function startServer() {
     socket.on("SYNC_TOKENS", (tokens: any) => {
       console.log(`[Server Socket] SYNC_TOKENS: count=${Array.isArray(tokens) ? tokens.length : 0}`);
       if (Array.isArray(tokens)) {
-        activeVttState.tokens = tokens;
+        const repaired = tokens.map((t: any) => repairMonsterToken(t));
+        activeVttState.tokens = repaired;
+        socket.broadcast.emit("SYNC_TOKENS", repaired);
+      } else {
+        socket.broadcast.emit("SYNC_TOKENS", tokens);
       }
-      socket.broadcast.emit("SYNC_TOKENS", tokens);
     });
 
     socket.on("SYNC_COMBAT_STATE", (val: any) => {
+      if (val) {
+        activeVttState.combatants = val.combatants || [];
+        activeVttState.combatRound = val.round || 1;
+        activeVttState.combatTurnIndex = val.turnIndex || 0;
+        activeVttState.showCombatTracker = val.showCombatTracker !== false;
+        if (Array.isArray(val.combatants) && Array.isArray(activeVttState.tokens)) {
+          activeVttState.tokens = activeVttState.tokens.map((t: any) => {
+            const match = val.combatants.find((c: any) =>
+              c.id === t.id ||
+              c.tokenId === t.id ||
+              (c.name && t.name && String(c.name).toLowerCase().trim() === String(t.name).toLowerCase().trim())
+            );
+            if (match && Array.isArray(match.conditions)) {
+              const mergedConds = Array.from(new Set([...(t.conditions || []), ...match.conditions]));
+              return { ...t, conditions: mergedConds };
+            }
+            return t;
+          });
+        }
+      }
       socket.broadcast.emit("SYNC_COMBAT_STATE", val);
     });
 

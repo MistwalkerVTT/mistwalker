@@ -69,6 +69,7 @@ import {
   CHARACTER_TOKEN_IMAGES,
   isDdbMatch
 } from '../data/defaultCharacters';
+import { repairMonsterToken } from '../data/srdMonstersCatalog';
 import { Character } from '../types/character';
 import {
   computeVisibilityPolygon,
@@ -97,6 +98,7 @@ interface Token {
   ac?: number;
   ddbCharacterId?: number | string;
   characterId?: string;
+  isCondition?: boolean;
   isPlayer?: boolean;
   isMonster?: boolean;
   visionRadius?: number;
@@ -116,15 +118,18 @@ interface Token {
 }
 
 /**
- * Normalizes a token ensuring both url and avatarUrl are authoritative image strings.
+ * Normalizes a token ensuring both url and avatarUrl are authoritative image strings,
+ * and repairs any monster tokens with missing or generic fallback icons/sizes.
  */
 function normalizeToken(t: any): Token {
-  const direct = t.url || t.avatarUrl;
+  const repaired = repairMonsterToken(t);
+  const direct = repaired.url || repaired.avatarUrl;
+  const isMon = Boolean(repaired.isMonster || repaired.category === 'monster' || (!repaired.isCondition && repaired.isPlayer === false && repaired.category !== 'ally' && !repaired.allyId));
   const resolved = (direct && typeof direct === 'string' && direct.trim() !== '')
     ? direct
-    : getCharacterTokenUrl(t.name || '', direct);
+    : (isMon ? '/uploads/file-1792077381663-439615846.png' : getCharacterTokenUrl(repaired.name || '', direct));
   return {
-    ...t,
+    ...repaired,
     url: resolved,
     avatarUrl: resolved
   };
@@ -700,6 +705,7 @@ const PlayerToken = React.memo(({
   gridSize,
   isClaimed,
   characters,
+  combatants,
   onMoveToken,
   onDragMoveToken,
   onDragStartToken,
@@ -710,6 +716,7 @@ const PlayerToken = React.memo(({
   gridSize: number;
   isClaimed: boolean;
   characters?: Character[];
+  combatants?: Combatant[];
   onMoveToken: (id: string, x: number, y: number) => void;
   onDragMoveToken?: (id: string, x: number, y: number) => void;
   onDragStartToken?: (id: string) => void;
@@ -721,11 +728,38 @@ const PlayerToken = React.memo(({
     return resolveTokenCharacterStats(token, characters || DEFAULT_CHARACTERS);
   }, [token, characters]);
 
+  const matchedCombatant = useMemo(() => {
+    if (!combatants || combatants.length === 0) return null;
+    return combatants.find((c: any) =>
+      c.id === token.id ||
+      c.tokenId === token.id ||
+      (c.name && token.name && c.name.toLowerCase().trim() === token.name.toLowerCase().trim())
+    );
+  }, [combatants, token.id, token.name]);
+
+  const mergedConditions = useMemo(() => {
+    const set = new Set<string>();
+    if (Array.isArray(token.conditions)) {
+      token.conditions.forEach((c: string) => { if (c) set.add(c); });
+    }
+    if (Array.isArray(matchedCombatant?.conditions)) {
+      matchedCombatant.conditions.forEach((c: string) => { if (c) set.add(c); });
+    }
+    return Array.from(set);
+  }, [token.conditions, matchedCombatant]);
+
+  const isCondition = Boolean(token.isCondition);
+  const isAlly = !isCondition && (token.category === 'ally' || !!(token as any).allyId);
+  const isMonster = !isCondition && !isAlly && (isMonsterToken(token) || token.isMonster === true || token.category === 'monster' || token.isPlayer === false);
+
   // Robust URL resolution: checks token.url, token.avatarUrl, compendium character match, and getCharacterTokenUrl fallback
   const resolvedUrl = useMemo(() => {
     const direct = token.url || token.avatarUrl;
     if (direct && typeof direct === 'string' && direct.trim() !== '') {
       return direct;
+    }
+    if (isMonster || isCondition) {
+      return direct || '/uploads/file-1792077381663-439615846.png';
     }
     const allChars = characters && characters.length > 0 ? characters : DEFAULT_CHARACTERS;
     const matchingChar = allChars.find(c =>
@@ -737,20 +771,18 @@ const PlayerToken = React.memo(({
       return matchingChar.avatarUrl;
     }
     return getCharacterTokenUrl(token.name || '', direct);
-  }, [token.url, token.avatarUrl, token.name, token.id, characters]);
+  }, [token.url, token.avatarUrl, token.name, token.id, characters, isMonster, isCondition]);
 
   const isGif = Boolean(resolvedUrl && resolvedUrl.toLowerCase().endsWith('.gif'));
-  // Dual-strategy image loading: try anonymous CORS first; if server rejects CORS, fallback without CORS
-  const [imgWithCors, corsStatus] = useImage(!isGif && resolvedUrl ? resolvedUrl : '', 'anonymous');
-  const [imgNoCors] = useImage(!isGif && corsStatus === 'failed' && resolvedUrl ? resolvedUrl : '');
-  const img = imgWithCors || imgNoCors;
+  // Load without CORS constraint (matching DM View TokenImage) so external avatars (D&D Beyond, wiki, etc.) never fail CORS
+  const [img] = useImage(!isGif && resolvedUrl ? resolvedUrl : '');
 
   const tokenPx = gridSize * (token.size || 1);
   const radius = tokenPx / 2;
   const lastEmitTimeRef = useRef<number>(0);
 
   const handleDragStart = () => {
-    if (onDragStartToken) {
+    if (!isMonster && !isCondition && onDragStartToken) {
       onDragStartToken(token.id);
     }
   };
@@ -777,9 +809,7 @@ const PlayerToken = React.memo(({
     onMoveToken(token.id, snappedX, snappedY);
   };
 
-  const isAlly = token.category === 'ally' || !!(token as any).allyId;
-  const isMonster = !isAlly && (isMonsterToken(token) || token.isMonster === true || token.category === 'monster' || token.isPlayer === false);
-  const hpRatio = Math.max(0, Math.min(1, stats.currentHp / stats.maxHp));
+  const hpRatio = Math.max(0, Math.min(1, stats.currentHp / Math.max(1, stats.maxHp)));
   const hpColor = hpRatio > 0.5 ? '#10b981' : hpRatio > 0.25 ? '#f59e0b' : '#ef4444';
   const pillWidth = Math.max(68, Math.min(108, tokenPx * 0.94));
   const pillHeight = 22;
@@ -806,24 +836,24 @@ const PlayerToken = React.memo(({
     <Group
       x={token.x}
       y={token.y}
-      draggable={true}
+      draggable={!isCondition}
       onDragStart={handleDragStart}
       onDragMove={handleDragMove}
       onDragEnd={handleDragEnd}
       onClick={() => {
-        if (!isMonster && onClaimToken) {
+        if (!isMonster && !isCondition && onClaimToken) {
           onClaimToken(token.id);
         }
       }}
       onTap={() => {
-        if (!isMonster && onClaimToken) {
+        if (!isMonster && !isCondition && onClaimToken) {
           onClaimToken(token.id);
         }
       }}
       onContextMenu={(e: any) => {
         e.evt.preventDefault();
         e.cancelBubble = true;
-        if (!isMonster && onContextMenu) {
+        if (!isMonster && !isCondition && onContextMenu) {
           onContextMenu(token.id, e.evt.clientX, e.evt.clientY);
         }
       }}
@@ -991,12 +1021,12 @@ const PlayerToken = React.memo(({
         )}
       </Group>
 
-      {/* 2. Outer Circular Border Ring (Allies are bright yellow, Players blue, Monsters red) */}
+      {/* 2. Outer Circular Border Ring (Allies are bright yellow, Players blue, Monsters & Condition markers red) */}
       <Circle
         x={radius}
         y={radius}
         radius={radius}
-        stroke={isClaimed ? '#10b981' : isAlly ? '#eab308' : token.isPlayer ? '#38bdf8' : '#ef4444'}
+        stroke={isCondition ? '#ef4444' : isClaimed ? '#10b981' : isAlly ? '#eab308' : token.isPlayer ? '#38bdf8' : '#ef4444'}
         strokeWidth={isClaimed ? 3.5 : isAlly ? 3 : 2.5}
         shadowColor={isClaimed ? '#10b981' : isAlly ? '#eab308' : undefined}
         shadowBlur={isClaimed ? 8 : isAlly ? 6 : 0}
@@ -1007,8 +1037,8 @@ const PlayerToken = React.memo(({
 
       {/* 3. AC Shield Badge on Top-Left: REMOVED per user request */}
 
-      {/* 4. Large, High-Contrast HP Pill Badge directly tied to D&D Beyond & Character Sheet (PLAYERS & ALLIES ONLY - Monsters NEVER show HP in player view) */}
-      {(!isMonster || isAlly) && (
+      {/* 4. Large, High-Contrast HP Pill Badge directly tied to D&D Beyond & Character Sheet (PLAYERS & ALLIES ONLY - Monsters & Condition tokens NEVER show HP in player view) */}
+      {!isCondition && (!isMonster || isAlly) && (
         <Group x={pillX} y={pillY} listening={false}>
           {/* Dark slate container badge */}
           <Rect
@@ -1058,7 +1088,7 @@ const PlayerToken = React.memo(({
       )}
 
       {/* 5. Token Name Label & Conditions (Cleanly spaced below the larger HP badge or token) */}
-      <Group y={tokenPx + (isMonster ? 4 : 16)} listening={false}>
+      <Group y={tokenPx + ((isMonster || isCondition) ? 4 : 16)} listening={false}>
         <Text
           text={token.name}
           width={tokenPx + 60}
@@ -1069,19 +1099,32 @@ const PlayerToken = React.memo(({
           fontStyle="bold"
           perfectDrawEnabled={false}
         />
-        {token.conditions && token.conditions.length > 0 && (
-          <Text
-            text={token.conditions.join(', ')}
-            fontSize={9.5}
-            fontStyle="bold"
-            fontFamily="monospace"
-            fill="#f43f5e"
-            align="center"
-            width={tokenPx + 60}
-            x={-30}
-            y={16}
-            perfectDrawEnabled={false}
-          />
+        {mergedConditions.length > 0 && (
+          <Group y={15}>
+            <Rect
+              x={-30}
+              y={-1}
+              width={tokenPx + 60}
+              height={14}
+              fill="rgba(15, 23, 42, 0.88)"
+              stroke="rgba(244, 63, 94, 0.55)"
+              strokeWidth={1}
+              cornerRadius={4}
+              perfectDrawEnabled={false}
+            />
+            <Text
+              text={mergedConditions.join(', ')}
+              fontSize={9.5}
+              fontStyle="bold"
+              fontFamily="monospace"
+              fill="#fb7185"
+              align="center"
+              width={tokenPx + 60}
+              x={-30}
+              y={1}
+              perfectDrawEnabled={false}
+            />
+          </Group>
         )}
       </Group>
     </Group>
@@ -1091,7 +1134,8 @@ const PlayerToken = React.memo(({
     prevProps.token === nextProps.token &&
     prevProps.gridSize === nextProps.gridSize &&
     prevProps.isClaimed === nextProps.isClaimed &&
-    prevProps.characters === nextProps.characters
+    prevProps.characters === nextProps.characters &&
+    prevProps.combatants === nextProps.combatants
   );
 });
 
@@ -1655,6 +1699,24 @@ export default function PlayerView() {
       });
     });
 
+    socket.on('UPDATE_TOKEN', (data: { id: string; updates: Partial<Token> }) => {
+      if (!data?.id || !data.updates) return;
+      setTokens(prev => {
+        const next = prev.map(t => t.id === data.id ? normalizeToken({ ...t, ...data.updates }) : t);
+        tokensRef.current = next;
+        return next;
+      });
+    });
+
+    socket.on('DELETE_TOKEN', (data: { id: string }) => {
+      if (!data?.id) return;
+      setTokens(prev => {
+        const next = prev.filter(t => t.id !== data.id);
+        tokensRef.current = next;
+        return next;
+      });
+    });
+
     // Full party initial D&D Beyond synchronization on socket connection or campaign switch
     socket.on('DDB_CAMPAIGN_SYNC_INIT', (data: {
       campaignId: string;
@@ -1959,6 +2021,7 @@ export default function PlayerView() {
 
   // Real-time Firestore activeSession/current subscription so remote Player Views always receive state across server restarts or different networks
   const lastFirestoreSceneRef = useRef<string | null>(null);
+  const lastFirestoreUpdateTimeRef = useRef<number>(0);
   useEffect(() => {
     const unsub = subscribeToActiveSession((sess) => {
       if (!sess) return;
@@ -1966,29 +2029,33 @@ export default function PlayerView() {
         ? sess.mapUrl
         : (sess.mapThumbnailUrl || '');
       const sceneChanged = Boolean(sess.sceneId && sess.sceneId !== lastFirestoreSceneRef.current);
+      const isNewerForceSync = Boolean(sess.updatedAt && sess.updatedAt > lastFirestoreUpdateTimeRef.current);
       if (sess.sceneId) {
         lastFirestoreSceneRef.current = sess.sceneId;
       }
+      if (sess.updatedAt) {
+        lastFirestoreUpdateTimeRef.current = sess.updatedAt;
+      }
       if (validUrl) {
-        setImageFile(prev => (sceneChanged || !prev || prev.startsWith('blob:')) ? validUrl : prev);
+        setImageFile(prev => (sceneChanged || isNewerForceSync || !prev || prev.startsWith('blob:')) ? validUrl : prev);
       }
       if (sess.tokens && Array.isArray(sess.tokens)) {
         setTokens(prev => {
-          if (!sceneChanged && prev.length > 0) return prev;
+          if (!sceneChanged && !isNewerForceSync && prev.length > 0) return prev;
           const normalized = sess.tokens.map(normalizeToken);
           tokensRef.current = normalized;
           return normalized;
         });
       }
       if (sess.walls && Array.isArray(sess.walls)) {
-        setWalls(prev => (!sceneChanged && prev.length > 0) ? prev : sess.walls);
+        setWalls(prev => (!sceneChanged && !isNewerForceSync && prev.length > 0) ? prev : sess.walls);
       }
-      if (sess.gridSize) setGridSize(prev => (sceneChanged || !prev) ? sess.gridSize! : prev);
+      if (sess.gridSize) setGridSize(prev => (sceneChanged || isNewerForceSync || !prev) ? sess.gridSize! : prev);
       if (sess.gridOpacity !== undefined) setGridOpacity(sess.gridOpacity);
       if (sess.isFogVisible !== undefined) setIsFogVisible(sess.isFogVisible);
       if (sess.visionConfig) setVisionConfig(sess.visionConfig);
       if (sess.sceneId || sess.sceneTitle || validUrl) {
-        setActiveSceneInfo(prev => (sceneChanged || !prev) ? {
+        setActiveSceneInfo(prev => (sceneChanged || isNewerForceSync || !prev) ? {
           campaignId: sess.campaignId,
           chapterId: sess.chapterId,
           sceneId: sess.sceneId,
@@ -2018,6 +2085,7 @@ export default function PlayerView() {
   const handleClaimToken = useCallback((tokenId: string) => {
     const target = tokensRef.current.find(t => t.id === tokenId);
     if (target) {
+      if (target.isCondition) return;
       const isAlly = target.category === 'ally' || !!(target as any).allyId;
       const isMonster = !isAlly && (isMonsterToken(target) || target.isMonster === true || target.category === 'monster' || target.isPlayer === false);
       if (isMonster) return;
@@ -2043,6 +2111,7 @@ export default function PlayerView() {
   const handleDragStartToken = useCallback((id: string) => {
     const target = tokensRef.current.find(t => t.id === id);
     if (target) {
+      if (target.isCondition) return;
       const isAlly = target.category === 'ally' || !!(target as any).allyId;
       const isMonster = !isAlly && (isMonsterToken(target) || target.isMonster === true || target.category === 'monster' || target.isPlayer === false);
       if (isMonster) return;
@@ -2064,7 +2133,7 @@ export default function PlayerView() {
     }
   }, []);
 
-  // Snapped or keyboard token movement handler (emits MOVE_TOKEN and SYNC_TOKENS)
+  // Snapped or keyboard token movement handler (emits MOVE_TOKEN only so it never overwrites DM tokens/conditions)
   const handleMoveToken = useCallback((id: string, newX: number, newY: number) => {
     const currentTokens = tokensRef.current;
     const nextTokens = currentTokens.map(t => t.id === id ? { ...t, x: newX, y: newY } : t);
@@ -2072,7 +2141,6 @@ export default function PlayerView() {
     setTokens(nextTokens);
     if (socketRef.current?.connected) {
       socketRef.current.emit('MOVE_TOKEN', { id, x: newX, y: newY });
-      socketRef.current.emit('SYNC_TOKENS', nextTokens);
     }
     setTimeout(() => {
       if (activeDraggingTokenIdRef.current === id) {
@@ -2081,10 +2149,10 @@ export default function PlayerView() {
     }, 150);
   }, []);
 
-  // Open right-click context menu for tokens (PLAYERS ONLY - Monsters NEVER show context menu or HP in player view)
+  // Open right-click context menu for tokens (PLAYERS ONLY - Monsters & Condition tokens NEVER show context menu or HP in player view)
   const handleOpenTokenContextMenu = useCallback((id: string, clientX: number, clientY: number) => {
     const target = tokensRef.current.find(t => t.id === id);
-    if (!target) return;
+    if (!target || target.isCondition) return;
     const isAlly = target.category === 'ally' || !!(target as any).allyId;
     const isMonster = !isAlly && (isMonsterToken(target) || target.isMonster === true || target.category === 'monster' || target.isPlayer === false);
     if (isMonster) return;
@@ -2098,7 +2166,7 @@ export default function PlayerView() {
     tokensRef.current = nextTokens;
     setTokens(nextTokens);
     if (socketRef.current?.connected) {
-      socketRef.current.emit('SYNC_TOKENS', nextTokens);
+      socketRef.current.emit('UPDATE_TOKEN', { id, updates });
     }
   }, []);
 
@@ -2116,7 +2184,7 @@ export default function PlayerView() {
     }
     setActiveTokenMenu(null);
     if (socketRef.current?.connected) {
-      socketRef.current.emit('SYNC_TOKENS', nextTokens);
+      socketRef.current.emit('DELETE_TOKEN', { id });
     }
   }, []);
 
@@ -2609,6 +2677,7 @@ export default function PlayerView() {
 
     const activeVisionTokens = tokens.filter((t) => {
       if ((t as any).hidden) return false;
+      if (t.isCondition) return false;
       const isAlly = t.category === 'ally' || !!(t as any).allyId;
       const isMonster = !isAlly && (isMonsterToken(t) || t.isMonster === true || t.category === 'monster' || t.isPlayer === false);
       if (isMonster) return false;
@@ -2705,28 +2774,34 @@ export default function PlayerView() {
     if (claimedTokenId && t.id === claimedTokenId) return true;
 
     // Friendly party characters, summons, and companions are always visible to players
-    const isAlly = t.category === 'ally' || !!(t as any).allyId;
-    const isMonster = !isAlly && (isMonsterToken(t) || t.isMonster === true || t.category === 'monster' || t.isPlayer === false);
-    if (!isMonster || isAlly) return true;
+    const isAlly = !t.isCondition && (t.category === 'ally' || !!(t as any).allyId);
+    const isMonster = !t.isCondition && !isAlly && (isMonsterToken(t) || t.isMonster === true || t.category === 'monster' || t.isPlayer === false);
+    if (!isMonster && !t.isCondition || isAlly) return true;
 
     const tokenPx = gridSize * (t.size || 1);
     const radius = tokenPx / 2;
     const cx = t.x + radius;
     const cy = t.y + radius;
 
-    // Multi-point sampling across token body (center + 4 cardinal offsets)
-    const sampleOffset = radius * 0.6;
+    // 9-point sampling across token footprint (center + 4 cardinal + 4 diagonal offsets)
+    // so Large (size 2) and Huge (size 3) monsters are visible whenever any part of their base is in FOV
+    const sampleOffset = radius * 0.8;
+    const diagOffset = sampleOffset * 0.707;
     const samplePoints = [
       { x: cx, y: cy },
       { x: cx - sampleOffset, y: cy },
       { x: cx + sampleOffset, y: cy },
       { x: cx, y: cy - sampleOffset },
       { x: cx, y: cy + sampleOffset },
+      { x: cx - diagOffset, y: cy - diagOffset },
+      { x: cx + diagOffset, y: cy - diagOffset },
+      { x: cx - diagOffset, y: cy + diagOffset },
+      { x: cx + diagOffset, y: cy + diagOffset },
     ];
 
     // 1. Check circle brush reveals
     for (const rev of reveals) {
-      if (distanceBetween(cx, cy, rev.x, rev.y) <= rev.radius + radius * 0.75) {
+      if (distanceBetween(cx, cy, rev.x, rev.y) <= rev.radius + radius * 0.85) {
         return true;
       }
     }
@@ -2750,12 +2825,16 @@ export default function PlayerView() {
         const d = distanceBetween(fov.center.x, fov.center.y, cx, cy);
         if (d > fov.radius + radius) continue;
 
-        // Token must be inside the observer's FOV polygon
+        // fov.points is already wall-clipped by computeVisibilityPolygon, so if any sample point of the token
+        // is inside fov.points OR has clear line of sight within fov.radius, the token is visible!
         const isInsideFov = samplePoints.some(pt => isPointInPolygon(pt.x, pt.y, fov.points));
-        if (!isInsideFov) continue;
+        if (isInsideFov) {
+          return true;
+        }
 
-        // Direct line-of-sight must NOT be occluded by any wall
-        const hasClearLos = samplePoints.some(pt => !isLineOfSightBlocked(fov.center, pt, walls));
+        const hasClearLos = samplePoints.some(
+          pt => distanceBetween(fov.center.x, fov.center.y, pt.x, pt.y) <= fov.radius && !isLineOfSightBlocked(fov.center, pt, walls)
+        );
         if (hasClearLos) {
           return true;
         }
@@ -2843,6 +2922,7 @@ export default function PlayerView() {
   const candidateTokens = useMemo(() => {
     return tokens.filter(t =>
       !(t as any).hidden &&
+      !t.isCondition &&
       !isMonsterToken(t) &&
       !t.isMonster &&
       t.category !== 'monster' &&
@@ -3987,6 +4067,7 @@ export default function PlayerView() {
                 token={token}
                 gridSize={gridSize}
                 characters={compendiumCharacters}
+                combatants={combatState.combatants}
                 isClaimed={claimedTokenId === token.id}
                 onMoveToken={handleMoveToken}
                 onDragMoveToken={handleDragMoveToken}

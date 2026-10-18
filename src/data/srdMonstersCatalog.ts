@@ -1125,6 +1125,145 @@ export const SRD_MONSTERS: Monster[] = [
       { name: 'Beak', type: 'attack', attackBonus: 4, reachRange: 'reach 5 ft.', damage: '1 piercing', description: 'Melee Weapon Attack: +4 to hit, reach 5 ft., one target. Hit: 1 piercing damage.' }
     ],
     source: 'SRD 5.1'
+  },
+  {
+    monsterId: 'monster_phase_spider',
+    name: 'Phase Spider',
+    size: 'Large',
+    type: 'Monstrosity',
+    alignment: 'Unaligned',
+    ac: 13,
+    acNotes: '(natural armor)',
+    hp: 32,
+    hpFormula: '(5d10 + 5)',
+    speed: '30 ft., climb 30 ft.',
+    initiativeBonus: 1,
+    str: 15,
+    dex: 12,
+    con: 12,
+    int: 6,
+    wis: 10,
+    cha: 6,
+    skills: 'Stealth +6',
+    senses: 'Darkvision 60 ft., Passive Perception 10',
+    languages: '—',
+    challenge: '3 (700 XP)',
+    proficiencyBonus: 2,
+    avatarUrl: '/uploads/file-1790541943352-104759656.jfif',
+    traits: [
+      { name: 'Ethereal Jaunt', description: 'As a bonus action, the spider can magically shift from the Material Plane to the Ethereal Plane, or vice versa.' },
+      { name: 'Spider Climb', description: 'The spider can climb difficult surfaces, including upside down on ceilings, without needing to make an ability check.' },
+      { name: 'Web Walker', description: 'The spider ignores movement restrictions caused by webbing.' }
+    ],
+    actions: [
+      { name: 'Bite', type: 'attack', attackBonus: 4, reachRange: 'reach 5 ft.', damage: '7 (1d10 + 2) piercing plus 18 (4d8) poison', description: 'Melee Weapon Attack: +4 to hit, reach 5 ft., one creature. Hit: 7 (1d10 + 2) piercing damage, and the target must make a DC 11 Constitution saving throw, taking 18 (4d8) poison damage on a failed save, or half as much damage on a successful one.' }
+    ],
+    source: 'SRD 5.1'
+  },
+  {
+    monsterId: 'monster_treant',
+    name: 'Treant',
+    size: 'Huge',
+    type: 'Plant',
+    alignment: 'Chaotic Good',
+    ac: 16,
+    acNotes: '(natural armor)',
+    hp: 138,
+    hpFormula: '(12d12 + 60)',
+    speed: '30 ft.',
+    initiativeBonus: -1,
+    str: 23,
+    dex: 8,
+    con: 21,
+    int: 12,
+    wis: 16,
+    cha: 12,
+    damageResistances: 'Bludgeoning, Piercing',
+    damageVulnerabilities: 'Fire',
+    senses: 'Passive Perception 13',
+    languages: 'Common, Druidic, Elvish, Sylvan',
+    challenge: '9 (5,000 XP)',
+    proficiencyBonus: 4,
+    avatarUrl: '/uploads/file-1790707157004-503180183.jfif',
+    traits: [
+      { name: 'False Appearance', description: 'While the treant remains motionless, it is indistinguishable from a normal tree.' },
+      { name: 'Siege Monster', description: 'The treant deals double damage to objects and structures.' }
+    ],
+    actions: [
+      { name: 'Multiattack', type: 'multiattack', description: 'The treant makes two slam attacks.' },
+      { name: 'Slam', type: 'attack', attackBonus: 10, reachRange: 'reach 5 ft.', damage: '16 (3d6 + 6) bludgeoning', description: 'Melee Weapon Attack: +10 to hit, reach 5 ft., one target. Hit: 16 (3d6 + 6) bludgeoning damage.' },
+      { name: 'Rock', type: 'attack', attackBonus: 10, reachRange: 'range 60/180 ft.', damage: '28 (4d10 + 6) bludgeoning', description: 'Ranged Weapon Attack: +10 to hit, range 60/180 ft., one target. Hit: 28 (4d10 + 6) bludgeoning damage.' }
+    ],
+    source: 'SRD 5.1'
+  },
+  {
+    monsterId: 'monster_werewolf',
+    name: 'Werewolf',
+    size: 'Medium',
+    type: 'Humanoid (Human, Shapechanger)',
+    alignment: 'Chaotic Evil',
+    ac: 12,
+    acNotes: '(in humanoid form, 12 in wolf or hybrid form)',
+    hp: 58,
+    hpFormula: '(9d8 + 18)',
+    speed: '30 ft. (40 ft. in wolf form)',
+    initiativeBonus: 1,
+    str: 15,
+    dex: 13,
+    con: 14,
+    int: 10,
+    wis: 11,
+    cha: 10,
+    skills: 'Perception +4, Stealth +3',
+    damageImmunities: 'Bludgeoning, Piercing, and Slashing from Nonmagical Attacks Not Made with Silvered Weapons',
+    senses: 'Passive Perception 14',
+    languages: 'Common (can\'t speak in wolf form)',
+    challenge: '3 (700 XP)',
+    proficiencyBonus: 2,
+    avatarUrl: '/uploads/file-1790542362393-148650395.jfif',
+    traits: [
+      { name: 'Shapechanger', description: 'The werewolf can use its action to polymorph into a wolf-humanoid hybrid or into a wolf, or back into its true form, which is humanoid.' },
+      { name: 'Keen Hearing and Smell', description: 'The werewolf has advantage on Wisdom (Perception) checks that rely on hearing or smell.' }
+    ],
+    actions: [
+      { name: 'Multiattack (Humanoid or Hybrid Form Only)', type: 'multiattack', description: 'The werewolf makes two attacks: two with its spear (humanoid form) or one with its bite and one with its claws (hybrid form).' },
+      { name: 'Bite (Wolf or Hybrid Form Only)', type: 'attack', attackBonus: 4, reachRange: 'reach 5 ft.', damage: '6 (1d8 + 2) piercing', description: 'Melee Weapon Attack: +4 to hit, reach 5 ft., one target. Hit: 6 (1d8 + 2) piercing damage. If the target is a humanoid, it must succeed on a DC 12 Constitution saving throw or be cursed with werewolf lycanthropy.' },
+      { name: 'Claws (Hybrid Form Only)', type: 'attack', attackBonus: 4, reachRange: 'reach 5 ft.', damage: '7 (2d4 + 2) slashing', description: 'Melee Weapon Attack: +4 to hit, reach 5 ft., one creature. Hit: 7 (2d4 + 2) slashing damage.' }
+    ],
+    source: 'SRD 5.1'
+  },
+  {
+    monsterId: 'monster_deadbark_dryad',
+    name: 'Deadbark Dryad',
+    size: 'Medium',
+    type: 'Fey',
+    alignment: 'Neutral Evil',
+    ac: 16,
+    acNotes: '(barkskin)',
+    hp: 22,
+    hpFormula: '(5d8)',
+    speed: '30 ft.',
+    initiativeBonus: 1,
+    str: 10,
+    dex: 12,
+    con: 11,
+    int: 14,
+    wis: 15,
+    cha: 18,
+    skills: 'Perception +4, Stealth +5',
+    senses: 'Darkvision 60 ft., Passive Perception 14',
+    languages: 'Elvish, Sylvan',
+    challenge: '1 (200 XP)',
+    proficiencyBonus: 2,
+    avatarUrl: '/uploads/file-1790541905194-354381266.png',
+    traits: [
+      { name: 'Magic Resistance', description: 'The dryad has advantage on saving throws against spells and other magical effects.' },
+      { name: 'Tree Stride', description: 'Once on her turn, the dryad can use 10 feet of her movement to step magically into one living or dead tree within her reach and emerge from a second tree within 60 feet.' }
+    ],
+    actions: [
+      { name: 'Club', type: 'attack', attackBonus: 6, reachRange: 'reach 5 ft.', damage: '8 (1d8 + 4) bludgeoning', description: 'Melee Weapon Attack: +6 to hit, reach 5 ft., one target. Hit: 8 (1d8 + 4) bludgeoning damage.' }
+    ],
+    source: 'SRD 5.1'
   }
 ];
 
@@ -1178,6 +1317,13 @@ export function isExactMonsterMatch(candidateName: string, monsterName: string):
   return false;
 }
 
+const GENERIC_FALLBACK_AVATAR = '/uploads/file-1792077381663-439615846.png';
+
+function isTrulyGuardType(name: string): boolean {
+  const n = (name || '').toLowerCase().trim();
+  return /^(guard|noble|commoner|gladiator|veteran|knight)(\s+\d+)?$/i.test(n);
+}
+
 /**
  * Resolves a monster string or name against all available monsters (with SRD fallbacks).
  * Returns a complete Monster object and quantity count.
@@ -1186,9 +1332,18 @@ export function resolveMonster(
   rawInput: string | any,
   compendium: Monster[]
 ): { monster: Monster; count: number } {
+  let overrideCount: number | undefined;
+
   if (typeof rawInput === 'object' && rawInput !== null && rawInput.name) {
     const count = typeof rawInput.count === 'number' && rawInput.count > 0 ? rawInput.count : 1;
-    return { monster: rawInput as Monster, count };
+    const isStaleFallback =
+      rawInput.source === 'Encounter Notes' ||
+      (rawInput.avatarUrl === GENERIC_FALLBACK_AVATAR && !isTrulyGuardType(rawInput.name));
+    if (!isStaleFallback) {
+      return { monster: rawInput as Monster, count };
+    }
+    overrideCount = count;
+    rawInput = rawInput.name;
   }
 
   const rawStr = String(rawInput || '').trim();
@@ -1218,11 +1373,11 @@ export function resolveMonster(
   }
 
   // 1. Extract count: e.g. "4x Vampire Spawn", "6 vampire spawns", "1 Wraith", "two ghouls"
-  let count = 1;
+  let count = overrideCount ?? 1;
   const countMatch = rawStr.match(/^(\d+)\s*x?\s+/i);
   if (countMatch) {
-    count = parseInt(countMatch[1], 10) || 1;
-  } else {
+    count = overrideCount ?? (parseInt(countMatch[1], 10) || 1);
+  } else if (overrideCount === undefined) {
     const wordNumbers: Record<string, number> = {
       one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
       eleven: 11, twelve: 12, a: 1, an: 1
@@ -1239,22 +1394,31 @@ export function resolveMonster(
     .replace(/^(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|a|an)\s+(?:x\s*)?/i, '')
     .trim();
 
-  // If in format "Guerthel (Wraith)", extract parenthetical type if known
+  // If in format "Guerthel (Wraith)" or "Riffel (kender werewolf)", extract parenthetical type if known
   const parenMatch = candidate.match(/\((.*?)\)/);
   const parenType = parenMatch ? parenMatch[1].trim() : null;
+  const parenWords = parenType ? parenType.split(/\s+/).filter(Boolean) : [];
+  const parenLastWord = parenWords.length > 1 && parenWords[parenWords.length - 1].length >= 4
+    ? parenWords[parenWords.length - 1]
+    : null;
 
-  const allAvailable = [...compendium, ...SRD_MONSTERS];
+  // Prefer entries with local /uploads/ avatars over external compendium URLs when duplicates exist
+  const allAvailable = [...compendium, ...SRD_MONSTERS].sort((a, b) => {
+    const aLocal = a.avatarUrl?.startsWith('/uploads/') && a.avatarUrl !== GENERIC_FALLBACK_AVATAR ? 1 : 0;
+    const bLocal = b.avatarUrl?.startsWith('/uploads/') && b.avatarUrl !== GENERIC_FALLBACK_AVATAR ? 1 : 0;
+    return bLocal - aLocal;
+  });
 
   // Match candidate or parenType strictly
   const matchCandidates = [
     candidate,
     parenType,
-    candidate.replace(/\(.*?\)/g, '').trim()
+    candidate.replace(/\(.*?\)/g, '').trim(),
+    parenLastWord
   ].filter(Boolean) as string[];
 
   let found: Monster | undefined;
   // Strict exact match: names must match exactly (case-insensitive, allowing singular/plural 's' or 'es' endings).
-  // Substring or partial matching is strictly forbidden (e.g. "moonlight guardian" must NEVER match "guard").
   for (const cName of matchCandidates) {
     found = allAvailable.find(m => isExactMonsterMatch(cName, m.name));
     if (found) break;
@@ -1273,19 +1437,19 @@ export function resolveMonster(
   }
 
   // 3. Fallback: synthesize dynamic monster with the EXACT requested name
-  const rawTarget = (parenType || candidate).trim();
+  const rawTarget = candidate.trim();
   // Strip plural trailing 's' if candidate was plural (e.g. "moonlight guardians" -> "Moonlight Guardian")
-  const singularBase = rawTarget.endsWith('s') && !rawTarget.endsWith('ss') && !rawTarget.endsWith('us') && !rawTarget.endsWith('is') && rawTarget.length > 3
+  const singularBase = !parenMatch && rawTarget.endsWith('s') && !rawTarget.endsWith('ss') && !rawTarget.endsWith('us') && !rawTarget.endsWith('is') && rawTarget.length > 3
     ? rawTarget.slice(0, -1)
     : rawTarget;
 
   const toTitleCase = (str: string) =>
     str
       .split(' ')
-      .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .map(w => w.startsWith('(') ? w : (w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()))
       .join(' ');
 
-  const displayName = toTitleCase(singularBase);
+  const displayName = parenMatch ? candidate : toTitleCase(singularBase);
   const synthId = `monster_${displayName.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
   
   return {
@@ -1308,7 +1472,7 @@ export function resolveMonster(
       cha: 10,
       challenge: '1 (200 XP)',
       proficiencyBonus: 2,
-      avatarUrl: '/uploads/file-1792077381663-439615846.png',
+      avatarUrl: GENERIC_FALLBACK_AVATAR,
       actions: [
         {
           name: 'Strike',
@@ -1324,3 +1488,59 @@ export function resolveMonster(
     count
   };
 }
+
+/**
+ * Repairs a monster token's avatarUrl and size if it was previously spawned with a generic fallback
+ * or missing URL, matching against compendium and SRD_MONSTERS.
+ */
+export function repairMonsterToken<T extends Record<string, any>>(
+  token: T,
+  compendium: Monster[] = []
+): T {
+  if (!token || token.isCondition || token.isPlayer === true || token.category === 'character' || token.category === 'ally' || token.allyId) {
+    return token;
+  }
+  const isMon = token.isMonster === true || token.category === 'monster' || token.isPlayer === false;
+  if (!isMon) return token;
+
+  const rawName = String(token.name || '').replace(/\s+\d+$/, '').trim();
+  if (!rawName) return token;
+
+  const currentUrl = token.url || token.avatarUrl || '';
+  const needsRepair =
+    !currentUrl ||
+    (currentUrl === GENERIC_FALLBACK_AVATAR && !isTrulyGuardType(rawName)) ||
+    currentUrl.includes('media.dndbeyond.com/compendium-images/veor/');
+
+  const res = resolveMonster(rawName, compendium);
+  const resolved = res?.monster;
+  if (!resolved || resolved.source === 'Encounter Notes') {
+    return token;
+  }
+
+  const sizeMap: Record<string, number> = {
+    tiny: 1,
+    small: 1,
+    medium: 1,
+    large: 2,
+    huge: 3,
+    gargantuan: 4
+  };
+  const expectedSize = sizeMap[String(resolved.size || 'medium').toLowerCase()] || 1;
+  const bestAvatar = (needsRepair && resolved.avatarUrl) ? resolved.avatarUrl : currentUrl;
+  const bestSize = (needsRepair || ((token.size === undefined || token.size === 1) && expectedSize > 1))
+    ? expectedSize
+    : (token.size || expectedSize);
+
+  if (bestAvatar === token.url && bestAvatar === token.avatarUrl && bestSize === token.size) {
+    return token;
+  }
+
+  return {
+    ...token,
+    url: bestAvatar,
+    avatarUrl: bestAvatar,
+    size: bestSize
+  };
+}
+
