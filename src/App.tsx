@@ -2201,6 +2201,7 @@ export default function App() {
       gridOpacity: gridOpacity,
       gridVisible: gridVisible,
       isFogVisible: isFogVisible,
+      fogResetKey: fogResetKey,
       reveals: reveals,
       polygonReveals: polygonReveals,
       visionConfig: visionConfig,
@@ -2222,7 +2223,7 @@ export default function App() {
         mapHeight: dims.height,
       }
     });
-  }, [getMapDimensions, imageFile, activeSceneInfo, tokens, walls, gridSize, gridOpacity, gridVisible, isFogVisible, reveals, polygonReveals, visionConfig, roomAnnotations, mapRotation, effects, boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect, compendiumCharacters]);
+  }, [getMapDimensions, imageFile, activeSceneInfo, tokens, walls, gridSize, gridOpacity, gridVisible, isFogVisible, fogResetKey, reveals, polygonReveals, visionConfig, roomAnnotations, mapRotation, effects, boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect, compendiumCharacters]);
 
   const broadcastFullStateRef = useRef<() => void>(() => {});
   useEffect(() => {
@@ -2314,7 +2315,6 @@ export default function App() {
 
     socket.on('MOVE_TOKEN', (data: { id: string; x: number; y: number }) => {
       if (data?.id) {
-        isRemoteUpdateRef.current = true;
         console.log('[DM Socket] Live MOVE_TOKEN from player:', data.id, data.x, data.y);
         const liveSlot = liveMapIdRef.current;
         if (mapsDataRef.current[liveSlot]?.tokens) {
@@ -2330,7 +2330,6 @@ export default function App() {
 
     socket.on('SYNC_TOKENS', (syncedTokens: Token[]) => {
       if (Array.isArray(syncedTokens)) {
-        isRemoteUpdateRef.current = true;
         console.log('[DM Socket] Live SYNC_TOKENS received:', syncedTokens.length, 'tokens');
         const liveSlot = liveMapIdRef.current;
         if (mapsDataRef.current[liveSlot]) {
@@ -2344,12 +2343,12 @@ export default function App() {
 
     socket.on('SYNC_STATE', (state: any) => {
       if (state?.walls && Array.isArray(state.walls)) {
-        isRemoteUpdateRef.current = true;
         const liveSlot = liveMapIdRef.current;
         if (mapsDataRef.current[liveSlot]) {
           mapsDataRef.current[liveSlot].walls = state.walls;
         }
         if (activeMapIdRef.current === liveSlot) {
+          isRemoteUpdateRef.current = true;
           setWalls(state.walls);
         }
       }
@@ -2656,7 +2655,7 @@ export default function App() {
     }, 150);
 
     return () => clearTimeout(timer);
-  }, [reveals, polygonReveals, isFogVisible, visionConfig, walls, gridSize, gridOpacity, gridVisible, effects, mapRotation]);
+  }, [reveals, polygonReveals, isFogVisible, fogResetKey, visionConfig, walls, gridSize, gridOpacity, gridVisible, effects, mapRotation]);
 
   // Manual "Force Sync to Players" action
   const handleForceSyncToPlayers = useCallback(() => {

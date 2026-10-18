@@ -498,6 +498,7 @@ interface SyncState {
   tokens?: Token[];
   walls?: WallSegment[];
   visionConfig?: VisionConfig;
+  fogResetKey?: number;
   roomAnnotations?: RoomAnnotation[];
   mapRotation?: number;
   imageFile?: string | null;
@@ -1119,6 +1120,7 @@ export default function PlayerView() {
   const [reveals, setReveals] = useState<Array<{ x: number; y: number; radius: number }>>([]);
   const [polygonReveals, setPolygonReveals] = useState<number[][]>([]);
   const [isFogVisible, setIsFogVisible] = useState(true);
+  const [fogResetKey, setFogResetKey] = useState<number>(0);
   const [effects, setEffects] = useState<SpellEffect[]>([]);
   const [boardAnimatedFeatures, setBoardAnimatedFeatures] = useState<AnimatedFeature[]>([]);
   const [boardAnimatedEnabled, setBoardAnimatedEnabled] = useState<boolean>(true);
@@ -1166,6 +1168,41 @@ export default function PlayerView() {
 
   // Compendium Characters synced from DM
   const [compendiumCharacters, setCompendiumCharacters] = useState<Character[]>(DEFAULT_CHARACTERS);
+
+  // Automatically reconcile claimedTokenId when tokens change (e.g. across scene transitions where token IDs differ)
+  useEffect(() => {
+    if (tokens.length === 0 || !claimedTokenId) return;
+    const exactMatch = tokens.find(t => t.id === claimedTokenId);
+    if (exactMatch) {
+      if (typeof window !== 'undefined' && exactMatch.name) {
+        localStorage.setItem('mistwalker_player_claimed_name', exactMatch.name);
+      }
+      return;
+    }
+
+    // Token ID not on current scene — try matching by character name
+    const savedName = typeof window !== 'undefined'
+      ? (localStorage.getItem('mistwalker_player_claimed_name') || '').trim().toLowerCase()
+      : '';
+    if (savedName) {
+      const nameMatch = tokens.find(t => {
+        const isAlly = t.category === 'ally' || !!(t as any).allyId;
+        const isMonster = !isAlly && (isMonsterToken(t) || t.isMonster === true || t.category === 'monster' || t.isPlayer === false);
+        if (isMonster) return false;
+        return (t.name || '').trim().toLowerCase() === savedName;
+      });
+      if (nameMatch) {
+        setClaimedTokenId(nameMatch.id);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('mistwalker_player_claimed_token', nameMatch.id);
+        }
+        return;
+      }
+    }
+
+    // Clear stale claimedTokenId from another scene so it never points to a non-existent token
+    setClaimedTokenId(null);
+  }, [tokens, claimedTokenId]);
 
   // Claimed Token Data & Character Stats
   const claimedToken = useMemo(() => {
@@ -1472,8 +1509,16 @@ export default function PlayerView() {
       if (state.gridOffsetY !== undefined) setGridOffsetY(state.gridOffsetY);
       if (state.isFogVisible !== undefined) setIsFogVisible(state.isFogVisible);
       if (state.visionConfig) setVisionConfig(state.visionConfig);
+      if (state.fogResetKey !== undefined) setFogResetKey(state.fogResetKey);
       if (state.mapRotation !== undefined) setMapRotation(state.mapRotation);
-      if (state.activeSceneInfo) setActiveSceneInfo(state.activeSceneInfo);
+      if (state.activeSceneInfo) {
+        setActiveSceneInfo(prev => {
+          if (prev?.sceneId && state.activeSceneInfo?.sceneId && prev.sceneId !== state.activeSceneInfo.sceneId) {
+            setFogResetKey(k => k + 1);
+          }
+          return state.activeSceneInfo!;
+        });
+      }
 
       // Combat state fallback in SYNC_STATE
       if (state.combatants) {
@@ -1976,6 +2021,9 @@ export default function PlayerView() {
       const isAlly = target.category === 'ally' || !!(target as any).allyId;
       const isMonster = !isAlly && (isMonsterToken(target) || target.isMonster === true || target.category === 'monster' || target.isPlayer === false);
       if (isMonster) return;
+      if (typeof window !== 'undefined' && target.name) {
+        localStorage.setItem('mistwalker_player_claimed_name', target.name);
+      }
     }
     setClaimedTokenId(tokenId);
     if (typeof window !== 'undefined') {
@@ -1988,6 +2036,7 @@ export default function PlayerView() {
     setClaimedTokenId(null);
     if (typeof window !== 'undefined') {
       localStorage.removeItem('mistwalker_player_claimed_token');
+      localStorage.removeItem('mistwalker_player_claimed_name');
     }
   }, []);
 
@@ -1997,6 +2046,9 @@ export default function PlayerView() {
       const isAlly = target.category === 'ally' || !!(target as any).allyId;
       const isMonster = !isAlly && (isMonsterToken(target) || target.isMonster === true || target.category === 'monster' || target.isPlayer === false);
       if (isMonster) return;
+      if (typeof window !== 'undefined' && target.name) {
+        localStorage.setItem('mistwalker_player_claimed_name', target.name);
+      }
     }
     activeDraggingTokenIdRef.current = id;
     setClaimedTokenId(id);
@@ -2551,7 +2603,7 @@ export default function PlayerView() {
     }
   }, [claimedToken?.name]);
 
-  // Vision Sources for Player Characters (active vision providers)
+  // Vision Sources for Player Characters (shared party vision providers)
   const playerVisionSources = useMemo<VisionSource[]>(() => {
     if (!visionConfig.enabled) return [];
 
@@ -2562,13 +2614,6 @@ export default function PlayerView() {
       if (isMonster) return false;
       if (t.visionEnabled === false) return false;
       if (typeof t.visionRadius === 'number' && t.visionRadius <= 0) return false;
-
-      // In Player View with a claimed token, only the claimed token (and its summons/allies) provides vision
-      if (claimedTokenId) {
-        if (t.id === claimedTokenId) return true;
-        if (isAlly && (t as any).ownerId === claimedTokenId) return true;
-        return false;
-      }
 
       if (t.visionEnabled !== undefined) return t.visionEnabled;
       return !isMonster || isAlly || t.isPlayer === true || t.category === 'character';
@@ -3928,6 +3973,7 @@ export default function PlayerView() {
           polygonReveals={polygonReveals}
           wallDrawStart={null}
           mousePos={{ x: 0, y: 0 }}
+          fogResetKey={fogResetKey}
           animatedFeatures={boardAnimatedFeatures}
         />
 

@@ -445,12 +445,35 @@ async function startServer() {
       socket.broadcast.emit("SYNC_IMAGE", url);
     });
 
-    // Authoritative full state synchronization
+    // Authoritative full or partial state synchronization
     socket.on("SYNC_STATE", (state: any) => {
       if (!state) return;
+
+      const isPartialPatch =
+        !('imageFile' in state) &&
+        !('activeSceneInfo' in state) &&
+        (Array.isArray(state.walls) ||
+          Array.isArray(state.reveals) ||
+          Array.isArray(state.polygonReveals) ||
+          Array.isArray(state.effects) ||
+          Array.isArray(state.boardAnimatedFeatures) ||
+          state.isFogVisible !== undefined ||
+          state.visionConfig !== undefined ||
+          state.fogResetKey !== undefined);
+
       // Prevent an empty/uninitialized client from overwriting an active loaded map in memory
-      if (!state.imageFile && !state.activeSceneInfo?.mapUrl && activeVttState.imageFile) {
+      if (!isPartialPatch && !state.imageFile && !state.activeSceneInfo?.mapUrl && activeVttState.imageFile) {
         console.log('[Server] Ignored blank SYNC_STATE: Active map session already loaded.');
+        return;
+      }
+
+      if (isPartialPatch) {
+        activeVttState = {
+          ...activeVttState,
+          ...state,
+          updatedAt: Date.now()
+        };
+        socket.broadcast.emit("SYNC_STATE", state);
         return;
       }
 

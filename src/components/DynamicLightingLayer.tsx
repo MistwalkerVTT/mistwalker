@@ -74,7 +74,7 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
 
   // Persistent memory of explored polygons across token movements
   const [exploredPolygons, setExploredPolygons] = useState<number[][]>([]);
-  const lastVisionPositionsRef = useRef<string>('');
+  const lastRecordedPosBySourceRef = useRef<Record<string, { x: number; y: number }>>({});
 
   // Reusable local scratch canvas for tight bounding-box blur (60 FPS high-performance feathering)
   const localScratchCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -141,7 +141,7 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
   const visionSources: VisionSource[] = useMemo(() => {
     if (!visionConfig.enabled) return [];
 
-    // In player view, show vision for player tokens (or explicitly marked player vision tokens)
+    // In player view and DM view, show shared party vision for all active player/ally tokens
     // Monster tokens strictly do NOT get vision and never pierce or remove fog of war
     const activeVisionTokens = tokens.filter((t) => {
       if (t.hidden && isPlayerView) return false;
@@ -150,13 +150,6 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
       if (isMonster) return false;
       if (t.visionEnabled === false) return false;
       if (typeof t.visionRadius === 'number' && t.visionRadius <= 0) return false;
-
-      // In Player View with a claimed character, only the claimed character (and its summons/allies) provides vision
-      if (isPlayerView && claimedTokenId) {
-        if (t.id === claimedTokenId) return true;
-        if (isAlly && (t as any).ownerId === claimedTokenId) return true;
-        return false;
-      }
 
       if (t.visionEnabled !== undefined) return t.visionEnabled;
       return !isMonster || isAlly || t.isPlayer === true || t.category === 'character';
@@ -231,34 +224,37 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
   // Reset explored memory whenever fog is reset, hidden, or exploration memory disabled
   useEffect(() => {
     setExploredPolygons([]);
-    lastVisionPositionsRef.current = '';
+    lastRecordedPosBySourceRef.current = {};
   }, [fogResetKey, isFogVisible, visionConfig.enabled, visionConfig.explorationMemory]);
 
-  // Accumulate exploration memory only as tokens move across the board
+  // Accumulate exploration memory per token only when that specific token moves significantly
   useEffect(() => {
     if (!visionConfig.enabled || !visionConfig.explorationMemory || !isFogVisible || activeFovPolygons.length === 0) {
       return;
     }
 
-    const currentPosKey = visionSources.map(s => `${s.id}:${Math.round(s.x)},${Math.round(s.y)}`).join('|');
-    if (!currentPosKey) return;
+    const minStepDist = Math.max(15, gridSize * 0.35);
+    const polysToAdd: number[][] = [];
 
-    if (lastVisionPositionsRef.current === '') {
-      // First position set
-      lastVisionPositionsRef.current = currentPosKey;
-      return;
+    for (const fov of activeFovPolygons) {
+      if (!fov.points || fov.points.length < 6) continue;
+      if (fov.sourceId.startsWith('torch-')) continue;
+
+      const prevPos = lastRecordedPosBySourceRef.current[fov.sourceId];
+      if (!prevPos || Math.hypot(fov.center.x - prevPos.x, fov.center.y - prevPos.y) >= minStepDist) {
+        lastRecordedPosBySourceRef.current[fov.sourceId] = { x: fov.center.x, y: fov.center.y };
+        polysToAdd.push([...fov.points]);
+      }
     }
 
-    if (currentPosKey !== lastVisionPositionsRef.current) {
-      lastVisionPositionsRef.current = currentPosKey;
-      const newPolys = activeFovPolygons.map(fov => [...fov.points]);
+    if (polysToAdd.length > 0) {
       setExploredPolygons(prev => {
-        const next = [...prev, ...newPolys];
-        if (next.length > 300) return next.slice(-200);
+        const next = [...prev, ...polysToAdd];
+        if (next.length > 800) return next.slice(-600);
         return next;
       });
     }
-  }, [activeFovPolygons, visionSources, visionConfig.enabled, visionConfig.explorationMemory, isFogVisible]);
+  }, [activeFovPolygons, gridSize, visionConfig.enabled, visionConfig.explorationMemory, isFogVisible]);
 
   // Base darkness opacity
   const baseDarkness = isPlayerView
