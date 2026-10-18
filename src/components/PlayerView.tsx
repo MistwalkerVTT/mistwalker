@@ -1,5 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import Konva from 'konva';
 import { Stage, Layer, Image as KonvaImage, Text, Group, Circle, Rect, Arc, Line } from 'react-konva';
+
+if (typeof window !== 'undefined' && (Konva as any)?.dragDistance !== undefined) {
+  (Konva as any).dragDistance = 10;
+}
 import useImage from 'use-image';
 import 'gifler';
 import { io, Socket } from 'socket.io-client';
@@ -783,10 +788,46 @@ const PlayerToken = React.memo(({
 
   const tokenPx = gridSize * (token.size || 1);
   const radius = tokenPx / 2;
+  const groupRef = useRef<any>(null);
   const lastEmitTimeRef = useRef<number>(0);
+  const pointerDownTimeRef = useRef<number>(0);
+  const pointerDownPosRef = useRef<{ x: number; y: number } | null>(null);
+  const holdTimerRef = useRef<any>(null);
+  const isHoldMetRef = useRef<boolean>(false);
+  const isCurrentlyDraggingRef = useRef<boolean>(false);
+
+  // Clear hold timer on unmount
+  useEffect(() => {
+    return () => {
+      if (holdTimerRef.current) {
+        clearTimeout(holdTimerRef.current);
+      }
+    };
+  }, []);
 
   const handleDragStart = (e: any) => {
     e.cancelBubble = true;
+    const now = Date.now();
+    const elapsed = pointerDownTimeRef.current > 0 ? (now - pointerDownTimeRef.current) : 999;
+    const clientX = e.evt?.clientX ?? (e.evt?.touches && e.evt.touches[0]?.clientX) ?? 0;
+    const clientY = e.evt?.clientY ?? (e.evt?.touches && e.evt.touches[0]?.clientY) ?? 0;
+    const dx = pointerDownPosRef.current ? clientX - pointerDownPosRef.current.x : 0;
+    const dy = pointerDownPosRef.current ? clientY - pointerDownPosRef.current.y : 0;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    // If hold requirement not met (user clicked quickly without holding down or dragging far), abort drag and select token
+    if (!isHoldMetRef.current && elapsed < 160 && dist < 24) {
+      if (holdTimerRef.current) {
+        clearTimeout(holdTimerRef.current);
+      }
+      e.target.stopDrag();
+      if (!isMonster && !isCondition && onClaimToken) {
+        onClaimToken(token.id);
+      }
+      return;
+    }
+
+    isCurrentlyDraggingRef.current = true;
     if (!isMonster && !isCondition && onDragStartToken) {
       onDragStartToken(token.id);
     }
@@ -794,6 +835,7 @@ const PlayerToken = React.memo(({
 
   const handleDragMove = (e: any) => {
     e.cancelBubble = true;
+    if (!isCurrentlyDraggingRef.current) return;
     const now = Date.now();
     if (now - lastEmitTimeRef.current > 30) {
       lastEmitTimeRef.current = now;
@@ -807,6 +849,20 @@ const PlayerToken = React.memo(({
 
   const handleDragEnd = (e: any) => {
     e.cancelBubble = true;
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+    }
+    const wasDragging = isCurrentlyDraggingRef.current;
+    isCurrentlyDraggingRef.current = false;
+    isHoldMetRef.current = false;
+    pointerDownTimeRef.current = 0;
+
+    if (!wasDragging) {
+      // Aborted drag from quick click - restore position to original token position
+      e.target.position({ x: token.x, y: token.y });
+      return;
+    }
+
     const rawX = e.target.x();
     const rawY = e.target.y();
     // Snap to grid
@@ -872,46 +928,83 @@ const PlayerToken = React.memo(({
 
   return (
     <Group
+      ref={groupRef}
       x={token.x}
       y={token.y}
       name="token"
       draggable={!isCondition && !isAimingSpell}
+      dragDistance={10}
       onMouseDown={(e: any) => {
         if (!isCondition && !isAimingSpell && e.evt?.button !== 2) {
           e.cancelBubble = true;
-          if (e.evt) {
-            e.evt.stopPropagation?.();
+          pointerDownTimeRef.current = Date.now();
+          pointerDownPosRef.current = {
+            x: e.evt?.clientX ?? 0,
+            y: e.evt?.clientY ?? 0
+          };
+          isHoldMetRef.current = false;
+          if (holdTimerRef.current) {
+            clearTimeout(holdTimerRef.current);
           }
+          holdTimerRef.current = setTimeout(() => {
+            isHoldMetRef.current = true;
+          }, 160);
         }
       }}
       onTouchStart={(e: any) => {
         if (!isCondition && !isAimingSpell) {
           e.cancelBubble = true;
-          if (e.evt) {
-            e.evt.stopPropagation?.();
+          pointerDownTimeRef.current = Date.now();
+          const t0 = e.evt?.touches?.[0];
+          pointerDownPosRef.current = {
+            x: t0?.clientX ?? 0,
+            y: t0?.clientY ?? 0
+          };
+          isHoldMetRef.current = false;
+          if (holdTimerRef.current) {
+            clearTimeout(holdTimerRef.current);
           }
+          holdTimerRef.current = setTimeout(() => {
+            isHoldMetRef.current = true;
+          }, 160);
+        }
+      }}
+      onMouseUp={() => {
+        if (holdTimerRef.current) {
+          clearTimeout(holdTimerRef.current);
+        }
+        if (groupRef.current?.isDragging()) {
+          groupRef.current.stopDrag();
+        }
+      }}
+      onTouchEnd={() => {
+        if (holdTimerRef.current) {
+          clearTimeout(holdTimerRef.current);
+        }
+        if (groupRef.current?.isDragging()) {
+          groupRef.current.stopDrag();
         }
       }}
       onDragStart={handleDragStart}
       onDragMove={handleDragMove}
       onDragEnd={handleDragEnd}
       onClick={(e: any) => {
-        if (!isAimingSpell) {
+        if (holdTimerRef.current) {
+          clearTimeout(holdTimerRef.current);
+        }
+        if (!isAimingSpell && !isCurrentlyDraggingRef.current) {
           e.cancelBubble = true;
-          if (e.evt) {
-            e.evt.stopPropagation?.();
-          }
           if (!isMonster && !isCondition && onClaimToken) {
             onClaimToken(token.id);
           }
         }
       }}
       onTap={(e: any) => {
-        if (!isAimingSpell) {
+        if (holdTimerRef.current) {
+          clearTimeout(holdTimerRef.current);
+        }
+        if (!isAimingSpell && !isCurrentlyDraggingRef.current) {
           e.cancelBubble = true;
-          if (e.evt) {
-            e.evt.stopPropagation?.();
-          }
           if (!isMonster && !isCondition && onClaimToken) {
             onClaimToken(token.id);
           }
@@ -920,8 +1013,8 @@ const PlayerToken = React.memo(({
       onContextMenu={(e: any) => {
         e.evt.preventDefault();
         e.cancelBubble = true;
-        if (e.evt) {
-          e.evt.stopPropagation?.();
+        if (holdTimerRef.current) {
+          clearTimeout(holdTimerRef.current);
         }
         if (!isMonster && !isCondition && onContextMenu) {
           onContextMenu(token.id, e.evt.clientX, e.evt.clientY);
@@ -1009,47 +1102,45 @@ const PlayerToken = React.memo(({
       })}
 
       {/* Halo highlight for claimed token */}
-      {isClaimed && (
-        <>
-          <Circle
-            x={radius}
-            y={radius}
-            radius={radius + 6}
-            stroke="#10b981"
-            strokeWidth={3}
-            dash={[6, 4]}
-            shadowColor="#10b981"
-            shadowBlur={10}
-            shadowForStrokeEnabled={false}
-            perfectDrawEnabled={false}
-            listening={false}
-          />
-          <Rect
-            x={radius - 20}
-            y={-18}
-            width={40}
-            height={16}
-            fill="#065f46"
-            cornerRadius={4}
-            stroke="#10b981"
-            strokeWidth={1}
-            perfectDrawEnabled={false}
-            listening={false}
-          />
-          <Text
-            x={radius - 20}
-            y={-16}
-            width={40}
-            align="center"
-            text="YOU"
-            fill="#6ee7b7"
-            fontSize={10}
-            fontStyle="bold"
-            perfectDrawEnabled={false}
-            listening={false}
-          />
-        </>
-      )}
+      <Group visible={isClaimed} listening={false}>
+        <Circle
+          x={radius}
+          y={radius}
+          radius={radius + 6}
+          stroke="#10b981"
+          strokeWidth={3}
+          dash={[6, 4]}
+          shadowColor="#10b981"
+          shadowBlur={10}
+          shadowForStrokeEnabled={false}
+          perfectDrawEnabled={false}
+          listening={false}
+        />
+        <Rect
+          x={radius - 20}
+          y={-18}
+          width={40}
+          height={16}
+          fill="#065f46"
+          cornerRadius={4}
+          stroke="#10b981"
+          strokeWidth={1}
+          perfectDrawEnabled={false}
+          listening={false}
+        />
+        <Text
+          x={radius - 20}
+          y={-16}
+          width={40}
+          align="center"
+          text="YOU"
+          fill="#6ee7b7"
+          fontSize={10}
+          fontStyle="bold"
+          perfectDrawEnabled={false}
+          listening={false}
+        />
+      </Group>
 
       {/* 1. Circular Avatar Clip */}
       <Group
@@ -2264,6 +2355,41 @@ export default function PlayerView() {
       }
     }, 150);
   }, []);
+
+  // Global pointerup/touchend capture listener to ensure dragging ALWAYS releases cleanly
+  useEffect(() => {
+    const handleGlobalPointerUp = () => {
+      try {
+        if (typeof Konva !== 'undefined' && (Konva as any).DD) {
+          const dd = (Konva as any).DD;
+          if (dd._dragElements && dd._dragElements.size > 0) {
+            dd._dragElements.forEach((elem: any) => {
+              if (elem?.node && typeof elem.node.stopDrag === 'function') {
+                elem.node.stopDrag();
+              }
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Error releasing Konva drag elements:', err);
+      }
+
+      if (activeDraggingTokenIdRef.current || isDraggingToken) {
+        setIsDraggingToken(false);
+        activeDraggingTokenIdRef.current = null;
+      }
+    };
+
+    window.addEventListener('mouseup', handleGlobalPointerUp, { capture: true });
+    window.addEventListener('touchend', handleGlobalPointerUp, { capture: true });
+    window.addEventListener('touchcancel', handleGlobalPointerUp, { capture: true });
+
+    return () => {
+      window.removeEventListener('mouseup', handleGlobalPointerUp, { capture: true });
+      window.removeEventListener('touchend', handleGlobalPointerUp, { capture: true });
+      window.removeEventListener('touchcancel', handleGlobalPointerUp, { capture: true });
+    };
+  }, [isDraggingToken]);
 
   // Open right-click context menu for tokens (PLAYERS ONLY - Monsters & Condition tokens NEVER show context menu or HP in player view)
   const handleOpenTokenContextMenu = useCallback((id: string, clientX: number, clientY: number) => {
