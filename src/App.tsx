@@ -53,6 +53,12 @@ import { MonsterCompendiumModal } from './components/MonsterCompendiumModal';
 import { CharacterCompendiumModal } from './components/CharacterCompendiumModal';
 import { AlliesCompendiumModal } from './components/AlliesCompendiumModal';
 import { DdbSyncModal } from './components/DdbSyncModal';
+import {
+  isUniversalVttFile,
+  parseUniversalVtt,
+  exportUniversalVtt,
+  downloadUniversalVttFile
+} from './services/universalVttService';
 import { DEFAULT_MONSTERS } from './data/defaultMonsters';
 import { repairMonsterToken } from './data/srdMonstersCatalog';
 import { DEFAULT_CHARACTERS, getCharacterTokenUrl, resolveTokenCharacterStats, isDdbMatch } from './data/defaultCharacters';
@@ -166,6 +172,7 @@ interface Token {
   ac?: number;
   ddbCharacterId?: number | string;
   characterId?: string;
+  allyId?: string;
   isCondition?: boolean;
   voice?: string;
   isPlayer?: boolean;
@@ -1564,9 +1571,90 @@ export default function App() {
     setShowAlliesCompendium(true);
   }, []);
 
-  // HTML5 Drag and Drop handler for tokens dropped onto the tactical battlemap
+  // Universal VTT (.dd2vtt / .uvtt) Importer: extracts map image, grid, walls, doors & lights
+  const handleUniversalVttImport = useCallback(async (file: File) => {
+    setIsReadingFile(true);
+    setUploadError(null);
+    toast.info(`Parsing Universal VTT map: ${file.name}...`);
+    try {
+      const parsed = await parseUniversalVtt(file);
+      console.log(`[UVTT] Successfully parsed ${file.name}:`, parsed.metadata);
+
+      // Instant local preview for immediate visual feedback
+      const localPreviewUrl = URL.createObjectURL(parsed.imageFile);
+      setMapType('image');
+      setImageFile(localPreviewUrl);
+      setReveals([]);
+      setStageScale(1);
+      setStagePos({ x: 0, y: 0 });
+      setActiveSceneInfo(null);
+
+      // Apply Grid Size
+      setGridSize(parsed.gridSize);
+      setGridVisible(true);
+
+      // Apply Walls and Doors
+      setWalls(parsed.walls);
+      setSelectedWallId(null);
+      setWallDrawStart(null);
+
+      // Apply Lights / Torches
+      if (parsed.animatedFeatures.length > 0) {
+        setBoardAnimatedFeatures(parsed.animatedFeatures);
+        setBoardAnimatedEnabled(true);
+      }
+
+      // Automatically enable dynamic lighting so player line of sight and wall shadows work immediately
+      setVisionConfig(prev => ({
+        ...prev,
+        enabled: true,
+        ambientLight: false
+      }));
+
+      // Upload extracted map image file to Firebase for cloud persistence and player view sync
+      try {
+        const asset = await uploadAndRegisterAsset(parsed.imageFile, 'map', {
+          customName: parsed.imageFile.name
+        });
+        if (asset.url && !asset.url.startsWith('local:')) {
+          setImageFile(asset.url);
+        }
+        lastSlotSwitchTimeRef.current = Date.now();
+        if (mapsDataRef.current[activeMapId]) {
+          mapsDataRef.current[activeMapId].imageFile = asset.url || localPreviewUrl;
+          mapsDataRef.current[activeMapId].gridSize = parsed.gridSize;
+        }
+      } catch (uploadErr) {
+        console.warn('[UVTT] Notice during Firebase cloud registration:', uploadErr);
+      }
+
+      toast.success(
+        `Universal VTT Map Loaded! ${parsed.gridCols}×${parsed.gridRows} grid (${parsed.gridSize}px), ${parsed.metadata.wallCount} walls, ${parsed.metadata.doorCount} doors, and ${parsed.metadata.lightCount} lights applied!`,
+        { duration: 6000 }
+      );
+    } catch (err: any) {
+      console.error('[UVTT] Error importing Universal VTT map:', err);
+      setUploadError(err.message || 'Failed to import Universal VTT file');
+      toast.error(err.message || 'Failed to import Universal VTT file');
+    } finally {
+      setIsReadingFile(false);
+      if (mapFileInputRef.current) mapFileInputRef.current.value = '';
+    }
+  }, [activeMapId]);
+
+  // HTML5 Drag and Drop handler for tokens and battlemap files dropped onto the board
   const handleDropOnStage = useCallback((e: React.DragEvent) => {
     e.preventDefault();
+
+    // Check for dropped Universal VTT map files (.dd2vtt / .uvtt)
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const droppedFile = e.dataTransfer.files[0];
+      if (isUniversalVttFile(droppedFile)) {
+        handleUniversalVttImport(droppedFile);
+        return;
+      }
+    }
+
     const rawData = e.dataTransfer.getData('application/json');
     if (!rawData) return;
     try {
@@ -3617,9 +3705,47 @@ export default function App() {
     return () => window.removeEventListener('resize', updateDimensions);
   }, []);
 
+  // Universal VTT (.dd2vtt) Exporter: exports current map image, grid, walls, doors & lights
+  const handleExportUniversalVtt = useCallback(async () => {
+    if (!imageFile) {
+      toast.error('No map loaded to export');
+      return;
+    }
+    const dims = getMapDimensions();
+    if (dims.width <= 0 || dims.height <= 0) {
+      toast.error('Map dimensions not ready for export');
+      return;
+    }
+
+    const toastId = toast.loading('Generating Universal VTT (.dd2vtt) package...');
+    try {
+      const mapName = activeSceneInfo?.sceneTitle || 'mistwalker_map';
+      const blob = await exportUniversalVtt({
+        imageSrc: imageFile,
+        mapWidth: dims.width,
+        mapHeight: dims.height,
+        gridSize: gridSize || 50,
+        walls: walls,
+        animatedFeatures: boardAnimatedFeatures,
+        mapName: mapName
+      });
+      downloadUniversalVttFile(blob, `${mapName.toLowerCase().replace(/[^a-z0-9_-]/g, '_')}.dd2vtt`);
+      toast.success('Universal VTT file exported successfully!', { id: toastId });
+    } catch (err: any) {
+      console.error('[UVTT Export Error]:', err);
+      toast.error(`Export failed: ${err.message || 'Unknown error'}`, { id: toastId });
+    }
+  }, [imageFile, getMapDimensions, gridSize, walls, boardAnimatedFeatures, activeSceneInfo]);
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // Automatic detection and handling of Universal VTT maps (.dd2vtt / .uvtt)
+      if (isUniversalVttFile(file)) {
+        await handleUniversalVttImport(file);
+        return;
+      }
+
       setIsReadingFile(true);
       console.log(`[Upload] Starting persistent upload for: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
       
@@ -6229,6 +6355,8 @@ export default function App() {
           }}
           onHoverZone={setHoveredZoneId}
           currentMapImage={imageFile}
+          onExportUniversalVtt={handleExportUniversalVtt}
+          onImportUniversalVtt={handleUniversalVttImport}
           onStartTutorial={handleStartTutorial}
           onOpenBugReport={() => setIsBugReportModalOpen(true)}
           onOpenBugManager={() => setIsBugManagerModalOpen(true)}
@@ -6328,7 +6456,13 @@ export default function App() {
                 <label className="px-6 py-3.5 bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-zinc-950 font-extrabold rounded-xl cursor-pointer transition-all transform hover:scale-105 active:scale-95 shadow-xl shadow-amber-950/60 font-mono text-xs flex items-center gap-2">
                   <Upload className="w-4 h-4 text-zinc-950" />
                   Select Map Asset
-                  <input type="file" className="hidden" accept="image/*,video/*,.m4v" onChange={handleFileUpload} />
+                  <input type="file" className="hidden" accept="image/*,video/*,.m4v,.dd2vtt,.uvtt,application/json" onChange={handleFileUpload} />
+                </label>
+
+                <label className="px-6 py-3.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold rounded-xl cursor-pointer transition-all transform hover:scale-105 active:scale-95 shadow-xl shadow-purple-950/60 font-mono text-xs flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-purple-200" />
+                  Import Universal VTT (.dd2vtt)
+                  <input type="file" className="hidden" accept=".dd2vtt,.uvtt,application/json" onChange={handleFileUpload} />
                 </label>
 
                 <button

@@ -80,8 +80,11 @@ import {
   GripHorizontal,
   Share2,
   Key,
-  Copy
+  Copy,
+  Download,
+  FileCode2
 } from 'lucide-react';
+import { isUniversalVttFile } from '../services/universalVttService';
 import {
   UploadedAsset,
   AnimatedFeature,
@@ -248,6 +251,8 @@ interface LeftSidebarProps {
   onOpenZoneDetails?: (zone: RoomAnnotation) => void;
   onHoverZone?: (zoneId: string | null) => void;
   currentMapImage?: string;
+  onExportUniversalVtt?: () => void;
+  onImportUniversalVtt?: (file: File) => void;
   onStartTutorial?: () => void;
   onOpenBugReport?: () => void;
   onOpenBugManager?: () => void;
@@ -393,6 +398,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   onOpenZoneDetails,
   onHoverZone,
   currentMapImage,
+  onExportUniversalVtt,
+  onImportUniversalVtt,
   onStartTutorial,
   onOpenBugReport,
   onOpenBugManager,
@@ -401,6 +408,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   activeEquippedCustomEffectId
 }) => {
   const mapFileInputRef = useRef<HTMLInputElement>(null);
+  const uvttFileInputRef = useRef<HTMLInputElement>(null);
   const [hoveredGroup, setHoveredGroup] = useState<GroupMenuId | null>(null);
   const [pinnedGroup, setPinnedGroup] = useState<GroupMenuId | null>(null);
   const [pinnedPosition, setPinnedPosition] = useState<{ x: number; y: number } | null>(null);
@@ -1503,9 +1511,54 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                       ref={mapFileInputRef}
                       type="file"
                       className="hidden"
-                      accept="image/*,video/*,.m4v"
+                      accept="image/*,video/*,.m4v,.dd2vtt,.uvtt,application/json"
                       onChange={handleFileUpload}
                     />
+
+                    {/* Universal VTT (.dd2vtt / .uvtt) Import Button */}
+                    <button
+                      id="btn-import-uvtt-sidebar"
+                      onClick={() => uvttFileInputRef.current?.click()}
+                      disabled={isReadingFile}
+                      className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-purple-950/60 to-indigo-950/60 hover:from-purple-900/80 hover:to-indigo-900/80 border border-purple-500/40 hover:border-purple-400 text-purple-200 font-medium text-xs flex items-center justify-between transition-all cursor-pointer shadow-sm group"
+                      title="Import Dungeondraft / Dungeon Alchemist (.dd2vtt / .uvtt) map with walls, doors, grid, and lights automatically mapped"
+                    >
+                      <span className="flex items-center gap-2">
+                        <FileCode2 className="w-4 h-4 text-purple-400 group-hover:scale-110 transition-transform" />
+                        <span>Import Universal VTT</span>
+                      </span>
+                      <span className="text-[10px] bg-purple-500/25 text-purple-300 px-1.5 py-0.5 rounded font-mono font-bold">.DD2VTT</span>
+                    </button>
+                    <input
+                      ref={uvttFileInputRef}
+                      type="file"
+                      className="hidden"
+                      accept=".dd2vtt,.uvtt,application/json"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          if (onImportUniversalVtt) onImportUniversalVtt(file);
+                          else handleFileUpload(e);
+                        }
+                        e.target.value = '';
+                      }}
+                    />
+
+                    {/* Universal VTT Export Button */}
+                    {onExportUniversalVtt && currentMapImage && (
+                      <button
+                        id="btn-export-uvtt-sidebar"
+                        onClick={onExportUniversalVtt}
+                        className="w-full py-2 px-3 rounded-xl bg-zinc-800 hover:bg-purple-950/40 border border-zinc-700 hover:border-purple-500/40 text-zinc-200 hover:text-purple-300 font-medium text-xs flex items-center justify-between transition-all cursor-pointer"
+                        title="Export current battlemap, grid size, walls, doors, and lights into a Universal VTT (.dd2vtt) file"
+                      >
+                        <span className="flex items-center gap-2">
+                          <Download className="w-4 h-4 text-purple-400" />
+                          <span>Export to .dd2vtt</span>
+                        </span>
+                        <span className="text-[10px] text-zinc-500 font-mono">EXPORT</span>
+                      </button>
+                    )}
 
                     {onRelinkMap && (
                       <button
@@ -2208,6 +2261,13 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                 <div className="flex items-center justify-between text-[10px] font-mono text-zinc-400">
                   <span className="font-bold text-zinc-300">{walls.length} Total Wall Sections</span>
                   <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => uvttFileInputRef.current?.click()}
+                      className="text-purple-400 hover:text-purple-300 flex items-center gap-1 hover:underline transition-all cursor-pointer"
+                      title="Import walls, doors & lights from a Universal VTT (.dd2vtt) file"
+                    >
+                      <FileCode2 className="w-3 h-3" /> Import .dd2vtt
+                    </button>
                     {walls.length > 0 && (
                       <button
                         onClick={() => setShowWallSectionsList(!showWallSectionsList)}

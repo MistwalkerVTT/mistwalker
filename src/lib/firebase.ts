@@ -240,6 +240,7 @@ export interface Scene {
   pdfFilename?: string;
   pdfSection?: string;
   pdfPage?: number;
+  updatedAt?: number;
 }
 
 export interface Chapter {

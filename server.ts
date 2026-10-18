@@ -323,6 +323,10 @@ async function startServer() {
     activeSceneInfo: any;
     characters: any[];
     effects: any[];
+    combatants?: any[];
+    combatRound?: number;
+    combatTurnIndex?: number;
+    showCombatTracker?: boolean;
     updatedAt: number;
   } = {
     imageFile: null,

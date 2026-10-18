@@ -52,6 +52,7 @@ import { UploadedAsset, WallSegment, VisionConfig, RoomAnnotation, ChapterPdfDig
 import { PRESET_BATTLEMAPS, PresetBattlemap } from '../data/presetBattlemaps';
 import { digestChapterPdf } from '../services/aiService';
 import { CampaignPdfImporterModal } from './CampaignPdfImporterModal';
+import { isUniversalVttFile, parseUniversalVtt } from '../services/universalVttService';
 import { DEMO_GV_CAMPAIGN, DEMO_GV_CHAPTER, DEMO_GV_SCENE, DEMO_GV_ROOM_ZONES, DEMO_GV_TOKENS, DEMO_GV_PDF_DIGEST } from '../data/demoCampaignGv';
 
 interface CampaignBuilderModalProps {
@@ -1430,8 +1431,21 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
     setSaveSuccessMessage('Uploading map asset to Firebase...');
 
     try {
+      let uploadFile = file;
+      let uvttData: any = null;
+      if (isUniversalVttFile(file)) {
+        try {
+          const parsed = await parseUniversalVtt(file);
+          uploadFile = parsed.imageFile;
+          uvttData = parsed;
+          toast.success(`Universal VTT loaded: ${parsed.metadata.wallCount} walls, ${parsed.metadata.doorCount} doors, ${parsed.metadata.lightCount} lights!`);
+        } catch (uvttErr: any) {
+          console.warn('[CampaignBuilderModal] UVTT parse notice:', uvttErr);
+        }
+      }
+
       // 1. Upload via uploadAndRegisterAsset: handles disk storage, IndexedDB, video/image dims, and Firestore uploadedAssets!
-      const asset = await uploadAndRegisterAsset(file, 'map');
+      const asset = await uploadAndRegisterAsset(uploadFile, 'map');
       const finalUrl = asset.url;
 
       setEditedMapUrl(finalUrl);
@@ -1450,10 +1464,16 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
           sceneTitle: (selectedScene ? editedTitle.trim() : '') || targetSc.sceneTitle,
           mapUrl: finalUrl,
           mapThumbnailUrl: asset.thumbnailUrl || targetSc.mapThumbnailUrl,
-          mapWidth: dims.width > 0 ? dims.width : targetSc.mapWidth,
-          mapHeight: dims.height > 0 ? dims.height : targetSc.mapHeight,
+          mapWidth: dims.width > 0 ? dims.width : (uvttData?.pixelWidth || targetSc.mapWidth),
+          mapHeight: dims.height > 0 ? dims.height : (uvttData?.pixelHeight || targetSc.mapHeight),
           dmNotes: selectedScene ? editedDmNotes : targetSc.dmNotes,
-          tokens: selectedScene ? editedSceneTokens : targetSc.tokens
+          tokens: selectedScene ? editedSceneTokens : targetSc.tokens,
+          ...(uvttData ? {
+            walls: uvttData.walls,
+            gridSize: uvttData.gridSize,
+            boardAnimatedFeatures: uvttData.animatedFeatures,
+            boardAnimatedEnabled: uvttData.animatedFeatures.length > 0
+          } : {})
         };
 
         // Cache video/file to scene in IndexedDB for instantaneous zero-latency local recall
@@ -2168,7 +2188,7 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
                                                 )}
 
                                                 <div className="flex items-center gap-1.5 min-w-0">
-                                                  <GripVertical className="w-3 h-3 text-zinc-600 group-hover:text-zinc-400 shrink-0 cursor-grab active:cursor-grabbing" title="Drag to move or reorder" />
+                                                  <GripVertical className="w-3 h-3 text-zinc-600 group-hover:text-zinc-400 shrink-0 cursor-grab active:cursor-grabbing" />
                                                   <MapPin className="w-3 h-3 text-emerald-400 shrink-0" />
                                                   <span className="text-[11px] truncate">{scene.sceneTitle}</span>
                                                   {scene.roomAnnotations && scene.roomAnnotations.length > 0 && (
@@ -2568,7 +2588,7 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
                         <input
                           ref={mapUploadInputRef}
                           type="file"
-                          accept="image/*,video/*,.mp4,.webm,.m4v"
+                          accept="image/*,video/*,.mp4,.webm,.m4v,.dd2vtt,.uvtt,application/json"
                           className="hidden"
                           onChange={handleMapFileChange}
                         />

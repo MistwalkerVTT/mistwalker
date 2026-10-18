@@ -140,6 +140,7 @@ export interface AnimatedFeature {
   polygonPoints?: number[]; // [dx0, dy0, dx1, dy1, ...] relative offsets in % from (x, y)
   shapePreset?: string;
   opacity?: number; // 0.1 to 1.0
+  color?: string; // Hex color for lights / torches / auras
 }
 
 export type MapSizePresetKey = 'small' | 'medium' | 'large' | 'colossal' | 'custom';
@@ -333,4 +334,4 @@ export interface CustomSpecialEffect {
 }
 
 export * from './types/aura';
-export * from './types/ally';
+export type { Ally, AllyAction, AllyTrait } from './types/ally';

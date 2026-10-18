@@ -232,7 +232,7 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
             x: tx,
             y: ty,
             radiusPx: tr,
-            color: '#f59e0b'
+            color: feat.color || '#f59e0b'
           });
         }
       }
