@@ -69,6 +69,9 @@ import {
 } from '../data/specialEffectsDatabase';
 import { spellSoundEngine } from '../utils/spellSoundEngine';
 import { DiceTableOverlay } from './DiceTableOverlay';
+import { UniversalCompendiumModal } from './UniversalCompendiumModal';
+import { Spell } from '../types/spell';
+import { DdbDiceRollEvent } from '../types/dice';
 import { DICE_COLOR_PRESETS, DiceColorPreset } from '../graphics/dice/diceTextures';
 import { WallSegment, VisionConfig, RoomAnnotation, Combatant, isMonsterToken, AURA_PRESETS, AURA_COLOR_PALETTE, TokenAura, AuraPreset } from '../types';
 import homeBackgroundImage from '../assets/images/home_background.jpg';
@@ -1280,6 +1283,11 @@ export default function PlayerView() {
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
   const [showCharacterFlyout, setShowCharacterFlyout] = useState(false);
 
+  // Universal 5e SRD Compendium Modal State
+  const [showUniversalCompendium, setShowUniversalCompendium] = useState(false);
+  const [universalCompendiumTab, setUniversalCompendiumTab] = useState<'spells' | 'monsters' | 'equipment' | 'rules'>('spells');
+  const [universalCompendiumQuery, setUniversalCompendiumQuery] = useState('');
+
   // Effects Tab and Interactive Placement State
   const [showEffectsPanel, setShowEffectsPanel] = useState(false);
   const [effectsTab, setEffectsTab] = useState<'instant' | 'persistent' | 'tactical' | 'active'>('instant');
@@ -2276,6 +2284,151 @@ export default function PlayerView() {
       description: 'Click and drag on the map to place and orient. Press ESC to cancel.'
     });
   }, []);
+
+  // 5e SRD Universal Compendium Handlers
+  const handleCastCompendiumSpell = useCallback((spell: Spell) => {
+    setShowUniversalCompendium(false);
+
+    // 1. Check if spell has direct match in PLAYER_EFFECTS_CATALOG
+    const normalizedName = spell.name.toLowerCase().trim();
+    const matched = PLAYER_EFFECTS_CATALOG.find(
+      s => (spell.effectId && s.id === spell.effectId) ||
+           s.id.toLowerCase() === spell.id.toLowerCase() ||
+           s.name.toLowerCase().trim() === normalizedName
+    );
+
+    if (matched) {
+      handleEquipSpell(matched);
+      return;
+    }
+
+    // 2. Synthesize a procedural PlayerSpellDefinition from the 5e SRD Spell
+    const isCone = spell.area?.toLowerCase().includes('cone');
+    const isLine = spell.area?.toLowerCase().includes('line');
+    const type: 'circle' | 'cone' | 'line' = isCone ? 'cone' : isLine ? 'line' : 'circle';
+
+    // Parse size in feet from area (e.g. "20-foot radius sphere", "15-foot cone")
+    let defaultSizeFt = 20;
+    if (spell.area) {
+      const match = spell.area.match(/(\d+)[-\s]foot/i);
+      if (match) {
+        defaultSizeFt = parseInt(match[1], 10);
+      }
+    } else if (spell.range) {
+      const match = spell.range.match(/(\d+)[-\s]foot/i);
+      if (match && parseInt(match[1], 10) <= 60) {
+        defaultSizeFt = Math.max(10, Math.min(30, parseInt(match[1], 10)));
+      }
+    }
+
+    // Theme color and icon based on damageType / school
+    let color = '#a855f7';
+    let iconName: 'flame' | 'zap' | 'sun' | 'snowflake' | 'moon' | 'cloud' | 'droplets' | 'wind' | 'shield' | 'sparkles' = 'sparkles';
+    const dmg = spell.damageType?.toLowerCase() || '';
+    const school = spell.school?.toLowerCase() || '';
+
+    if (dmg.includes('fire') || normalizedName.includes('flame') || normalizedName.includes('fire')) {
+      color = '#f97316';
+      iconName = 'flame';
+    } else if (dmg.includes('lightning') || dmg.includes('thunder') || normalizedName.includes('shock')) {
+      color = '#38bdf8';
+      iconName = 'zap';
+    } else if (dmg.includes('cold') || normalizedName.includes('ice') || normalizedName.includes('frost')) {
+      color = '#06b6d4';
+      iconName = 'snowflake';
+    } else if (dmg.includes('radiant') || school.includes('evocation')) {
+      color = '#fbbf24';
+      iconName = 'sun';
+    } else if (dmg.includes('necrotic') || school.includes('necromancy')) {
+      color = '#84cc16';
+      iconName = 'moon';
+    } else if (school.includes('abjuration')) {
+      color = '#3b82f6';
+      iconName = 'shield';
+    } else if (dmg.includes('acid') || dmg.includes('poison')) {
+      color = '#22c55e';
+      iconName = 'droplets';
+    }
+
+    const isPersistent = spell.duration.toLowerCase().includes('minute') ||
+                         spell.duration.toLowerCase().includes('hour') ||
+                         spell.concentration;
+
+    const synthesizedSpell: PlayerSpellDefinition = {
+      id: spell.effectId || `compendium_${spell.id}`,
+      name: spell.name,
+      label: spell.name,
+      category: isPersistent ? 'persistent' : 'instant',
+      type,
+      defaultSizeFt,
+      color,
+      isPersistent,
+      defaultOpacity: 0.9,
+      description: spell.description.slice(0, 120) + (spell.description.length > 120 ? '...' : ''),
+      iconName,
+      badgeColor: color,
+      soundEffect: dmg.includes('fire') ? 'fire' : dmg.includes('lightning') ? 'lightning' : dmg.includes('cold') ? 'frost' : 'arcane',
+      shockwave: true
+    };
+
+    handleEquipSpell(synthesizedSpell);
+  }, [handleEquipSpell]);
+
+  const handleRollCompendiumDice = useCallback((notation: string, label: string = 'Compendium Roll') => {
+    const clean = notation.toLowerCase().replace(/\s+/g, '');
+    const match = clean.match(/^(\d*)d(\d+)(?:([+-])(\d+))?/i);
+
+    if (!match) {
+      toast.info(`Rolling ${notation} for ${label}`);
+      return;
+    }
+
+    const count = Math.min(Math.max(parseInt(match[1] || '1', 10), 1), 30);
+    const sides = parseInt(match[2], 10) || 6;
+    const sign = match[3];
+    const modifier = match[4] ? parseInt(match[4], 10) : 0;
+
+    const results: number[] = [];
+    let sum = 0;
+    const diceList: { sides: number; result: number; type: string }[] = [];
+
+    for (let i = 0; i < count; i++) {
+      const res = Math.floor(Math.random() * sides) + 1;
+      results.push(res);
+      sum += res;
+      diceList.push({ sides, result: res, type: `d${sides}` });
+    }
+
+    const total = sign === '-' ? sum - modifier : sum + modifier;
+
+    const diceEvent: DdbDiceRollEvent = {
+      id: `player-spell-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+      characterName: claimedToken?.name || 'Local Player',
+      action: label,
+      formula: notation,
+      diceNotation: notation,
+      dice: diceList,
+      total,
+      isCritical: sides === 20 && results.includes(20),
+      isFumble: sides === 20 && results.includes(1),
+      theme: selectedDicePreset.id,
+      themeColor: selectedDicePreset.theme.primaryColor,
+      timestamp: Date.now(),
+      source: 'player' as any
+    };
+
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', diceEvent);
+    }
+
+    if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+      (window as any).__mistwalkerRoll3d(diceEvent);
+    }
+
+    toast.success(`${label}: Rolled ${notation} = ${total}`, {
+      description: `[${results.join(', ')}]${modifier ? ` ${sign} ${modifier}` : ''}`
+    });
+  }, [claimedToken?.name, selectedDicePreset]);
 
   const handlePanelDragStart = useCallback((e: React.MouseEvent) => {
     if (pinnedEffectsPanel) return;
@@ -3309,6 +3462,31 @@ export default function PlayerView() {
                 {effects.length > 0 && (
                   <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full bg-purple-950 text-purple-300 border border-purple-700/50">
                     {effects.length}
+                  </span>
+                )}
+              </button>
+
+              {/* 5e SRD Spell Compendium */}
+              <button
+                onClick={() => {
+                  setUniversalCompendiumTab('spells');
+                  setUniversalCompendiumQuery('');
+                  setShowUniversalCompendium(true);
+                }}
+                className={`w-full flex items-center rounded-xl transition-all cursor-pointer border ${
+                  showUniversalCompendium
+                    ? 'bg-amber-600/80 hover:bg-amber-600 text-white border-amber-500/70 shadow-lg shadow-amber-950/50'
+                    : 'bg-zinc-900/80 hover:bg-zinc-900 border-zinc-800 text-zinc-300 hover:text-white'
+                } ${isSidebarExpanded ? 'px-2.5 py-2 justify-between text-xs font-medium' : 'p-2.5 justify-center'}`}
+                title="Browse 5e SRD Spell Compendium"
+              >
+                <div className="flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-amber-400 shrink-0" />
+                  {isSidebarExpanded && <span>Spell Compendium</span>}
+                </div>
+                {isSidebarExpanded && (
+                  <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-700/50">
+                    5e SRD
                   </span>
                 )}
               </button>
@@ -4901,8 +5079,20 @@ export default function PlayerView() {
 
                 if (filteredSpells.length === 0) {
                   return (
-                    <div className="py-8 text-center text-zinc-500 text-xs">
-                      No matching spells found.
+                    <div className="py-8 text-center text-zinc-500 text-xs space-y-3">
+                      <p>No quick effects found for &quot;{effectsSearchQuery}&quot;.</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUniversalCompendiumTab('spells');
+                          setUniversalCompendiumQuery(effectsSearchQuery);
+                          setShowUniversalCompendium(true);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-950/70 hover:bg-amber-900 border border-amber-700/60 text-amber-200 hover:text-white transition-all text-xs font-medium cursor-pointer"
+                      >
+                        <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Search in 5e Compendium</span>
+                      </button>
                     </div>
                   );
                 }
@@ -5011,6 +5201,27 @@ export default function PlayerView() {
                         </div>
                       );
                     })}
+
+                    {/* Compendium Discovery Banner */}
+                    <div className="pt-2 border-t border-zinc-800/60">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUniversalCompendiumTab('spells');
+                          setUniversalCompendiumQuery(effectsSearchQuery);
+                          setShowUniversalCompendium(true);
+                        }}
+                        className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-amber-950/40 via-zinc-900 to-purple-950/40 hover:from-amber-950/60 hover:to-purple-950/60 border border-amber-600/40 text-amber-300 hover:text-white flex items-center justify-between text-xs font-medium transition-all shadow-sm cursor-pointer group"
+                      >
+                        <div className="flex items-center gap-2">
+                          <BookOpen className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform shrink-0" />
+                          <span>Browse 5e SRD Compendium</span>
+                        </div>
+                        <span className="text-[10px] font-mono font-bold text-amber-300 bg-amber-950/90 px-1.5 py-0.5 rounded border border-amber-700/60">
+                          300+ Spells
+                        </span>
+                      </button>
+                    </div>
                   </div>
                 );
               })()
@@ -5019,7 +5230,17 @@ export default function PlayerView() {
 
           {/* Panel Footer */}
           <div className="px-3 py-2 border-t border-zinc-800/80 bg-zinc-900/50 rounded-b-2xl flex items-center justify-between text-[10px] text-zinc-500 font-mono">
-            <span>Synchronized across DM & Players</span>
+            <button
+              type="button"
+              onClick={() => {
+                setUniversalCompendiumTab('spells');
+                setShowUniversalCompendium(true);
+              }}
+              className="text-amber-400 hover:text-amber-300 flex items-center gap-1 hover:underline cursor-pointer"
+            >
+              <BookOpen className="w-3 h-3" />
+              <span>Full 5e Spell Compendium</span>
+            </button>
             <span className="text-purple-400">MistWalker FX</span>
           </div>
         </div>
@@ -5187,6 +5408,19 @@ export default function PlayerView() {
           </div>
         </div>
       )}
+
+      {/* 5e SRD Universal Compendium Modal for Players */}
+      <UniversalCompendiumModal
+        isOpen={showUniversalCompendium}
+        onClose={() => {
+          setShowUniversalCompendium(false);
+          setUniversalCompendiumQuery('');
+        }}
+        initialTab={universalCompendiumTab}
+        initialSearchQuery={universalCompendiumQuery}
+        onCastSpell={handleCastCompendiumSpell}
+        onRollDice={handleRollCompendiumDice}
+      />
 
       {/* 3D Physics Dice Table Overlay */}
       <DiceTableOverlay
