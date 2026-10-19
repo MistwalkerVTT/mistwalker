@@ -58,6 +58,7 @@ import { DndChatbotModal } from './components/DndChatbotModal';
 import { MonsterCompendiumModal } from './components/MonsterCompendiumModal';
 import { CharacterCompendiumModal } from './components/CharacterCompendiumModal';
 import { AlliesCompendiumModal } from './components/AlliesCompendiumModal';
+import { DashboardHomeHub } from './components/DashboardHomeHub';
 import { DdbSyncModal } from './components/DdbSyncModal';
 import {
   isUniversalVttFile,
@@ -6460,142 +6461,25 @@ export default function App() {
           </div>
         )}
         {!imageFile ? (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-6 text-center pointer-events-auto">
-            {/* Elegant glassmorphic center hub layered over the background */}
-            <div className="max-w-xl w-full bg-zinc-950/75 backdrop-blur-xl border border-zinc-800/90 rounded-3xl p-8 sm:p-10 shadow-[0_25px_60px_rgba(0,0,0,0.85)] flex flex-col items-center relative overflow-hidden ring-1 ring-white/10 animate-in fade-in duration-300">
-              {/* Subtle top amber glow accent line */}
-              <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-transparent via-amber-500/70 to-transparent" />
-
-              <div className="w-20 h-20 mb-5 rounded-2xl bg-zinc-900/90 border border-amber-500/30 flex items-center justify-center shadow-lg shadow-amber-500/10">
-                <img
-                  src="https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/blob-c3567a0.png/:/rs=w:1440,h:1440"
-                  alt="MistWalker"
-                  className="w-12 h-12 object-contain filter drop-shadow-[0_0_12px_rgba(245,158,11,0.5)]"
-                  referrerPolicy="no-referrer"
-                />
-              </div>
-
-              <div className="flex items-center gap-2 mb-2">
-                <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-mono font-bold uppercase tracking-wider border border-amber-500/30">
-                  Ready For Adventure
-                </span>
-              </div>
-
-              <h2 className="text-3xl sm:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-amber-500 mb-2 font-mono tracking-tight">
-                MistWalker VTT
-              </h2>
-              <p className="text-zinc-300 max-w-md text-xs sm:text-sm mb-7 leading-relaxed font-sans">
-                Tactical Battlemap Command Deck • Fog of War • Dynamic FOV & Lighting • AI Dungeon Master Co-Pilot
-              </p>
-
-              {/* Unsaved Scene Recovery Card */}
-              {unsavedSceneBackup && (
-                <div className="w-full mb-6 p-4 rounded-2xl bg-amber-950/40 border border-amber-500/50 shadow-lg shadow-amber-950/30 text-left animate-in slide-in-from-top-2 duration-300 ring-1 ring-amber-500/20">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-3">
-                      <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0 mt-0.5">
-                        <RotateCcw className="w-5 h-5 animate-pulse" />
-                      </div>
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-xs font-mono font-bold text-amber-300 uppercase tracking-wider">
-                            {unsavedSceneBackupWasCrash ? 'Recover Interrupted Scene' : 'Unsaved Scene Detected'}
-                          </span>
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                            {unsavedSceneBackup.activeSceneInfo?.sceneTitle || 'Active Battlemap'}
-                          </span>
-                        </div>
-                        <p className="text-xs text-zinc-300 leading-relaxed font-sans">
-                          {unsavedSceneBackupWasCrash
-                            ? 'MistWalker detected an unexpected crash or interruption with unsaved battlemap progress. Would you like to reload this scene?'
-                            : 'A previous battlemap session contains unsaved changes. Would you like to reload your work or discard it?'}
-                        </p>
-                        <div className="flex items-center gap-4 text-[11px] font-mono text-zinc-400 pt-1">
-                          <span>Tokens: <strong className="text-amber-300">{unsavedSceneBackup.tokens?.length || 0}</strong></span>
-                          <span>Walls: <strong className="text-amber-300">{unsavedSceneBackup.walls?.length || 0}</strong></span>
-                          {unsavedSceneBackup.timestamp && (
-                            <span>Recorded: <strong className="text-zinc-300">{new Date(unsavedSceneBackup.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong></span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-end gap-2.5 mt-3 pt-3 border-t border-amber-500/20">
-                    <button
-                      type="button"
-                      id="btn-discard-unsaved-scene"
-                      onClick={handleDiscardUnsavedScene}
-                      className="px-3.5 py-2 rounded-xl text-xs font-mono font-medium text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 border border-zinc-800 hover:border-rose-500/30 transition-all flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      Discard
-                    </button>
-                    <button
-                      type="button"
-                      id="btn-reload-unsaved-scene"
-                      onClick={handleRestoreUnsavedScene}
-                      className="px-4 py-2 rounded-xl text-xs font-mono font-bold bg-amber-500 hover:bg-amber-400 text-zinc-950 shadow-lg shadow-amber-500/25 transition-all flex items-center gap-1.5 cursor-pointer transform hover:scale-[1.02] active:scale-[0.98]"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                      Reload Unsaved Scene
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex flex-wrap items-center justify-center gap-3 w-full">
-                <label className="px-6 py-3.5 bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-zinc-950 font-extrabold rounded-xl cursor-pointer transition-all transform hover:scale-105 active:scale-95 shadow-xl shadow-amber-950/60 font-mono text-xs flex items-center gap-2">
-                  <Upload className="w-4 h-4 text-zinc-950" />
-                  Select Map Asset
-                  <input type="file" className="hidden" accept="image/*,video/*,.m4v,.dd2vtt,.uvtt,application/json" onChange={handleFileUpload} />
-                </label>
-
-                <label className="px-6 py-3.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold rounded-xl cursor-pointer transition-all transform hover:scale-105 active:scale-95 shadow-xl shadow-purple-950/60 font-mono text-xs flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-purple-200" />
-                  Import Universal VTT (.dd2vtt)
-                  <input type="file" className="hidden" accept=".dd2vtt,.uvtt,application/json" onChange={handleFileUpload} />
-                </label>
-
-                <button
-                  type="button"
-                  id="btn-load-campaign-empty-screen"
-                  onClick={() => setShowLoadCampaignModal(true)}
-                  className="px-6 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl transition-all transform hover:scale-105 active:scale-95 shadow-xl font-mono text-xs flex items-center gap-2 shadow-emerald-950/50 cursor-pointer"
-                >
-                  <BookOpen className="w-4 h-4 text-emerald-200" />
-                  Load Campaign Scene
-                </button>
-
-                <button
-                  type="button"
-                  id="btn-open-campaign-manager-empty-screen"
-                  onClick={() => setShowCampaignBuilder(true)}
-                  className="px-6 py-3.5 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700/80 text-amber-300 hover:text-amber-200 font-bold rounded-xl transition-all font-mono text-xs flex items-center gap-2 shadow-md cursor-pointer"
-                >
-                  <Sliders className="w-4 h-4 text-amber-400" />
-                  Campaign Manager
-                </button>
-              </div>
-
-              {/* Interactive Tutorial Guide Button */}
-              <div className="mt-5 w-full flex justify-center">
-                <button
-                  type="button"
-                  id="btn-start-tutorial-guide-home"
-                  onClick={() => {
-                    handleStartTutorial();
-                  }}
-                  className="group px-7 py-3 bg-gradient-to-r from-amber-500/20 via-zinc-900/90 to-amber-500/15 hover:from-amber-500/30 hover:to-amber-500/25 border border-amber-500/50 hover:border-amber-400 text-amber-300 hover:text-amber-200 font-bold rounded-xl transition-all font-mono text-xs flex items-center gap-2.5 shadow-xl shadow-amber-950/40 cursor-pointer transform hover:scale-105 active:scale-95"
-                >
-                  <HelpCircle className="w-4 h-4 text-amber-400 group-hover:rotate-12 transition-transform" />
-                  <span>Interactive DM Tutorial Guide</span>
-                  <span className="px-2 py-0.5 text-[9px] bg-amber-500/20 border border-amber-500/40 rounded-full text-amber-300 font-sans">
-                    11 Steps
-                  </span>
-                </button>
-              </div>
-            </div>
-          </div>
+          <DashboardHomeHub
+            onFileUpload={handleFileUpload}
+            onUniversalVttUpload={handleFileUpload}
+            onOpenLoadModal={() => setShowLoadCampaignModal(true)}
+            onOpenCampaignManager={() => setShowCampaignBuilder(true)}
+            onOpenMonsterCompendium={() => setShowMonsterCompendium(true)}
+            onOpenCharacterCompendium={() => setShowCharacterCompendium(true)}
+            onOpenAlliesCompendium={() => setShowAlliesCompendium(true)}
+            onOpenDdbSync={() => setShowDdbModal(true)}
+            onStartTutorial={handleStartTutorial}
+            onOpenBugReport={() => setIsBugReportModalOpen(true)}
+            onLoadSceneFromCampaign={handleLoadSceneFromCampaign}
+            campaignsList={campaignsList}
+            unsavedSceneBackup={unsavedSceneBackup}
+            unsavedSceneBackupWasCrash={unsavedSceneBackupWasCrash}
+            onRestoreUnsavedScene={handleRestoreUnsavedScene}
+            onDiscardUnsavedScene={handleDiscardUnsavedScene}
+            isFirebaseConnected={isFirebaseConnected}
+          />
         ) : (
           <div
             className={`flex-1 h-full relative ${isSpacePressed || isShiftPanActive || tool === 'pan' ? 'cursor-grab active:cursor-grabbing' : tool === 'select' ? 'cursor-default' : 'cursor-crosshair'}`}
