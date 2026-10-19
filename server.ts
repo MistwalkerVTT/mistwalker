@@ -196,6 +196,82 @@ async function startServer() {
   apiRouter.use("/ai", aiRouter);
   apiRouter.use("/ddb", ddbRouter);
 
+  // Local JB2A asset cache directory
+  const jb2aCacheDir = path.resolve(process.cwd(), 'uploads', 'jb2a_cache');
+  if (!fs.existsSync(jb2aCacheDir)) {
+    fs.mkdirSync(jb2aCacheDir, { recursive: true });
+  }
+
+  // JB2A Animated Asset Streaming & Cache Proxy (guarantees video/webm MIME and 206 byte-range streaming)
+  apiRouter.get("/effects/asset", async (req, res) => {
+    try {
+      const rawPath = String(req.query.path || '');
+      if (!rawPath) {
+        return res.status(400).send('Missing path parameter');
+      }
+
+      const cleanPath = rawPath.replace(/^(\/?modules\/JB2A_DnD5e\/)?/, '').replace(/^\/+/, '');
+      if (cleanPath.includes('..')) {
+        return res.status(403).send('Invalid path');
+      }
+
+      const cacheKey = cleanPath.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const localFilePath = path.join(jb2aCacheDir, cacheKey);
+
+      const isWebm = cleanPath.endsWith('.webm');
+      const isWebp = cleanPath.endsWith('.webp');
+      const contentType = isWebm ? 'video/webm' : (isWebp ? 'image/webp' : 'application/octet-stream');
+
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Accept-Ranges', 'bytes');
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+
+      if (fs.existsSync(localFilePath)) {
+        const stat = fs.statSync(localFilePath);
+        const fileSize = stat.size;
+        const range = req.headers.range;
+
+        if (range) {
+          const parts = range.replace(/bytes=/, "").split("-");
+          const start = parseInt(parts[0], 10);
+          const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+          const chunksize = (end - start) + 1;
+          const file = fs.createReadStream(localFilePath, { start, end });
+          res.writeHead(206, {
+            'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+            'Accept-Ranges': 'bytes',
+            'Content-Length': chunksize,
+            'Content-Type': contentType,
+          });
+          return file.pipe(res);
+        } else {
+          res.setHeader('Content-Type', contentType);
+          res.setHeader('Content-Length', fileSize);
+          return fs.createReadStream(localFilePath).pipe(res);
+        }
+      }
+
+      // Fetch upstream from official JB2A raw repository
+      const upstreamUrl = `https://raw.githubusercontent.com/Jules-Bens-Aa/JB2A_DnD5e/main/${cleanPath}`;
+      const upstreamRes = await fetch(upstreamUrl);
+      if (!upstreamRes.ok) {
+        return res.status(upstreamRes.status).send(`Upstream error: ${upstreamRes.statusText}`);
+      }
+
+      const buffer = Buffer.from(await upstreamRes.arrayBuffer());
+      fs.writeFile(localFilePath, buffer, (err) => {
+        if (err) console.warn('[JB2A Cache] Write failed:', err.message);
+      });
+
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Content-Length', buffer.length);
+      res.send(buffer);
+    } catch (err: any) {
+      console.error('[JB2A Proxy Error]:', err.message);
+      res.status(500).send('Error streaming JB2A asset');
+    }
+  });
+
   // Mount API router
   app.use("/api", apiRouter);
 

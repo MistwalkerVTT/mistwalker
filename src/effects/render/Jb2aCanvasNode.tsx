@@ -19,7 +19,6 @@ export const Jb2aCanvasNode: React.FC<Jb2aCanvasNodeProps> = React.memo(({
 }) => {
   const imageRef = useRef<any>(null);
   const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null);
-  const [hasCurrentFrame, setHasCurrentFrame] = useState(false);
 
   // Compute physical pixel dimensions from 5e grid feet: 5ft = 1 grid square
   const pixelRadius = ((effect.sizeFt || 20) / 5) * (gridSize / 2);
@@ -36,7 +35,6 @@ export const Jb2aCanvasNode: React.FC<Jb2aCanvasNodeProps> = React.memo(({
         acquiredVideo = await videoPool.acquire(effect.videoUrl, effect.loop || effect.isPersistent);
         if (active) {
           setVideoElement(acquiredVideo);
-          setHasCurrentFrame(acquiredVideo.readyState >= 2);
         }
       } catch (err) {
         console.warn('Failed to acquire video for effect:', effect.name, err);
@@ -53,49 +51,42 @@ export const Jb2aCanvasNode: React.FC<Jb2aCanvasNodeProps> = React.memo(({
     };
   }, [effect.videoUrl, effect.loop, effect.isPersistent]);
 
-  // RequestVideoFrameCallback / RAF loop to synchronize Konva layer drawing with decoded frames
+  // Reliable RAF loop to synchronize Konva layer drawing with video playback
   useEffect(() => {
     if (!videoElement) return;
 
     let animId: number;
-    let rvfcId: number;
     let isMounted = true;
 
-    const onFrame = () => {
+    const render = () => {
       if (!isMounted) return;
-      if (videoElement.readyState >= 2) {
-        setHasCurrentFrame(true);
-        if (imageRef.current) {
-          imageRef.current.getLayer()?.batchDraw();
-        }
+      const layer = imageRef.current?.getLayer();
+      if (layer && !videoElement.paused && !videoElement.ended) {
+        layer.batchDraw();
       }
-
-      // Check for requestVideoFrameCallback support
-      if ('requestVideoFrameCallback' in videoElement) {
-        rvfcId = (videoElement as any).requestVideoFrameCallback(onFrame);
-      } else {
-        animId = requestAnimationFrame(onFrame);
-      }
+      animId = requestAnimationFrame(render);
     };
 
-    if ('requestVideoFrameCallback' in videoElement) {
-      rvfcId = (videoElement as any).requestVideoFrameCallback(onFrame);
-    } else {
-      animId = requestAnimationFrame(onFrame);
-    }
+    animId = requestAnimationFrame(render);
+
+    const onPlayEvent = () => {
+      imageRef.current?.getLayer()?.batchDraw();
+    };
+
+    videoElement.addEventListener('playing', onPlayEvent);
+    videoElement.addEventListener('loadeddata', onPlayEvent);
+    videoElement.addEventListener('timeupdate', onPlayEvent);
 
     return () => {
       isMounted = false;
-      if (rvfcId && 'cancelVideoFrameCallback' in videoElement) {
-        (videoElement as any).cancelVideoFrameCallback(rvfcId);
-      }
-      if (animId) {
-        cancelAnimationFrame(animId);
-      }
+      cancelAnimationFrame(animId);
+      videoElement.removeEventListener('playing', onPlayEvent);
+      videoElement.removeEventListener('loadeddata', onPlayEvent);
+      videoElement.removeEventListener('timeupdate', onPlayEvent);
     };
   }, [videoElement]);
 
-  if (!videoElement || !hasCurrentFrame) {
+  if (!videoElement) {
     return null;
   }
 

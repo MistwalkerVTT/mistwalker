@@ -59,24 +59,34 @@ export class VideoCacheManager {
    */
   public async resolvePlayableUrl(cdnUrl: string): Promise<string> {
     if (!cdnUrl) return '';
-    if (this.blobMap.has(cdnUrl)) {
-      return this.blobMap.get(cdnUrl)!;
+
+    // If relative path from JB2A catalog, route through our fast local proxy
+    let targetUrl = cdnUrl;
+    if (targetUrl.startsWith('Library/') || targetUrl.startsWith('modules/')) {
+      targetUrl = `/api/effects/asset?path=${encodeURIComponent(targetUrl)}`;
+    }
+
+    if (this.blobMap.has(targetUrl)) {
+      return this.blobMap.get(targetUrl)!;
     }
 
     if (typeof window !== 'undefined' && 'caches' in window) {
       try {
         const cache = await caches.open(CACHE_NAME);
-        const match = await cache.match(cdnUrl);
+        const match = await cache.match(targetUrl);
         if (match) {
           const blob = await match.blob();
-          const objUrl = URL.createObjectURL(blob);
-          this.blobMap.set(cdnUrl, objUrl);
+          const safeBlob = (blob.type && blob.type.includes('video'))
+            ? blob
+            : new Blob([blob], { type: 'video/webm' });
+          const objUrl = URL.createObjectURL(safeBlob);
+          this.blobMap.set(targetUrl, objUrl);
           return objUrl;
         }
       } catch (e) {}
     }
 
-    return cdnUrl;
+    return targetUrl;
   }
 }
 

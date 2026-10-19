@@ -2376,37 +2376,41 @@ export default function PlayerView() {
     if (activeEquippedAsset && aimOrigin && aimCurrent) {
       const dx = aimCurrent.x - aimOrigin.x;
       const dy = aimCurrent.y - aimOrigin.y;
+      const dist = Math.hypot(dx, dy);
       const rotation = Math.atan2(dy, dx) * (180 / Math.PI);
-      const isProjectile = activeEquippedAsset.paradigm === 'projectile' || activeEquippedAsset.paradigm === 'ray';
+      const isTrajectory = (activeEquippedAsset.paradigm === 'projectile' || activeEquippedAsset.paradigm === 'ray') ||
+                           (Boolean(activeEquippedAsset.projectileWebm) && dist > 20);
+
+      const isPointAoe = activeEquippedAsset.paradigm === 'point' || activeEquippedAsset.paradigm === 'aura';
 
       const newEffect: VttEffectInstance = {
         id: `eff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         name: activeEquippedAsset.name,
         label: activeEquippedAsset.label,
         assetKey: activeEquippedAsset.id,
-        videoUrl: (isProjectile && activeEquippedAsset.projectileWebm)
+        videoUrl: (isTrajectory && activeEquippedAsset.projectileWebm)
           ? activeEquippedAsset.projectileWebm
           : activeEquippedAsset.webm,
         loopVideoUrl: activeEquippedAsset.loopWebm,
         thumbUrl: activeEquippedAsset.thumb,
-        paradigm: activeEquippedAsset.paradigm,
-        x: isProjectile ? aimOrigin.x : aimCurrent.x,
-        y: isProjectile ? aimOrigin.y : aimCurrent.y,
+        paradigm: isTrajectory ? 'projectile' : activeEquippedAsset.paradigm,
+        x: isTrajectory ? aimOrigin.x : (dist > 15 && isPointAoe ? aimCurrent.x : aimOrigin.x),
+        y: isTrajectory ? aimOrigin.y : (dist > 15 && isPointAoe ? aimCurrent.y : aimOrigin.y),
+        originX: aimOrigin.x,
+        originY: aimOrigin.y,
+        targetX: aimCurrent.x,
+        targetY: aimCurrent.y,
         sizeFt: activeEquippedAsset.defaultSizeFt,
-        rotation,
+        rotation: (activeEquippedAsset.paradigm === 'cone' || activeEquippedAsset.paradigm === 'line') ? rotation : 0,
         opacity: 1.0,
         blendMode: activeEquippedAsset.blendMode,
         isPersistent: activeEquippedAsset.isPersistent,
         loop: activeEquippedAsset.isPersistent,
         castTime: Date.now(),
-        durationMs: isProjectile ? 2000 : 5000,
+        durationMs: isTrajectory ? 2500 : 5000,
         soundKey: activeEquippedAsset.soundKey,
         color: activeEquippedAsset.color,
-        originX: aimOrigin.x,
-        originY: aimOrigin.y,
-        targetX: aimCurrent.x,
-        targetY: aimCurrent.y,
-        trajectory: isProjectile ? {
+        trajectory: isTrajectory ? {
           startX: aimOrigin.x,
           startY: aimOrigin.y,
           endX: aimCurrent.x,

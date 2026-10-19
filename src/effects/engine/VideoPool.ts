@@ -36,7 +36,7 @@ export class VideoPool {
         existing.id = CONTAINER_ID;
         existing.setAttribute('aria-hidden', 'true');
         existing.style.cssText =
-          'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;overflow:hidden;opacity:0.01;pointer-events:none;z-index:-9999;';
+          'position:fixed;top:0;left:0;width:2px;height:2px;overflow:hidden;opacity:0.001;pointer-events:none;z-index:-9999;';
         document.body.appendChild(existing);
       }
       this.container = existing;
@@ -64,7 +64,8 @@ export class VideoPool {
         vid.playsInline = true;
         vid.setAttribute('playsinline', '');
         vid.setAttribute('webkit-playsinline', '');
-        vid.style.cssText = 'width:64px;height:64px;position:absolute;';
+        vid.setAttribute('muted', '');
+        vid.style.cssText = 'width:2px;height:2px;position:absolute;top:0;left:0;';
         container.appendChild(vid);
 
         entry = { video: vid, inUse: true, currentUrl: '' };

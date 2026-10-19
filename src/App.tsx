@@ -4751,6 +4751,14 @@ export default function App() {
 
     // Right click handling
     if (e.evt.button === 2) {
+      if (tool === 'spell_aim') {
+        setActiveEquippedAsset(null);
+        setAimOrigin(null);
+        setAimCurrent(null);
+        setTool('pan');
+        toast.info('Spell aiming cancelled');
+        return;
+      }
       if (wallEraseDragStart) {
         setWallEraseDragStart(null);
         setWallEraseDragCurrent(null);
@@ -4779,7 +4787,26 @@ export default function App() {
       }
     }
 
-
+    // MistWalker 4.0 Spell & Projectile Aiming (Check before isInteractive so clicking tokens to aim works)
+    if (tool === 'spell_aim' && activeEquippedAsset) {
+      let originPoint = point;
+      let targetNode = e.target;
+      while (targetNode && targetNode !== stage) {
+        if (targetNode.name() === 'token') {
+          const tokenId = targetNode.id?.() || (targetNode as any).attrs?.id;
+          const foundToken = tokens.find(t => t.id === tokenId);
+          if (foundToken) {
+            const tokenRadius = ((foundToken.size || 1) * gridSize) / 2;
+            originPoint = { x: foundToken.x + tokenRadius, y: foundToken.y + tokenRadius };
+          }
+          break;
+        }
+        targetNode = targetNode.getParent();
+      }
+      setAimOrigin(originPoint);
+      setAimCurrent(originPoint);
+      return;
+    }
 
     // Check if we clicked on an existing token or its children
     let target = e.target;
@@ -4793,13 +4820,6 @@ export default function App() {
     }
 
     if (isInteractive) {
-      return;
-    }
-
-    // MistWalker 4.0 Spell & Projectile Aiming
-    if (tool === 'spell_aim' && activeEquippedAsset) {
-      setAimOrigin(point);
-      setAimCurrent(point);
       return;
     }
 
@@ -5126,34 +5146,50 @@ export default function App() {
     if (tool === 'spell_aim' && activeEquippedAsset && aimOrigin && aimCurrent) {
       const dx = aimCurrent.x - aimOrigin.x;
       const dy = aimCurrent.y - aimOrigin.y;
+      const dist = Math.hypot(dx, dy);
       const rotation = Math.atan2(dy, dx) * (180 / Math.PI);
-      const isProjectile = activeEquippedAsset.paradigm === 'projectile' || activeEquippedAsset.paradigm === 'ray';
+      const isTrajectory = (activeEquippedAsset.paradigm === 'projectile' || activeEquippedAsset.paradigm === 'ray') ||
+                           (Boolean(activeEquippedAsset.projectileWebm) && dist > 20);
+
+      const isPointAoe = activeEquippedAsset.paradigm === 'point' || activeEquippedAsset.paradigm === 'aura';
 
       const newEffect: VttEffectInstance = {
         id: `eff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         name: activeEquippedAsset.name,
         label: activeEquippedAsset.label,
         assetKey: activeEquippedAsset.id,
-        videoUrl: (isProjectile && activeEquippedAsset.projectileWebm)
+        videoUrl: (isTrajectory && activeEquippedAsset.projectileWebm)
           ? activeEquippedAsset.projectileWebm
           : activeEquippedAsset.webm,
         loopVideoUrl: activeEquippedAsset.loopWebm,
         thumbUrl: activeEquippedAsset.thumb,
-        paradigm: activeEquippedAsset.paradigm,
-        x: aimOrigin.x,
-        y: aimOrigin.y,
+        paradigm: isTrajectory ? 'projectile' : activeEquippedAsset.paradigm,
+        x: isTrajectory ? aimOrigin.x : (dist > 15 && isPointAoe ? aimCurrent.x : aimOrigin.x),
+        y: isTrajectory ? aimOrigin.y : (dist > 15 && isPointAoe ? aimCurrent.y : aimOrigin.y),
+        originX: aimOrigin.x,
+        originY: aimOrigin.y,
         targetX: aimCurrent.x,
         targetY: aimCurrent.y,
         sizeFt: activeEquippedAsset.defaultSizeFt,
-        rotation,
+        rotation: (activeEquippedAsset.paradigm === 'cone' || activeEquippedAsset.paradigm === 'line') ? rotation : 0,
         opacity: 1.0,
         blendMode: activeEquippedAsset.blendMode,
         isPersistent: activeEquippedAsset.isPersistent,
         loop: activeEquippedAsset.isPersistent,
         castTime: Date.now(),
-        durationMs: 5000,
+        durationMs: isTrajectory ? 2500 : 5000,
         soundKey: activeEquippedAsset.soundKey,
-        color: activeEquippedAsset.color
+        color: activeEquippedAsset.color,
+        trajectory: isTrajectory ? {
+          startX: aimOrigin.x,
+          startY: aimOrigin.y,
+          endX: aimCurrent.x,
+          endY: aimCurrent.y,
+          speedPxSec: 1400,
+          burstOnImpact: true,
+          burstVideoUrl: activeEquippedAsset.burstWebm || activeEquippedAsset.webm,
+          burstSoundKey: activeEquippedAsset.soundKey
+        } : undefined
       };
 
       setEffects(prev => [...prev, newEffect]);

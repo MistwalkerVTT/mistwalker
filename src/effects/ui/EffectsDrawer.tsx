@@ -28,11 +28,15 @@ import { Attribution } from './Attribution';
 
 interface EffectsDrawerProps {
   onEquipEffect?: (asset: Jb2aAssetDefinition) => void;
+  onEquipAsset?: (asset: Jb2aAssetDefinition) => void;
   onQuickPlaceEffect?: (asset: Jb2aAssetDefinition) => void;
+  onQuickPlaceAsset?: (asset: Jb2aAssetDefinition) => void;
   onClearEffects?: () => void;
   onOpenCompendium?: () => void;
   activeEquippedId?: string | null;
+  activeEquippedAsset?: Jb2aAssetDefinition | null;
   gridSize?: number;
+  className?: string;
 }
 
 const SCHOOLS: { id: string; label: string }[] = [
@@ -48,12 +52,20 @@ const SCHOOLS: { id: string; label: string }[] = [
 
 export const EffectsDrawer: React.FC<EffectsDrawerProps> = ({
   onEquipEffect,
+  onEquipAsset,
   onQuickPlaceEffect,
+  onQuickPlaceAsset,
   onClearEffects,
   onOpenCompendium,
   activeEquippedId,
-  gridSize = 50
+  activeEquippedAsset,
+  gridSize = 50,
+  className
 }) => {
+  const handleEquip = onEquipEffect || onEquipAsset;
+  const handleQuickPlace = onQuickPlaceEffect || onQuickPlaceAsset;
+  const currentEquippedId = activeEquippedId || activeEquippedAsset?.id;
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSchool, setSelectedSchool] = useState<string>('all');
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'instant' | 'persistent' | 'projectile'>('all');
@@ -142,7 +154,7 @@ export const EffectsDrawer: React.FC<EffectsDrawerProps> = ({
           </div>
         ) : (
           filteredAssets.map(asset => {
-            const isEquipped = activeEquippedId === asset.id;
+            const isEquipped = currentEquippedId === asset.id;
             const isPlaying = previewingSound === asset.id;
 
             return (
@@ -158,11 +170,15 @@ export const EffectsDrawer: React.FC<EffectsDrawerProps> = ({
                   <div className="flex items-center gap-2.5 min-w-0">
                     <div className="w-9 h-9 rounded-lg bg-zinc-950 border border-zinc-700/80 flex items-center justify-center shrink-0 overflow-hidden relative shadow-inner">
                       <img
-                        src={asset.thumb}
+                        src={asset.thumb || asset.webm}
                         alt={asset.name}
                         className="w-full h-full object-cover"
                         loading="lazy"
+                        onError={(e) => {
+                          (e.target as HTMLElement).style.display = 'none';
+                        }}
                       />
+                      <Sparkles className="w-3.5 h-3.5 text-zinc-600 absolute pointer-events-none" />
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
@@ -201,10 +217,10 @@ export const EffectsDrawer: React.FC<EffectsDrawerProps> = ({
 
                 {/* Actions: Quick Place & Aim on Map */}
                 <div className="flex gap-1.5 mt-2 pt-2 border-t border-zinc-800/60">
-                  {onQuickPlaceEffect && (
+                  {handleQuickPlace && (
                     <button
                       type="button"
-                      onClick={() => onQuickPlaceEffect(asset)}
+                      onClick={() => handleQuickPlace(asset)}
                       className="flex-1 py-1.5 px-2 rounded-lg bg-zinc-800 hover:bg-zinc-750 text-zinc-200 text-[11px] font-mono font-semibold border border-zinc-700/80 transition-all flex items-center justify-center gap-1 cursor-pointer"
                     >
                       <Plus className="w-3 h-3 text-emerald-400" />
@@ -212,10 +228,10 @@ export const EffectsDrawer: React.FC<EffectsDrawerProps> = ({
                     </button>
                   )}
 
-                  {onEquipEffect && (
+                  {handleEquip && (
                     <button
                       type="button"
-                      onClick={() => onEquipEffect(asset)}
+                      onClick={() => handleEquip(asset)}
                       className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] font-mono font-semibold transition-all flex items-center justify-center gap-1 cursor-pointer ${
                         isEquipped
                           ? 'bg-rose-600 hover:bg-rose-700 text-white'

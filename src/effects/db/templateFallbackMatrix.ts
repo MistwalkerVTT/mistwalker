@@ -38,29 +38,29 @@ export function synthesizeElementalTemplate(ctx: SpellSynthesisContext): Jb2aAss
 
   // 3. Acid / Poison
   if (normDamage.includes('acid') || normDamage.includes('poison') || normDamage.includes('toxic')) {
-    return JB2A_REGISTRY.find(a => a.id === 'template_circle_acid') || JB2A_REGISTRY.find(a => a.id === 'cloudkill')!;
+    return JB2A_REGISTRY.find(a => a.id === 'template_circle_acid') || JB2A_REGISTRY.find(a => a.id === 'fog_cloud') || JB2A_REGISTRY[0];
   }
 
   // 4. Lightning / Shock
   if (normDamage.includes('lightning') || normDamage.includes('thunder') || normDamage.includes('shock')) {
-    return JB2A_REGISTRY.find(a => a.id === 'lightning_bolt')!;
+    return JB2A_REGISTRY.find(a => a.id === 'lightning_bolt') || JB2A_REGISTRY.find(a => a.id === 'call_lightning') || JB2A_REGISTRY[0];
   }
 
   // 5. Radiant / Holy
   if (normDamage.includes('radiant') || normDamage.includes('holy') || normSchool === 'abjuration') {
-    return JB2A_REGISTRY.find(a => a.id === 'template_circle_radiant') || JB2A_REGISTRY.find(a => a.id === 'beacon_of_hope')!;
+    return JB2A_REGISTRY.find(a => a.id === 'template_circle_radiant') || JB2A_REGISTRY.find(a => a.id === 'bless') || JB2A_REGISTRY.find(a => a.id === 'shield') || JB2A_REGISTRY[0];
   }
 
   // 6. Necrotic / Dark
   if (normDamage.includes('necrotic') || normDamage.includes('death') || normSchool === 'necromancy') {
-    return JB2A_REGISTRY.find(a => a.id === 'template_circle_necrotic') || JB2A_REGISTRY.find(a => a.id === 'arms_of_hadar')!;
+    return JB2A_REGISTRY.find(a => a.id === 'template_circle_necrotic') || JB2A_REGISTRY.find(a => a.id === 'arms_of_hadar') || JB2A_REGISTRY.find(a => a.id === 'darkness') || JB2A_REGISTRY[0];
   }
 
   // 7. General Arcane / Force / Illusion
   if (normSchool === 'illusion' || normSchool === 'enchantment') {
-    return JB2A_REGISTRY.find(a => a.id === 'hypnotic_pattern')!;
+    return JB2A_REGISTRY.find(a => a.id === 'bless') || JB2A_REGISTRY.find(a => a.id === 'misty_step') || JB2A_REGISTRY[0];
   }
 
-  // Universal Fallback: Divine Smite burst
-  return JB2A_REGISTRY.find(a => a.id === 'divine_smite') || JB2A_REGISTRY[0];
+  // Universal Fallback: Fireball or first asset
+  return JB2A_REGISTRY.find(a => a.id === 'fireball') || JB2A_REGISTRY[0];
 }
