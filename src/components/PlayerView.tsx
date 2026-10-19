@@ -3824,6 +3824,8 @@ export default function PlayerView() {
         stagePos={stagePos}
         stageScale={stageScale}
         gridSize={gridSize}
+        tokens={tokens.filter(isTokenVisibleToPlayer)}
+        combatants={combatState?.combatants}
         activeEquippedAsset={activeEquippedAsset}
         aimOrigin={aimOrigin}
         aimCurrent={aimCurrent}

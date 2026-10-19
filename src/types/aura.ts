@@ -5,6 +5,7 @@ export interface TokenAura {
   color: string; // rgba or hex
   opacity?: number;
   pulse?: boolean;
+  videoUrl?: string; // Transparent animated WebM for this aura
 }
 
 export interface AuraPreset {
@@ -14,6 +15,7 @@ export interface AuraPreset {
   color: string;
   opacity?: number;
   description?: string;
+  videoUrl?: string; // Transparent animated WebM for this aura
 }
 
 export const AURA_PRESETS: AuraPreset[] = [
@@ -23,7 +25,8 @@ export const AURA_PRESETS: AuraPreset[] = [
     radius: 10,
     color: 'rgba(234, 179, 8, 0.4)',
     opacity: 0.35,
-    description: '+Cha to all saving throws (10 ft)'
+    description: '+Cha to all saving throws (10 ft)',
+    videoUrl: '/jb2a/Library/Generic/Template/Circle/TemplateRunesCircle_01_Regular_Orange_800x800.webm'
   },
   {
     id: 'spirit_guardians',
@@ -31,7 +34,8 @@ export const AURA_PRESETS: AuraPreset[] = [
     radius: 15,
     color: 'rgba(59, 130, 246, 0.4)',
     opacity: 0.35,
-    description: 'Halves speed, 3d8 radiant/necrotic (15 ft)'
+    description: 'Halves speed, 3d8 radiant/necrotic (15 ft)',
+    videoUrl: '/jb2a/Library/3rd_Level/Spirit_Guardians/SpiritGuardians_01_Regular_Blue_600x600.webm'
   },
   {
     id: 'twilight_sanctuary',
@@ -39,7 +43,8 @@ export const AURA_PRESETS: AuraPreset[] = [
     radius: 30,
     color: 'rgba(147, 51, 234, 0.35)',
     opacity: 0.35,
-    description: '1d6+Level temp HP or end charm/fear (30 ft)'
+    description: '1d6+Level temp HP or end charm/fear (30 ft)',
+    videoUrl: '/jb2a/Library/Generic/Creature/FairiesLoop01_01_Regular_BluePurple_600x600.webm'
   },
   {
     id: 'aura_of_life',
@@ -47,7 +52,8 @@ export const AURA_PRESETS: AuraPreset[] = [
     radius: 30,
     color: 'rgba(34, 197, 94, 0.4)',
     opacity: 0.35,
-    description: 'Necrotic resistance & regain 1 HP at 0 (30 ft)'
+    description: 'Necrotic resistance & regain 1 HP at 0 (30 ft)',
+    videoUrl: '/jb2a/Library/Generic/Template/Circle/Aura/AuraThemedOrbitLoopNature01_01_Regular_Green_700x700.webm'
   },
   {
     id: 'crusaders_mantle',
@@ -55,7 +61,8 @@ export const AURA_PRESETS: AuraPreset[] = [
     radius: 30,
     color: 'rgba(245, 158, 11, 0.4)',
     opacity: 0.35,
-    description: '+1d4 radiant damage on weapon attacks (30 ft)'
+    description: '+1d4 radiant damage on weapon attacks (30 ft)',
+    videoUrl: '/jb2a/Library/Generic/Template/Circle/TemplateRunesCircle_01_Regular_Orange_800x800.webm'
   },
   {
     id: 'aura_of_courage',
@@ -63,7 +70,8 @@ export const AURA_PRESETS: AuraPreset[] = [
     radius: 10,
     color: 'rgba(251, 191, 36, 0.4)',
     opacity: 0.35,
-    description: 'Immunity to frightened condition (10 ft)'
+    description: 'Immunity to frightened condition (10 ft)',
+    videoUrl: '/jb2a/Library/Generic/Template/Circle/TemplateRunesCircle_01_Regular_Orange_800x800.webm'
   },
   {
     id: 'frost_rime',
@@ -71,7 +79,8 @@ export const AURA_PRESETS: AuraPreset[] = [
     radius: 15,
     color: 'rgba(6, 182, 212, 0.4)',
     opacity: 0.35,
-    description: 'Freezing cold hazardous aura (15 ft)'
+    description: 'Freezing cold hazardous aura (15 ft)',
+    videoUrl: '/jb2a/Library/Generic/Template/Circle/Aura/AuraThemedOrbitLoopCold01_01_Regular_Blue_700x700.webm'
   },
   {
     id: 'aura_of_dread',
@@ -79,7 +88,8 @@ export const AURA_PRESETS: AuraPreset[] = [
     radius: 10,
     color: 'rgba(239, 68, 68, 0.4)',
     opacity: 0.35,
-    description: '+Cha to fiend/undead damage (10 ft)'
+    description: '+Cha to fiend/undead damage (10 ft)',
+    videoUrl: '/jb2a/Library/2nd_Level/Darkness/Darkness_01_Regular_Black_600x600.webm'
   },
   {
     id: 'faerie_glow',
@@ -87,7 +97,8 @@ export const AURA_PRESETS: AuraPreset[] = [
     radius: 10,
     color: 'rgba(236, 72, 153, 0.4)',
     opacity: 0.35,
-    description: 'Luminescent fey outlining aura (10 ft)'
+    description: 'Luminescent fey outlining aura (10 ft)',
+    videoUrl: '/jb2a/Library/Generic/Creature/FairiesLoop01_01_Regular_BluePurple_600x600.webm'
   },
   {
     id: 'darkness_sphere',
@@ -95,7 +106,8 @@ export const AURA_PRESETS: AuraPreset[] = [
     radius: 15,
     color: 'rgba(100, 116, 139, 0.5)',
     opacity: 0.45,
-    description: 'Void field blocking sound or light (15 ft)'
+    description: 'Void field blocking sound or light (15 ft)',
+    videoUrl: '/jb2a/Library/2nd_Level/Darkness/Darkness_01_Regular_Black_600x600.webm'
   },
   {
     id: 'cloak_of_flies',
@@ -103,7 +115,17 @@ export const AURA_PRESETS: AuraPreset[] = [
     radius: 5,
     color: 'rgba(132, 204, 22, 0.45)',
     opacity: 0.4,
-    description: 'Poison damage & intimidation aura (5 ft)'
+    description: 'Poison damage & intimidation aura (5 ft)',
+    videoUrl: '/jb2a/Library/Generic/Template/Circle/TemplatePoisonCircle_01_Dark_Green_800x800.webm'
+  },
+  {
+    id: 'fire_shield',
+    name: 'Fire Shield / Flame Body',
+    radius: 5,
+    color: 'rgba(249, 115, 22, 0.45)',
+    opacity: 0.45,
+    description: 'Wreathing flames damaging melee attackers (5 ft)',
+    videoUrl: '/jb2a/Library/Generic/Fire/ShieldFireAbove01_01_Regular_Orange_400x400.webm'
   }
 ];
 

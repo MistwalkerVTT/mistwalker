@@ -20,7 +20,8 @@ export type SpellSchool =
   | 'transmutation'
   | 'illusion'
   | 'divination'
-  | 'environmental';
+  | 'environmental'
+  | 'martial';
 
 /**
  * Universal runtime instance of an active effect on the battlemap.

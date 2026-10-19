@@ -6,6 +6,7 @@
 import React, { useEffect, useCallback } from 'react';
 import { VttEffectInstance, Jb2aAssetDefinition } from '../types/effect';
 import { soundCatalog } from '../db/soundCatalog';
+import { getConditionFx, getAuraVideoUrl } from '../db/tokenFxMap';
 
 interface DomEffectOverlayProps {
   effects: VttEffectInstance[];
@@ -13,6 +14,8 @@ interface DomEffectOverlayProps {
   stagePos: { x: number; y: number };
   stageScale: number;
   gridSize: number;
+  tokens?: any[];
+  combatants?: any[];
   activeEquippedAsset?: Jb2aAssetDefinition | null;
   aimOrigin?: { x: number; y: number } | null;
   aimCurrent?: { x: number; y: number } | null;
@@ -25,6 +28,8 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
   stagePos,
   stageScale,
   gridSize,
+  tokens,
+  combatants,
   activeEquippedAsset,
   aimOrigin,
   aimCurrent,
@@ -90,8 +95,9 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
 
   const hasEffects = Boolean(effects && effects.length > 0);
   const hasAimPreview = Boolean(activeEquippedAsset && aimCurrent);
+  const hasTokens = Boolean(tokens && tokens.length > 0);
 
-  if (!hasEffects && !hasAimPreview) return null;
+  if (!hasEffects && !hasAimPreview && !hasTokens) return null;
 
   return (
     <div
@@ -108,7 +114,72 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
           willChange: 'transform'
         }}
       >
-        {/* 1. Active In-World Visual Effects (Hardware-accelerated native transparent WebMs) */}
+        {/* 1. Animated Token Auras (Looping JB2A runes, spirit guardians, cold auras, nature swirls) */}
+        {tokens?.map((token) => {
+          const tokenSize = token.size || 1;
+          const tokenWidth = gridSize * tokenSize;
+          const tokenRadius = tokenWidth / 2;
+          const centerX = (token.x ?? 0) + tokenRadius;
+          const centerY = (token.y ?? 0) + tokenRadius;
+
+          const auras: any[] = [];
+          if (Array.isArray(token.auras) && token.auras.length > 0) {
+            auras.push(...token.auras);
+          } else if (token.auraRadius && token.auraRadius > 0) {
+            auras.push({
+              radius: token.auraRadius,
+              color: token.auraColor,
+              opacity: token.auraOpacity,
+              name: token.auraName,
+              videoUrl: token.videoUrl || (token as any).auraVideoUrl
+            });
+          }
+
+          if (auras.length === 0) return null;
+
+          return auras.map((aura, idx) => {
+            const auraFt = aura.radius || 10;
+            const auraVideo = aura.videoUrl || getAuraVideoUrl(aura.name, aura.color);
+            if (!auraVideo) return null;
+
+            const auraPixelRadius = tokenRadius + (auraFt / 5) * gridSize;
+            const auraDiameter = auraPixelRadius * 2;
+            const auraOpacity = aura.opacity ?? 0.35;
+
+            return (
+              <video
+                key={`aura-${token.id}-${idx}`}
+                src={auraVideo}
+                autoPlay
+                muted
+                loop
+                playsInline
+                preload="auto"
+                onLoadedData={(e) => (e.target as HTMLVideoElement).play().catch(() => {})}
+                onError={(e) => console.warn('Aura video load failed:', auraVideo, e)}
+                style={{
+                  position: 'absolute',
+                  left: `${centerX}px`,
+                  top: `${centerY}px`,
+                  width: `${auraDiameter}px`,
+                  height: `${auraDiameter}px`,
+                  maxWidth: 'none',
+                  maxHeight: 'none',
+                  minWidth: `${auraDiameter}px`,
+                  minHeight: `${auraDiameter}px`,
+                  transform: 'translate(-50%, -50%) translateZ(0)',
+                  transformOrigin: '50% 50%',
+                  objectFit: 'contain',
+                  opacity: auraOpacity,
+                  pointerEvents: 'none',
+                  filter: 'drop-shadow(0 0 16px rgba(255, 255, 255, 0.2))'
+                }}
+              />
+            );
+          });
+        })}
+
+        {/* 2. Active In-World Visual Effects (Hardware-accelerated native transparent WebMs) */}
         {effects.map((effect) => {
           const sizeFt = effect.sizeFt || 20;
 
@@ -267,7 +338,73 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
           );
         })}
 
-        {/* 2. Live Animated Targeting Preview (Follows mouse cursor while aiming spells) */}
+        {/* 3. Animated Token Condition Overlays (Dizzy stars, poison clouds, charm hearts, fear, ice, fire, skulls) */}
+        {tokens?.map((token) => {
+          const tokenSize = token.size || 1;
+          const tokenWidth = gridSize * tokenSize;
+          const tokenRadius = tokenWidth / 2;
+          const centerX = (token.x ?? 0) + tokenRadius;
+          const centerY = (token.y ?? 0) + tokenRadius;
+
+          const conditionsSet = new Set<string>();
+          if (Array.isArray(token.conditions)) {
+            token.conditions.forEach((c: string) => { if (c) conditionsSet.add(c); });
+          }
+          if (combatants && combatants.length > 0) {
+            const matched = combatants.find((c: any) =>
+              c.id === token.id ||
+              c.tokenId === token.id ||
+              (c.name && token.name && c.name.toLowerCase().trim() === token.name.toLowerCase().trim())
+            );
+            if (Array.isArray(matched?.conditions)) {
+              matched.conditions.forEach((c: string) => { if (c) conditionsSet.add(c); });
+            }
+          }
+
+          const conditions = Array.from(conditionsSet);
+          if (conditions.length === 0) return null;
+
+          return conditions.map((conditionName) => {
+            const fx = getConditionFx(conditionName);
+            if (!fx) return null;
+
+            const condDiameter = tokenWidth * (fx.sizeMultiplier || 1.25);
+            const offsetY = tokenWidth * (fx.yOffset || 0);
+
+            return (
+              <video
+                key={`cond-${token.id}-${fx.condition}`}
+                src={fx.videoUrl}
+                autoPlay
+                muted
+                loop
+                playsInline
+                preload="auto"
+                onLoadedData={(e) => (e.target as HTMLVideoElement).play().catch(() => {})}
+                onError={(e) => console.warn('Condition video load failed:', fx.videoUrl, e)}
+                style={{
+                  position: 'absolute',
+                  left: `${centerX}px`,
+                  top: `${centerY + offsetY}px`,
+                  width: `${condDiameter}px`,
+                  height: `${condDiameter}px`,
+                  maxWidth: 'none',
+                  maxHeight: 'none',
+                  minWidth: `${condDiameter}px`,
+                  minHeight: `${condDiameter}px`,
+                  transform: 'translate(-50%, -50%) translateZ(0)',
+                  transformOrigin: '50% 50%',
+                  objectFit: 'contain',
+                  opacity: fx.opacity ?? 0.9,
+                  pointerEvents: 'none',
+                  filter: 'drop-shadow(0 0 10px rgba(0, 0, 0, 0.5))'
+                }}
+              />
+            );
+          });
+        })}
+
+        {/* 4. Live Animated Targeting Preview (Follows mouse cursor while aiming spells) */}
         {hasAimPreview && activeEquippedAsset && aimCurrent && (() => {
           const previewSize = activeEquippedAsset.defaultSizeFt || 20;
 

@@ -5,6 +5,7 @@ export * from './types/effect';
 export * from './db/jb2aRegistry';
 export * from './db/soundCatalog';
 export * from './db/templateFallbackMatrix';
+export * from './db/tokenFxMap';
 export * from './engine/VideoPool';
 export * from './engine/VideoCacheManager';
 export * from './engine/Sequencer';

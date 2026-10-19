@@ -7381,6 +7381,8 @@ export default function App() {
               stagePos={stagePos}
               stageScale={stageScale}
               gridSize={gridSize}
+              tokens={tokens}
+              combatants={combatTrackerCombatants}
               activeEquippedAsset={activeEquippedAsset}
               aimOrigin={aimOrigin}
               aimCurrent={aimCurrent}

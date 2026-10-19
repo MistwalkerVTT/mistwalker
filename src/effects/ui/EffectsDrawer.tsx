@@ -47,6 +47,7 @@ const SCHOOLS: { id: string; label: string }[] = [
   { id: 'necromancy', label: 'Necromancy' },
   { id: 'enchantment', label: 'Enchantment' },
   { id: 'illusion', label: 'Illusion' },
+  { id: 'martial', label: 'Martial & Weapons' },
   { id: 'environmental', label: 'Hazards' }
 ];
 
@@ -68,7 +69,7 @@ export const EffectsDrawer: React.FC<EffectsDrawerProps> = ({
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSchool, setSelectedSchool] = useState<string>('all');
-  const [categoryFilter, setCategoryFilter] = useState<'all' | 'instant' | 'persistent' | 'projectile'>('all');
+  const [categoryFilter, setCategoryFilter] = useState<'all' | 'instant' | 'persistent' | 'projectile' | 'martial'>('all');
   const [previewingSound, setPreviewingSound] = useState<string | null>(null);
 
   const filteredAssets = JB2A_REGISTRY.filter(asset => {
@@ -76,7 +77,8 @@ export const EffectsDrawer: React.FC<EffectsDrawerProps> = ({
     if (selectedSchool !== 'all' && asset.school !== selectedSchool) return false;
 
     // Category tab filter
-    if (categoryFilter === 'instant' && (asset.isPersistent || asset.paradigm === 'projectile')) return false;
+    if (categoryFilter === 'martial' && asset.school !== 'martial') return false;
+    if (categoryFilter === 'instant' && (asset.isPersistent || asset.paradigm === 'projectile' || asset.school === 'martial')) return false;
     if (categoryFilter === 'persistent' && !asset.isPersistent) return false;
     if (categoryFilter === 'projectile' && asset.paradigm !== 'projectile' && asset.paradigm !== 'ray') return false;
 
@@ -102,7 +104,7 @@ export const EffectsDrawer: React.FC<EffectsDrawerProps> = ({
     <div className="flex flex-col gap-3 text-zinc-200 select-none">
       {/* Category Filter Switcher */}
       <div className="flex bg-zinc-950 p-1 rounded-xl border border-zinc-800 gap-1">
-        {(['all', 'instant', 'persistent', 'projectile'] as const).map(tab => (
+        {(['all', 'instant', 'persistent', 'projectile', 'martial'] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setCategoryFilter(tab)}
@@ -112,7 +114,7 @@ export const EffectsDrawer: React.FC<EffectsDrawerProps> = ({
                 : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850'
             }`}
           >
-            {tab === 'all' ? 'All FX' : tab === 'instant' ? 'Blasts' : tab === 'persistent' ? 'AoE' : 'Rays'}
+            {tab === 'all' ? 'All FX' : tab === 'instant' ? 'Blasts' : tab === 'persistent' ? 'AoE' : tab === 'projectile' ? 'Rays' : 'Martial'}
           </button>
         ))}
       </div>
