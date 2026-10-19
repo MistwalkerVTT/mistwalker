@@ -61,6 +61,13 @@ import { DynamicLightingLayer } from './DynamicLightingLayer';
 import { GridLayer } from './GridLayer';
 import { AnimatedFeaturesKonvaImage, AnimatedFeature, WeatherEffectType } from './AnimatedMapOverlay';
 import { ProceduralSpellEffect } from './ProceduralSpellEffect';
+import { ShockwaveOverlay, useShockwaves, triggerShockwave } from './ShockwaveOverlay';
+import {
+  SPECIAL_EFFECTS_DATABASE,
+  getSpecialEffectDefinition,
+  SpecialEffectDefinition
+} from '../data/specialEffectsDatabase';
+import { spellSoundEngine } from '../utils/spellSoundEngine';
 import { DiceTableOverlay } from './DiceTableOverlay';
 import { DICE_COLOR_PRESETS, DiceColorPreset } from '../graphics/dice/diceTextures';
 import { WallSegment, VisionConfig, RoomAnnotation, Combatant, isMonsterToken, AURA_PRESETS, AURA_COLOR_PALETTE, TokenAura, AuraPreset } from '../types';
@@ -171,313 +178,26 @@ export interface PlayerSpellDefinition {
   description: string;
   iconName: 'flame' | 'zap' | 'sun' | 'snowflake' | 'moon' | 'cloud' | 'droplets' | 'wind' | 'shield' | 'sparkles';
   badgeColor: string;
+  soundEffect?: string;
+  shockwave?: boolean;
 }
+export const PLAYER_EFFECTS_CATALOG: PlayerSpellDefinition[] = SPECIAL_EFFECTS_DATABASE.map(s => ({
+  id: s.id,
+  name: s.name,
+  label: s.label,
+  category: (s.category === 'instant' ? 'instant' : s.category === 'persistent' ? 'persistent' : 'tactical') as any,
+  type: s.shape,
+  defaultSizeFt: s.defaultSizeFt,
+  color: s.color,
+  isPersistent: s.isPersistent,
+  defaultOpacity: s.defaultOpacity,
+  description: s.description,
+  iconName: s.iconName as any,
+  badgeColor: s.badgeColor,
+  soundEffect: s.soundEffect,
+  shockwave: s.shockwave
+}));
 
-export const PLAYER_EFFECTS_CATALOG: PlayerSpellDefinition[] = [
-  // --- Instant Evocation & Attack Spells ---
-  {
-    id: 'fireball',
-    name: 'Fireball',
-    label: 'Fireball',
-    category: 'instant',
-    type: 'circle',
-    defaultSizeFt: 20,
-    color: 'rgba(239, 68, 68, 0.45)',
-    isPersistent: false,
-    description: '20ft radius explosive bloom of roaring flame.',
-    iconName: 'flame',
-    badgeColor: 'text-red-400 bg-red-950/60 border-red-800/60'
-  },
-  {
-    id: 'eldritch_blast',
-    name: 'Eldritch Blast',
-    label: 'Eldritch Blast',
-    category: 'instant',
-    type: 'circle',
-    defaultSizeFt: 5,
-    color: 'rgba(147, 51, 234, 0.5)',
-    isPersistent: false,
-    description: 'Crackling beam of eldritch force and cosmic void.',
-    iconName: 'zap',
-    badgeColor: 'text-purple-400 bg-purple-950/60 border-purple-800/60'
-  },
-  {
-    id: 'divine_smite',
-    name: 'Divine Smite',
-    label: 'Divine Smite',
-    category: 'instant',
-    type: 'circle',
-    defaultSizeFt: 10,
-    color: 'rgba(251, 191, 36, 0.5)',
-    isPersistent: false,
-    description: 'Radiant holy power bursting with solar brilliance.',
-    iconName: 'sun',
-    badgeColor: 'text-amber-400 bg-amber-950/60 border-amber-800/60'
-  },
-  {
-    id: 'cone_of_cold',
-    name: 'Cone of Cold',
-    label: 'Cone of Cold',
-    category: 'instant',
-    type: 'cone',
-    defaultSizeFt: 60,
-    color: 'rgba(59, 130, 246, 0.45)',
-    isPersistent: false,
-    description: '60ft cone of freezing arctic blast and crystalline rime.',
-    iconName: 'snowflake',
-    badgeColor: 'text-sky-400 bg-sky-950/60 border-sky-800/60'
-  },
-  {
-    id: 'lightning_bolt',
-    name: 'Lightning Bolt',
-    label: 'Lightning Bolt',
-    category: 'instant',
-    type: 'line',
-    defaultSizeFt: 100,
-    color: 'rgba(234, 179, 8, 0.5)',
-    isPersistent: false,
-    description: '100ft stroke of lightning blasting in a straight line.',
-    iconName: 'zap',
-    badgeColor: 'text-yellow-400 bg-yellow-950/60 border-yellow-800/60'
-  },
-  {
-    id: 'fire_bolt',
-    name: 'Fire Bolt',
-    label: 'Fire Bolt',
-    category: 'instant',
-    type: 'circle',
-    defaultSizeFt: 5,
-    color: 'rgba(239, 68, 68, 0.5)',
-    isPersistent: false,
-    description: 'Single fiery projectile hurled at a target.',
-    iconName: 'flame',
-    badgeColor: 'text-red-400 bg-red-950/60 border-red-800/60'
-  },
-  {
-    id: 'burning_hands',
-    name: 'Burning Hands / Breath',
-    label: 'Burning Hands',
-    category: 'instant',
-    type: 'cone',
-    defaultSizeFt: 15,
-    color: 'rgba(249, 115, 22, 0.45)',
-    isPersistent: false,
-    description: '15ft sheet of roaring flames from your fingertips.',
-    iconName: 'flame',
-    badgeColor: 'text-orange-400 bg-orange-950/60 border-orange-800/60'
-  },
-  {
-    id: 'shocking_grasp',
-    name: 'Shocking Grasp',
-    label: 'Shocking Grasp',
-    category: 'instant',
-    type: 'circle',
-    defaultSizeFt: 10,
-    color: 'rgba(59, 130, 246, 0.5)',
-    isPersistent: false,
-    description: 'Lightning sparks jumping across the target creature.',
-    iconName: 'zap',
-    badgeColor: 'text-cyan-400 bg-cyan-950/60 border-cyan-800/60'
-  },
-  {
-    id: 'destructive_wave',
-    name: 'Destructive Wave',
-    label: 'Destructive Wave',
-    category: 'instant',
-    type: 'circle',
-    defaultSizeFt: 30,
-    color: 'rgba(239, 68, 68, 0.45)',
-    isPersistent: false,
-    description: '30ft concussive shockwave of divine thunder and force.',
-    iconName: 'wind',
-    badgeColor: 'text-rose-400 bg-rose-950/60 border-rose-800/60'
-  },
-  {
-    id: 'shadow_grasp',
-    name: 'Shadow Grasp',
-    label: 'Shadow Grasp',
-    category: 'instant',
-    type: 'circle',
-    defaultSizeFt: 10,
-    color: 'rgba(99, 102, 241, 0.5)',
-    isPersistent: false,
-    description: 'Tentacles of dark Netherese energy grasping nearby foes.',
-    iconName: 'moon',
-    badgeColor: 'text-indigo-400 bg-indigo-950/60 border-indigo-800/60'
-  },
-
-  // --- Persistent AoE & Hazards ---
-  {
-    id: 'spirit_guardians',
-    name: 'Spirit Guardians',
-    label: 'Spirit Guardians',
-    category: 'persistent',
-    type: 'circle',
-    defaultSizeFt: 15,
-    color: 'rgba(255, 215, 0, 0.4)',
-    isPersistent: true,
-    defaultOpacity: 0.85,
-    description: '15ft celestial sanctuary with orbiting seraphs and glyphs.',
-    iconName: 'sun',
-    badgeColor: 'text-amber-300 bg-amber-950/60 border-amber-700/60'
-  },
-  {
-    id: 'darkness',
-    name: 'Darkness',
-    label: 'Darkness',
-    category: 'persistent',
-    type: 'circle',
-    defaultSizeFt: 15,
-    color: 'rgba(0, 0, 0, 0.75)',
-    isPersistent: true,
-    defaultOpacity: 0.9,
-    description: '15ft sphere of impenetrable magical darkness.',
-    iconName: 'moon',
-    badgeColor: 'text-zinc-300 bg-zinc-900 border-zinc-700'
-  },
-  {
-    id: 'fog_cloud',
-    name: 'Fog Cloud',
-    label: 'Fog Cloud',
-    category: 'persistent',
-    type: 'circle',
-    defaultSizeFt: 20,
-    color: 'rgba(200, 200, 200, 0.45)',
-    isPersistent: true,
-    defaultOpacity: 0.8,
-    description: '20ft radius swirling fog bank obscuring all vision.',
-    iconName: 'cloud',
-    badgeColor: 'text-slate-300 bg-slate-900/70 border-slate-700'
-  },
-  {
-    id: 'poison_cloud',
-    name: 'Poison Cloud / Cloudkill',
-    label: 'Poison Cloud',
-    category: 'persistent',
-    type: 'circle',
-    defaultSizeFt: 20,
-    color: 'rgba(34, 197, 94, 0.45)',
-    isPersistent: true,
-    defaultOpacity: 0.8,
-    description: '20ft billowing toxic noxious vapors.',
-    iconName: 'droplets',
-    badgeColor: 'text-emerald-400 bg-emerald-950/60 border-emerald-800/60'
-  },
-  {
-    id: 'acid_pool',
-    name: 'Acid Pool',
-    label: 'Acid Pool',
-    category: 'persistent',
-    type: 'circle',
-    defaultSizeFt: 15,
-    color: 'rgba(132, 204, 22, 0.45)',
-    isPersistent: true,
-    defaultOpacity: 0.85,
-    description: 'Caustic bubbling pool of glowing acid vitriol.',
-    iconName: 'droplets',
-    badgeColor: 'text-lime-400 bg-lime-950/60 border-lime-800/60'
-  },
-  {
-    id: 'hypnotic_pattern',
-    name: 'Hypnotic Pattern',
-    label: 'Hypnotic Pattern',
-    category: 'persistent',
-    type: 'circle',
-    defaultSizeFt: 30,
-    color: 'rgba(255, 0, 255, 0.4)',
-    isPersistent: true,
-    defaultOpacity: 0.8,
-    description: '30ft swirling vortex of iridescent colors that incapacitates.',
-    iconName: 'sparkles',
-    badgeColor: 'text-fuchsia-400 bg-fuchsia-950/60 border-fuchsia-800/60'
-  },
-  {
-    id: 'beacon_of_hope',
-    name: 'Beacon of Hope',
-    label: 'Beacon of Hope',
-    category: 'persistent',
-    type: 'circle',
-    defaultSizeFt: 30,
-    color: 'rgba(255, 255, 255, 0.4)',
-    isPersistent: true,
-    defaultOpacity: 0.85,
-    description: '30ft radiant holy bastion inspiring hope and vitality.',
-    iconName: 'sun',
-    badgeColor: 'text-yellow-200 bg-yellow-950/60 border-yellow-700/60'
-  },
-  {
-    id: 'sunbeam',
-    name: 'Sunbeam',
-    label: 'Sunbeam',
-    category: 'persistent',
-    type: 'line',
-    defaultSizeFt: 60,
-    color: 'rgba(255, 255, 100, 0.4)',
-    isPersistent: true,
-    defaultOpacity: 0.85,
-    description: '60ft searing beam of brilliant solar radiance.',
-    iconName: 'sun',
-    badgeColor: 'text-amber-200 bg-amber-950/60 border-amber-700/60'
-  },
-
-  // --- Tactical & Light FX ---
-  {
-    id: 'torch_light',
-    name: 'Torch Light',
-    label: 'Torch Light',
-    category: 'tactical',
-    type: 'circle',
-    defaultSizeFt: 20,
-    color: 'rgba(251, 146, 60, 0.35)',
-    isPersistent: true,
-    defaultOpacity: 0.75,
-    description: '20ft bright warm flickering torchlight.',
-    iconName: 'flame',
-    badgeColor: 'text-amber-400 bg-amber-950/60 border-amber-800/60'
-  },
-  {
-    id: 'daylight',
-    name: 'Daylight',
-    label: 'Daylight',
-    category: 'tactical',
-    type: 'circle',
-    defaultSizeFt: 60,
-    color: 'rgba(254, 240, 138, 0.35)',
-    isPersistent: true,
-    defaultOpacity: 0.75,
-    description: '60ft dazzling sphere of radiant daylight.',
-    iconName: 'sun',
-    badgeColor: 'text-yellow-300 bg-yellow-950/60 border-yellow-800/60'
-  },
-  {
-    id: 'faerie_fire',
-    name: 'Faerie Fire',
-    label: 'Faerie Fire',
-    category: 'tactical',
-    type: 'circle',
-    defaultSizeFt: 20,
-    color: 'rgba(168, 85, 247, 0.4)',
-    isPersistent: true,
-    defaultOpacity: 0.8,
-    description: '20ft violet shimmer outlining targets in mystical light.',
-    iconName: 'sparkles',
-    badgeColor: 'text-purple-400 bg-purple-950/60 border-purple-800/60'
-  },
-  {
-    id: 'paladin_aura',
-    name: 'Paladin Aura',
-    label: 'Paladin Aura',
-    category: 'tactical',
-    type: 'circle',
-    defaultSizeFt: 10,
-    color: 'rgba(253, 224, 71, 0.35)',
-    isPersistent: true,
-    defaultOpacity: 0.75,
-    description: '10ft protective aura of divine courage and warding.',
-    iconName: 'shield',
-    badgeColor: 'text-yellow-400 bg-yellow-950/60 border-yellow-800/60'
-  }
-];
 
 export const renderSpellIcon = (iconName: string, className: string = "w-4 h-4") => {
   switch (iconName) {
@@ -1363,6 +1083,7 @@ export default function PlayerView() {
   const [boardAnimatedFeatures, setBoardAnimatedFeatures] = useState<AnimatedFeature[]>(() => Array.isArray(initialBackup?.boardAnimatedFeatures) ? initialBackup.boardAnimatedFeatures : []);
   const [boardAnimatedEnabled, setBoardAnimatedEnabled] = useState<boolean>(() => initialBackup?.boardAnimatedEnabled !== undefined ? initialBackup.boardAnimatedEnabled : true);
   const [boardWeatherEffect, setBoardWeatherEffect] = useState<WeatherEffectType>(() => initialBackup?.boardWeatherEffect || 'none');
+  const { shockwaves, handleRemoveShockwave } = useShockwaves();
 
   // Grid Settings
   const [gridVisible, setGridVisible] = useState<boolean>(() => initialBackup?.gridVisible !== undefined ? initialBackup.gridVisible : true);
@@ -1734,7 +1455,28 @@ export default function PlayerView() {
       if (state.walls && Array.isArray(state.walls)) setWalls(state.walls);
       if (state.reveals) setReveals(state.reveals);
       if (state.polygonReveals) setPolygonReveals(state.polygonReveals);
-      if (state.effects && Array.isArray(state.effects)) setEffects(state.effects);
+      if (state.effects && Array.isArray(state.effects)) {
+        const newEffects = state.effects.filter(e => !effectsRef.current.some(old => old.id === e.id));
+        newEffects.forEach(e => {
+          const def = (e.spellId && getSpecialEffectDefinition(e.spellId))
+            || (e.label && getSpecialEffectDefinition(e.label.toLowerCase().replace(/\s+/g, '_')));
+          const soundToPlay = e.soundEffect || def?.soundEffect;
+          if (soundToPlay && soundToPlay !== 'none') {
+            spellSoundEngine.play(soundToPlay);
+          }
+          const hasShockwave = e.shockwave !== undefined ? e.shockwave : (def?.shockwave ?? true);
+          if (hasShockwave && e.x != null && e.y != null) {
+            triggerShockwave({
+              x: e.x,
+              y: e.y,
+              maxRadius: (e.size || 60) * 1.5,
+              color: e.color || def?.color || 'rgba(255, 255, 255, 0.9)',
+              duration: 550
+            });
+          }
+        });
+        setEffects(state.effects);
+      }
       if (state.boardAnimatedFeatures && Array.isArray(state.boardAnimatedFeatures)) {
         setBoardAnimatedFeatures(state.boardAnimatedFeatures);
       }
@@ -2105,6 +1847,24 @@ export default function PlayerView() {
           if (prev.some(e => e.id === newEffect.id)) return prev;
           return [...prev, newEffect];
         });
+
+        // Trigger procedural sound & shockwave if configured
+        const def = (newEffect.spellId && getSpecialEffectDefinition(newEffect.spellId))
+          || (newEffect.label && getSpecialEffectDefinition(newEffect.label.toLowerCase().replace(/\s+/g, '_')));
+        const soundToPlay = newEffect.soundEffect || def?.soundEffect;
+        if (soundToPlay && soundToPlay !== 'none') {
+          spellSoundEngine.play(soundToPlay);
+        }
+        const hasShockwave = newEffect.shockwave !== undefined ? newEffect.shockwave : (def?.shockwave ?? true);
+        if (hasShockwave && newEffect.x != null && newEffect.y != null) {
+          triggerShockwave({
+            x: newEffect.x,
+            y: newEffect.y,
+            maxRadius: (newEffect.size || 60) * 1.5,
+            color: newEffect.color || def?.color || 'rgba(255, 255, 255, 0.9)',
+            duration: 550
+          });
+        }
       }
     });
 
@@ -2464,6 +2224,23 @@ export default function PlayerView() {
 
     setEffects(prev => [...prev, newEffect]);
     effectsRef.current = [...effectsRef.current, newEffect];
+
+    // Procedural sound & shockwave
+    const def = getSpecialEffectDefinition(spellDef.id);
+    const soundToPlay = spellDef.soundEffect || def?.soundEffect;
+    if (soundToPlay && soundToPlay !== 'none') {
+      spellSoundEngine.play(soundToPlay);
+    }
+    const hasShockwave = spellDef.shockwave !== undefined ? spellDef.shockwave : (def?.shockwave ?? true);
+    if (hasShockwave) {
+      triggerShockwave({
+        x,
+        y,
+        maxRadius: size * 1.5,
+        color: spellDef.color,
+        duration: 550
+      });
+    }
 
     if (socketRef.current?.connected) {
       socketRef.current.emit('ADD_EFFECT', newEffect);
@@ -4367,6 +4144,13 @@ export default function PlayerView() {
               })()}
             </Group>
           )}
+
+          {/* Real-time Shockwave Blast Rings & Flash Overlay */}
+          <ShockwaveOverlay
+            shockwaves={shockwaves}
+            onRemoveShockwave={handleRemoveShockwave}
+            stageScale={stageScale}
+          />
         </Layer>
 
         {/* Layer 3: Dynamic Lighting & Fog of War (Raycasting with Doors, Walls & Torches) */}
@@ -5158,6 +4942,19 @@ export default function PlayerView() {
 
                             {/* Cast / Aim Action Button */}
                             <div className="flex items-center gap-1 shrink-0">
+                              {spell.soundEffect && spell.soundEffect !== 'none' && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    spellSoundEngine.play(spell.soundEffect!);
+                                  }}
+                                  className="p-1.5 rounded-lg text-zinc-400 hover:text-cyan-400 hover:bg-zinc-800 transition-colors cursor-pointer"
+                                  title="Preview Sound FX"
+                                >
+                                  <Volume2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 onClick={(e) => {

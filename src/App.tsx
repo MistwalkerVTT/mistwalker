@@ -44,6 +44,9 @@ import { DdbDiceRollEvent } from './types/dice';
 import { EffectContextMenu, ContextMenuData } from './components/EffectContextMenu';
 import { ProceduralSpellEffect } from './components/ProceduralSpellEffect';
 import { SpellEffectsGroup } from './components/SpellEffectsGroup';
+import { ShockwaveOverlay, useShockwaves, triggerShockwave } from './components/ShockwaveOverlay';
+import { spellSoundEngine } from './utils/spellSoundEngine';
+import { getSpecialEffectDefinition } from './data/specialEffectsDatabase';
 import { CampaignBuilderModal } from './components/CampaignBuilderModal';
 import { SaveToCampaignModal } from './components/SaveToCampaignModal';
 import { LoadCampaignModal } from './components/LoadCampaignModal';
@@ -1053,6 +1056,7 @@ export default function App() {
 
   const socketRef = useRef<any>(null);
   const [socketInstance, setSocketInstance] = useState<any>(null);
+  const { shockwaves, handleRemoveShockwave } = useShockwaves();
   const [isReadingFile, setIsReadingFile] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [activeMapId, setActiveMapId] = useState<'DM1'|'DM2'|'DM3'>('DM1');
@@ -2888,6 +2892,26 @@ export default function App() {
             return [...prev, newEffect];
           });
         }
+
+        // Trigger procedural sound & shockwave on DM view
+        const def = (newEffect.spellId && getSpecialEffectDefinition(newEffect.spellId))
+          || (newEffect.label && getSpecialEffectDefinition(newEffect.label.toLowerCase().replace(/\s+/g, '_')));
+        const soundToPlay = newEffect.soundEffect || def?.soundEffect;
+        if (soundToPlay && soundToPlay !== 'none') {
+          spellSoundEngine.play(soundToPlay);
+        }
+        const hasShockwave = newEffect.shockwave !== undefined ? newEffect.shockwave : (def?.shockwave ?? true);
+        if (hasShockwave && newEffect.x != null && newEffect.y != null) {
+          triggerShockwave({
+            x: newEffect.x,
+            y: newEffect.y,
+            maxRadius: (newEffect.size || 60) * 1.5,
+            color: newEffect.color || def?.color || 'rgba(255, 255, 255, 0.9)',
+            duration: 550
+          });
+          triggerShake(false);
+        }
+
         toast.info(`Player cast: ${newEffect.label || 'Spell Effect'}`);
       }
     });
@@ -3396,6 +3420,29 @@ export default function App() {
     setEffects(prev => [...prev, newEffect]);
     activeEffectIdRef.current = id;
     setActiveEffectId(id);
+
+    // Procedural sound & shockwave
+    const def = getSpecialEffectDefinition(effect.id);
+    const soundToPlay = (effect as any).soundEffect || def?.soundEffect;
+    if (soundToPlay && soundToPlay !== 'none') {
+      spellSoundEngine.play(soundToPlay);
+    }
+    const hasShockwave = (effect as any).shockwave !== undefined ? (effect as any).shockwave : (def?.shockwave ?? true);
+    if (hasShockwave) {
+      triggerShockwave({
+        x: centerX,
+        y: centerY,
+        maxRadius: initialSize * 1.5,
+        color: effect.color,
+        duration: 550
+      });
+      triggerShake(true);
+    }
+
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('ADD_EFFECT', newEffect);
+    }
+
     toast.success(`Dropped ${effect.name} at center of map!`);
   }, [getMapDimensions, gridSize]);
 
@@ -7435,6 +7482,12 @@ export default function App() {
                   coneOfColdImg={coneOfColdImg}
                   GifImage={GifImage}
                   EffectResizeHandle={EffectResizeHandle}
+                />
+                {/* Real-time Shockwave Blast Rings & Flash Overlay */}
+                <ShockwaveOverlay
+                  shockwaves={shockwaves}
+                  onRemoveShockwave={handleRemoveShockwave}
+                  stageScale={stageScale}
                 />
               </Layer>
 

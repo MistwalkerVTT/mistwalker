@@ -1265,6 +1265,401 @@ function drawShadowGrasp(
 }
 
 // ---------------------------------------------------------------------------
+// 13. LIGHTNING BOLT / ELECTRIC ARC
+// ---------------------------------------------------------------------------
+function drawLightningBolt(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  r: number,
+  t: number,
+  spd: number = 1.0
+) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+
+  // Ambient electric corona glow
+  const corona = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+  corona.addColorStop(0, 'rgba(234, 179, 8, 0.45)');
+  corona.addColorStop(0.5, 'rgba(56, 189, 248, 0.25)');
+  corona.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = corona;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Draw 6 jittering plasma lightning branches radiating from center
+  const branchCount = 6;
+  for (let b = 0; b < branchCount; b++) {
+    const baseAngle = (b / branchCount) * Math.PI * 2 + t * 0.2;
+    let currX = cx;
+    let currY = cy;
+    const segments = 7;
+    const segLen = r / segments;
+
+    ctx.strokeStyle = b % 2 === 0 ? 'rgba(255, 255, 255, 0.95)' : 'rgba(234, 179, 8, 0.9)';
+    ctx.lineWidth = b % 2 === 0 ? 2.5 : 1.5;
+    ctx.beginPath();
+    ctx.moveTo(currX, currY);
+
+    for (let s = 1; s <= segments; s++) {
+      const jitter = (Math.sin(t * 15 + b * 4 + s * 2) * 0.35) * segLen;
+      const angle = baseAngle + jitter;
+      currX += Math.cos(angle) * segLen;
+      currY += Math.sin(angle) * segLen;
+      ctx.lineTo(currX, currY);
+    }
+    ctx.stroke();
+  }
+
+  // Intense epicenter core
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.15, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------------------
+// 14. ICE CONE / FROST BURST
+// ---------------------------------------------------------------------------
+function drawIceCone(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  r: number,
+  t: number,
+  spd: number = 1.0
+) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+
+  // Sub-zero frost gradient
+  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+  grad.addColorStop(0, 'rgba(255, 255, 255, 0.7)');
+  grad.addColorStop(0.35, 'rgba(56, 189, 248, 0.45)');
+  grad.addColorStop(0.75, 'rgba(14, 165, 233, 0.25)');
+  grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 12 Crystalline frost needles
+  const needles = 12;
+  const rot = t * 0.15 * spd;
+  for (let n = 0; n < needles; n++) {
+    const ang = (n / needles) * Math.PI * 2 + rot;
+    const isLong = n % 2 === 0;
+    const len = r * (isLong ? 0.92 : 0.65);
+
+    ctx.strokeStyle = isLong ? 'rgba(255, 255, 255, 0.9)' : 'rgba(186, 230, 253, 0.7)';
+    ctx.lineWidth = isLong ? 2.0 : 1.2;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(ang) * len, cy + Math.sin(ang) * len);
+    ctx.stroke();
+
+    // Secondary ice diamond facet
+    const tipX = cx + Math.cos(ang) * (len * 0.75);
+    const tipY = cy + Math.sin(ang) * (len * 0.75);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+    ctx.beginPath();
+    ctx.arc(tipX, tipY, isLong ? 3 : 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------------------
+// 15. HEX SHIELD (Shield, Sanctuary, Protection)
+// ---------------------------------------------------------------------------
+function drawHexShield(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  r: number,
+  t: number,
+  spd: number = 1.0
+) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+
+  // Shield aura
+  const grad = ctx.createRadialGradient(cx, cy, r * 0.3, cx, cy, r);
+  grad.addColorStop(0, 'rgba(56, 189, 248, 0.15)');
+  grad.addColorStop(0.8, 'rgba(56, 189, 248, 0.4)');
+  grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Honeycomb hexagonal shield boundary
+  const sides = 6;
+  const hexRot = t * 0.12 * spd;
+  ctx.strokeStyle = 'rgba(56, 189, 248, 0.85)';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  for (let s = 0; s <= sides; s++) {
+    const a = (s / sides) * Math.PI * 2 + hexRot;
+    const hx = cx + Math.cos(a) * (r * 0.88);
+    const hy = cy + Math.sin(a) * (r * 0.88);
+    if (s === 0) ctx.moveTo(hx, hy);
+    else ctx.lineTo(hx, hy);
+  }
+  ctx.stroke();
+
+  // Inner pulsing hex ring
+  const innerPulse = 0.65 + Math.sin(t * 3.5) * 0.08;
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  for (let s = 0; s <= sides; s++) {
+    const a = (s / sides) * Math.PI * 2 - hexRot;
+    const hx = cx + Math.cos(a) * (r * innerPulse);
+    const hy = cy + Math.sin(a) * (r * innerPulse);
+    if (s === 0) ctx.moveTo(hx, hy);
+    else ctx.lineTo(hx, hy);
+  }
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------------------
+// 16. HEALING BLOOM (Cure Wounds, Healing Word, Restoration)
+// ---------------------------------------------------------------------------
+function drawHealingBloom(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  r: number,
+  t: number,
+  spd: number = 1.0
+) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+
+  // Verdant divine glow
+  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+  grad.addColorStop(0, 'rgba(254, 240, 138, 0.8)');
+  grad.addColorStop(0.3, 'rgba(52, 211, 153, 0.55)');
+  grad.addColorStop(0.7, 'rgba(16, 185, 129, 0.25)');
+  grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 8 Sacred Flower-of-Life petals
+  const petals = 8;
+  const rot = t * 0.2 * spd;
+  const petalR = r * 0.45;
+  ctx.strokeStyle = 'rgba(254, 240, 138, 0.85)';
+  ctx.lineWidth = 1.5;
+  for (let p = 0; p < petals; p++) {
+    const a = (p / petals) * Math.PI * 2 + rot;
+    const px = cx + Math.cos(a) * (r * 0.35);
+    const py = cy + Math.sin(a) * (r * 0.35);
+    ctx.beginPath();
+    ctx.arc(px, py, petalR, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // Rising restorative spark motes
+  for (let m = 0; m < 12; m++) {
+    const mAngle = (m / 12) * Math.PI * 2 + m * 0.5;
+    const mDist = r * ((t * 0.4 + m * 0.08) % 0.85);
+    const mx = cx + Math.cos(mAngle) * mDist;
+    const my = cy + Math.sin(mAngle) * mDist - (mDist * 0.2); // rising upward
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.beginPath();
+    ctx.arc(mx, my, 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------------------
+// 17. ASTRAL PORTAL (Arcane Gate, Dimensional Rift)
+// ---------------------------------------------------------------------------
+function drawAstralPortal(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  r: number,
+  t: number,
+  spd: number = 1.0
+) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+
+  // Cosmic swirling vortex
+  const spiralCount = 3;
+  const rot = t * 0.8 * spd;
+  for (let s = 0; s < spiralCount; s++) {
+    const sOffset = (s / spiralCount) * Math.PI * 2;
+    ctx.strokeStyle = s % 2 === 0 ? 'rgba(168, 85, 247, 0.75)' : 'rgba(236, 72, 153, 0.75)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    for (let rad = 5; rad < r * 0.9; rad += 4) {
+      const theta = rad * 0.12 + rot + sOffset;
+      const x = cx + Math.cos(theta) * rad;
+      const y = cy + Math.sin(theta) * rad;
+      if (rad === 5) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+
+  // Pitch black singularity center
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = '#09090b';
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.22, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(192, 132, 252, 0.9)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------------------
+// 18. MOONBEAM (Cylinder of Silvery Radiant Moonlight)
+// ---------------------------------------------------------------------------
+function drawMoonbeam(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  r: number,
+  t: number,
+  spd: number = 1.0
+) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+
+  // Ethereal silvery moonlight core
+  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+  grad.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
+  grad.addColorStop(0.35, 'rgba(186, 230, 253, 0.65)');
+  grad.addColorStop(0.75, 'rgba(56, 189, 248, 0.3)');
+  grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Silver lunar halo rings
+  const pulse = Math.sin(t * 2.5) * 0.06;
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * (0.8 + pulse), 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------------------
+// 19. FAERIE FIRE (Glimmering Neon Starlight Dust)
+// ---------------------------------------------------------------------------
+function drawFaerieFire(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  r: number,
+  t: number,
+  spd: number = 1.0
+) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+
+  // Neon pink / violet glow
+  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+  grad.addColorStop(0, 'rgba(244, 114, 182, 0.55)');
+  grad.addColorStop(0.6, 'rgba(192, 132, 252, 0.3)');
+  grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 16 Sparkling starlight motes with cross flares
+  for (let s = 0; s < 16; s++) {
+    const a = (s / 16) * Math.PI * 2 + s * 1.3;
+    const dist = r * (0.2 + (Math.sin(s * 7 + t * 2) * 0.5 + 0.5) * 0.65);
+    const sx = cx + Math.cos(a) * dist;
+    const sy = cy + Math.sin(a) * dist;
+    const sparkleAlpha = (Math.sin(t * 4 + s * 2) * 0.5 + 0.5);
+
+    ctx.fillStyle = `rgba(255, 255, 255, ${sparkleAlpha * 0.9})`;
+    ctx.beginPath();
+    ctx.arc(sx, sy, 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Cross flare
+    ctx.strokeStyle = `rgba(244, 114, 182, ${sparkleAlpha * 0.75})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(sx - 4, sy);
+    ctx.lineTo(sx + 4, sy);
+    ctx.moveTo(sx, sy - 4);
+    ctx.lineTo(sx, sy + 4);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------------------
+// 20. LAVA PIT (Searing Molten Magma Churn)
+// ---------------------------------------------------------------------------
+function drawLavaPit(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  r: number,
+  t: number,
+  spd: number = 1.0
+) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+
+  // Molten magma base
+  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+  grad.addColorStop(0, 'rgba(254, 240, 138, 0.9)');
+  grad.addColorStop(0.35, 'rgba(249, 115, 22, 0.75)');
+  grad.addColorStop(0.7, 'rgba(220, 38, 38, 0.5)');
+  grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Bursting incandescent magma bubbles
+  for (let b = 0; b < 7; b++) {
+    const bAngle = (b / 7) * Math.PI * 2 + b * 1.7;
+    const bDist = r * ((Math.sin(t * 1.5 + b * 2) * 0.5 + 0.5) * 0.75);
+    const bx = cx + Math.cos(bAngle) * bDist;
+    const by = cy + Math.sin(bAngle) * bDist;
+    const bubbleSize = 3 + Math.sin(t * 3 + b) * 2;
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.beginPath();
+    ctx.arc(bx, by, bubbleSize, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------------------
 // MAIN PROCEDURAL SPELL EFFECT COMPONENT
 // ---------------------------------------------------------------------------
 export const ProceduralSpellEffect: React.FC<ProceduralSpellEffectProps> = ({
@@ -1290,50 +1685,72 @@ export const ProceduralSpellEffect: React.FC<ProceduralSpellEffectProps> = ({
 
   useEffect(() => {
     let isMounted = true;
+    let lastRenderTime = 0;
 
-    const render = () => {
+    const render = (currentTime: number) => {
       if (!isMounted) return;
 
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.clearRect(0, 0, canvasSize, canvasSize);
+      // Throttle rendering to ~30fps for buttery smooth visuals with low CPU
+      if (currentTime - lastRenderTime >= 33) {
+        lastRenderTime = currentTime;
 
-        const cx = canvasSize / 2;
-        const cy = canvasSize / 2;
-        const r = (canvasSize / 2) * 0.92;
-        const t = performance.now() / 1000;
-        const spd = 1.0;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.clearRect(0, 0, canvasSize, canvasSize);
 
-        const label = (effect.label || '').toLowerCase();
+          const cx = canvasSize / 2;
+          const cy = canvasSize / 2;
+          const r = (canvasSize / 2) * 0.92;
+          const t = currentTime / 1000;
+          const spd = 1.0;
 
-        if (label.includes('eldritch') || label.includes('blast')) {
-          drawEldritchBlast(ctx, cx, cy, r, t, spd);
-        } else if (label.includes('divine') || label.includes('smite')) {
-          drawDivineSmite(ctx, cx, cy, r, t, spd);
-        } else if (label.includes('acid') || label.includes('vitriol')) {
-          drawAcidPool(ctx, cx, cy, r, t, spd);
-        } else if (label.includes('grasp') || label.includes('hadar') || label.includes('shadow grasp') || label.includes('tentacle')) {
-          drawShadowGrasp(ctx, cx, cy, r, t, spd);
-        } else if (label.includes('spirit') || label.includes('guardian')) {
-          drawSpiritGuardians(ctx, cx, cy, r, t, spd);
-        } else if (label.includes('beacon') || label.includes('hope')) {
-          drawBeaconOfHope(ctx, cx, cy, r, t, spd);
-        } else if (label.includes('fireball') || label.includes('fire bolt')) {
-          drawFireball(ctx, cx, cy, r, t, spd);
-        } else if (label.includes('darkness') || label.includes('shadow')) {
-          drawDarkness(ctx, cx, cy, r, t, spd);
-        } else if (label.includes('fog')) {
-          drawFogCloud(ctx, cx, cy, r, t, spd);
-        } else if (label.includes('poison') || label.includes('cloudkill')) {
-          drawPoisonCloud(ctx, cx, cy, r, t, spd);
-        } else if (label.includes('hypnotic')) {
-          drawHypnoticPattern(ctx, cx, cy, r, t, spd);
-        } else {
-          drawGenericSpell(ctx, cx, cy, r, effect.color || 'rgba(147, 51, 234, 0.4)', t, spd);
+          const label = (effect.label || '').toLowerCase();
+
+          if (label.includes('lightning') || label.includes('electric') || label.includes('shocking grasp')) {
+            drawLightningBolt(ctx, cx, cy, r, t, spd);
+          } else if (label.includes('cone of cold') || label.includes('frost') || label.includes('ice')) {
+            drawIceCone(ctx, cx, cy, r, t, spd);
+          } else if (label.includes('shield') || label.includes('sanctuary') || label.includes('barrier')) {
+            drawHexShield(ctx, cx, cy, r, t, spd);
+          } else if (label.includes('cure') || label.includes('heal') || label.includes('restoration') || label.includes('bless')) {
+            drawHealingBloom(ctx, cx, cy, r, t, spd);
+          } else if (label.includes('portal') || label.includes('gate') || label.includes('teleport') || label.includes('dimension')) {
+            drawAstralPortal(ctx, cx, cy, r, t, spd);
+          } else if (label.includes('moonbeam') || label.includes('lunar')) {
+            drawMoonbeam(ctx, cx, cy, r, t, spd);
+          } else if (label.includes('faerie') || label.includes('starlight')) {
+            drawFaerieFire(ctx, cx, cy, r, t, spd);
+          } else if (label.includes('lava') || label.includes('magma')) {
+            drawLavaPit(ctx, cx, cy, r, t, spd);
+          } else if (label.includes('eldritch') || label.includes('blast')) {
+            drawEldritchBlast(ctx, cx, cy, r, t, spd);
+          } else if (label.includes('divine') || label.includes('smite')) {
+            drawDivineSmite(ctx, cx, cy, r, t, spd);
+          } else if (label.includes('acid') || label.includes('vitriol')) {
+            drawAcidPool(ctx, cx, cy, r, t, spd);
+          } else if (label.includes('grasp') || label.includes('hadar') || label.includes('shadow grasp') || label.includes('tentacle')) {
+            drawShadowGrasp(ctx, cx, cy, r, t, spd);
+          } else if (label.includes('spirit') || label.includes('guardian')) {
+            drawSpiritGuardians(ctx, cx, cy, r, t, spd);
+          } else if (label.includes('beacon') || label.includes('hope')) {
+            drawBeaconOfHope(ctx, cx, cy, r, t, spd);
+          } else if (label.includes('fireball') || label.includes('fire bolt') || label.includes('flame') || label.includes('burning')) {
+            drawFireball(ctx, cx, cy, r, t, spd);
+          } else if (label.includes('darkness') || label.includes('shadow')) {
+            drawDarkness(ctx, cx, cy, r, t, spd);
+          } else if (label.includes('fog')) {
+            drawFogCloud(ctx, cx, cy, r, t, spd);
+          } else if (label.includes('poison') || label.includes('cloudkill') || label.includes('stinking')) {
+            drawPoisonCloud(ctx, cx, cy, r, t, spd);
+          } else if (label.includes('hypnotic')) {
+            drawHypnoticPattern(ctx, cx, cy, r, t, spd);
+          } else {
+            drawGenericSpell(ctx, cx, cy, r, effect.color || 'rgba(147, 51, 234, 0.4)', t, spd);
+          }
+
+          // Notify Konva of canvas update
+          imageRef.current?.getLayer()?.batchDraw();
         }
-
-        // Notify Konva of canvas update
-        imageRef.current?.getLayer()?.batchDraw();
       }
 
       animFrameIdRef.current = requestAnimationFrame(render);
