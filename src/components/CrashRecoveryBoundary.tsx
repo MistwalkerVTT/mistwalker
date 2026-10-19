@@ -58,6 +58,7 @@ export class CrashRecoveryBoundary extends Component<Props, State> {
 
     try {
       sessionStorage.setItem(CRASH_LOG_KEY, JSON.stringify(crashTimestamps));
+      localStorage.setItem('mistwalker_crash_detected', 'true');
     } catch {
       // ignore
     }
@@ -92,6 +93,9 @@ export class CrashRecoveryBoundary extends Component<Props, State> {
   };
 
   handleReloadWithState = () => {
+    try {
+      localStorage.setItem('mistwalker_crash_detected', 'true');
+    } catch {}
     window.location.reload();
   };
 
@@ -100,6 +104,7 @@ export class CrashRecoveryBoundary extends Component<Props, State> {
       localStorage.removeItem('mistwalker_dm_state_backup_v1');
       localStorage.removeItem('mistwalker_player_state_backup_v1');
       localStorage.removeItem('mistwalker_explored_polygons_backup_v1');
+      localStorage.removeItem('mistwalker_crash_detected');
       sessionStorage.removeItem(CRASH_LOG_KEY);
     } catch {
       // ignore
@@ -182,7 +187,7 @@ export class CrashRecoveryBoundary extends Component<Props, State> {
                   className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold font-mono border border-zinc-700 transition-all active:scale-[0.98] cursor-pointer"
                 >
                   <RotateCcw className="w-4 h-4 text-emerald-400" />
-                  <span>Reload with State</span>
+                  <span>Return to Home Screen</span>
                 </button>
               </div>
 

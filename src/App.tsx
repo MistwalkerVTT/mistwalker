@@ -1030,25 +1030,45 @@ export default function App() {
   const initialDmBackupRef = useRef(loadDmBackupState());
   const initialDmBackup = initialDmBackupRef.current;
 
+  // Detect whether a previous unsaved scene or crash recovery session exists
+  const [unsavedSceneBackup, setUnsavedSceneBackup] = useState<any>(() => {
+    if (typeof window === 'undefined') return null;
+    const backup = loadDmBackupState();
+    if (!backup) return null;
+    const hasContent = Boolean(backup.imageFile || backup.activeSceneInfo?.mapUrl || (backup.tokens && backup.tokens.length > 0));
+    if (!hasContent) return null;
+    const crashDetected = localStorage.getItem('mistwalker_crash_detected') === 'true';
+    const isUnsaved = backup.isSaved === false || backup.isSaved === undefined || crashDetected;
+    return isUnsaved ? backup : null;
+  });
+
+  const [unsavedSceneBackupWasCrash, setUnsavedSceneBackupWasCrash] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('mistwalker_crash_detected') === 'true';
+  });
+
+  const isSceneSavedRef = useRef<boolean>(true);
+
   const socketRef = useRef<any>(null);
   const [socketInstance, setSocketInstance] = useState<any>(null);
   const [isReadingFile, setIsReadingFile] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [activeMapId, setActiveMapId] = useState<'DM1'|'DM2'|'DM3'>(() => initialDmBackup?.activeMapId || 'DM1');
-  const [liveMapId, setLiveMapId] = useState<'DM1'|'DM2'|'DM3'>(() => initialDmBackup?.liveMapId || 'DM1');
-  const activeMapIdRef = useRef<'DM1'|'DM2'|'DM3'>(initialDmBackup?.activeMapId || 'DM1');
-  const liveMapIdRef = useRef<'DM1'|'DM2'|'DM3'>(initialDmBackup?.liveMapId || 'DM1');
+  const [activeMapId, setActiveMapId] = useState<'DM1'|'DM2'|'DM3'>('DM1');
+  const [liveMapId, setLiveMapId] = useState<'DM1'|'DM2'|'DM3'>('DM1');
+  const activeMapIdRef = useRef<'DM1'|'DM2'|'DM3'>('DM1');
+  const liveMapIdRef = useRef<'DM1'|'DM2'|'DM3'>('DM1');
   const isSwitchingMapSlotRef = useRef<boolean>(false);
   const lastSlotSwitchTimeRef = useRef<number>(0);
-  const mapsDataRef = useRef<Record<string, any>>(initialDmBackup?.mapsData || {
+  const mapsDataRef = useRef<Record<string, any>>({
     DM1: null,
     DM2: null,
     DM3: null
   });
-  const hasRestoredInitialSessionRef = useRef<boolean>(Boolean(initialDmBackup?.imageFile || initialDmBackup?.activeSceneInfo));
+  const hasRestoredInitialSessionRef = useRef<boolean>(true);
 
-  const [imageFile, setImageFile] = useState<string | null>(() => initialDmBackup?.imageFile || null);
-  const [mapType, setMapType] = useState<'image' | 'video'>(() => initialDmBackup?.mapType || 'image');
+  // MistWalker always loads directly onto the Home Screen Hub on app launch/refresh (imageFile = null)
+  const [imageFile, setImageFile] = useState<string | null>(null);
+  const [mapType, setMapType] = useState<'image' | 'video'>('image');
   const [image, imageStatus] = useImage(mapType === 'image' ? (imageFile || '') : '');
   const broadcastState = useCallback((_force?: boolean) => {
     if (socketRef.current?.connected && imageFile && (activeMapIdRef.current === liveMapIdRef.current)) {
@@ -1137,7 +1157,7 @@ export default function App() {
     };
   }, [videoElement]);
 
-  const [videoSize, setVideoSize] = useState(() => initialDmBackup?.videoSize || { width: 0, height: 0 });
+  const [videoSize, setVideoSize] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
     if (videoElement) {
@@ -1185,14 +1205,14 @@ export default function App() {
     }
   }, [videoElement]);
 
-  const [reveals, setReveals] = useState<RevealPoint[]>(() => Array.isArray(initialDmBackup?.reveals) ? initialDmBackup.reveals : []);
-  const [polygonReveals, setPolygonReveals] = useState<number[][]>(() => Array.isArray(initialDmBackup?.polygonReveals) ? initialDmBackup.polygonReveals : []);
+  const [reveals, setReveals] = useState<RevealPoint[]>([]);
+  const [polygonReveals, setPolygonReveals] = useState<number[][]>([]);
   const [currentPolygonPoints, setCurrentPolygonPoints] = useState<number[]>([]);
-  const [fogResetKey, setFogResetKey] = useState<number>(() => initialDmBackup?.fogResetKey || 0);
-  const [tokens, setTokens] = useState<Token[]>(() => Array.isArray(initialDmBackup?.tokens) ? initialDmBackup.tokens : []);
+  const [fogResetKey, setFogResetKey] = useState<number>(0);
+  const [tokens, setTokens] = useState<Token[]>([]);
   const [selectedToken, setSelectedToken] = useState<any>(null);
   const [brushSize, setBrushSize] = useState(50);
-  const [isFogVisible, setIsFogVisible] = useState<boolean>(() => initialDmBackup?.isFogVisible !== undefined ? initialDmBackup.isFogVisible : true);
+  const [isFogVisible, setIsFogVisible] = useState<boolean>(true);
   const [tool, setToolState] = useState<string>('pan');
   const [isSpacePressed, setIsSpacePressed] = useState<boolean>(false);
   const spacePanActiveRef = useRef<boolean>(false);
@@ -1233,7 +1253,7 @@ export default function App() {
 
   // Dynamic Lighting & Walls State
   const [campaignMode, setCampaignMode] = useState<CampaignMode>('run');
-  const [walls, setWalls] = useState<WallSegment[]>(() => Array.isArray(initialDmBackup?.walls) ? initialDmBackup.walls : []);
+  const [walls, setWalls] = useState<WallSegment[]>([]);
   const [selectedWallId, setSelectedWallId] = useState<string | null>(null);
   const [wallDrawStart, setWallDrawStart] = useState<{ x: number; y: number } | null>(null);
   const [wallEraseDragStart, setWallEraseDragStart] = useState<{ x: number; y: number } | null>(null);
@@ -1241,7 +1261,7 @@ export default function App() {
   const [activeWallType, setActiveWallType] = useState<WallType>('normal');
   const [activeDoorState, setActiveDoorState] = useState<DoorState>('closed');
   const [snapToGridWalls, setSnapToGridWalls] = useState<boolean>(false);
-  const [visionConfig, setVisionConfig] = useState<VisionConfig>(() => initialDmBackup?.visionConfig || {
+  const [visionConfig, setVisionConfig] = useState<VisionConfig>({
     enabled: true,
     explorationMemory: true,
     darknessOpacity: 1.0,
@@ -1276,7 +1296,7 @@ export default function App() {
   const [measureEnd, setMeasureEnd] = useState<{ x: number, y: number } | null>(null);
   const [measureType, setMeasureType] = useState<'line' | 'square' | 'cone' | 'rectangle' | 'circle'>('line');
   const [isMeasuring, setIsMeasuring] = useState(false);
-  const [effects, setEffects] = useState<Effect[]>(() => Array.isArray(initialDmBackup?.effects) ? initialDmBackup.effects : []);
+  const [effects, setEffects] = useState<Effect[]>([]);
   const [selectedCustomEffect, setSelectedCustomEffect] = useState<CustomSpecialEffect | null>(null);
   const activeEffectIdRef = useRef<string | null>(null);
   const [activeEffectId, setActiveEffectId] = useState<string | null>(null);
@@ -1285,7 +1305,7 @@ export default function App() {
     data: ContextMenuData;
     position: { x: number; y: number };
   } | null>(null);
-  const [stageScale, setStageScale] = useState<number>(() => initialDmBackup?.stageScale || 1);
+  const [stageScale, setStageScale] = useState<number>(1);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const tutorial = useTutorial();
 
@@ -1306,13 +1326,13 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  const [stagePos, setStagePos] = useState<{ x: number; y: number }>(() => initialDmBackup?.stagePos || { x: 0, y: 0 });
-  const [gridVisible, setGridVisible] = useState<boolean>(() => initialDmBackup?.gridVisible !== undefined ? initialDmBackup.gridVisible : true);
-  const [gridOpacity, setGridOpacity] = useState<number>(() => initialDmBackup?.gridOpacity !== undefined ? initialDmBackup.gridOpacity : 0.3);
-  const [gridSize, setGridSize] = useState<number>(() => initialDmBackup?.gridSize || 50);
-  const [gridOffsetX, setGridOffsetX] = useState<number>(() => initialDmBackup?.gridOffsetX || 0);
-  const [gridOffsetY, setGridOffsetY] = useState<number>(() => initialDmBackup?.gridOffsetY || 0);
-  const [mapRotation, setMapRotation] = useState<number>(() => initialDmBackup?.mapRotation || 0);
+  const [stagePos, setStagePos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [gridVisible, setGridVisible] = useState<boolean>(true);
+  const [gridOpacity, setGridOpacity] = useState<number>(0.3);
+  const [gridSize, setGridSize] = useState<number>(50);
+  const [gridOffsetX, setGridOffsetX] = useState<number>(0);
+  const [gridOffsetY, setGridOffsetY] = useState<number>(0);
+  const [mapRotation, setMapRotation] = useState<number>(0);
 
 
   const [sidebarMode, setSidebarMode] = useState<'user' | 'ai'>('user');
@@ -1582,6 +1602,9 @@ export default function App() {
 
       // Instant local preview for immediate visual feedback
       const localPreviewUrl = URL.createObjectURL(parsed.imageFile);
+      setUnsavedSceneBackup(null);
+      setUnsavedSceneBackupWasCrash(false);
+      isSceneSavedRef.current = false;
       setMapType('image');
       setImageFile(localPreviewUrl);
       setReveals([]);
@@ -1728,7 +1751,7 @@ export default function App() {
   }, [stagePos, stageScale, gridSize, compendiumCharacters]);
 
   const [campaignsList, setCampaignsList] = useState<Campaign[]>([]);
-  const [activeDmNotes, setActiveDmNotes] = useState<string>(() => initialDmBackup?.activeDmNotes || '');
+  const [activeDmNotes, setActiveDmNotes] = useState<string>('');
   const [isQuickSaving, setIsQuickSaving] = useState<boolean>(false);
   const [isQuotaExceeded, setIsQuotaExceeded] = useState(false);
   const [activeSceneInfo, setActiveSceneInfo] = useState<{
@@ -1740,7 +1763,7 @@ export default function App() {
     mapThumbnailUrl?: string;
     mapWidth?: number;
     mapHeight?: number;
-  } | null>(() => initialDmBackup?.activeSceneInfo || null);
+  } | null>(null);
 
   // Connection and Quota state listeners
   useEffect(() => {
@@ -1748,7 +1771,7 @@ export default function App() {
       setIsQuotaExceeded(exceeded);
     });
   }, []);
-  const [showCombatTracker, setShowCombatTracker] = useState<boolean>(() => initialDmBackup?.showCombatTracker || false);
+  const [showCombatTracker, setShowCombatTracker] = useState<boolean>(false);
   const [isCombatTrackerMinimized, setIsCombatTrackerMinimized] = useState(false);
   const [tokenMenuTab, setTokenMenuTab] = useState<'stats' | 'conditions' | 'auras'>('stats');
   const [customAuraRadiusInput, setCustomAuraRadiusInput] = useState<number>(10);
@@ -1756,9 +1779,9 @@ export default function App() {
   const [customAuraOpacityInput, setCustomAuraOpacityInput] = useState<number>(0.35);
 
   // Environmental Animated FX & Weather State on Main Board (Uploaded & Generated Maps)
-  const [boardAnimatedFeatures, setBoardAnimatedFeatures] = useState<AnimatedFeature[]>(() => Array.isArray(initialDmBackup?.boardAnimatedFeatures) ? initialDmBackup.boardAnimatedFeatures : []);
-  const [boardAnimatedEnabled, setBoardAnimatedEnabled] = useState<boolean>(() => initialDmBackup?.boardAnimatedEnabled !== undefined ? initialDmBackup.boardAnimatedEnabled : true);
-  const [boardWeatherEffect, setBoardWeatherEffect] = useState<WeatherEffectType>(() => initialDmBackup?.boardWeatherEffect || 'none');
+  const [boardAnimatedFeatures, setBoardAnimatedFeatures] = useState<AnimatedFeature[]>([]);
+  const [boardAnimatedEnabled, setBoardAnimatedEnabled] = useState<boolean>(true);
+  const [boardWeatherEffect, setBoardWeatherEffect] = useState<WeatherEffectType>('none');
   const [boardPlacingAnimatedType, setBoardPlacingAnimatedType] = useState<AnimatedFeatureType | null>(null);
   const [boardPlacingTemplate, setBoardPlacingTemplate] = useState<Partial<AnimatedFeature> | null>(null);
   const [showBoardAnimatedControls, setShowBoardAnimatedControls] = useState(false);
@@ -1775,7 +1798,7 @@ export default function App() {
   const isShiftPanActive = isShiftPressed && Boolean(boardPlacingAnimatedType || boardPolygonDrawingState?.isDrawing);
 
   // Campaign Map Zones & Interactive Hotspots State
-  const [roomAnnotations, setRoomAnnotations] = useState<RoomAnnotation[]>(() => Array.isArray(initialDmBackup?.roomAnnotations) ? initialDmBackup.roomAnnotations : []);
+  const [roomAnnotations, setRoomAnnotations] = useState<RoomAnnotation[]>([]);
   const [currentZonePolygonPoints, setCurrentZonePolygonPoints] = useState<number[]>([]);
   const [isZoneEditorOpen, setIsZoneEditorOpen] = useState(false);
   const [editingZone, setEditingZone] = useState<RoomAnnotation | null>(null);
@@ -1958,9 +1981,9 @@ export default function App() {
   };
   
   // Lifted Combat Tracker State
-  const [combatTrackerCombatants, setCombatTrackerCombatants] = useState<Combatant[]>(() => Array.isArray(initialDmBackup?.combatTrackerCombatants) ? initialDmBackup.combatTrackerCombatants : []);
-  const [combatTrackerRound, setCombatTrackerRound] = useState<number>(() => initialDmBackup?.combatTrackerRound || 1);
-  const [combatTrackerTurnIndex, setCombatTrackerTurnIndex] = useState<number>(() => initialDmBackup?.combatTrackerTurnIndex || 0);
+  const [combatTrackerCombatants, setCombatTrackerCombatants] = useState<Combatant[]>([]);
+  const [combatTrackerRound, setCombatTrackerRound] = useState<number>(1);
+  const [combatTrackerTurnIndex, setCombatTrackerTurnIndex] = useState<number>(0);
 
   const sortedCombatTrackerCombatants = useMemo(() => {
     return [...combatTrackerCombatants].sort((a, b) => {
@@ -2300,7 +2323,7 @@ export default function App() {
   }, [dimensions, getMapDimensions, mapRotation]);
 
   // Auto-fit whenever a new map or scene loads in DM view
-  const lastFittedAssetRef = useRef<string | null>(initialDmBackup?.activeSceneInfo?.sceneId || initialDmBackup?.imageFile || null);
+  const lastFittedAssetRef = useRef<string | null>(null);
   useEffect(() => {
     const currentAssetKey = activeSceneInfo?.sceneId || imageFile || (image ? `${image.src}_${image.width}x${image.height}` : null);
     if (currentAssetKey && currentAssetKey !== lastFittedAssetRef.current && (image || videoSize.width > 0)) {
@@ -2309,16 +2332,30 @@ export default function App() {
     }
   }, [image, imageFile, activeSceneInfo?.sceneId, videoSize, fitWholeMapToScreen]);
 
+  // Track user modifications to flag scenes as unsaved
+  const isSceneChangeMountedRef = useRef(true);
+  useEffect(() => {
+    if (isSceneChangeMountedRef.current) {
+      isSceneChangeMountedRef.current = false;
+      return;
+    }
+    if (imageFile) {
+      isSceneSavedRef.current = false;
+    }
+  }, [tokens, walls, reveals, polygonReveals, roomAnnotations, activeDmNotes, effects, visionConfig, gridSize]);
+
   // Continuous debounced state snapshot saving to localStorage for instant DM crash recovery
   useEffect(() => {
     const timer = setTimeout(() => {
       if (typeof window === 'undefined') return;
+      // Do not overwrite previous session backups when idling on the home screen without an active scene
+      if (!imageFile) return;
       try {
         const stateToSave = {
           activeMapId: activeMapIdRef.current,
           liveMapId: liveMapIdRef.current,
           mapsData: mapsDataRef.current,
-          imageFile: (imageFile && !imageFile.startsWith('blob:')) ? imageFile : null,
+          imageFile: (!imageFile.startsWith('blob:')) ? imageFile : null,
           mapType,
           videoSize,
           mapRotation,
@@ -2347,6 +2384,7 @@ export default function App() {
           combatTrackerRound,
           combatTrackerTurnIndex,
           showCombatTracker,
+          isSaved: isSceneSavedRef.current,
           timestamp: Date.now()
         };
         localStorage.setItem('mistwalker_dm_state_backup_v1', JSON.stringify(stateToSave));
@@ -2366,12 +2404,13 @@ export default function App() {
   // Synchronous beforeunload snapshot
   useEffect(() => {
     const handleBeforeUnload = () => {
+      if (!imageFile) return;
       try {
         const stateToSave = {
           activeMapId: activeMapIdRef.current,
           liveMapId: liveMapIdRef.current,
           mapsData: mapsDataRef.current,
-          imageFile: (imageFile && !imageFile.startsWith('blob:')) ? imageFile : null,
+          imageFile: (!imageFile.startsWith('blob:')) ? imageFile : null,
           mapType,
           videoSize,
           mapRotation,
@@ -2400,6 +2439,7 @@ export default function App() {
           combatTrackerRound,
           combatTrackerTurnIndex,
           showCombatTracker,
+          isSaved: isSceneSavedRef.current,
           timestamp: Date.now()
         };
         localStorage.setItem('mistwalker_dm_state_backup_v1', JSON.stringify(stateToSave));
@@ -3285,7 +3325,9 @@ export default function App() {
     if (targetView && activeMapId !== targetView) {
       handleMapSwitch(targetView);
     }
-    console.log('[CampaignBuilder] Loading scene onto VTT:', scene.sceneTitle);
+    setUnsavedSceneBackup(null);
+    setUnsavedSceneBackupWasCrash(false);
+    isSceneSavedRef.current = true;
     
     // Clear existing annotations to start fresh
     setRoomAnnotations([]);
@@ -3668,6 +3710,16 @@ export default function App() {
 
       const wallCount = walls.length;
       const roomCount = roomAnnotations.length;
+      isSceneSavedRef.current = true;
+      try {
+        const raw = localStorage.getItem('mistwalker_dm_state_backup_v1');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          parsed.isSaved = true;
+          localStorage.setItem('mistwalker_dm_state_backup_v1', JSON.stringify(parsed));
+        }
+        localStorage.removeItem('mistwalker_crash_detected');
+      } catch {}
       toast.success(`Saved "${updatedScene.sceneTitle}" with ${sceneTokensToSave.length} tokens${wallCount > 0 ? `, ${wallCount} walls/doors` : ''}${roomCount > 0 ? `, and ${roomCount} polygon rooms` : ''} to Campaign!`);
     } catch (err: any) {
       console.error('Quick save scene error:', err);
@@ -3678,6 +3730,16 @@ export default function App() {
   };
 
   const handleSceneSaved = (scene: Scene, campaignId: string, chapterId: string) => {
+    isSceneSavedRef.current = true;
+    try {
+      const raw = localStorage.getItem('mistwalker_dm_state_backup_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        parsed.isSaved = true;
+        localStorage.setItem('mistwalker_dm_state_backup_v1', JSON.stringify(parsed));
+      }
+      localStorage.removeItem('mistwalker_crash_detected');
+    } catch {}
     setActiveSceneInfo({
       campaignId,
       chapterId,
@@ -3689,6 +3751,81 @@ export default function App() {
     setActiveDmNotes(scene.dmNotes || '');
     toast.success(`Saved scene "${scene.sceneTitle}" into Campaign!`);
   };
+
+  const handleRestoreUnsavedScene = useCallback(() => {
+    if (!unsavedSceneBackup) return;
+    const backup = unsavedSceneBackup;
+
+    if (backup.activeMapId) {
+      setActiveMapId(backup.activeMapId);
+      activeMapIdRef.current = backup.activeMapId;
+    }
+    if (backup.liveMapId) {
+      setLiveMapId(backup.liveMapId);
+      liveMapIdRef.current = backup.liveMapId;
+    }
+    if (backup.mapsData) {
+      mapsDataRef.current = backup.mapsData;
+    }
+
+    if (backup.mapType) setMapType(backup.mapType);
+    if (backup.videoSize) setVideoSize(backup.videoSize);
+    if (backup.mapRotation !== undefined) setMapRotation(backup.mapRotation);
+    if (backup.stageScale !== undefined) setStageScale(backup.stageScale);
+    if (backup.stagePos) setStagePos(backup.stagePos);
+
+    if (Array.isArray(backup.tokens)) setTokens(backup.tokens);
+    if (Array.isArray(backup.walls)) setWalls(backup.walls);
+    if (Array.isArray(backup.reveals)) setReveals(backup.reveals);
+    if (Array.isArray(backup.polygonReveals)) setPolygonReveals(backup.polygonReveals);
+    if (backup.isFogVisible !== undefined) setIsFogVisible(backup.isFogVisible);
+    if (backup.fogResetKey !== undefined) setFogResetKey(backup.fogResetKey);
+    if (backup.visionConfig) setVisionConfig(backup.visionConfig);
+
+    if (backup.gridVisible !== undefined) setGridVisible(backup.gridVisible);
+    if (backup.gridOpacity !== undefined) setGridOpacity(backup.gridOpacity);
+    if (backup.gridSize !== undefined) setGridSize(backup.gridSize);
+    if (backup.gridOffsetX !== undefined) setGridOffsetX(backup.gridOffsetX);
+    if (backup.gridOffsetY !== undefined) setGridOffsetY(backup.gridOffsetY);
+
+    if (Array.isArray(backup.roomAnnotations)) setRoomAnnotations(backup.roomAnnotations);
+    if (backup.activeSceneInfo) setActiveSceneInfo(backup.activeSceneInfo);
+    if (backup.activeDmNotes !== undefined) setActiveDmNotes(backup.activeDmNotes);
+
+    if (Array.isArray(backup.effects)) setEffects(backup.effects);
+    if (Array.isArray(backup.boardAnimatedFeatures)) setBoardAnimatedFeatures(backup.boardAnimatedFeatures);
+    if (backup.boardAnimatedEnabled !== undefined) setBoardAnimatedEnabled(backup.boardAnimatedEnabled);
+    if (backup.boardWeatherEffect) setBoardWeatherEffect(backup.boardWeatherEffect);
+
+    if (Array.isArray(backup.combatTrackerCombatants)) setCombatTrackerCombatants(backup.combatTrackerCombatants);
+    if (backup.combatTrackerRound !== undefined) setCombatTrackerRound(backup.combatTrackerRound);
+    if (backup.combatTrackerTurnIndex !== undefined) setCombatTrackerTurnIndex(backup.combatTrackerTurnIndex);
+    if (backup.showCombatTracker !== undefined) setShowCombatTracker(backup.showCombatTracker);
+
+    const targetUrl = backup.imageFile || backup.activeSceneInfo?.mapUrl;
+    if (targetUrl) {
+      setImageFile(targetUrl);
+    }
+
+    try {
+      localStorage.removeItem('mistwalker_crash_detected');
+    } catch {}
+
+    setUnsavedSceneBackup(null);
+    setUnsavedSceneBackupWasCrash(false);
+    isSceneSavedRef.current = false;
+    toast.success('Successfully restored previous unsaved scene!');
+  }, [unsavedSceneBackup]);
+
+  const handleDiscardUnsavedScene = useCallback(() => {
+    try {
+      localStorage.removeItem('mistwalker_dm_state_backup_v1');
+      localStorage.removeItem('mistwalker_crash_detected');
+    } catch {}
+    setUnsavedSceneBackup(null);
+    setUnsavedSceneBackupWasCrash(false);
+    toast.info('Discarded previous unsaved scene.');
+  }, []);
 
   useEffect(() => {
     const updateDimensions = () => {
@@ -3753,6 +3890,9 @@ export default function App() {
       
       // Instant local preview so map displays immediately on canvas
       const localPreviewUrl = URL.createObjectURL(file);
+      setUnsavedSceneBackup(null);
+      setUnsavedSceneBackupWasCrash(false);
+      isSceneSavedRef.current = false;
       setMapType(isVideo ? 'video' : 'image');
       setImageFile(localPreviewUrl);
       setReveals([]); 
@@ -3952,6 +4092,9 @@ export default function App() {
   };
 
   const handleSelectUploadedMap = async (mapAsset: UploadedAsset) => {
+    setUnsavedSceneBackup(null);
+    setUnsavedSceneBackupWasCrash(false);
+    isSceneSavedRef.current = false;
     const isVideo = mapAsset.fileType === 'video' || isVideoAsset(mapAsset.url);
     setMapType(isVideo ? 'video' : 'image');
     let targetUrl = mapAsset.url;
@@ -4010,6 +4153,9 @@ export default function App() {
   };
 
   const handleSelectPresetMap = (preset: PresetBattlemap) => {
+    setUnsavedSceneBackup(null);
+    setUnsavedSceneBackupWasCrash(false);
+    isSceneSavedRef.current = false;
     setMapType('image');
     setImageFile(preset.url);
     setActiveSceneInfo(null);
@@ -5914,6 +6060,12 @@ export default function App() {
       setMeasureEnd(null);
       setSelectedTokenIds([]);
       setSelectedEffectId(null);
+      setUnsavedSceneBackup(null);
+      setUnsavedSceneBackupWasCrash(false);
+      try {
+        localStorage.removeItem('mistwalker_dm_state_backup_v1');
+        localStorage.removeItem('mistwalker_crash_detected');
+      } catch {}
     }
     toast.info(`Slot ${targetSlot} reset to blank`);
   };
@@ -6451,6 +6603,61 @@ export default function App() {
               <p className="text-zinc-300 max-w-md text-xs sm:text-sm mb-7 leading-relaxed font-sans">
                 Tactical Battlemap Command Deck • Fog of War • Dynamic FOV & Lighting • AI Dungeon Master Co-Pilot
               </p>
+
+              {/* Unsaved Scene Recovery Card */}
+              {unsavedSceneBackup && (
+                <div className="w-full mb-6 p-4 rounded-2xl bg-amber-950/40 border border-amber-500/50 shadow-lg shadow-amber-950/30 text-left animate-in slide-in-from-top-2 duration-300 ring-1 ring-amber-500/20">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0 mt-0.5">
+                        <RotateCcw className="w-5 h-5 animate-pulse" />
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-mono font-bold text-amber-300 uppercase tracking-wider">
+                            {unsavedSceneBackupWasCrash ? 'Recover Interrupted Scene' : 'Unsaved Scene Detected'}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                            {unsavedSceneBackup.activeSceneInfo?.sceneTitle || 'Active Battlemap'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-zinc-300 leading-relaxed font-sans">
+                          {unsavedSceneBackupWasCrash
+                            ? 'MistWalker detected an unexpected crash or interruption with unsaved battlemap progress. Would you like to reload this scene?'
+                            : 'A previous battlemap session contains unsaved changes. Would you like to reload your work or discard it?'}
+                        </p>
+                        <div className="flex items-center gap-4 text-[11px] font-mono text-zinc-400 pt-1">
+                          <span>Tokens: <strong className="text-amber-300">{unsavedSceneBackup.tokens?.length || 0}</strong></span>
+                          <span>Walls: <strong className="text-amber-300">{unsavedSceneBackup.walls?.length || 0}</strong></span>
+                          {unsavedSceneBackup.timestamp && (
+                            <span>Recorded: <strong className="text-zinc-300">{new Date(unsavedSceneBackup.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong></span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-end gap-2.5 mt-3 pt-3 border-t border-amber-500/20">
+                    <button
+                      type="button"
+                      id="btn-discard-unsaved-scene"
+                      onClick={handleDiscardUnsavedScene}
+                      className="px-3.5 py-2 rounded-xl text-xs font-mono font-medium text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 border border-zinc-800 hover:border-rose-500/30 transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Discard
+                    </button>
+                    <button
+                      type="button"
+                      id="btn-reload-unsaved-scene"
+                      onClick={handleRestoreUnsavedScene}
+                      className="px-4 py-2 rounded-xl text-xs font-mono font-bold bg-amber-500 hover:bg-amber-400 text-zinc-950 shadow-lg shadow-amber-500/25 transition-all flex items-center gap-1.5 cursor-pointer transform hover:scale-[1.02] active:scale-[0.98]"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      Reload Unsaved Scene
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="flex flex-wrap items-center justify-center gap-3 w-full">
                 <label className="px-6 py-3.5 bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-zinc-950 font-extrabold rounded-xl cursor-pointer transition-all transform hover:scale-105 active:scale-95 shadow-xl shadow-amber-950/60 font-mono text-xs flex items-center gap-2">
