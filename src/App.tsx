@@ -1836,7 +1836,7 @@ export default function App() {
     toast.success('Loaded "The Guild House - Main Level" with Fog of War, 64 walls/doors and 13 room zones!');
   };
 
-  // Launch Preconfigured Feature Test Lab & Sandbox Scene
+  // Launch Preconfigured Featured Test Scene (Skeleton Crypt)
   const handleLoadTestScene = () => {
     handleLoadSceneFromCampaign(TEST_SANDBOX_SCENE, TEST_SANDBOX_CAMPAIGN.campaignId, TEST_SANDBOX_CHAPTER.chapterId);
     setIsFogVisible(true);
@@ -1855,7 +1855,7 @@ export default function App() {
       fetch('/api/ddb/campaigns/poll-now', { method: 'POST' }).catch(() => {});
     }
 
-    toast.success('🧪 Loaded Feature Test Lab & Sandbox! Ready for testing walls, vision, allies, and D&D Beyond HP syncing.');
+    toast.success('🧪 Loaded Featured Test Scene (Skeleton Crypt) with preloaded Player & Enemy tokens!');
   };
 
   const handleActivateWallTool = () => {
@@ -3170,10 +3170,24 @@ export default function App() {
 
 
 
-  // Subscribe to Campaigns list in real-time
+  // Preload Featured Test Scene map asset in browser cache for instant zero-latency loading
   useEffect(() => {
+    if (TEST_SANDBOX_SCENE.mapUrl) {
+      const img = new Image();
+      img.src = TEST_SANDBOX_SCENE.mapUrl;
+    }
+  }, []);
+
+  // Subscribe to Campaigns list in real-time & ensure Featured Test Scene is persisted and available
+  useEffect(() => {
+    saveCampaignDoc(TEST_SANDBOX_CAMPAIGN).catch(err => {
+      console.warn('[App] Test scene campaign doc save notice:', err);
+    });
+
     const unsub = subscribeToCampaigns((list) => {
-      setCampaignsList(list);
+      const hasTestCamp = list.some(c => c.campaignId === TEST_SANDBOX_CAMPAIGN.campaignId);
+      const combined = hasTestCamp ? list : [TEST_SANDBOX_CAMPAIGN, ...list];
+      setCampaignsList(combined);
     });
     return () => unsub();
   }, []);

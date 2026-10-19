@@ -66,6 +66,7 @@ import { DICE_COLOR_PRESETS, DiceColorPreset } from '../graphics/dice/diceTextur
 import { WallSegment, VisionConfig, RoomAnnotation, Combatant, isMonsterToken, AURA_PRESETS, AURA_COLOR_PALETTE, TokenAura, AuraPreset } from '../types';
 import homeBackgroundImage from '../assets/images/home_background.jpg';
 import sceneBackdropImage from '../assets/images/scene_backdrop.jpg';
+import skeletonCryptImg from '../assets/images/skeleton_crypt_map_1788900167836.jpg';
 import { base64AudioToBlob, getNarrationVoice } from '../services/audioNarrationService';
 import {
   DEFAULT_CHARACTERS,
@@ -1846,6 +1847,12 @@ export default function PlayerView() {
       fetch('/api/ddb/campaigns/poll-now', { method: 'POST' }).catch(() => {});
     }, 4000);
     return () => clearInterval(interval);
+  }, []);
+
+  // Preload featured test scene map asset in Player View for immediate rendering
+  useEffect(() => {
+    const img = new Image();
+    img.src = skeletonCryptImg;
   }, []);
 
   // Real-time Firestore activeSession/current subscription so remote Player Views always receive state across server restarts or different networks
