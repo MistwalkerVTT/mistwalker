@@ -162,97 +162,6 @@ export const SpellEffectsGroup: React.FC<SpellEffectsGroupProps> = React.memo(({
                     setEffects={setEffects} 
                   />
                 </Group>
-              ) : isShockingGrasp ? (
-                <Group>
-                  <GifImage
-                    name="effect"
-                    src="https://i.ibb.co/9kwMMsJz/Shockinggrasp.gif"
-                    x={-effect.size * 1.5}
-                    y={-effect.size * 1.5}
-                    width={effect.size * 3}
-                    height={effect.size * 3}
-                    opacity={0.9}
-                    globalCompositeOperation="lighter"
-                  />
-                  <EffectResizeHandle 
-                    effect={effect} 
-                    gridSize={gridSize} 
-                    stageScale={stageScale} 
-                    isPlayerView={false} 
-                    activeEffectId={activeEffectId} 
-                    hoveredEffectId={hoveredEffectId} 
-                    setActiveEffectId={setActiveEffectId} 
-                    setEffects={setEffects} 
-                  />
-                </Group>
-              ) : isFuryOfBlows ? (
-                <Group>
-                  <GifImage
-                    name="effect"
-                    src="https://i.ibb.co/wNcsnSWM/fury-of-blows.gif"
-                    x={-effect.size * 1.5}
-                    y={-effect.size * 1.5}
-                    width={effect.size * 3}
-                    height={effect.size * 3}
-                    opacity={0.9}
-                    globalCompositeOperation="lighter"
-                  />
-                  <EffectResizeHandle 
-                    effect={effect} 
-                    gridSize={gridSize} 
-                    stageScale={stageScale} 
-                    isPlayerView={false} 
-                    activeEffectId={activeEffectId} 
-                    hoveredEffectId={hoveredEffectId} 
-                    setActiveEffectId={setActiveEffectId} 
-                    setEffects={setEffects} 
-                  />
-                </Group>
-              ) : isFireBolt ? (
-                <Group>
-                  <GifImage
-                    name="effect"
-                    src="https://i.ibb.co/R44ks2yJ/firebolt-ezgif-com-optimize.gif"
-                    x={-effect.size * 1.5}
-                    y={-effect.size * 1.5}
-                    width={effect.size * 3}
-                    height={effect.size * 3}
-                    opacity={0.9}
-                  />
-                  <EffectResizeHandle 
-                    effect={effect} 
-                    gridSize={gridSize} 
-                    stageScale={stageScale} 
-                    isPlayerView={false} 
-                    activeEffectId={activeEffectId} 
-                    hoveredEffectId={hoveredEffectId} 
-                    setActiveEffectId={setActiveEffectId} 
-                    setEffects={setEffects} 
-                  />
-                </Group>
-              ) : isCharm ? (
-                <Group>
-                  <GifImage
-                    name="effect"
-                    src="https://i.ibb.co/xK8pTzM9/Charm.gif"
-                    x={-effect.size}
-                    y={-effect.size}
-                    width={effect.size * 2}
-                    height={effect.size * 2}
-                    opacity={0.8}
-                    globalCompositeOperation="lighter"
-                  />
-                  <EffectResizeHandle 
-                    effect={effect} 
-                    gridSize={gridSize} 
-                    stageScale={stageScale} 
-                    isPlayerView={false} 
-                    activeEffectId={activeEffectId} 
-                    hoveredEffectId={hoveredEffectId} 
-                    setActiveEffectId={setActiveEffectId} 
-                    setEffects={setEffects} 
-                  />
-                </Group>
               ) : (
                 <Group>
                   <ProceduralSpellEffect
@@ -352,71 +261,23 @@ export const SpellEffectsGroup: React.FC<SpellEffectsGroupProps> = React.memo(({
                     }
                   }}
                 />
-              ) : isFireBreath ? (
-                <GifImage
-                  name="effect"
-                  src="https://i.ibb.co/93mjzJtd/flamebreath.gif"
-                  x={0}
-                  y={0}
-                  width={effect.size * 2}
-                  height={effect.size * 2}
-                  offsetX={0}
-                  offsetY={effect.size}
-                  rotation={effect.rotation}
-                  opacity={0.9}
-                  globalCompositeOperation="lighter"
-                  onClick={() => {
-                    if (!activeEffectId) {
-                      const newEffects = effects.map(eff => 
-                        eff.id === effect.id ? { ...eff, rotation: (eff.rotation + 45) % 360 } : eff
-                      );
-                      setEffects(newEffects);
-                    }
-                  }}
-                />
-              ) : isConeOfCold && coneOfColdImg ? (
-                <KonvaImage
-                  name="effect"
-                  image={coneOfColdImg}
-                  x={0}
-                  y={0}
-                  width={effect.size * 2}
-                  height={effect.size * 2}
-                  offsetX={0}
-                  offsetY={effect.size}
-                  rotation={effect.rotation}
-                  opacity={0.8}
-                  onClick={() => {
-                    if (!activeEffectId) {
-                      const newEffects = effects.map(eff => 
-                        eff.id === effect.id ? { ...eff, rotation: (eff.rotation + 45) % 360 } : eff
-                      );
-                      setEffects(newEffects);
-                    }
-                  }}
-                />
               ) : (
                 <>
-                  <Wedge
-                    name="effect"
-                    x={0}
-                    y={0}
-                    radius={effect.size * (pulse + 0.05)}
-                    angle={60}
-                    rotation={effect.rotation}
-                    fill={effect.color}
-                    opacity={0.2}
+                  <ProceduralSpellEffect
+                    effect={effect}
+                    gridSize={gridSize}
+                    stageScale={stageScale}
                   />
                   <Wedge
                     name="effect"
                     x={0}
                     y={0}
-                    radius={effect.size * pulse}
+                    radius={effect.size}
                     angle={60}
-                    rotation={effect.rotation}
-                    fill={effect.color}
+                    rotation={(effect.rotation || 0) - 30}
                     stroke={strokeColor}
-                    strokeWidth={2 / stageScale}
+                    strokeWidth={1.5 / stageScale}
+                    dash={[6, 4]}
                     onClick={() => {
                       if (!activeEffectId) {
                         const newEffects = effects.map(eff => 
@@ -514,30 +375,23 @@ export const SpellEffectsGroup: React.FC<SpellEffectsGroupProps> = React.memo(({
                     }
                   }}
                 />
-              ) : effect.label !== 'Sunbeam' ? (
+              ) : (
                 <>
-                  <Rect
-                    name="effect"
-                    x={0}
-                    y={0}
-                    width={effect.size * (pulse + 0.02)}
-                    height={gridSize * pulse}
-                    offsetY={(gridSize * pulse) / 2}
-                    rotation={effect.rotation}
-                    fill={effect.color}
-                    opacity={0.2}
+                  <ProceduralSpellEffect
+                    effect={effect}
+                    gridSize={gridSize}
+                    stageScale={stageScale}
                   />
                   <Rect
                     name="effect"
                     x={0}
-                    y={0}
-                    width={effect.size * pulse}
+                    y={-gridSize / 2}
+                    width={effect.size}
                     height={gridSize}
-                    offsetY={gridSize / 2}
                     rotation={effect.rotation}
-                    fill={effect.color}
                     stroke={strokeColor}
-                    strokeWidth={2 / stageScale}
+                    strokeWidth={1.5 / stageScale}
+                    dash={[6, 4]}
                     onClick={() => {
                       if (!activeEffectId) {
                         const newEffects = effects.map(eff => 
@@ -548,27 +402,6 @@ export const SpellEffectsGroup: React.FC<SpellEffectsGroupProps> = React.memo(({
                     }}
                   />
                 </>
-              ) : (
-                <GifImage
-                  name="effect"
-                  src="https://cdn.jumpshare.com/preview/Cf710ydwml3Ajp7tarb8CBL8utV__DLzcz-KV8DdykUSRUBTKHWS-UoYhjtzfpNX5K5Lry7y4h3SEAa3uWn-rDr85FpDpy_BglELkjA_IZE"
-                  x={0}
-                  y={0}
-                  width={effect.size}
-                  height={gridSize * 2}
-                  offsetY={gridSize}
-                  rotation={effect.rotation}
-                  opacity={0.8}
-                  globalCompositeOperation="lighter"
-                  onClick={() => {
-                    if (!activeEffectId) {
-                      const newEffects = effects.map(eff => 
-                        eff.id === effect.id ? { ...eff, rotation: (eff.rotation + 45) % 360 } : eff
-                      );
-                      setEffects(newEffects);
-                    }
-                  }}
-                />
               )}
               <EffectResizeHandle 
                 effect={effect} 

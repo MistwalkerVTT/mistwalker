@@ -1660,6 +1660,325 @@ function drawLavaPit(
 }
 
 // ---------------------------------------------------------------------------
+// 21. WEB / STICKY SILK CLUSTER
+// ---------------------------------------------------------------------------
+function drawWeb(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  r: number,
+  t: number,
+  spd: number = 1.0
+) {
+  ctx.save();
+  const spokes = 12;
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+  ctx.lineWidth = 1.2;
+  for (let s = 0; s < spokes; s++) {
+    const ang = (s / spokes) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(ang) * (r * 0.95), cy + Math.sin(ang) * (r * 0.95));
+    ctx.stroke();
+  }
+
+  const rings = 6;
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+  ctx.lineWidth = 1.0;
+  for (let rg = 1; rg <= rings; rg++) {
+    const rad = (rg / rings) * (r * 0.95);
+    ctx.beginPath();
+    for (let s = 0; s <= spokes; s++) {
+      const ang = (s / spokes) * Math.PI * 2;
+      const sag = Math.sin(t * 1.5 + s) * 2;
+      const x = cx + Math.cos(ang) * (rad + sag);
+      const y = cy + Math.sin(ang) * (rad + sag);
+      if (s === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+
+  const dewCount = 10;
+  for (let d = 0; d < dewCount; d++) {
+    const dAng = (d / dewCount) * Math.PI * 2 + d * 0.3;
+    const dDist = (0.3 + (d % 4) * 0.18) * r;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+    ctx.beginPath();
+    ctx.arc(cx + Math.cos(dAng) * dDist, cy + Math.sin(dAng) * dDist, 1.8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------------------
+// 22. SONIC SHOCKWAVE / THUNDER (Thunderwave, Shatter, Destructive Wave)
+// ---------------------------------------------------------------------------
+function drawSonicWave(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  r: number,
+  t: number,
+  spd: number = 1.0
+) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  const ringCount = 3;
+  for (let i = 0; i < ringCount; i++) {
+    const prog = ((t * 1.5 * spd + i * 0.33) % 1.0);
+    const rad = r * Math.pow(prog, 0.7);
+    const alpha = (1 - prog) * 0.85;
+    ctx.strokeStyle = `rgba(186, 230, 253, ${alpha})`;
+    ctx.lineWidth = 4 * (1 - prog) + 1;
+    ctx.beginPath();
+    ctx.arc(cx, cy, Math.max(1, rad), 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * 0.7})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(cx, cy, Math.max(1, rad * 0.85), 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------------------
+// 23. DIRECTIONAL CONE (Cone of Cold, Burning Hands, Breath Weapons)
+// ---------------------------------------------------------------------------
+function drawDirectionalCone(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  effect: Effect,
+  t: number,
+  spd: number = 1.0
+) {
+  const apexX = 4;
+  const apexY = h / 2;
+  const length = w * 0.95;
+  const halfAngle = Math.PI / 6; // 30 degrees = 60 degree total cone
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(apexX, apexY);
+  ctx.arc(apexX, apexY, length, -halfAngle, halfAngle);
+  ctx.closePath();
+  ctx.clip();
+
+  const query = `${effect.label || ''} ${effect.name || ''} ${effect.spellId || ''} ${(effect as any).id || ''}`.toLowerCase();
+  const isCold = query.includes('cold') || query.includes('frost') || query.includes('ice');
+  const isFire = query.includes('fire') || query.includes('flame') || query.includes('breath') || query.includes('burning');
+
+  if (isCold) {
+    const frostGrad = ctx.createRadialGradient(apexX, apexY, 0, apexX, apexY, length);
+    frostGrad.addColorStop(0, 'rgba(255, 255, 255, 0.9)');
+    frostGrad.addColorStop(0.25, 'rgba(186, 230, 253, 0.6)');
+    frostGrad.addColorStop(0.65, 'rgba(56, 189, 248, 0.35)');
+    frostGrad.addColorStop(1, 'rgba(14, 165, 233, 0.1)');
+    ctx.fillStyle = frostGrad;
+    ctx.fillRect(0, 0, w, h);
+
+    const needleCount = 18;
+    for (let i = 0; i < needleCount; i++) {
+      const spread = (Math.sin(i * 99 + t * 2) * halfAngle * 0.9);
+      const prog = ((t * 1.4 * spd + i * 0.13) % 1.0);
+      const needleDist = prog * length;
+      const nx = apexX + Math.cos(spread) * needleDist;
+      const ny = apexY + Math.sin(spread) * needleDist;
+      const nLen = 15 + (i % 4) * 8;
+
+      ctx.strokeStyle = i % 2 === 0 ? 'rgba(255, 255, 255, 0.95)' : 'rgba(125, 211, 252, 0.85)';
+      ctx.lineWidth = i % 2 === 0 ? 2 : 1.2;
+      ctx.beginPath();
+      ctx.moveTo(nx, ny);
+      ctx.lineTo(nx + Math.cos(spread) * nLen, ny + Math.sin(spread) * nLen);
+      ctx.stroke();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(nx + Math.cos(spread) * nLen, ny + Math.sin(spread) * nLen, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    const spikeCount = 6;
+    for (let s = 0; s < spikeCount; s++) {
+      const spAng = -halfAngle * 0.75 + (s / (spikeCount - 1)) * halfAngle * 1.5;
+      const spLen = length * (0.5 + Math.sin(t * 3 + s * 1.5) * 0.15);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(apexX, apexY);
+      ctx.lineTo(apexX + Math.cos(spAng) * spLen, apexY + Math.sin(spAng) * spLen);
+      ctx.stroke();
+    }
+  } else if (isFire) {
+    const fireGrad = ctx.createRadialGradient(apexX, apexY, 0, apexX, apexY, length);
+    fireGrad.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
+    fireGrad.addColorStop(0.2, 'rgba(254, 240, 138, 0.85)');
+    fireGrad.addColorStop(0.55, 'rgba(249, 115, 22, 0.65)');
+    fireGrad.addColorStop(0.9, 'rgba(220, 38, 38, 0.35)');
+    fireGrad.addColorStop(1, 'rgba(153, 27, 27, 0.05)');
+    ctx.fillStyle = fireGrad;
+    ctx.fillRect(0, 0, w, h);
+
+    const emberCount = 20;
+    for (let e = 0; e < emberCount; e++) {
+      const spread = (Math.sin(e * 77 + t * 3) * halfAngle * 0.88);
+      const prog = ((t * 1.6 * spd + e * 0.11) % 1.0);
+      const eDist = prog * length;
+      const ex = apexX + Math.cos(spread) * eDist;
+      const ey = apexY + Math.sin(spread) * eDist + Math.sin(t * 8 + e) * 4;
+      const eRadius = (1 - prog * 0.5) * (4 + (e % 3) * 3);
+
+      const emberGrad = ctx.createRadialGradient(ex, ey, 0, ex, ey, eRadius);
+      emberGrad.addColorStop(0, 'rgba(255, 255, 255, 0.9)');
+      emberGrad.addColorStop(0.4, 'rgba(251, 146, 60, 0.8)');
+      emberGrad.addColorStop(1, 'rgba(239, 68, 68, 0)');
+      ctx.fillStyle = emberGrad;
+      ctx.beginPath();
+      ctx.arc(ex, ey, eRadius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else {
+    const col = effect.color || 'rgba(168, 85, 247, 0.6)';
+    const genGrad = ctx.createRadialGradient(apexX, apexY, 0, apexX, apexY, length);
+    genGrad.addColorStop(0, 'rgba(255, 255, 255, 0.9)');
+    genGrad.addColorStop(0.4, col);
+    genGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = genGrad;
+    ctx.fillRect(0, 0, w, h);
+
+    for (let wIter = 0; wIter < 12; wIter++) {
+      const spread = (Math.sin(wIter * 88 + t * 2) * halfAngle * 0.85);
+      const prog = ((t * 1.2 * spd + wIter * 0.15) % 1.0);
+      const dist = prog * length;
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+      ctx.beginPath();
+      ctx.arc(apexX + Math.cos(spread) * dist, apexY + Math.sin(spread) * dist, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------------------
+// 24. DIRECTIONAL LINE (Lightning Bolt, Sunbeam, Guiding Bolt)
+// ---------------------------------------------------------------------------
+function drawDirectionalLine(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  effect: Effect,
+  t: number,
+  spd: number = 1.0
+) {
+  const startX = 2;
+  const startY = h / 2;
+  const endX = w - 2;
+  const endY = h / 2;
+  const lineLen = endX - startX;
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+
+  const query = `${effect.label || ''} ${effect.name || ''} ${effect.spellId || ''} ${(effect as any).id || ''}`.toLowerCase();
+  const isLightning = query.includes('lightning') || query.includes('electric') || query.includes('shock') || query.includes('storm');
+  const isRadiant = query.includes('sunbeam') || query.includes('guiding') || query.includes('radiant') || query.includes('solar') || query.includes('beam');
+
+  if (isLightning) {
+    const corona = ctx.createLinearGradient(0, startY - h * 0.45, 0, startY + h * 0.45);
+    corona.addColorStop(0, 'rgba(0, 0, 0, 0)');
+    corona.addColorStop(0.3, 'rgba(56, 189, 248, 0.18)');
+    corona.addColorStop(0.5, 'rgba(234, 179, 8, 0.35)');
+    corona.addColorStop(0.7, 'rgba(56, 189, 248, 0.18)');
+    corona.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = corona;
+    ctx.fillRect(0, 0, w, h);
+
+    const segments = Math.max(12, Math.floor(lineLen / 20));
+    const segW = lineLen / segments;
+
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.85)';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(startX, startY);
+    for (let s = 1; s <= segments; s++) {
+      const jitter = (Math.sin(t * 22 + s * 3.7) * 0.5 + Math.cos(t * 15 + s * 2.1) * 0.5) * (h * 0.22);
+      ctx.lineTo(startX + s * segW, startY + jitter);
+    }
+    ctx.stroke();
+
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.moveTo(startX, startY);
+    for (let s = 1; s <= segments; s++) {
+      const jitter = (Math.sin(t * 22 + s * 3.7) * 0.5 + Math.cos(t * 15 + s * 2.1) * 0.5) * (h * 0.22);
+      ctx.lineTo(startX + s * segW, startY + jitter);
+    }
+    ctx.stroke();
+
+    const branchCount = 6;
+    for (let b = 0; b < branchCount; b++) {
+      const bProgress = ((t * 1.5 + b * 0.35) % 0.85) + 0.08;
+      const bx = startX + bProgress * lineLen;
+      const by = startY;
+      const bDir = b % 2 === 0 ? 1 : -1;
+      const bLen = (12 + (b % 3) * 10);
+
+      ctx.strokeStyle = 'rgba(234, 179, 8, 0.9)';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(bx, by);
+      ctx.lineTo(bx + 8, by + bDir * (bLen * 0.6));
+      ctx.lineTo(bx + 14, by + bDir * bLen);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(startX + 8, startY, 8, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (isRadiant) {
+    const beamGrad = ctx.createLinearGradient(0, startY - h * 0.4, 0, startY + h * 0.4);
+    beamGrad.addColorStop(0, 'rgba(0, 0, 0, 0)');
+    beamGrad.addColorStop(0.3, 'rgba(251, 191, 36, 0.4)');
+    beamGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0.95)');
+    beamGrad.addColorStop(0.7, 'rgba(251, 191, 36, 0.4)');
+    beamGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = beamGrad;
+    ctx.fillRect(0, 0, w, h);
+
+    const ringCount = 8;
+    for (let r = 0; r < ringCount; r++) {
+      const prog = ((t * 1.8 * spd + r * 0.18) % 1.0);
+      const rx = startX + prog * lineLen;
+      ctx.strokeStyle = 'rgba(254, 240, 138, 0.9)';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.ellipse(rx, startY, 4, h * 0.35, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  } else {
+    const col = effect.color || 'rgba(147, 51, 234, 0.6)';
+    ctx.fillStyle = col;
+    ctx.fillRect(startX, startY - h * 0.25, lineLen, h * 0.5);
+
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(startX, startY);
+    ctx.lineTo(endX, endY);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------------------
 // MAIN PROCEDURAL SPELL EFFECT COMPONENT
 // ---------------------------------------------------------------------------
 export const ProceduralSpellEffect: React.FC<ProceduralSpellEffectProps> = ({
@@ -1670,18 +1989,58 @@ export const ProceduralSpellEffect: React.FC<ProceduralSpellEffectProps> = ({
   const imageRef = useRef<any>(null);
   const animFrameIdRef = useRef<number | null>(null);
 
-  // Dedicated offscreen canvas for high-DPI rendering
   const canvas = useMemo(() => {
     return document.createElement('canvas');
   }, []);
 
+  const isCone = effect.type === 'cone';
+  const isLine = effect.type === 'line';
   const size = Math.max(16, effect.size);
-  const canvasSize = Math.max(128, Math.min(512, Math.round(size * 2)));
+
+  let canvasW: number;
+  let canvasH: number;
+  let imgW: number;
+  let imgH: number;
+  let imgX: number;
+  let imgY: number;
+  let imgOffsetX: number;
+  let imgOffsetY: number;
+
+  if (isCone) {
+    canvasW = Math.max(128, Math.min(512, Math.round(size)));
+    canvasH = Math.max(128, Math.min(512, Math.round(size * 1.2)));
+    imgW = size;
+    imgH = size * 1.2;
+    imgX = 0;
+    imgY = 0;
+    imgOffsetX = 0;
+    imgOffsetY = imgH / 2;
+  } else if (isLine) {
+    canvasW = Math.max(256, Math.min(1024, Math.round(size)));
+    canvasH = Math.max(64, Math.min(256, Math.round(gridSize * 2)));
+    imgW = size;
+    imgH = gridSize * 2;
+    imgX = 0;
+    imgY = 0;
+    imgOffsetX = 0;
+    imgOffsetY = imgH / 2;
+  } else {
+    // Circle
+    const canvasSize = Math.max(128, Math.min(512, Math.round(size * 2)));
+    canvasW = canvasSize;
+    canvasH = canvasSize;
+    imgW = size * 2;
+    imgH = size * 2;
+    imgX = -size;
+    imgY = -size;
+    imgOffsetX = 0;
+    imgOffsetY = 0;
+  }
 
   useEffect(() => {
-    canvas.width = canvasSize;
-    canvas.height = canvasSize;
-  }, [canvas, canvasSize]);
+    canvas.width = canvasW;
+    canvas.height = canvasH;
+  }, [canvas, canvasW, canvasH]);
 
   useEffect(() => {
     let isMounted = true;
@@ -1690,62 +2049,74 @@ export const ProceduralSpellEffect: React.FC<ProceduralSpellEffectProps> = ({
     const render = (currentTime: number) => {
       if (!isMounted) return;
 
-      // Throttle rendering to ~30fps for buttery smooth visuals with low CPU
+      // Throttle rendering to ~30fps for smooth visuals with low CPU
       if (currentTime - lastRenderTime >= 33) {
         lastRenderTime = currentTime;
 
         const ctx = canvas.getContext('2d');
         if (ctx) {
-          ctx.clearRect(0, 0, canvasSize, canvasSize);
+          ctx.clearRect(0, 0, canvasW, canvasH);
 
-          const cx = canvasSize / 2;
-          const cy = canvasSize / 2;
-          const r = (canvasSize / 2) * 0.92;
           const t = currentTime / 1000;
           const spd = 1.0;
 
-          const label = (effect.label || '').toLowerCase();
-
-          if (label.includes('lightning') || label.includes('electric') || label.includes('shocking grasp')) {
-            drawLightningBolt(ctx, cx, cy, r, t, spd);
-          } else if (label.includes('cone of cold') || label.includes('frost') || label.includes('ice')) {
-            drawIceCone(ctx, cx, cy, r, t, spd);
-          } else if (label.includes('shield') || label.includes('sanctuary') || label.includes('barrier')) {
-            drawHexShield(ctx, cx, cy, r, t, spd);
-          } else if (label.includes('cure') || label.includes('heal') || label.includes('restoration') || label.includes('bless')) {
-            drawHealingBloom(ctx, cx, cy, r, t, spd);
-          } else if (label.includes('portal') || label.includes('gate') || label.includes('teleport') || label.includes('dimension')) {
-            drawAstralPortal(ctx, cx, cy, r, t, spd);
-          } else if (label.includes('moonbeam') || label.includes('lunar')) {
-            drawMoonbeam(ctx, cx, cy, r, t, spd);
-          } else if (label.includes('faerie') || label.includes('starlight')) {
-            drawFaerieFire(ctx, cx, cy, r, t, spd);
-          } else if (label.includes('lava') || label.includes('magma')) {
-            drawLavaPit(ctx, cx, cy, r, t, spd);
-          } else if (label.includes('eldritch') || label.includes('blast')) {
-            drawEldritchBlast(ctx, cx, cy, r, t, spd);
-          } else if (label.includes('divine') || label.includes('smite')) {
-            drawDivineSmite(ctx, cx, cy, r, t, spd);
-          } else if (label.includes('acid') || label.includes('vitriol')) {
-            drawAcidPool(ctx, cx, cy, r, t, spd);
-          } else if (label.includes('grasp') || label.includes('hadar') || label.includes('shadow grasp') || label.includes('tentacle')) {
-            drawShadowGrasp(ctx, cx, cy, r, t, spd);
-          } else if (label.includes('spirit') || label.includes('guardian')) {
-            drawSpiritGuardians(ctx, cx, cy, r, t, spd);
-          } else if (label.includes('beacon') || label.includes('hope')) {
-            drawBeaconOfHope(ctx, cx, cy, r, t, spd);
-          } else if (label.includes('fireball') || label.includes('fire bolt') || label.includes('flame') || label.includes('burning')) {
-            drawFireball(ctx, cx, cy, r, t, spd);
-          } else if (label.includes('darkness') || label.includes('shadow')) {
-            drawDarkness(ctx, cx, cy, r, t, spd);
-          } else if (label.includes('fog')) {
-            drawFogCloud(ctx, cx, cy, r, t, spd);
-          } else if (label.includes('poison') || label.includes('cloudkill') || label.includes('stinking')) {
-            drawPoisonCloud(ctx, cx, cy, r, t, spd);
-          } else if (label.includes('hypnotic')) {
-            drawHypnoticPattern(ctx, cx, cy, r, t, spd);
+          if (isCone) {
+            drawDirectionalCone(ctx, canvasW, canvasH, effect, t, spd);
+          } else if (isLine) {
+            drawDirectionalLine(ctx, canvasW, canvasH, effect, t, spd);
           } else {
-            drawGenericSpell(ctx, cx, cy, r, effect.color || 'rgba(147, 51, 234, 0.4)', t, spd);
+            // Circle rendering
+            const cx = canvasW / 2;
+            const cy = canvasH / 2;
+            const r = (canvasW / 2) * 0.92;
+
+            const query = `${effect.label || ''} ${effect.name || ''} ${effect.spellId || ''} ${(effect as any).id || ''} ${(effect as any).proceduralStyle || ''}`.toLowerCase();
+
+            if (query.includes('web')) {
+              drawWeb(ctx, cx, cy, r, t, spd);
+            } else if (query.includes('thunder') || query.includes('shatter') || query.includes('wave') || query.includes('destructive')) {
+              drawSonicWave(ctx, cx, cy, r, t, spd);
+            } else if (query.includes('lightning') || query.includes('electric') || query.includes('shock')) {
+              drawLightningBolt(ctx, cx, cy, r, t, spd);
+            } else if (query.includes('cold') || query.includes('frost') || query.includes('ice')) {
+              drawIceCone(ctx, cx, cy, r, t, spd);
+            } else if (query.includes('shield') || query.includes('sanctuary') || query.includes('barrier')) {
+              drawHexShield(ctx, cx, cy, r, t, spd);
+            } else if (query.includes('cure') || query.includes('heal') || query.includes('restoration') || query.includes('bless')) {
+              drawHealingBloom(ctx, cx, cy, r, t, spd);
+            } else if (query.includes('portal') || query.includes('gate') || query.includes('teleport') || query.includes('dimension')) {
+              drawAstralPortal(ctx, cx, cy, r, t, spd);
+            } else if (query.includes('moonbeam') || query.includes('lunar')) {
+              drawMoonbeam(ctx, cx, cy, r, t, spd);
+            } else if (query.includes('faerie') || query.includes('starlight')) {
+              drawFaerieFire(ctx, cx, cy, r, t, spd);
+            } else if (query.includes('lava') || query.includes('magma')) {
+              drawLavaPit(ctx, cx, cy, r, t, spd);
+            } else if (query.includes('eldritch') || query.includes('blast')) {
+              drawEldritchBlast(ctx, cx, cy, r, t, spd);
+            } else if (query.includes('divine') || query.includes('smite')) {
+              drawDivineSmite(ctx, cx, cy, r, t, spd);
+            } else if (query.includes('acid') || query.includes('vitriol')) {
+              drawAcidPool(ctx, cx, cy, r, t, spd);
+            } else if (query.includes('grasp') || query.includes('hadar') || query.includes('tentacle')) {
+              drawShadowGrasp(ctx, cx, cy, r, t, spd);
+            } else if (query.includes('spirit') || query.includes('guardian')) {
+              drawSpiritGuardians(ctx, cx, cy, r, t, spd);
+            } else if (query.includes('beacon') || query.includes('hope')) {
+              drawBeaconOfHope(ctx, cx, cy, r, t, spd);
+            } else if (query.includes('fire') || query.includes('flame') || query.includes('burning') || query.includes('combust')) {
+              drawFireball(ctx, cx, cy, r, t, spd);
+            } else if (query.includes('darkness') || query.includes('shadow')) {
+              drawDarkness(ctx, cx, cy, r, t, spd);
+            } else if (query.includes('fog')) {
+              drawFogCloud(ctx, cx, cy, r, t, spd);
+            } else if (query.includes('poison') || query.includes('cloudkill') || query.includes('stinking')) {
+              drawPoisonCloud(ctx, cx, cy, r, t, spd);
+            } else if (query.includes('hypnotic')) {
+              drawHypnoticPattern(ctx, cx, cy, r, t, spd);
+            } else {
+              drawGenericSpell(ctx, cx, cy, r, effect.color || 'rgba(147, 51, 234, 0.4)', t, spd);
+            }
           }
 
           // Notify Konva of canvas update
@@ -1765,18 +2136,22 @@ export const ProceduralSpellEffect: React.FC<ProceduralSpellEffectProps> = ({
         animFrameIdRef.current = null;
       }
     };
-  }, [canvas, canvasSize, effect]);
+  }, [canvas, canvasW, canvasH, effect, isCone, isLine]);
 
   return (
     <KonvaImage
       ref={imageRef}
       name="effect"
       image={canvas}
-      x={-size}
-      y={-size}
-      width={size * 2}
-      height={size * 2}
+      x={imgX}
+      y={imgY}
+      width={imgW}
+      height={imgH}
+      offsetX={imgOffsetX}
+      offsetY={imgOffsetY}
+      rotation={isCone || isLine ? (effect.rotation || 0) : 0}
       opacity={effect.opacity !== undefined ? effect.opacity : 0.95}
+      globalCompositeOperation={effect.blendMode || "screen"}
     />
   );
 };

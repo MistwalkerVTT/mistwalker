@@ -2900,7 +2900,7 @@ export default function App() {
         if (soundToPlay && soundToPlay !== 'none') {
           spellSoundEngine.play(soundToPlay);
         }
-        const hasShockwave = newEffect.shockwave !== undefined ? newEffect.shockwave : (def?.shockwave ?? true);
+        const hasShockwave = newEffect.shockwave !== undefined ? newEffect.shockwave : (def?.hasShockwave ?? (def as any)?.shockwave ?? true);
         if (hasShockwave && newEffect.x != null && newEffect.y != null) {
           triggerShockwave({
             x: newEffect.x,
@@ -3427,7 +3427,9 @@ export default function App() {
     if (soundToPlay && soundToPlay !== 'none') {
       spellSoundEngine.play(soundToPlay);
     }
-    const hasShockwave = (effect as any).shockwave !== undefined ? (effect as any).shockwave : (def?.shockwave ?? true);
+    const hasShockwave = (effect as any).shockwave !== undefined 
+      ? (effect as any).shockwave 
+      : ((effect as any).hasShockwave !== undefined ? (effect as any).hasShockwave : (def?.hasShockwave ?? (def as any)?.shockwave ?? true));
     if (hasShockwave) {
       triggerShockwave({
         x: centerX,
@@ -5336,6 +5338,28 @@ export default function App() {
       setEffects([...effects, newEffect]);
       activeEffectIdRef.current = id;
       setActiveEffectId(id);
+
+      // Trigger procedural sound & shockwave
+      const def = getSpecialEffectDefinition(tool)
+        || getSpecialEffectDefinition(label.toLowerCase().replace(/\s+/g, '_'));
+      const soundToPlay = def?.soundEffect;
+      if (soundToPlay && soundToPlay !== 'none') {
+        spellSoundEngine.play(soundToPlay);
+      }
+      const hasShockwave = def?.hasShockwave ?? true;
+      if (hasShockwave) {
+        triggerShockwave({
+          x: point.x,
+          y: point.y,
+          maxRadius: initialSize * 1.5,
+          color,
+          duration: 550
+        });
+        triggerShake(true);
+      }
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('ADD_EFFECT', newEffect);
+      }
     } else if (tool === 'custom_effect' && selectedCustomEffect) {
       const id = Math.random().toString(36).substr(2, 9);
       const sizeMultiplier = (selectedCustomEffect.defaultSize || 20) / 5;
@@ -5358,6 +5382,31 @@ export default function App() {
       setEffects(prev => [...prev, newEffect]);
       activeEffectIdRef.current = id;
       setActiveEffectId(id);
+
+      // Trigger procedural sound & shockwave
+      const def = getSpecialEffectDefinition(selectedCustomEffect.id)
+        || getSpecialEffectDefinition(selectedCustomEffect.name.toLowerCase().replace(/\s+/g, '_'));
+      const soundToPlay = (selectedCustomEffect as any).soundEffect || def?.soundEffect;
+      if (soundToPlay && soundToPlay !== 'none') {
+        spellSoundEngine.play(soundToPlay);
+      }
+      const hasShockwave = (selectedCustomEffect as any).hasShockwave !== undefined 
+        ? (selectedCustomEffect as any).hasShockwave 
+        : (def?.hasShockwave ?? true);
+      if (hasShockwave) {
+        triggerShockwave({
+          x: point.x,
+          y: point.y,
+          maxRadius: initialSize * 1.5,
+          color: selectedCustomEffect.color,
+          duration: 550
+        });
+        triggerShake(true);
+      }
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('ADD_EFFECT', newEffect);
+      }
+
       toast.success(`Placed ${selectedCustomEffect.name} on the map!`);
     }
   };

@@ -195,7 +195,7 @@ export const PLAYER_EFFECTS_CATALOG: PlayerSpellDefinition[] = SPECIAL_EFFECTS_D
   iconName: s.iconName as any,
   badgeColor: s.badgeColor,
   soundEffect: s.soundEffect,
-  shockwave: s.shockwave
+  shockwave: s.hasShockwave
 }));
 
 
@@ -1464,7 +1464,7 @@ export default function PlayerView() {
           if (soundToPlay && soundToPlay !== 'none') {
             spellSoundEngine.play(soundToPlay);
           }
-          const hasShockwave = e.shockwave !== undefined ? e.shockwave : (def?.shockwave ?? true);
+          const hasShockwave = e.shockwave !== undefined ? e.shockwave : (def?.hasShockwave ?? (def as any)?.shockwave ?? true);
           if (hasShockwave && e.x != null && e.y != null) {
             triggerShockwave({
               x: e.x,
@@ -1855,7 +1855,7 @@ export default function PlayerView() {
         if (soundToPlay && soundToPlay !== 'none') {
           spellSoundEngine.play(soundToPlay);
         }
-        const hasShockwave = newEffect.shockwave !== undefined ? newEffect.shockwave : (def?.shockwave ?? true);
+        const hasShockwave = newEffect.shockwave !== undefined ? newEffect.shockwave : (def?.hasShockwave ?? (def as any)?.shockwave ?? true);
         if (hasShockwave && newEffect.x != null && newEffect.y != null) {
           triggerShockwave({
             x: newEffect.x,
@@ -2231,7 +2231,7 @@ export default function PlayerView() {
     if (soundToPlay && soundToPlay !== 'none') {
       spellSoundEngine.play(soundToPlay);
     }
-    const hasShockwave = spellDef.shockwave !== undefined ? spellDef.shockwave : (def?.shockwave ?? true);
+    const hasShockwave = spellDef.shockwave !== undefined ? spellDef.shockwave : (def?.hasShockwave ?? (def as any)?.shockwave ?? true);
     if (hasShockwave) {
       triggerShockwave({
         x,
@@ -3960,19 +3960,7 @@ export default function PlayerView() {
                   )}
                   {isCone && (
                     <>
-                      <Arc
-                        angle={60}
-                        innerRadius={0}
-                        outerRadius={effect.size}
-                        rotation={(effect.rotation || 0) - 30}
-                        fill={effectColor}
-                        opacity={effect.imageUrl ? 0.15 : 0.35}
-                        stroke={effectColor}
-                        strokeWidth={2 / stageScale}
-                        shadowColor={effectColor}
-                        shadowBlur={8}
-                      />
-                      {effect.imageUrl && (
+                      {effect.imageUrl ? (
                         <GifImage
                           src={effect.imageUrl}
                           x={0}
@@ -3985,23 +3973,29 @@ export default function PlayerView() {
                           opacity={0.85}
                           globalCompositeOperation={effect.blendMode || "lighter"}
                         />
+                      ) : (
+                        <ProceduralSpellEffect
+                          effect={effect as any}
+                          gridSize={gridSize}
+                          stageScale={stageScale}
+                        />
                       )}
+                      <Arc
+                        angle={60}
+                        innerRadius={0}
+                        outerRadius={effect.size}
+                        rotation={(effect.rotation || 0) - 30}
+                        stroke={effectColor}
+                        strokeWidth={1.5 / stageScale}
+                        dash={[6, 4]}
+                        shadowColor={effectColor}
+                        shadowBlur={6}
+                      />
                     </>
                   )}
                   {isLine && (
                     <>
-                      <Rect
-                        width={effect.size}
-                        height={gridSize}
-                        rotation={effect.rotation || 0}
-                        fill={effectColor}
-                        opacity={effect.imageUrl ? 0.15 : 0.35}
-                        stroke={effectColor}
-                        strokeWidth={2 / stageScale}
-                        shadowColor={effectColor}
-                        shadowBlur={8}
-                      />
-                      {effect.imageUrl && (
+                      {effect.imageUrl ? (
                         <GifImage
                           src={effect.imageUrl}
                           x={0}
@@ -4013,7 +4007,24 @@ export default function PlayerView() {
                           opacity={0.85}
                           globalCompositeOperation={effect.blendMode || "lighter"}
                         />
+                      ) : (
+                        <ProceduralSpellEffect
+                          effect={effect as any}
+                          gridSize={gridSize}
+                          stageScale={stageScale}
+                        />
                       )}
+                      <Rect
+                        width={effect.size}
+                        height={gridSize}
+                        offsetY={gridSize / 2}
+                        rotation={effect.rotation || 0}
+                        stroke={effectColor}
+                        strokeWidth={1.5 / stageScale}
+                        dash={[6, 4]}
+                        shadowColor={effectColor}
+                        shadowBlur={6}
+                      />
                     </>
                   )}
                   {effect.label && (
