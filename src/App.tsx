@@ -3638,13 +3638,92 @@ export default function App() {
     };
   }, [socketRef.current]);
 
+  const castSpellAt = useCallback((origin: { x: number; y: number }, target: { x: number; y: number }) => {
+    if (!activeEquippedAsset) return;
+
+    const dx = target.x - origin.x;
+    const dy = target.y - origin.y;
+    const dist = Math.hypot(dx, dy);
+    const rotation = Math.atan2(dy, dx) * (180 / Math.PI);
+    const isTrajectory = (activeEquippedAsset.paradigm === 'projectile' || activeEquippedAsset.paradigm === 'ray') ||
+                         (Boolean(activeEquippedAsset.projectileWebm) && dist > 25);
+    const isPointAoe = activeEquippedAsset.paradigm === 'point' || activeEquippedAsset.paradigm === 'aura';
+
+    const newEffect: VttEffectInstance = {
+      id: `eff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      name: activeEquippedAsset.name,
+      label: activeEquippedAsset.label,
+      assetKey: activeEquippedAsset.id,
+      videoUrl: (isTrajectory && activeEquippedAsset.projectileWebm)
+        ? activeEquippedAsset.projectileWebm
+        : activeEquippedAsset.webm,
+      loopVideoUrl: activeEquippedAsset.loopWebm,
+      thumbUrl: activeEquippedAsset.thumb,
+      paradigm: isTrajectory ? 'projectile' : activeEquippedAsset.paradigm,
+      x: isTrajectory ? origin.x : (isPointAoe ? target.x : origin.x),
+      y: isTrajectory ? origin.y : (isPointAoe ? target.y : origin.y),
+      originX: origin.x,
+      originY: origin.y,
+      targetX: target.x,
+      targetY: target.y,
+      sizeFt: activeEquippedAsset.defaultSizeFt,
+      rotation: (activeEquippedAsset.paradigm === 'cone' || activeEquippedAsset.paradigm === 'line') ? rotation : 0,
+      opacity: 1.0,
+      blendMode: activeEquippedAsset.blendMode,
+      isPersistent: activeEquippedAsset.isPersistent,
+      loop: activeEquippedAsset.isPersistent,
+      castTime: Date.now(),
+      durationMs: isTrajectory ? 2500 : 5000,
+      soundKey: activeEquippedAsset.soundKey,
+      color: activeEquippedAsset.color,
+      trajectory: isTrajectory ? {
+        startX: origin.x,
+        startY: origin.y,
+        endX: target.x,
+        endY: target.y,
+        speedPxSec: 1400,
+        burstOnImpact: true,
+        burstVideoUrl: activeEquippedAsset.burstWebm || activeEquippedAsset.webm,
+        burstSoundKey: activeEquippedAsset.soundKey
+      } : undefined
+    };
+
+    setEffects(prev => [...prev, newEffect]);
+    if (activeEquippedAsset.soundKey) soundCatalog.play(activeEquippedAsset.soundKey);
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('EFFECT_SPAWN', newEffect);
+    }
+    toast.success(`Cast ${activeEquippedAsset.name}!`);
+
+    setAimOrigin(null);
+    setAimCurrent(null);
+    setActiveEquippedAsset(null);
+    setTool('pan');
+  }, [activeEquippedAsset]);
+
   const handleEquipAsset = useCallback((asset: Jb2aAssetDefinition) => {
     setActiveEquippedAsset(asset);
     setTool('spell_aim');
-    toast.info(`Aiming ${asset.name}`, {
-      description: 'Click and drag on the battlemap to target and cast.'
+
+    if (selectedTokenIds.length > 0) {
+      const selectedToken = tokens.find(t => t.id === selectedTokenIds[0]);
+      if (selectedToken) {
+        const tokenRadius = ((selectedToken.size || 1) * gridSize) / 2;
+        setAimOrigin({ x: selectedToken.x + tokenRadius, y: selectedToken.y + tokenRadius });
+      } else {
+        setAimOrigin(null);
+      }
+    } else {
+      setAimOrigin(null);
+    }
+
+    const isPoint = asset.paradigm === 'point' || asset.shape === 'circle' || asset.paradigm === 'aura';
+    toast.info(`Equipped ${asset.name}`, {
+      description: isPoint
+        ? 'Click anywhere on the battlemap to detonate.'
+        : 'Click caster then target, or click and drag towards target.'
     });
-  }, [setTool]);
+  }, [setTool, selectedTokenIds, tokens, gridSize]);
 
   const handleQuickPlaceAsset = useCallback((asset: Jb2aAssetDefinition) => {
     const dims = getMapDimensions();
@@ -4831,6 +4910,24 @@ export default function App() {
         }
         targetNode = targetNode.getParent();
       }
+
+      // Point AoE spells (Fireball, Fog Cloud, Web, Darkness, etc.) drop immediately on click!
+      if (activeEquippedAsset.paradigm === 'point' || activeEquippedAsset.shape === 'circle' || activeEquippedAsset.paradigm === 'aura') {
+        castSpellAt(originPoint, originPoint);
+        return;
+      }
+
+      // If we already have an aimOrigin set, clicking casts towards this target!
+      if (aimOrigin) {
+        const dx = originPoint.x - aimOrigin.x;
+        const dy = originPoint.y - aimOrigin.y;
+        if (Math.hypot(dx, dy) > 20) {
+          castSpellAt(aimOrigin, originPoint);
+          return;
+        }
+      }
+
+      // Otherwise, set this click as the spell's starting origin (caster)
       setAimOrigin(originPoint);
       setAimCurrent(originPoint);
       return;
@@ -5047,7 +5144,7 @@ export default function App() {
       y: (pointer.y - stage.y()) / scale
     };
 
-    if (tool === 'spell_aim' && aimOrigin) {
+    if (tool === 'spell_aim' && activeEquippedAsset) {
       setAimCurrent(point);
       return;
     }
@@ -5175,63 +5272,12 @@ export default function App() {
       const dx = aimCurrent.x - aimOrigin.x;
       const dy = aimCurrent.y - aimOrigin.y;
       const dist = Math.hypot(dx, dy);
-      const rotation = Math.atan2(dy, dx) * (180 / Math.PI);
-      const isTrajectory = (activeEquippedAsset.paradigm === 'projectile' || activeEquippedAsset.paradigm === 'ray') ||
-                           (Boolean(activeEquippedAsset.projectileWebm) && dist > 20);
 
-      const isPointAoe = activeEquippedAsset.paradigm === 'point' || activeEquippedAsset.paradigm === 'aura';
-
-      const newEffect: VttEffectInstance = {
-        id: `eff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-        name: activeEquippedAsset.name,
-        label: activeEquippedAsset.label,
-        assetKey: activeEquippedAsset.id,
-        videoUrl: (isTrajectory && activeEquippedAsset.projectileWebm)
-          ? activeEquippedAsset.projectileWebm
-          : activeEquippedAsset.webm,
-        loopVideoUrl: activeEquippedAsset.loopWebm,
-        thumbUrl: activeEquippedAsset.thumb,
-        paradigm: isTrajectory ? 'projectile' : activeEquippedAsset.paradigm,
-        x: isTrajectory ? aimOrigin.x : (isPointAoe ? aimCurrent.x : aimOrigin.x),
-        y: isTrajectory ? aimOrigin.y : (isPointAoe ? aimCurrent.y : aimOrigin.y),
-        originX: aimOrigin.x,
-        originY: aimOrigin.y,
-        targetX: aimCurrent.x,
-        targetY: aimCurrent.y,
-        sizeFt: activeEquippedAsset.defaultSizeFt,
-        rotation: (activeEquippedAsset.paradigm === 'cone' || activeEquippedAsset.paradigm === 'line') ? rotation : 0,
-        opacity: 1.0,
-        blendMode: activeEquippedAsset.blendMode,
-        isPersistent: activeEquippedAsset.isPersistent,
-        loop: activeEquippedAsset.isPersistent,
-        castTime: Date.now(),
-        durationMs: isTrajectory ? 2500 : 5000,
-        soundKey: activeEquippedAsset.soundKey,
-        color: activeEquippedAsset.color,
-        trajectory: isTrajectory ? {
-          startX: aimOrigin.x,
-          startY: aimOrigin.y,
-          endX: aimCurrent.x,
-          endY: aimCurrent.y,
-          speedPxSec: 1400,
-          burstOnImpact: true,
-          burstVideoUrl: activeEquippedAsset.burstWebm || activeEquippedAsset.webm,
-          burstSoundKey: activeEquippedAsset.soundKey
-        } : undefined
-      };
-
-      setEffects(prev => [...prev, newEffect]);
-      if (activeEquippedAsset.soundKey) soundCatalog.play(activeEquippedAsset.soundKey);
-      if (socketRef.current?.connected) {
-        socketRef.current.emit('EFFECT_SPAWN', newEffect);
+      // Only trigger drag-cast if the user dragged significantly (> 25px)
+      if (dist > 25) {
+        castSpellAt(aimOrigin, aimCurrent);
+        return;
       }
-      toast.success(`Cast ${activeEquippedAsset.name}!`);
-
-      setAimOrigin(null);
-      setAimCurrent(null);
-      setActiveEquippedAsset(null);
-      setTool('pan');
-      return;
     }
 
     if (tool === 'erase_wall' && wallEraseDragStart) {
@@ -7335,6 +7381,9 @@ export default function App() {
               stagePos={stagePos}
               stageScale={stageScale}
               gridSize={gridSize}
+              activeEquippedAsset={activeEquippedAsset}
+              aimOrigin={aimOrigin}
+              aimCurrent={aimCurrent}
             />
 
             {/* Environmental & Animated Map FX Overlay (Uploaded & Generated Maps) */}

@@ -1,9 +1,10 @@
 // src/effects/render/DomEffectOverlay.tsx
 // Hardware-Accelerated GPU DOM Video Effects Overlay for MistWalker 4.0
-// Guarantees 100% flawless video playback for transparent WebMs with 60 FPS zero-overhead GPU compositing
+// Features 60 FPS zero-overhead GPU compositing, native VP9 alpha transparency,
+// and live animated targeting preview under the cursor while aiming spells.
 
-import React, { useEffect, useCallback, useMemo } from 'react';
-import { VttEffectInstance } from '../types/effect';
+import React, { useEffect, useCallback } from 'react';
+import { VttEffectInstance, Jb2aAssetDefinition } from '../types/effect';
 import { soundCatalog } from '../db/soundCatalog';
 
 interface DomEffectOverlayProps {
@@ -12,6 +13,9 @@ interface DomEffectOverlayProps {
   stagePos: { x: number; y: number };
   stageScale: number;
   gridSize: number;
+  activeEquippedAsset?: Jb2aAssetDefinition | null;
+  aimOrigin?: { x: number; y: number } | null;
+  aimCurrent?: { x: number; y: number } | null;
   onEffectComplete?: (effectId: string) => void;
 }
 
@@ -21,6 +25,9 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
   stagePos,
   stageScale,
   gridSize,
+  activeEquippedAsset,
+  aimOrigin,
+  aimCurrent,
   onEffectComplete
 }) => {
   // Lifetime expiration timer for non-persistent single-shot blasts (e.g. 5s fallback)
@@ -81,12 +88,16 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
     onEffectComplete?.(effect.id);
   }, [setEffects, onEffectComplete]);
 
-  if (!effects || effects.length === 0) return null;
+  const hasEffects = Boolean(effects && effects.length > 0);
+  const hasAimPreview = Boolean(activeEquippedAsset && aimCurrent);
+
+  if (!hasEffects && !hasAimPreview) return null;
 
   return (
     <div
       id="mistwalker-dom-effects-overlay-viewport"
       className="absolute inset-0 pointer-events-none overflow-hidden select-none z-20"
+      style={{ isolation: 'isolate' }}
     >
       <div
         id="mistwalker-dom-effects-overlay-world"
@@ -97,10 +108,11 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
           willChange: 'transform'
         }}
       >
+        {/* 1. Active In-World Visual Effects (Hardware-accelerated native transparent WebMs) */}
         {effects.map((effect) => {
           const sizeFt = effect.sizeFt || 20;
 
-          // 1. Ranged Projectile / Trajectory Beam (.stretchTo paradigm)
+          // A. Ranged Projectile / Trajectory Beam (.stretchTo paradigm)
           if (effect.paradigm === 'projectile' || effect.paradigm === 'ray') {
             const startX = effect.originX ?? effect.x;
             const startY = effect.originY ?? effect.y;
@@ -122,7 +134,7 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                 playsInline
                 preload="auto"
                 onLoadedData={(e) => (e.target as HTMLVideoElement).play().catch(() => {})}
-                onError={() => handleEnded(effect)}
+                onError={(e) => console.warn('Effect video load failed:', effect.videoUrl, e)}
                 onEnded={() => handleEnded(effect)}
                 style={{
                   position: 'absolute',
@@ -130,18 +142,18 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                   top: `${startY}px`,
                   width: `${beamWidth}px`,
                   height: `${beamHeight}px`,
-                  transform: `translate(0px, -50%) rotate(${angleDeg}deg)`,
+                  transform: `translate(0px, -50%) rotate(${angleDeg}deg) translateZ(0)`,
                   transformOrigin: '0 50%',
                   objectFit: 'fill',
-                  mixBlendMode: effect.blendMode === 'screen' ? 'screen' : effect.blendMode === 'lighter' ? 'plus-lighter' : 'normal',
                   opacity: effect.opacity ?? 1.0,
+                  filter: 'drop-shadow(0 0 12px rgba(255, 255, 255, 0.25))',
                   pointerEvents: 'none'
                 }}
               />
             );
           }
 
-          // 2. Cone Spells (Burning Hands, Cone of Cold)
+          // B. Cone Spells (Burning Hands, Cone of Cold)
           if (effect.paradigm === 'cone') {
             const coneLength = (sizeFt / 5) * gridSize;
             const coneSpread = coneLength;
@@ -155,7 +167,7 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                 preload="auto"
                 loop={Boolean(effect.loop || effect.isPersistent)}
                 onLoadedData={(e) => (e.target as HTMLVideoElement).play().catch(() => {})}
-                onError={() => handleEnded(effect)}
+                onError={(e) => console.warn('Effect video load failed:', effect.videoUrl, e)}
                 onEnded={() => handleEnded(effect)}
                 style={{
                   position: 'absolute',
@@ -163,18 +175,18 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                   top: `${effect.y}px`,
                   width: `${coneLength}px`,
                   height: `${coneSpread}px`,
-                  transform: `translate(0px, -50%) rotate(${effect.rotation || 0}deg)`,
+                  transform: `translate(0px, -50%) rotate(${effect.rotation || 0}deg) translateZ(0)`,
                   transformOrigin: '0 50%',
                   objectFit: 'fill',
-                  mixBlendMode: effect.blendMode === 'screen' ? 'screen' : effect.blendMode === 'lighter' ? 'plus-lighter' : 'normal',
                   opacity: effect.opacity ?? 1.0,
+                  filter: 'drop-shadow(0 0 12px rgba(255, 255, 255, 0.25))',
                   pointerEvents: 'none'
                 }}
               />
             );
           }
 
-          // 3. Line Spells (Lightning Bolt, Sunbeam)
+          // C. Line Spells (Lightning Bolt, Sunbeam)
           if (effect.paradigm === 'line') {
             const lineLength = (sizeFt / 5) * gridSize;
             const beamHeight = Math.max(gridSize, lineLength / 10);
@@ -188,7 +200,7 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                 preload="auto"
                 loop={Boolean(effect.loop || effect.isPersistent)}
                 onLoadedData={(e) => (e.target as HTMLVideoElement).play().catch(() => {})}
-                onError={() => handleEnded(effect)}
+                onError={(e) => console.warn('Effect video load failed:', effect.videoUrl, e)}
                 onEnded={() => handleEnded(effect)}
                 style={{
                   position: 'absolute',
@@ -196,18 +208,18 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                   top: `${effect.y}px`,
                   width: `${lineLength}px`,
                   height: `${beamHeight}px`,
-                  transform: `translate(0px, -50%) rotate(${effect.rotation || 0}deg)`,
+                  transform: `translate(0px, -50%) rotate(${effect.rotation || 0}deg) translateZ(0)`,
                   transformOrigin: '0 50%',
                   objectFit: 'fill',
-                  mixBlendMode: effect.blendMode === 'screen' ? 'screen' : effect.blendMode === 'lighter' ? 'plus-lighter' : 'normal',
                   opacity: effect.opacity ?? 1.0,
+                  filter: 'drop-shadow(0 0 12px rgba(255, 255, 255, 0.25))',
                   pointerEvents: 'none'
                 }}
               />
             );
           }
 
-          // 4. Point / Sphere / Circle / Aura (Fireball, Darkness, Fog Cloud, Web)
+          // D. Point / Sphere / Circle / Aura (Fireball, Darkness, Fog Cloud, Web)
           const diameterFt = sizeFt * 2;
           const pixelDiameter = (diameterFt / 5) * gridSize;
           return (
@@ -220,7 +232,7 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
               preload="auto"
               loop={Boolean(effect.loop || effect.isPersistent)}
               onLoadedData={(e) => (e.target as HTMLVideoElement).play().catch(() => {})}
-              onError={() => handleEnded(effect)}
+              onError={(e) => console.warn('Effect video load failed:', effect.videoUrl, e)}
               onEnded={() => handleEnded(effect)}
               style={{
                 position: 'absolute',
@@ -228,16 +240,123 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                 top: `${effect.y}px`,
                 width: `${pixelDiameter}px`,
                 height: `${pixelDiameter}px`,
-                transform: `translate(-50%, -50%) rotate(${effect.rotation || 0}deg)`,
+                transform: `translate(-50%, -50%) rotate(${effect.rotation || 0}deg) translateZ(0)`,
                 transformOrigin: '50% 50%',
                 objectFit: 'fill',
-                mixBlendMode: effect.blendMode === 'screen' ? 'screen' : effect.blendMode === 'lighter' ? 'plus-lighter' : 'normal',
                 opacity: effect.opacity ?? 1.0,
+                filter: 'drop-shadow(0 0 12px rgba(255, 255, 255, 0.25))',
                 pointerEvents: 'none'
               }}
             />
           );
         })}
+
+        {/* 2. Live Animated Targeting Preview (Follows mouse cursor while aiming spells) */}
+        {hasAimPreview && activeEquippedAsset && aimCurrent && (() => {
+          const previewSize = activeEquippedAsset.defaultSizeFt || 20;
+
+          // A. Point / Sphere preview under cursor (Fireball, Fog Cloud, Web, Darkness, etc.)
+          if (activeEquippedAsset.paradigm === 'point' || activeEquippedAsset.shape === 'circle' || activeEquippedAsset.paradigm === 'aura') {
+            const previewDiameter = ((previewSize * 2) / 5) * gridSize;
+            const previewVideo = activeEquippedAsset.loopWebm || activeEquippedAsset.webm;
+            return (
+              <video
+                key="aim-preview-point"
+                src={previewVideo}
+                autoPlay
+                muted
+                loop
+                playsInline
+                preload="auto"
+                style={{
+                  position: 'absolute',
+                  left: `${aimCurrent.x}px`,
+                  top: `${aimCurrent.y}px`,
+                  width: `${previewDiameter}px`,
+                  height: `${previewDiameter}px`,
+                  transform: 'translate(-50%, -50%) translateZ(0)',
+                  transformOrigin: '50% 50%',
+                  objectFit: 'fill',
+                  opacity: 0.8,
+                  filter: 'drop-shadow(0 0 16px rgba(255, 255, 255, 0.4))',
+                  pointerEvents: 'none'
+                }}
+              />
+            );
+          }
+
+          // B. Cone / Line preview from origin to cursor
+          if (aimOrigin && (activeEquippedAsset.paradigm === 'cone' || activeEquippedAsset.paradigm === 'line')) {
+            const dx = aimCurrent.x - aimOrigin.x;
+            const dy = aimCurrent.y - aimOrigin.y;
+            const angleDeg = Math.atan2(dy, dx) * (180 / Math.PI);
+            const isCone = activeEquippedAsset.paradigm === 'cone';
+            const length = (previewSize / 5) * gridSize;
+            const spreadOrHeight = isCone ? length : Math.max(gridSize, length / 10);
+
+            return (
+              <video
+                key="aim-preview-directional"
+                src={activeEquippedAsset.webm}
+                autoPlay
+                muted
+                loop
+                playsInline
+                preload="auto"
+                style={{
+                  position: 'absolute',
+                  left: `${aimOrigin.x}px`,
+                  top: `${aimOrigin.y}px`,
+                  width: `${length}px`,
+                  height: `${spreadOrHeight}px`,
+                  transform: `translate(0px, -50%) rotate(${angleDeg}deg) translateZ(0)`,
+                  transformOrigin: '0 50%',
+                  objectFit: 'fill',
+                  opacity: 0.8,
+                  filter: 'drop-shadow(0 0 16px rgba(255, 255, 255, 0.4))',
+                  pointerEvents: 'none'
+                }}
+              />
+            );
+          }
+
+          // C. Projectile beam preview stretching from origin to cursor
+          if (aimOrigin && (activeEquippedAsset.paradigm === 'projectile' || activeEquippedAsset.paradigm === 'ray')) {
+            const dx = aimCurrent.x - aimOrigin.x;
+            const dy = aimCurrent.y - aimOrigin.y;
+            const distance = Math.max(20, Math.hypot(dx, dy));
+            const angleDeg = Math.atan2(dy, dx) * (180 / Math.PI);
+            const beamHeight = Math.max(gridSize * 0.8, Math.min(gridSize * 2, distance * 0.25));
+            const videoUrl = activeEquippedAsset.projectileWebm || activeEquippedAsset.webm;
+
+            return (
+              <video
+                key="aim-preview-projectile"
+                src={videoUrl}
+                autoPlay
+                muted
+                loop
+                playsInline
+                preload="auto"
+                style={{
+                  position: 'absolute',
+                  left: `${aimOrigin.x}px`,
+                  top: `${aimOrigin.y}px`,
+                  width: `${distance}px`,
+                  height: `${beamHeight}px`,
+                  transform: `translate(0px, -50%) rotate(${angleDeg}deg) translateZ(0)`,
+                  transformOrigin: '0 50%',
+                  objectFit: 'fill',
+                  opacity: 0.8,
+                  filter: 'drop-shadow(0 0 16px rgba(255, 255, 255, 0.4))',
+                  pointerEvents: 'none'
+                }}
+              />
+            );
+          }
+
+          return null;
+        })()}
       </div>
     </div>
   );
