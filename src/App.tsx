@@ -2228,7 +2228,7 @@ export default function App() {
     if (imageFile) {
       isSceneSavedRef.current = false;
     }
-  }, [tokens, walls, reveals, polygonReveals, roomAnnotations, activeDmNotes, effects, visionConfig, gridSize]);
+  }, [tokens, walls, reveals, polygonReveals, roomAnnotations, activeDmNotes, visionConfig, gridSize]);
 
   // Continuous debounced state snapshot saving to localStorage for instant DM crash recovery
   useEffect(() => {
@@ -2262,7 +2262,6 @@ export default function App() {
           roomAnnotations,
           activeSceneInfo,
           activeDmNotes,
-          effects,
           boardAnimatedFeatures,
           boardAnimatedEnabled,
           boardWeatherEffect,
@@ -2283,7 +2282,7 @@ export default function App() {
     imageFile, mapType, videoSize, mapRotation, stageScale, stagePos, tokens, walls,
     reveals, polygonReveals, isFogVisible, fogResetKey, visionConfig, gridVisible,
     gridOpacity, gridSize, gridOffsetX, gridOffsetY, roomAnnotations, activeSceneInfo,
-    activeDmNotes, effects, boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect,
+    activeDmNotes, boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect,
     combatTrackerCombatants, combatTrackerRound, combatTrackerTurnIndex, showCombatTracker
   ]);
 
@@ -2317,7 +2316,6 @@ export default function App() {
           roomAnnotations,
           activeSceneInfo,
           activeDmNotes,
-          effects,
           boardAnimatedFeatures,
           boardAnimatedEnabled,
           boardWeatherEffect,
@@ -2337,7 +2335,7 @@ export default function App() {
     imageFile, mapType, videoSize, mapRotation, stageScale, stagePos, tokens, walls,
     reveals, polygonReveals, isFogVisible, fogResetKey, visionConfig, gridVisible,
     gridOpacity, gridSize, gridOffsetX, gridOffsetY, roomAnnotations, activeSceneInfo,
-    activeDmNotes, effects, boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect,
+    activeDmNotes, boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect,
     combatTrackerCombatants, combatTrackerRound, combatTrackerTurnIndex, showCombatTracker
   ]);
 
@@ -2437,7 +2435,6 @@ export default function App() {
       visionConfig: visionConfig,
       roomAnnotations: roomAnnotations,
       mapRotation: mapRotation,
-      effects: effects,
       boardAnimatedFeatures: boardAnimatedFeatures,
       boardAnimatedEnabled: boardAnimatedEnabled,
       boardWeatherEffect: boardWeatherEffect,
@@ -2457,7 +2454,7 @@ export default function App() {
         mapHeight: dims.height,
       }
     });
-  }, [getMapDimensions, imageFile, activeSceneInfo, tokens, compendiumMonsters, combatTrackerCombatants, prepareTokensForSync, walls, gridSize, gridOpacity, gridVisible, gridOffsetX, gridOffsetY, isFogVisible, fogResetKey, reveals, polygonReveals, visionConfig, roomAnnotations, mapRotation, effects, boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect, compendiumCharacters, sortedCombatTrackerCombatants, combatTrackerRound, combatTrackerTurnIndex, showCombatTracker]);
+  }, [getMapDimensions, imageFile, activeSceneInfo, tokens, compendiumMonsters, combatTrackerCombatants, prepareTokensForSync, walls, gridSize, gridOpacity, gridVisible, gridOffsetX, gridOffsetY, isFogVisible, fogResetKey, reveals, polygonReveals, visionConfig, roomAnnotations, mapRotation, boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect, compendiumCharacters, sortedCombatTrackerCombatants, combatTrackerRound, combatTrackerTurnIndex, showCombatTracker]);
 
   const broadcastFullStateRef = useRef<() => void>(() => {});
   useEffect(() => {
@@ -2490,19 +2487,18 @@ export default function App() {
     }
   }, [tokens, compendiumMonsters, combatTrackerCombatants, prepareTokensForSync]);
 
-  // Real-time synchronization of spell effects, board animated features & weather to Player View
+  // Real-time synchronization of board animated features & weather to Player View
   useEffect(() => {
     if (isSwitchingMapSlotRef.current || (Date.now() - lastSlotSwitchTimeRef.current < 1500)) return;
     if (activeMapIdRef.current !== liveMapIdRef.current) return;
     if (socketRef.current?.connected) {
       socketRef.current.emit('SYNC_STATE', {
-        effects,
         boardAnimatedFeatures,
         boardAnimatedEnabled,
         boardWeatherEffect
       });
     }
-  }, [effects, boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect]);
+  }, [boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect]);
 
   useEffect(() => {
     activeMapIdRef.current = activeMapId;
@@ -2557,7 +2553,6 @@ export default function App() {
             visionConfig: liveData.visionConfig,
             roomAnnotations: liveData.roomAnnotations || [],
             mapRotation: liveData.mapRotation || 0,
-            effects: liveData.effects || [],
             boardAnimatedFeatures: liveData.boardAnimatedFeatures || [],
             boardAnimatedEnabled: liveData.boardAnimatedEnabled ?? true,
             boardWeatherEffect: liveData.boardWeatherEffect || 'none',
@@ -2951,7 +2946,6 @@ export default function App() {
       reveals,
       polygonReveals,
       isFogVisible,
-      effects,
       tokens: syncedTokens,
       gridVisible,
       gridOpacity,
@@ -3004,7 +2998,7 @@ export default function App() {
       }).catch(console.warn);
     }
     toast.success(`Force-synced ${currentSlot} to Player View!`);
-  }, [broadcastFullState, getMapDimensions, imageFile, activeSceneInfo, activeDmNotes, tokens, compendiumMonsters, combatTrackerCombatants, prepareTokensForSync, sortedCombatTrackerCombatants, combatTrackerRound, combatTrackerTurnIndex, showCombatTracker, gridSize, gridOpacity, isFogVisible, walls, visionConfig, roomAnnotations, mapType, videoSize, mapRotation, stageScale, stagePos, reveals, polygonReveals, effects, gridVisible, gridOffsetX, gridOffsetY, boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect]);
+  }, [broadcastFullState, getMapDimensions, imageFile, activeSceneInfo, activeDmNotes, tokens, compendiumMonsters, combatTrackerCombatants, prepareTokensForSync, sortedCombatTrackerCombatants, combatTrackerRound, combatTrackerTurnIndex, showCombatTracker, gridSize, gridOpacity, isFogVisible, walls, visionConfig, roomAnnotations, mapType, videoSize, mapRotation, stageScale, stagePos, reveals, polygonReveals, gridVisible, gridOffsetX, gridOffsetY, boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect]);
 
   const handleSpawnMonsterToken = useCallback((tokenData: {
     name: string;
@@ -3452,7 +3446,6 @@ export default function App() {
         walls: walls,
         visionConfig: visionConfig,
         roomAnnotations: roomAnnotations,
-        effects: effects,
         boardAnimatedFeatures: boardAnimatedFeatures,
         boardAnimatedEnabled: boardAnimatedEnabled,
         boardWeatherEffect: boardWeatherEffect
@@ -3485,7 +3478,6 @@ export default function App() {
           walls: updatedScene.walls,
           visionConfig: updatedScene.visionConfig,
           roomAnnotations: updatedScene.roomAnnotations,
-          effects: updatedScene.effects,
           boardAnimatedFeatures: updatedScene.boardAnimatedFeatures,
           boardAnimatedEnabled: updatedScene.boardAnimatedEnabled,
           boardWeatherEffect: updatedScene.boardWeatherEffect,
@@ -3506,7 +3498,6 @@ export default function App() {
           polygonReveals: polygonReveals,
           visionConfig: visionConfig,
           roomAnnotations: roomAnnotations,
-          effects: effects,
           boardAnimatedFeatures: boardAnimatedFeatures,
           boardAnimatedEnabled: boardAnimatedEnabled,
           boardWeatherEffect: boardWeatherEffect,
@@ -4239,7 +4230,6 @@ export default function App() {
             walls,
             visionConfig,
             roomAnnotations: nextAnnotations,
-            effects: effects,
             boardAnimatedFeatures: boardAnimatedFeatures,
             boardAnimatedEnabled: boardAnimatedEnabled,
             boardWeatherEffect: boardWeatherEffect,
@@ -4289,7 +4279,6 @@ export default function App() {
               walls: updatedScene.walls,
               visionConfig: updatedScene.visionConfig,
               roomAnnotations: nextAnnotations,
-              effects: updatedScene.effects,
               boardAnimatedFeatures: updatedScene.boardAnimatedFeatures,
               boardAnimatedEnabled: updatedScene.boardAnimatedEnabled,
               boardWeatherEffect: updatedScene.boardWeatherEffect,
@@ -4382,7 +4371,6 @@ export default function App() {
           walls,
           visionConfig,
           roomAnnotations: nextAnnotations,
-          effects: effects,
           boardAnimatedFeatures: boardAnimatedFeatures,
           boardAnimatedEnabled: boardAnimatedEnabled,
           boardWeatherEffect: boardWeatherEffect,
@@ -4432,7 +4420,6 @@ export default function App() {
             walls: updatedScene.walls,
             visionConfig: updatedScene.visionConfig,
             roomAnnotations: nextAnnotations,
-            effects: updatedScene.effects,
             boardAnimatedFeatures: updatedScene.boardAnimatedFeatures,
             boardAnimatedEnabled: updatedScene.boardAnimatedEnabled,
             boardWeatherEffect: updatedScene.boardWeatherEffect,
@@ -4569,7 +4556,6 @@ export default function App() {
         walls,
         visionConfig,
         roomAnnotations: nextAnnotations,
-        effects,
         boardAnimatedFeatures,
         boardAnimatedEnabled,
         boardWeatherEffect,
@@ -4619,7 +4605,6 @@ export default function App() {
           walls: updatedScene.walls,
           visionConfig: updatedScene.visionConfig,
           roomAnnotations: nextAnnotations,
-          effects: updatedScene.effects,
           boardAnimatedFeatures: updatedScene.boardAnimatedFeatures,
           boardAnimatedEnabled: updatedScene.boardAnimatedEnabled,
           boardWeatherEffect: updatedScene.boardWeatherEffect,
@@ -5569,7 +5554,6 @@ export default function App() {
       reveals,
       polygonReveals,
       isFogVisible,
-      effects,
       tokens,
       gridVisible,
       gridOpacity,
@@ -5833,7 +5817,7 @@ export default function App() {
         await (window as any).aistudio.openSelectKey();
       }
 
-      const mapStateText = `Tokens:\n${tokens.map(t => `- ${t.name} (ID: ${t.id}) at X:${Math.round(t.x)}, Y:${Math.round(t.y)}`).join('\n')}\nGrid Size: ${gridSize}px\nEffects on map: ${effects.length}`;
+      const mapStateText = `Tokens:\n${tokens.map(t => `- ${t.name} (ID: ${t.id}) at X:${Math.round(t.x)}, Y:${Math.round(t.y)}`).join('\n')}\nGrid Size: ${gridSize}px`;
 
       const historyForApi = newHistory.map(h => ({
         role: h.role,

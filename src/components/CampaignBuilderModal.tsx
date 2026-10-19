@@ -723,7 +723,6 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
       gridOpacity: updatedSourceScene.gridOpacity ?? currentGridOpacity ?? 0.25,
       isFogVisible: updatedSourceScene.isFogVisible ?? currentIsFogVisible ?? true,
       visionConfig: updatedSourceScene.visionConfig ? JSON.parse(JSON.stringify(updatedSourceScene.visionConfig)) : undefined,
-      effects: updatedSourceScene.effects ? JSON.parse(JSON.stringify(updatedSourceScene.effects)) : undefined,
       boardAnimatedFeatures: updatedSourceScene.boardAnimatedFeatures ? JSON.parse(JSON.stringify(updatedSourceScene.boardAnimatedFeatures)) : undefined,
       boardAnimatedEnabled: updatedSourceScene.boardAnimatedEnabled,
       boardWeatherEffect: updatedSourceScene.boardWeatherEffect,
