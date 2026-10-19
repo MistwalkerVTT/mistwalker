@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Group, Rect, Circle, Wedge, Image as KonvaImage } from 'react-konva';
 import { ProceduralSpellEffect } from './ProceduralSpellEffect';
 import { Jb2aSpellEffect } from './Jb2aSpellEffect';
+import { findJb2aAsset } from '../data/jb2aDatabase';
 
 export interface SpellEffectsGroupProps {
   effects: any[];
@@ -64,23 +65,9 @@ export const SpellEffectsGroup: React.FC<SpellEffectsGroupProps> = React.memo(({
         const age = effect.createdAt ? (Date.now() - effect.createdAt) : 0;
         const opacity = ((effect.createdAt && !effect.isPersistent && age > 4000) ? Math.max(0, 1 - (age - 4000) / 1000) : 1) * (effect.opacity !== undefined ? effect.opacity : 1.0);
         
+        const hasJb2a = !!(effect.videoUrl || effect.jb2aId || findJb2aAsset(effect.label || effect.name || effect.id));
+
         if (effect.type === 'circle') {
-          const label = effect.label?.toLowerCase() || '';
-          const isFireball = label.includes('fireball');
-          const isEldritchSmite = label.includes('eldritch smite');
-          const isShockingGrasp = label.includes('shocking grasp');
-          const isFuryOfBlows = label.includes('fury of blows');
-          const isFireBolt = label.includes('fire bolt');
-          const isEldritchBlast = label.includes('eldritch blast');
-          const isImageEffect = label.includes('spirit guardians');
-          const isPoisonCloud = label.includes('poison cloud');
-          const isFogCloud = label.includes('fog') && label.includes('cloud') || label.includes('fogcloud');
-          const isDarkness = label.includes('darkness');
-          const isBeaconOfHope = label.includes('beacon') && label.includes('hope');
-          const isAura = label.includes('aura');
-          const isCharm = label.includes('charm');
-          const isHypnoticPattern = label.includes('hypnotic pattern');
-          
           return (
             <Group 
               key={effect.id} 
@@ -131,7 +118,7 @@ export const SpellEffectsGroup: React.FC<SpellEffectsGroupProps> = React.memo(({
                   dash={[5, 5]}
                 />
               )}
-              {effect.imageUrl ? (
+              {effect.imageUrl && !hasJb2a ? (
                 <Group>
                   <Circle
                     name="effect"
@@ -240,7 +227,7 @@ export const SpellEffectsGroup: React.FC<SpellEffectsGroupProps> = React.memo(({
                   rotation={effect.rotation}
                 />
               )}
-              {effect.imageUrl ? (
+              {effect.imageUrl && !hasJb2a ? (
                 <GifImage
                   name="effect"
                   src={effect.imageUrl}
@@ -355,7 +342,7 @@ export const SpellEffectsGroup: React.FC<SpellEffectsGroupProps> = React.memo(({
                   rotation={effect.rotation}
                 />
               )}
-              {effect.imageUrl ? (
+              {effect.imageUrl && !hasJb2a ? (
                 <GifImage
                   name="effect"
                   src={effect.imageUrl}

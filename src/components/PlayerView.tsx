@@ -4118,6 +4118,7 @@ export default function PlayerView() {
               const isCone = effect.type === 'cone';
               const isLine = effect.type === 'line';
               const effectColor = effect.color || '#3b82f6';
+              const hasJb2a = !!(effect.videoUrl || effect.jb2aId || findJb2aAsset(effect.label || effect.name || effect.id));
 
               const age = effect.createdAt ? (Date.now() - effect.createdAt) : 0;
               const computedOpacity = ((effect.createdAt && !effect.isPersistent && age > 4000)
@@ -4127,7 +4128,7 @@ export default function PlayerView() {
               return (
                 <Group key={effect.id} x={effect.x} y={effect.y} listening={false} opacity={computedOpacity}>
                   {isCircle && (
-                    effect.imageUrl ? (
+                    effect.imageUrl && !hasJb2a ? (
                       <Group>
                         <Circle
                           radius={effect.size}
@@ -4162,7 +4163,7 @@ export default function PlayerView() {
                   )}
                   {isCone && (
                     <>
-                      {effect.imageUrl ? (
+                      {effect.imageUrl && !hasJb2a ? (
                         <GifImage
                           src={effect.imageUrl}
                           x={0}
@@ -4197,7 +4198,7 @@ export default function PlayerView() {
                   )}
                   {isLine && (
                     <>
-                      {effect.imageUrl ? (
+                      {effect.imageUrl && !hasJb2a ? (
                         <GifImage
                           src={effect.imageUrl}
                           x={0}

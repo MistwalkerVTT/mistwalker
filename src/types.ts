@@ -329,6 +329,10 @@ export interface CustomSpecialEffect {
   color: string; // rgba or hex
   imageUrl: string; // image or gif URL
   thumbnailUrl?: string;
+  videoUrl?: string;
+  loopVideoUrl?: string;
+  thumbUrl?: string;
+  jb2aId?: string;
   isPersistent?: boolean;
   blendMode?: 'normal' | 'screen' | 'lighter' | 'multiply';
   source: 'upload' | 'gemini' | 'preset';

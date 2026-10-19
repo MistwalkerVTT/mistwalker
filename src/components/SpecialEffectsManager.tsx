@@ -122,7 +122,11 @@ export const SpecialEffectsManager: React.FC<SpecialEffectsManagerProps> = ({
       shape: spell.shape,
       defaultSize: spell.defaultSizeFt,
       color: spell.color,
-      imageUrl: '', // Uses rich procedural shader rendering
+      imageUrl: spell.thumbUrl || '',
+      videoUrl: spell.videoUrl,
+      loopVideoUrl: spell.loopVideoUrl,
+      thumbUrl: spell.thumbUrl,
+      jb2aId: spell.jb2aId,
       isPersistent: spell.isPersistent,
       blendMode: spell.blendMode,
       source: 'preset',
@@ -406,14 +410,26 @@ export const SpecialEffectsManager: React.FC<SpecialEffectsManagerProps> = ({
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2 mb-1.5">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className="w-7 h-7 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center shrink-0">
-                        {renderIcon(spell.iconName, "w-4 h-4 text-purple-400")}
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-lg bg-zinc-950 border border-zinc-700/80 flex items-center justify-center shrink-0 overflow-hidden relative shadow-inner">
+                        {spell.thumbUrl ? (
+                          <img
+                            src={spell.thumbUrl}
+                            alt={spell.name}
+                            className="w-full h-full object-cover"
+                            loading="lazy"
+                          />
+                        ) : (
+                          renderIcon(spell.iconName, "w-4 h-4 text-purple-400")
+                        )}
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="text-xs font-bold font-sans text-zinc-100 truncate">
                             {spell.name}
+                          </span>
+                          <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-amber-950/80 text-amber-300 border border-amber-600/50 shadow-sm">
+                            JB2A
                           </span>
                           <span className={`text-[9px] font-mono font-semibold px-1.5 py-0.2 rounded border ${spell.badgeColor}`}>
                             {spell.level === 0 ? 'Cantrip' : `Lvl ${spell.level}`} • {spell.defaultSizeFt}ft {spell.shape}
