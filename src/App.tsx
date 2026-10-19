@@ -3402,19 +3402,24 @@ export default function App() {
     const initialSize = gridSize * sizeMultiplier;
     const id = Math.random().toString(36).substr(2, 9);
 
+    const def = getSpecialEffectDefinition(effect.id) || getSpecialEffectDefinition(effect.name);
     const newEffect: Effect = {
       id,
-      type: effect.shape || 'circle',
+      type: effect.shape || def?.shape || 'circle',
       x: centerX,
       y: centerY,
       size: initialSize,
       rotation: 0,
-      color: effect.color || 'rgba(147, 51, 234, 0.4)',
+      color: effect.color || def?.color || 'rgba(147, 51, 234, 0.4)',
       label: effect.name,
       createdAt: Date.now(),
       isPersistent: effect.isPersistent !== false,
       imageUrl: effect.imageUrl,
-      blendMode: effect.blendMode || 'screen'
+      videoUrl: (effect as any).videoUrl || def?.videoUrl,
+      loopVideoUrl: (effect as any).loopVideoUrl || def?.loopVideoUrl,
+      thumbUrl: (effect as any).thumbUrl || def?.thumbUrl,
+      jb2aId: (effect as any).jb2aId || def?.jb2aId,
+      blendMode: effect.blendMode || def?.blendMode || 'screen'
     };
 
     setEffects(prev => [...prev, newEffect]);
@@ -3422,7 +3427,6 @@ export default function App() {
     setActiveEffectId(id);
 
     // Procedural sound & shockwave
-    const def = getSpecialEffectDefinition(effect.id);
     const soundToPlay = (effect as any).soundEffect || def?.soundEffect;
     if (soundToPlay && soundToPlay !== 'none') {
       spellSoundEngine.play(soundToPlay);
@@ -5322,6 +5326,9 @@ export default function App() {
         initialSize = gridSize * 2; // 10ft
       }
       
+      const def = getSpecialEffectDefinition(tool)
+        || getSpecialEffectDefinition(label.toLowerCase().replace(/\s+/g, '_'));
+      
       const newEffect: Effect = {
         id,
         type,
@@ -5333,15 +5340,18 @@ export default function App() {
         label,
         createdAt: Date.now(),
         isPersistent,
-        opacity: 1.0
+        opacity: 1.0,
+        videoUrl: def?.videoUrl,
+        loopVideoUrl: def?.loopVideoUrl,
+        thumbUrl: def?.thumbUrl,
+        jb2aId: def?.jb2aId,
+        blendMode: def?.blendMode || 'screen'
       };
       setEffects([...effects, newEffect]);
       activeEffectIdRef.current = id;
       setActiveEffectId(id);
 
       // Trigger procedural sound & shockwave
-      const def = getSpecialEffectDefinition(tool)
-        || getSpecialEffectDefinition(label.toLowerCase().replace(/\s+/g, '_'));
       const soundToPlay = def?.soundEffect;
       if (soundToPlay && soundToPlay !== 'none') {
         spellSoundEngine.play(soundToPlay);
@@ -5361,31 +5371,35 @@ export default function App() {
         socketRef.current.emit('ADD_EFFECT', newEffect);
       }
     } else if (tool === 'custom_effect' && selectedCustomEffect) {
+      const def = getSpecialEffectDefinition(selectedCustomEffect.id)
+        || getSpecialEffectDefinition(selectedCustomEffect.name.toLowerCase().replace(/\s+/g, '_'));
       const id = Math.random().toString(36).substr(2, 9);
       const sizeMultiplier = (selectedCustomEffect.defaultSize || 20) / 5;
       const initialSize = gridSize * sizeMultiplier;
 
       const newEffect: Effect = {
         id,
-        type: selectedCustomEffect.shape || 'circle',
+        type: selectedCustomEffect.shape || def?.shape || 'circle',
         x: point.x,
         y: point.y,
         size: initialSize,
         rotation: 0,
-        color: selectedCustomEffect.color || 'rgba(147, 51, 234, 0.4)',
+        color: selectedCustomEffect.color || def?.color || 'rgba(147, 51, 234, 0.4)',
         label: selectedCustomEffect.name,
         createdAt: Date.now(),
         isPersistent: selectedCustomEffect.isPersistent !== false,
         imageUrl: selectedCustomEffect.imageUrl,
-        blendMode: selectedCustomEffect.blendMode || 'screen'
+        videoUrl: (selectedCustomEffect as any).videoUrl || def?.videoUrl,
+        loopVideoUrl: (selectedCustomEffect as any).loopVideoUrl || def?.loopVideoUrl,
+        thumbUrl: (selectedCustomEffect as any).thumbUrl || def?.thumbUrl,
+        jb2aId: (selectedCustomEffect as any).jb2aId || def?.jb2aId,
+        blendMode: selectedCustomEffect.blendMode || def?.blendMode || 'screen'
       };
       setEffects(prev => [...prev, newEffect]);
       activeEffectIdRef.current = id;
       setActiveEffectId(id);
 
       // Trigger procedural sound & shockwave
-      const def = getSpecialEffectDefinition(selectedCustomEffect.id)
-        || getSpecialEffectDefinition(selectedCustomEffect.name.toLowerCase().replace(/\s+/g, '_'));
       const soundToPlay = (selectedCustomEffect as any).soundEffect || def?.soundEffect;
       if (soundToPlay && soundToPlay !== 'none') {
         spellSoundEngine.play(soundToPlay);

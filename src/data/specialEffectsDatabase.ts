@@ -1,4 +1,5 @@
 import { SpellSoundType } from '../utils/spellSoundEngine';
+import { findJb2aAsset, JB2A_DATABASE } from './jb2aDatabase';
 
 export type SpellSchool =
   | 'evocation'
@@ -35,9 +36,13 @@ export interface SpecialEffectDefinition {
   hasShockwave: boolean;
   proceduralStyle: string; // Identifier for real-time procedural / shader rendering
   tags: string[];
+  videoUrl?: string;
+  loopVideoUrl?: string;
+  thumbUrl?: string;
+  jb2aId?: string;
 }
 
-export const SPECIAL_EFFECTS_DATABASE: SpecialEffectDefinition[] = [
+const RAW_SPECIAL_EFFECTS: SpecialEffectDefinition[] = [
   // =========================================================================
   // 1. EVOCATION & BLAST ATTACKS (Instant Destruction & Energy)
   // =========================================================================
@@ -656,6 +661,59 @@ export const SPECIAL_EFFECTS_DATABASE: SpecialEffectDefinition[] = [
     tags: ['lava', 'fire', 'hazard', 'magma']
   }
 ];
+
+// Enrich with Jules & Ben's Animated Assets (JB2A) wherever available
+const ENRICHED_SPECIAL_EFFECTS: SpecialEffectDefinition[] = RAW_SPECIAL_EFFECTS.map(s => {
+  const jb = findJb2aAsset(s.id) || findJb2aAsset(s.name) || findJb2aAsset(s.label);
+  if (jb) {
+    return {
+      ...s,
+      videoUrl: jb.webm,
+      loopVideoUrl: jb.loopWebm,
+      thumbUrl: jb.thumb,
+      jb2aId: jb.id,
+      shape: jb.shape || s.shape,
+      defaultSizeFt: jb.defaultSizeFt || s.defaultSizeFt
+    };
+  }
+  return s;
+});
+
+// Append any additional JB2A animated assets to special effects database
+for (const jb of JB2A_DATABASE) {
+  const exists = ENRICHED_SPECIAL_EFFECTS.some(
+    e => e.id === jb.id || e.name.toLowerCase() === jb.name.toLowerCase()
+  );
+  if (!exists) {
+    ENRICHED_SPECIAL_EFFECTS.push({
+      id: jb.id,
+      name: jb.name,
+      label: jb.label,
+      level: jb.level,
+      school: (jb.school as any) || 'evocation',
+      category: jb.isPersistent ? 'persistent' : 'instant',
+      shape: jb.shape,
+      defaultSizeFt: jb.defaultSizeFt,
+      color: jb.color,
+      blendMode: jb.blendMode || 'screen',
+      isPersistent: jb.isPersistent,
+      defaultOpacity: 0.95,
+      description: jb.description,
+      iconName: (jb.tags.includes('fire') ? 'flame' : jb.tags.includes('frost') ? 'snowflake' : jb.tags.includes('lightning') ? 'zap' : 'sparkles') as any,
+      badgeColor: 'text-purple-400 bg-purple-950/70 border-purple-800/70',
+      soundEffect: (jb.soundEffect as any) || 'whoosh',
+      hasShockwave: !jb.isPersistent,
+      proceduralStyle: jb.id,
+      tags: jb.tags,
+      videoUrl: jb.webm,
+      loopVideoUrl: jb.loopWebm,
+      thumbUrl: jb.thumb,
+      jb2aId: jb.id
+    });
+  }
+}
+
+export const SPECIAL_EFFECTS_DATABASE: SpecialEffectDefinition[] = ENRICHED_SPECIAL_EFFECTS;
 
 /** Helper to find a spell definition by ID or fallback search */
 export function getSpecialEffectDefinition(idOrName: string): SpecialEffectDefinition | undefined {

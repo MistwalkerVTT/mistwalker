@@ -118,6 +118,10 @@ export interface Effect {
   createdAt?: number;
   isPersistent?: boolean;
   imageUrl?: string;
+  videoUrl?: string;
+  loopVideoUrl?: string;
+  thumbUrl?: string;
+  jb2aId?: string;
   blendMode?: string;
   opacity?: number; // 0.1 to 1.0
   placedById?: string;

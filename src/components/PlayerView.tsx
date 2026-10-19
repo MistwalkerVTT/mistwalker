@@ -61,6 +61,8 @@ import { DynamicLightingLayer } from './DynamicLightingLayer';
 import { GridLayer } from './GridLayer';
 import { AnimatedFeaturesKonvaImage, AnimatedFeature, WeatherEffectType } from './AnimatedMapOverlay';
 import { ProceduralSpellEffect } from './ProceduralSpellEffect';
+import { Jb2aSpellEffect } from './Jb2aSpellEffect';
+import { findJb2aAsset } from '../data/jb2aDatabase';
 import { ShockwaveOverlay, useShockwaves, triggerShockwave } from './ShockwaveOverlay';
 import {
   SPECIAL_EFFECTS_DATABASE,
@@ -162,6 +164,10 @@ interface SpellEffect {
   createdAt?: number;
   isPersistent?: boolean;
   imageUrl?: string;
+  videoUrl?: string;
+  loopVideoUrl?: string;
+  thumbUrl?: string;
+  jb2aId?: string;
   blendMode?: string;
   opacity?: number;
   placedById?: string;
@@ -183,6 +189,10 @@ export interface PlayerSpellDefinition {
   badgeColor: string;
   soundEffect?: string;
   shockwave?: boolean;
+  videoUrl?: string;
+  loopVideoUrl?: string;
+  thumbUrl?: string;
+  jb2aId?: string;
 }
 export const PLAYER_EFFECTS_CATALOG: PlayerSpellDefinition[] = SPECIAL_EFFECTS_DATABASE.map(s => ({
   id: s.id,
@@ -198,7 +208,11 @@ export const PLAYER_EFFECTS_CATALOG: PlayerSpellDefinition[] = SPECIAL_EFFECTS_D
   iconName: s.iconName as any,
   badgeColor: s.badgeColor,
   soundEffect: s.soundEffect,
-  shockwave: s.hasShockwave
+  shockwave: s.hasShockwave,
+  videoUrl: s.videoUrl,
+  loopVideoUrl: s.loopVideoUrl,
+  thumbUrl: s.thumbUrl,
+  jb2aId: s.jb2aId
 }));
 
 
@@ -2227,7 +2241,11 @@ export default function PlayerView() {
       isPersistent: spellDef.isPersistent,
       opacity: spellDef.defaultOpacity !== undefined ? spellDef.defaultOpacity : 1.0,
       placedById: claimedTokenId || 'player',
-      placedByName: claimedChar?.name || 'Player'
+      placedByName: claimedChar?.name || 'Player',
+      videoUrl: spellDef.videoUrl || findJb2aAsset(spellDef.id)?.webm || findJb2aAsset(spellDef.name)?.webm,
+      loopVideoUrl: spellDef.loopVideoUrl || findJb2aAsset(spellDef.id)?.loopWebm || findJb2aAsset(spellDef.name)?.loopWebm,
+      thumbUrl: spellDef.thumbUrl || findJb2aAsset(spellDef.id)?.thumb || findJb2aAsset(spellDef.name)?.thumb,
+      jb2aId: spellDef.jb2aId || findJb2aAsset(spellDef.id)?.id || findJb2aAsset(spellDef.name)?.id
     };
 
     setEffects(prev => [...prev, newEffect]);
@@ -2354,21 +2372,27 @@ export default function PlayerView() {
                          spell.duration.toLowerCase().includes('hour') ||
                          spell.concentration;
 
+    const jb = findJb2aAsset(spell.name) || findJb2aAsset(spell.id) || (spell.effectId ? findJb2aAsset(spell.effectId) : undefined);
+
     const synthesizedSpell: PlayerSpellDefinition = {
       id: spell.effectId || `compendium_${spell.id}`,
       name: spell.name,
       label: spell.name,
       category: isPersistent ? 'persistent' : 'instant',
-      type,
-      defaultSizeFt,
-      color,
+      type: jb?.shape || type,
+      defaultSizeFt: jb?.defaultSizeFt || defaultSizeFt,
+      color: jb?.color || color,
       isPersistent,
       defaultOpacity: 0.9,
       description: spell.description.slice(0, 120) + (spell.description.length > 120 ? '...' : ''),
       iconName,
-      badgeColor: color,
-      soundEffect: dmg.includes('fire') ? 'fire' : dmg.includes('lightning') ? 'lightning' : dmg.includes('cold') ? 'frost' : 'arcane',
-      shockwave: true
+      badgeColor: jb?.color || color,
+      soundEffect: (jb?.soundEffect as any) || (dmg.includes('fire') ? 'fire' : dmg.includes('lightning') ? 'lightning' : dmg.includes('cold') ? 'frost' : 'arcane'),
+      shockwave: true,
+      videoUrl: jb?.webm,
+      loopVideoUrl: jb?.loopWebm,
+      thumbUrl: jb?.thumb,
+      jb2aId: jb?.id
     };
 
     handleEquipSpell(synthesizedSpell);
@@ -4129,7 +4153,7 @@ export default function PlayerView() {
                         />
                       </Group>
                     ) : (
-                      <ProceduralSpellEffect
+                      <Jb2aSpellEffect
                         effect={effect as any}
                         gridSize={gridSize}
                         stageScale={stageScale}
@@ -4152,7 +4176,7 @@ export default function PlayerView() {
                           globalCompositeOperation={effect.blendMode || "lighter"}
                         />
                       ) : (
-                        <ProceduralSpellEffect
+                        <Jb2aSpellEffect
                           effect={effect as any}
                           gridSize={gridSize}
                           stageScale={stageScale}
@@ -4186,7 +4210,7 @@ export default function PlayerView() {
                           globalCompositeOperation={effect.blendMode || "lighter"}
                         />
                       ) : (
-                        <ProceduralSpellEffect
+                        <Jb2aSpellEffect
                           effect={effect as any}
                           gridSize={gridSize}
                           stageScale={stageScale}
@@ -5118,14 +5142,28 @@ export default function PlayerView() {
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex items-start gap-2.5 min-w-0">
-                              <div className="w-8 h-8 rounded-lg bg-zinc-800/90 border border-zinc-700/60 flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
-                                {renderSpellIcon(spell.iconName, "w-4 h-4 text-purple-400")}
+                              <div className="w-9 h-9 rounded-lg bg-zinc-800/90 border border-zinc-700/60 overflow-hidden flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform bg-black/40">
+                                {spell.thumbUrl ? (
+                                  <img
+                                    src={spell.thumbUrl}
+                                    alt={spell.name}
+                                    className="w-full h-full object-cover"
+                                    loading="lazy"
+                                  />
+                                ) : (
+                                  renderSpellIcon(spell.iconName, "w-4 h-4 text-purple-400")
+                                )}
                               </div>
                               <div className="flex flex-col min-w-0">
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   <span className="text-xs font-bold text-zinc-100 group-hover:text-purple-300 transition-colors">
                                     {spell.name}
                                   </span>
+                                  {spell.jb2aId && (
+                                    <span className="text-[9px] font-mono font-bold px-1 py-0.2 rounded bg-amber-950/90 text-amber-300 border border-amber-700/60">
+                                      JB2A
+                                    </span>
+                                  )}
                                   <span className={`text-[9px] font-mono font-semibold px-1.5 py-0.2 rounded border ${spell.badgeColor}`}>
                                     {spell.defaultSizeFt}ft {spell.type}
                                   </span>

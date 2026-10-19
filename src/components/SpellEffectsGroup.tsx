@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Group, Rect, Circle, Wedge, Image as KonvaImage } from 'react-konva';
 import { ProceduralSpellEffect } from './ProceduralSpellEffect';
+import { Jb2aSpellEffect } from './Jb2aSpellEffect';
 
 export interface SpellEffectsGroupProps {
   effects: any[];
@@ -164,7 +165,7 @@ export const SpellEffectsGroup: React.FC<SpellEffectsGroupProps> = React.memo(({
                 </Group>
               ) : (
                 <Group>
-                  <ProceduralSpellEffect
+                  <Jb2aSpellEffect
                     effect={effect}
                     gridSize={gridSize}
                     stageScale={stageScale}
@@ -263,7 +264,7 @@ export const SpellEffectsGroup: React.FC<SpellEffectsGroupProps> = React.memo(({
                 />
               ) : (
                 <>
-                  <ProceduralSpellEffect
+                  <Jb2aSpellEffect
                     effect={effect}
                     gridSize={gridSize}
                     stageScale={stageScale}
@@ -377,7 +378,7 @@ export const SpellEffectsGroup: React.FC<SpellEffectsGroupProps> = React.memo(({
                 />
               ) : (
                 <>
-                  <ProceduralSpellEffect
+                  <Jb2aSpellEffect
                     effect={effect}
                     gridSize={gridSize}
                     stageScale={stageScale}
