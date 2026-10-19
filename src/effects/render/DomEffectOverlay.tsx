@@ -96,12 +96,12 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
   return (
     <div
       id="mistwalker-dom-effects-overlay-viewport"
-      className="absolute inset-0 pointer-events-none overflow-hidden select-none z-20"
+      className="absolute inset-0 pointer-events-none overflow-hidden select-none z-[35]"
       style={{ isolation: 'isolate' }}
     >
       <div
         id="mistwalker-dom-effects-overlay-world"
-        className="absolute top-0 left-0 w-0 h-0 pointer-events-none"
+        className="absolute top-0 left-0 pointer-events-none"
         style={{
           transform: `translate3d(${stagePos.x}px, ${stagePos.y}px, 0) scale(${stageScale})`,
           transformOrigin: '0 0',
@@ -142,6 +142,10 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                   top: `${startY}px`,
                   width: `${beamWidth}px`,
                   height: `${beamHeight}px`,
+                  maxWidth: 'none',
+                  maxHeight: 'none',
+                  minWidth: `${beamWidth}px`,
+                  minHeight: `${beamHeight}px`,
                   transform: `translate(0px, -50%) rotate(${angleDeg}deg) translateZ(0)`,
                   transformOrigin: '0 50%',
                   objectFit: 'fill',
@@ -175,6 +179,10 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                   top: `${effect.y}px`,
                   width: `${coneLength}px`,
                   height: `${coneSpread}px`,
+                  maxWidth: 'none',
+                  maxHeight: 'none',
+                  minWidth: `${coneLength}px`,
+                  minHeight: `${coneSpread}px`,
                   transform: `translate(0px, -50%) rotate(${effect.rotation || 0}deg) translateZ(0)`,
                   transformOrigin: '0 50%',
                   objectFit: 'fill',
@@ -208,6 +216,10 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                   top: `${effect.y}px`,
                   width: `${lineLength}px`,
                   height: `${beamHeight}px`,
+                  maxWidth: 'none',
+                  maxHeight: 'none',
+                  minWidth: `${lineLength}px`,
+                  minHeight: `${beamHeight}px`,
                   transform: `translate(0px, -50%) rotate(${effect.rotation || 0}deg) translateZ(0)`,
                   transformOrigin: '0 50%',
                   objectFit: 'fill',
@@ -240,6 +252,10 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                 top: `${effect.y}px`,
                 width: `${pixelDiameter}px`,
                 height: `${pixelDiameter}px`,
+                maxWidth: 'none',
+                maxHeight: 'none',
+                minWidth: `${pixelDiameter}px`,
+                minHeight: `${pixelDiameter}px`,
                 transform: `translate(-50%, -50%) rotate(${effect.rotation || 0}deg) translateZ(0)`,
                 transformOrigin: '50% 50%',
                 objectFit: 'fill',
@@ -274,6 +290,10 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                   top: `${aimCurrent.y}px`,
                   width: `${previewDiameter}px`,
                   height: `${previewDiameter}px`,
+                  maxWidth: 'none',
+                  maxHeight: 'none',
+                  minWidth: `${previewDiameter}px`,
+                  minHeight: `${previewDiameter}px`,
                   transform: 'translate(-50%, -50%) translateZ(0)',
                   transformOrigin: '50% 50%',
                   objectFit: 'fill',
@@ -309,6 +329,10 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                   top: `${aimOrigin.y}px`,
                   width: `${length}px`,
                   height: `${spreadOrHeight}px`,
+                  maxWidth: 'none',
+                  maxHeight: 'none',
+                  minWidth: `${length}px`,
+                  minHeight: `${spreadOrHeight}px`,
                   transform: `translate(0px, -50%) rotate(${angleDeg}deg) translateZ(0)`,
                   transformOrigin: '0 50%',
                   objectFit: 'fill',
@@ -344,6 +368,10 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                   top: `${aimOrigin.y}px`,
                   width: `${distance}px`,
                   height: `${beamHeight}px`,
+                  maxWidth: 'none',
+                  maxHeight: 'none',
+                  minWidth: `${distance}px`,
+                  minHeight: `${beamHeight}px`,
                   transform: `translate(0px, -50%) rotate(${angleDeg}deg) translateZ(0)`,
                   transformOrigin: '0 50%',
                   objectFit: 'fill',
