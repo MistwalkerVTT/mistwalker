@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Upload,
   BookOpen,
@@ -16,9 +16,10 @@ import {
   ChevronRight,
   Play,
   FileCode2,
-  Bug
+  Bug,
+  Clock
 } from 'lucide-react';
-import { Campaign, Scene } from '../lib/firebase';
+import { Campaign, Scene, ActiveSessionData } from '../lib/firebase';
 import { DEMO_GV_CAMPAIGN, DEMO_GV_SCENE, DEMO_GV_CHAPTER } from '../data/demoCampaignGv';
 
 interface DashboardHomeHubProps {
@@ -34,6 +35,7 @@ interface DashboardHomeHubProps {
   onOpenBugReport?: () => void;
   onLoadSceneFromCampaign: (scene: Scene, campaignId: string, chapterId: string) => void;
   campaignsList: Campaign[];
+  lastActiveSession?: ActiveSessionData | null;
   unsavedSceneBackup: any;
   unsavedSceneBackupWasCrash: boolean;
   onRestoreUnsavedScene: () => void;
@@ -54,6 +56,7 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
   onOpenBugReport,
   onLoadSceneFromCampaign,
   campaignsList,
+  lastActiveSession,
   unsavedSceneBackup,
   unsavedSceneBackupWasCrash,
   onRestoreUnsavedScene,
@@ -62,20 +65,128 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
 }) => {
   const [isDragOverDropzone, setIsDragOverDropzone] = useState(false);
 
-  // Determine latest / primary active campaign to display in Resume Adventure card
-  const primaryCampaign = campaignsList.length > 0 ? campaignsList[0] : null;
-  const primaryChapter = primaryCampaign?.chapters?.[0] || null;
-  const primaryScene = primaryChapter?.scenes?.[0] || null;
+  // Retrieve last active scene info from localStorage as fast fallback
+  const cachedLastActive = useMemo(() => {
+    try {
+      const raw = localStorage.getItem('mistwalker_last_active_scene');
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return null;
+  }, []);
 
-  // Fallback to demo campaign if user has no saved campaigns yet
-  const displayScene = primaryScene || DEMO_GV_SCENE;
-  const displayCampaignTitle = primaryCampaign?.campaignTitle || DEMO_GV_CAMPAIGN.campaignTitle;
-  const displayChapterTitle = primaryChapter?.chapterTitle || DEMO_GV_CHAPTER.chapterTitle;
-  const displaySceneTitle = primaryScene?.sceneTitle || DEMO_GV_SCENE.sceneTitle;
-  const displayCampaignId = primaryCampaign?.campaignId || DEMO_GV_CAMPAIGN.campaignId;
-  const displayChapterId = primaryChapter?.chapterId || DEMO_GV_CHAPTER.chapterId;
-  const tokenCount = displayScene.tokens?.length || 10;
-  const wallCount = displayScene.walls?.length || 64;
+  // Determine the most recently saved scene with high precision
+  const resolvedResumeData = useMemo(() => {
+    // 1. Try matching with Firestore lastActiveSession
+    if (lastActiveSession?.campaignId && lastActiveSession?.sceneId) {
+      const matchedCamp = campaignsList.find(c => c.campaignId === lastActiveSession.campaignId);
+      if (matchedCamp) {
+        for (const chap of matchedCamp.chapters) {
+          const matchedScene = chap.scenes.find(s => s.sceneId === lastActiveSession.sceneId);
+          if (matchedScene) {
+            return {
+              scene: matchedScene,
+              campaignId: matchedCamp.campaignId,
+              chapterId: chap.chapterId,
+              campaignTitle: matchedCamp.campaignTitle,
+              chapterTitle: chap.chapterTitle,
+              sceneTitle: matchedScene.sceneTitle,
+              tokenCount: matchedScene.tokens?.length || 0,
+              wallCount: matchedScene.walls?.length || 0,
+              isRealSave: true,
+              sourceLabel: 'Last Active Scene'
+            };
+          }
+        }
+      }
+    }
+
+    // 2. Try matching with cached localStorage last saved scene
+    if (cachedLastActive?.campaignId && cachedLastActive?.sceneId) {
+      const matchedCamp = campaignsList.find(c => c.campaignId === cachedLastActive.campaignId);
+      if (matchedCamp) {
+        for (const chap of matchedCamp.chapters) {
+          const matchedScene = chap.scenes.find(s => s.sceneId === cachedLastActive.sceneId);
+          if (matchedScene) {
+            return {
+              scene: matchedScene,
+              campaignId: matchedCamp.campaignId,
+              chapterId: chap.chapterId,
+              campaignTitle: matchedCamp.campaignTitle,
+              chapterTitle: chap.chapterTitle,
+              sceneTitle: matchedScene.sceneTitle,
+              tokenCount: matchedScene.tokens?.length || 0,
+              wallCount: matchedScene.walls?.length || 0,
+              isRealSave: true,
+              sourceLabel: 'Last Saved Scene'
+            };
+          }
+        }
+      }
+    }
+
+    // 3. Scan all campaigns and chapters to locate the scene with the latest updatedAt timestamp
+    let latestScene: Scene | null = null;
+    let latestCampId = '';
+    let latestChapId = '';
+    let latestCampTitle = '';
+    let latestChapTitle = '';
+    let maxTimestamp = 0;
+
+    for (const camp of campaignsList) {
+      const campTime = camp.updatedAt || camp.createdAt || 0;
+      for (const chap of camp.chapters) {
+        for (const sc of chap.scenes) {
+          const scTime = sc.updatedAt || campTime;
+          if (scTime > maxTimestamp) {
+            maxTimestamp = scTime;
+            latestScene = sc;
+            latestCampId = camp.campaignId;
+            latestChapId = chap.chapterId;
+            latestCampTitle = camp.campaignTitle;
+            latestChapTitle = chap.chapterTitle;
+          }
+        }
+      }
+    }
+
+    if (latestScene) {
+      return {
+        scene: latestScene,
+        campaignId: latestCampId,
+        chapterId: latestChapId,
+        campaignTitle: latestCampTitle,
+        chapterTitle: latestChapTitle,
+        sceneTitle: latestScene.sceneTitle,
+        tokenCount: latestScene.tokens?.length || 0,
+        wallCount: latestScene.walls?.length || 0,
+        isRealSave: true,
+        sourceLabel: 'Latest Saved Scene'
+      };
+    }
+
+    // 4. Fallback to demo Guild House scene if no user campaigns exist
+    return {
+      scene: DEMO_GV_SCENE,
+      campaignId: DEMO_GV_CAMPAIGN.campaignId,
+      chapterId: DEMO_GV_CHAPTER.chapterId,
+      campaignTitle: DEMO_GV_CAMPAIGN.campaignTitle,
+      chapterTitle: DEMO_GV_CHAPTER.chapterTitle,
+      sceneTitle: DEMO_GV_SCENE.sceneTitle,
+      tokenCount: DEMO_GV_SCENE.tokens?.length || 10,
+      wallCount: DEMO_GV_SCENE.walls?.length || 64,
+      isRealSave: false,
+      sourceLabel: 'Demo Scene'
+    };
+  }, [campaignsList, lastActiveSession, cachedLastActive]);
+
+  const displayScene = resolvedResumeData.scene;
+  const displayCampaignTitle = resolvedResumeData.campaignTitle;
+  const displayChapterTitle = resolvedResumeData.chapterTitle;
+  const displaySceneTitle = resolvedResumeData.sceneTitle;
+  const displayCampaignId = resolvedResumeData.campaignId;
+  const displayChapterId = resolvedResumeData.chapterId;
+  const tokenCount = resolvedResumeData.tokenCount;
+  const wallCount = resolvedResumeData.wallCount;
 
   const handleResumePrimaryScene = () => {
     onLoadSceneFromCampaign(displayScene, displayCampaignId, displayChapterId);
@@ -187,8 +298,9 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
                   <Play className="w-3.5 h-3.5" />
                   Resume Adventure
                 </span>
-                <span className="text-[10px] font-mono text-zinc-500">
-                  {primaryCampaign ? 'Active Campaign' : 'Demo Scene'}
+                <span className="text-[10px] font-mono text-emerald-400/80 bg-emerald-950/50 px-2 py-0.5 rounded-full border border-emerald-500/30 flex items-center gap-1">
+                  <Clock className="w-2.5 h-2.5" />
+                  {resolvedResumeData.sourceLabel}
                 </span>
               </div>
 

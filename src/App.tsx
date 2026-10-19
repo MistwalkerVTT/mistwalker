@@ -77,7 +77,9 @@ import {
   Campaign,
   Scene,
   SceneToken,
+  ActiveSessionData,
   publishActiveSession,
+  subscribeToActiveSession,
   subscribeToCampaigns,
   saveCampaignDoc,
   saveSceneToCampaign,
@@ -1653,6 +1655,7 @@ export default function App() {
   }, [stagePos, stageScale, gridSize, compendiumCharacters]);
 
   const [campaignsList, setCampaignsList] = useState<Campaign[]>([]);
+  const [lastActiveSession, setLastActiveSession] = useState<ActiveSessionData | null>(null);
   const [activeDmNotes, setActiveDmNotes] = useState<string>('');
   const [isQuickSaving, setIsQuickSaving] = useState<boolean>(false);
   const [isQuotaExceeded, setIsQuotaExceeded] = useState(false);
@@ -3155,6 +3158,14 @@ export default function App() {
     return () => unsub();
   }, []);
 
+  // Subscribe to persistent Active Session from Firestore
+  useEffect(() => {
+    const unsub = subscribeToActiveSession((session) => {
+      setLastActiveSession(session);
+    });
+    return () => unsub();
+  }, []);
+
 
 
   // Subscribe to persistent Uploaded Assets (maps, tokens, etc.) from Firebase
@@ -3421,6 +3432,23 @@ export default function App() {
     // Suppress automatic background debounced broadcast right after scene load
     lastSlotSwitchTimeRef.current = Date.now();
 
+    // Persist as last active scene in local storage for instant offline resume
+    try {
+      localStorage.setItem('mistwalker_last_active_scene', JSON.stringify({
+        campaignId,
+        chapterId,
+        sceneId: scene.sceneId,
+        sceneTitle: scene.sceneTitle,
+        mapUrl: authoritativeMapUrl,
+        mapThumbnailUrl: scene.mapThumbnailUrl,
+        mapWidth: scene.mapWidth,
+        mapHeight: scene.mapHeight,
+        tokensCount: loadedTokens.length,
+        wallsCount: (scene.walls || []).length,
+        timestamp: Date.now()
+      }));
+    } catch {}
+
     const wallCount = scene.walls?.length || 0;
     const roomCount = scene.roomAnnotations?.length || 0;
     toast.success(`Loaded scene "${scene.sceneTitle}" into ${targetSlot} (Press "Force Sync" to broadcast to players)`, {
@@ -3567,6 +3595,21 @@ export default function App() {
         localStorage.removeItem('mistwalker_crash_detected');
       } catch {}
       toast.success(`Saved "${updatedScene.sceneTitle}" with ${sceneTokensToSave.length} tokens${wallCount > 0 ? `, ${wallCount} walls/doors` : ''}${roomCount > 0 ? `, and ${roomCount} polygon rooms` : ''} to Campaign!`);
+      try {
+        localStorage.setItem('mistwalker_last_active_scene', JSON.stringify({
+          campaignId: activeSceneInfo.campaignId,
+          chapterId: activeSceneInfo.chapterId,
+          sceneId: updatedScene.sceneId,
+          sceneTitle: updatedScene.sceneTitle,
+          mapUrl: updatedScene.mapUrl,
+          mapThumbnailUrl: updatedScene.mapThumbnailUrl,
+          mapWidth: updatedScene.mapWidth,
+          mapHeight: updatedScene.mapHeight,
+          tokensCount: sceneTokensToSave.length,
+          wallsCount: (walls || []).length,
+          timestamp: Date.now()
+        }));
+      } catch {}
     } catch (err: any) {
       console.error('Quick save scene error:', err);
       toast.error('Failed to save scene: ' + (err.message || 'Firestore error'));
@@ -3595,6 +3638,21 @@ export default function App() {
       mapHeight: scene.mapHeight
     });
     setActiveDmNotes(scene.dmNotes || '');
+    try {
+      localStorage.setItem('mistwalker_last_active_scene', JSON.stringify({
+        campaignId,
+        chapterId,
+        sceneId: scene.sceneId,
+        sceneTitle: scene.sceneTitle,
+        mapUrl: scene.mapUrl,
+        mapThumbnailUrl: scene.mapThumbnailUrl,
+        mapWidth: scene.mapWidth,
+        mapHeight: scene.mapHeight,
+        tokensCount: scene.tokens?.length || 0,
+        wallsCount: scene.walls?.length || 0,
+        timestamp: Date.now()
+      }));
+    } catch {}
     toast.success(`Saved scene "${scene.sceneTitle}" into Campaign!`);
   };
 
@@ -6474,6 +6532,7 @@ export default function App() {
             onOpenBugReport={() => setIsBugReportModalOpen(true)}
             onLoadSceneFromCampaign={handleLoadSceneFromCampaign}
             campaignsList={campaignsList}
+            lastActiveSession={lastActiveSession}
             unsavedSceneBackup={unsavedSceneBackup}
             unsavedSceneBackupWasCrash={unsavedSceneBackupWasCrash}
             onRestoreUnsavedScene={handleRestoreUnsavedScene}

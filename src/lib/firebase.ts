@@ -965,7 +965,10 @@ export async function saveSceneToCampaign(
       throw new Error(`Campaign ${campaignId} not found`);
     }
     const camp = snap.data() as Campaign;
-    const sanitizedScene = await sanitizeSceneForStorage(scene);
+    const sanitizedScene = await sanitizeSceneForStorage({
+      ...scene,
+      updatedAt: Date.now()
+    });
     let foundChapter = false;
 
     const updatedChapters = camp.chapters.map(ch => {
