@@ -248,12 +248,29 @@ function computeDdbCharacterSheet(c: any): {
 export async function fetchDdbCharacterData(charId: string): Promise<Partial<DdbCampaignCharacter> | null> {
   const headers = getDdbHeaders();
   try {
-    const res = await fetch(`https://character-service.dndbeyond.com/character/v5/character/${charId}`, { headers });
-    if (!res.ok) {
-      return null;
+    let c: any = null;
+    try {
+      const res = await fetch(`https://character-service.dndbeyond.com/character/v5/character/${charId}`, { headers });
+      if (res.ok) {
+        const json = await res.json();
+        c = json.data;
+      }
+    } catch (e) {
+      // Primary fetch failed, try fallback
     }
-    const json = await res.json();
-    const c = json.data;
+
+    if (!c) {
+      try {
+        const fallbackRes = await fetch(`https://www.dndbeyond.com/characters/${charId}/json`, { headers });
+        if (fallbackRes.ok) {
+          const json = await fallbackRes.json();
+          c = json.data || json;
+        }
+      } catch (e) {
+        // Fallback fetch failed
+      }
+    }
+
     if (!c) return null;
 
     const computed = computeDdbCharacterSheet(c);
@@ -517,11 +534,73 @@ export class DdbHpSyncDaemon {
     this.ensurePollingStarted();
   }
 
+  public async addMonitoredCharacter(rawId: string | number, initialName?: string): Promise<Partial<DdbCampaignCharacter> | null> {
+    if (!rawId) return null;
+    const charId = String(rawId).replace(/^char_ddb_/, '').trim();
+    if (!charId || isNaN(Number(charId))) return null;
+
+    if (!this.monitoredCharacters.has(charId)) {
+      this.monitoredCharacters.set(charId, {
+        currentHp: 20,
+        maxHp: 20,
+        tempHp: 0,
+        name: initialName || `Character ${charId}`
+      });
+    }
+
+    this.ensurePollingStarted();
+
+    try {
+      const live = await fetchDdbCharacterData(charId);
+      if (live && live.currentHp !== undefined && live.maxHp !== undefined) {
+        this.monitoredCharacters.set(charId, {
+          currentHp: live.currentHp,
+          maxHp: live.maxHp,
+          tempHp: live.tempHp ?? 0,
+          name: live.name || initialName || `Character ${charId}`
+        });
+
+        const existingIdx = this.cachedCharacters.findIndex(c => c.id === charId);
+        if (existingIdx !== -1) {
+          this.cachedCharacters[existingIdx] = {
+            ...this.cachedCharacters[existingIdx],
+            ...live
+          } as DdbCampaignCharacter;
+        } else {
+          this.cachedCharacters.push(live as DdbCampaignCharacter);
+        }
+
+        return live;
+      }
+    } catch (err) {
+      console.warn(`[DdbHpSyncDaemon] Error fetching initial data for character ${charId}:`, err);
+    }
+    return null;
+  }
+
+  public async addMonitoredCharacters(characterIds: (string | number)[]): Promise<any[]> {
+    const results: any[] = [];
+    if (!Array.isArray(characterIds)) return results;
+    for (const rawId of characterIds) {
+      const live = await this.addMonitoredCharacter(rawId);
+      if (live) results.push(live);
+    }
+    this.ensurePollingStarted();
+    return results;
+  }
+
   public getCachedCharacter(characterId: string): DdbCampaignCharacter | undefined {
     return this.cachedCharacters.find(c => c.id === characterId);
   }
 
   private async startBackgroundMonitoring() {
+    // 1. Always monitor default hero characters (Varrak, Noctua, Aggie, Rowan)
+    const defaultHeroIds = ['146614740', '147334187', '158502126', '146533824'];
+    for (const id of defaultHeroIds) {
+      await this.addMonitoredCharacter(id);
+    }
+
+    // 2. Auto-discover user campaigns
     const campaignIds = new Set<string>(['3290944', '6738033']);
     if (process.env.DND_BEYOND_CAMPAIGN_ID) {
       process.env.DND_BEYOND_CAMPAIGN_ID.split(',').map(s => s.trim()).filter(Boolean).forEach(id => campaignIds.add(id));
@@ -539,6 +618,8 @@ export class DdbHpSyncDaemon {
     for (const campId of campaignIds) {
       await this.attachCampaign(campId);
     }
+
+    this.ensurePollingStarted();
 
     if (this.io && this.cachedCharacters.length > 0) {
       this.io.emit('DDB_CAMPAIGN_SYNC_INIT', {
@@ -560,48 +641,55 @@ export class DdbHpSyncDaemon {
 
     try {
       for (const [charId, state] of this.monitoredCharacters.entries()) {
-        const live = await fetchDdbCharacterData(charId);
-        if (!live || live.currentHp === undefined || live.maxHp === undefined) continue;
+        try {
+          const live = await fetchDdbCharacterData(charId);
+          if (!live || live.currentHp === undefined || live.maxHp === undefined) continue;
 
-        // Check for HP update
-        if (live.currentHp !== state.currentHp || live.maxHp !== state.maxHp || (live.tempHp ?? 0) !== state.tempHp) {
-          const oldHp = state.currentHp;
-          const newHp = live.currentHp;
-          const maxHp = live.maxHp;
-          const tempHp = live.tempHp ?? 0;
-          const charName = live.name || state.name;
+          // Check for HP update
+          if (live.currentHp !== state.currentHp || live.maxHp !== state.maxHp || (live.tempHp ?? 0) !== state.tempHp) {
+            const oldHp = state.currentHp;
+            const newHp = live.currentHp;
+            const maxHp = live.maxHp;
+            const tempHp = live.tempHp ?? 0;
+            const charName = live.name || state.name;
 
-          console.log(`[DdbHpSyncDaemon] ⚡ HP CHANGED on D&D Beyond for "${charName}": ${oldHp} -> ${newHp}/${maxHp} (temp: ${tempHp})`);
+            console.log(`[DdbHpSyncDaemon] ⚡ HP CHANGED on D&D Beyond for "${charName}": ${oldHp} -> ${newHp}/${maxHp} (temp: ${tempHp})`);
 
-          // Update internal map
-          this.monitoredCharacters.set(charId, {
-            currentHp: newHp,
-            maxHp,
-            tempHp,
-            name: charName
-          });
-
-          // Update cached characters list
-          const cachedIdx = this.cachedCharacters.findIndex(c => c.id === charId);
-          if (cachedIdx !== -1) {
-            this.cachedCharacters[cachedIdx].currentHp = newHp;
-            this.cachedCharacters[cachedIdx].maxHp = maxHp;
-            this.cachedCharacters[cachedIdx].tempHp = tempHp;
-            this.cachedCharacters[cachedIdx].lastUpdated = Date.now();
-          }
-
-          // Broadcast to all connected clients (DM and Player View)
-          if (this.io) {
-            this.io.emit('DDB_CHARACTER_HP_CHANGED', {
-              characterId: charId,
-              name: charName,
+            // Update internal map
+            this.monitoredCharacters.set(charId, {
               currentHp: newHp,
               maxHp,
               tempHp,
-              previousHp: oldHp,
-              timestamp: Date.now()
+              name: charName
             });
+
+            // Update cached characters list
+            const cachedIdx = this.cachedCharacters.findIndex(c => c.id === charId);
+            if (cachedIdx !== -1) {
+              this.cachedCharacters[cachedIdx].currentHp = newHp;
+              this.cachedCharacters[cachedIdx].maxHp = maxHp;
+              this.cachedCharacters[cachedIdx].tempHp = tempHp;
+              this.cachedCharacters[cachedIdx].lastUpdated = Date.now();
+            } else {
+              this.cachedCharacters.push(live as DdbCampaignCharacter);
+            }
+
+            // Broadcast to all connected clients (DM and Player View)
+            if (this.io) {
+              this.io.emit('DDB_CHARACTER_HP_CHANGED', {
+                characterId: charId,
+                name: charName,
+                currentHp: newHp,
+                maxHp,
+                tempHp,
+                previousHp: oldHp,
+                timestamp: Date.now()
+              });
+            }
           }
+        } catch (charErr) {
+          // Individual character polling error - continue with next character
+          console.warn(`[DdbHpSyncDaemon] Poll error for character ${charId}:`, charErr);
         }
       }
     } catch (err) {

@@ -1820,6 +1820,34 @@ export default function PlayerView() {
     };
   }, [isAudioMuted]);
 
+  // Real-time automatic D&D Beyond HP registration for Player View active tokens and characters
+  useEffect(() => {
+    const ddbIdSet = new Set<string>();
+    tokens.forEach((t: any) => {
+      if (t.ddbCharacterId) ddbIdSet.add(String(t.ddbCharacterId).trim());
+    });
+    compendiumCharacters.forEach((c: any) => {
+      if (c.ddbCharacterId) ddbIdSet.add(String(c.ddbCharacterId).trim());
+    });
+
+    const ddbIds = Array.from(ddbIdSet).filter(id => id && !isNaN(Number(id)));
+    if (ddbIds.length > 0) {
+      fetch('/api/ddb/monitor-characters', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ characterIds: ddbIds })
+      }).catch(() => {});
+    }
+  }, [tokens, compendiumCharacters]);
+
+  // Periodic heartbeat poll to trigger D&D Beyond HP refresh cycle every 4 seconds in Player View
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetch('/api/ddb/campaigns/poll-now', { method: 'POST' }).catch(() => {});
+    }, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Real-time Firestore activeSession/current subscription so remote Player Views always receive state across server restarts or different networks
   const lastFirestoreSceneRef = useRef<string | null>(null);
   const lastFirestoreUpdateTimeRef = useRef<number>(0);

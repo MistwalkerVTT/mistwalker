@@ -14,6 +14,7 @@ import {
 import {
   fetchDdbCampaigns,
   fetchDdbCampaignCharacters,
+  fetchDdbCharacterData,
   DdbHpSyncDaemon
 } from './ddbCampaignService';
 import { DdbGameLogDaemon } from './ddbGameLogDaemon';
@@ -244,6 +245,35 @@ ddbRouter.post('/campaigns/poll-now', async (req: Request, res: Response) => {
     await DdbHpSyncDaemon.getInstance().pollCycle();
     const status = DdbHpSyncDaemon.getInstance().getStatus();
     res.json({ success: true, status });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/ddb/monitor-characters - Register active character IDs for continuous HP polling
+ddbRouter.post('/monitor-characters', async (req: Request, res: Response) => {
+  try {
+    const { characterIds } = req.body;
+    if (!Array.isArray(characterIds)) {
+      return res.status(400).json({ error: 'characterIds array is required' });
+    }
+    const daemon = DdbHpSyncDaemon.getInstance();
+    const added = await daemon.addMonitoredCharacters(characterIds);
+    res.json({ success: true, count: added.length, characters: added });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/ddb/characters/:id - Fetch live D&D Beyond data for a specific character
+ddbRouter.get('/characters/:id', async (req: Request, res: Response) => {
+  try {
+    const charId = req.params.id;
+    const data = await fetchDdbCharacterData(charId);
+    if (!data) {
+      return res.status(404).json({ error: `Character ${charId} not found on D&D Beyond` });
+    }
+    res.json(data);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
