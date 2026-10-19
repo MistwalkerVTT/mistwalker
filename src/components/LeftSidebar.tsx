@@ -100,8 +100,7 @@ import {
   RoomAnnotation,
   isMonsterToken,
   NarrationVoice,
-  NARRATION_VOICES,
-  CustomSpecialEffect
+  NARRATION_VOICES
 } from '../types';
 import { Monster, getSizeMultiplier } from '../types/monster';
 import { DEFAULT_MONSTERS } from '../data/defaultMonsters';
@@ -110,7 +109,6 @@ import { DEFAULT_ALLIES } from '../data/defaultAllies';
 
 import { PRESET_BATTLEMAPS, PresetBattlemap } from '../data/presetBattlemaps';
 import { toast } from 'sonner';
-import { SpecialEffectsManager } from './SpecialEffectsManager';
 import { HelpDrawer } from './HelpDrawer';
 
 interface LeftSidebarProps {
@@ -152,7 +150,6 @@ interface LeftSidebarProps {
   menuAnchor: { top: number; bottom: number };
   handleToolMenuToggle: (tool: string, e: React.MouseEvent) => void;
   handleMenuClick: (menu: any, e: React.MouseEvent) => void;
-  setEffects: React.Dispatch<React.SetStateAction<any[]>>;
   tokens: any[];
   setTokens: React.Dispatch<React.SetStateAction<any[]>>;
   customTokens: { id?: string; name: string; url: string; size: number }[];
@@ -198,7 +195,6 @@ interface LeftSidebarProps {
   onOpenMonsterCompendium?: (initialSearch?: string) => void;
   onOpenCharacterCompendium?: (initialSearch?: string) => void;
   onOpenAlliesCompendium?: (initialSearch?: string) => void;
-  onOpenUniversalCompendium?: (tab?: 'spells' | 'monsters' | 'equipment' | 'rules', search?: string) => void;
   compendiumMonsters?: Monster[];
   compendiumCharacters?: Character[];
   compendiumAllies?: Ally[];
@@ -257,9 +253,6 @@ interface LeftSidebarProps {
   onStartTutorial?: () => void;
   onOpenBugReport?: () => void;
   onOpenBugManager?: () => void;
-  onEquipCustomEffect?: (effect: CustomSpecialEffect) => void;
-  onQuickPlaceCustomEffect?: (effect: CustomSpecialEffect) => void;
-  activeEquippedCustomEffectId?: string | null;
 }
 
 type GroupMenuId = 'maps' | 'zones' | 'fog-grid' | 'lighting' | 'combat' | 'fx' | 'spells' | 'tokens' | 'dice' | 'ai' | 'help';
@@ -296,7 +289,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   setCurrentPolygonPoints,
   measureType,
   setMeasureType,
-  setEffects,
   tokens,
   setTokens,
   customTokens,
@@ -341,7 +333,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   onOpenMonsterCompendium,
   onOpenCharacterCompendium,
   onOpenAlliesCompendium,
-  onOpenUniversalCompendium,
   compendiumMonsters = [],
   compendiumCharacters = [],
   compendiumAllies = [],
@@ -404,10 +395,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   onImportUniversalVtt,
   onStartTutorial,
   onOpenBugReport,
-  onOpenBugManager,
-  onEquipCustomEffect,
-  onQuickPlaceCustomEffect,
-  activeEquippedCustomEffectId
+  onOpenBugManager
 }) => {
   const mapFileInputRef = useRef<HTMLInputElement>(null);
   const uvttFileInputRef = useRef<HTMLInputElement>(null);
@@ -419,12 +407,10 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   const [menuTop, setMenuTop] = useState<number>(100);
   const [confirmClearWalls, setConfirmClearWalls] = useState(false);
   const [showWallSectionsList, setShowWallSectionsList] = useState(false);
-  const [spellTab, setSpellTab] = useState<'instant' | 'persistent'>('instant');
   const [tokenTab, setTokenTab] = useState<'creatures' | 'auras' | 'conditions'>('creatures');
   const [tokenCategoryFilter, setTokenCategoryFilter] = useState<'all' | 'characters' | 'monsters' | 'allies' | 'custom'>('all');
   const [tokenSearchQuery, setTokenSearchQuery] = useState<string>('');
   const [lightingSubTab, setLightingSubTab] = useState<'lighting' | 'fog' | 'zones'>('fog');
-  const [fxCategory, setFxCategory] = useState<'environmental' | 'spells' | 'manager'>('environmental');
   const [fxSubTab, setFxSubTab] = useState<'features' | 'weather' | 'scale'>('features');
   const [selectedScalePreset, setSelectedScalePreset] = useState<MapSizePresetKey>('medium');
   const [customCols, setCustomCols] = useState<number>(30);
@@ -489,18 +475,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
       setLightingSubTab('fog');
     } else if (tool === 'wall') {
       setLightingSubTab('lighting');
-    }
-  }, [tool]);
-
-  useEffect(() => {
-    const spellTools = [
-      'fireball', 'cone_of_cold', 'lightning_bolt', 'burning_hands',
-      'charm_person', 'divine_smite', 'eldritch_blast', 'arms_of_hadar',
-      'destructive_wave', 'fire_bolt', 'hypnotic_pattern', 'spirit_guardians',
-      'beacon_of_hope', 'darkness', 'fog_cloud', 'cloudkill', 'sunbeam'
-    ];
-    if (spellTools.includes(tool)) {
-      setFxCategory('spells');
     }
   }, [tool]);
 
@@ -635,12 +609,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   const isFogActive = isFogVisible;
   const isGridActive = gridVisible;
   const isCombatActive = showCombatTracker;
-  const isSpellToolActive = (activeEquippedCustomEffectId !== null && tool === 'custom_effect') || [
-    'fireball', 'cone_of_cold', 'lightning_bolt', 'burning_hands',
-    'charm_person', 'divine_smite', 'eldritch_blast', 'arms_of_hadar',
-    'destructive_wave', 'fire_bolt', 'hypnotic_pattern', 'spirit_guardians',
-    'beacon_of_hope', 'darkness', 'fog_cloud', 'cloudkill', 'sunbeam'
-  ].includes(tool);
   const isTokensActive = tool === 'aura';
   const isAIActive = tool === 'ai-describe';
 
@@ -793,7 +761,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
           </button>
         </div>
 
-        {/* Tactical, Animated & Spell FX Group (Combined) */}
+        {/* Tactical & Weather FX Group */}
         <div className="relative group shrink-0">
           <button
             id="group-btn-fx"
@@ -802,17 +770,17 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
             onMouseLeave={handleMouseLeave}
             onClick={(e) => handleGroupClick('fx', e)}
             className={`w-11 h-11 rounded-xl flex flex-col items-center justify-center transition-all relative ${
-              activeGroup === 'fx' || activeGroup === 'spells' || isSpellToolActive || (boardAnimatedEnabled && (boardAnimatedFeatures.length > 0 || boardWeatherEffect !== 'none'))
+              activeGroup === 'fx' || (boardAnimatedEnabled && (boardAnimatedFeatures.length > 0 || boardWeatherEffect !== 'none'))
                 ? 'bg-cyan-500/25 text-cyan-300 border border-cyan-500/60 shadow-[0_0_14px_rgba(6,182,212,0.4)]'
                 : 'text-zinc-400 hover:text-cyan-300 hover:bg-zinc-850 hover:border hover:border-zinc-700/60'
             }`}
-            title="Tactical, Weather & Spell FX (Animated Features, Weather, Grid Sizing & Magic Spells)"
+            title="Tactical & Weather FX (Animated Features, Weather & Grid Sizing)"
           >
             <Sparkles className="w-5 h-5" />
             <span className="text-[6.5px] font-black font-mono tracking-wider text-cyan-400 -mt-0.5 leading-none">
               FX
             </span>
-            {((boardAnimatedFeatures.length > 0 || boardWeatherEffect !== 'none') || isSpellToolActive) && (
+            {(boardAnimatedFeatures.length > 0 || boardWeatherEffect !== 'none') && (
               <span className="absolute -top-1 -right-1 px-1 min-w-[14px] h-[14px] rounded-full bg-cyan-500 text-[8px] font-bold font-mono text-zinc-950 flex items-center justify-center shadow">
                 {boardAnimatedFeatures.length > 0 ? boardAnimatedFeatures.length : '●'}
               </span>
@@ -841,23 +809,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
             )}
           </button>
         </div>
-
-        {/* Universal 5e SRD Compendium Group */}
-        {onOpenUniversalCompendium && (
-          <div className="relative group shrink-0">
-            <button
-              id="group-btn-compendium"
-              onClick={() => onOpenUniversalCompendium()}
-              className="w-11 h-11 rounded-xl flex flex-col items-center justify-center transition-all relative text-zinc-400 hover:text-amber-300 hover:bg-zinc-850 hover:border hover:border-zinc-700/60 cursor-pointer"
-              title="Universal 5e SRD Compendium (Spells, Items, Monsters & Rules)"
-            >
-              <BookOpen className="w-5 h-5 text-amber-400/90" />
-              <span className="text-[6.5px] font-black font-mono tracking-wider text-amber-400/80 -mt-0.5 leading-none">
-                SRD
-              </span>
-            </button>
-          </div>
-        )}
 
         <div className="w-8 h-px bg-zinc-800/80 my-1 shrink-0" />
 
@@ -3070,42 +3021,11 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                   })}
                 </div>
               </div>
-
-              {/* SRD Compendium & Quick Rules */}
-              {onOpenUniversalCompendium && (
-                <div className="flex flex-col gap-2 pt-2 border-t border-zinc-800">
-                  <span className="text-[10px] uppercase font-bold font-mono text-zinc-400">Rules & Compendium</span>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onOpenUniversalCompendium('rules');
-                        closeFlyout();
-                      }}
-                      className="py-2 px-2.5 rounded-xl bg-zinc-850 hover:bg-zinc-800 border border-zinc-700/80 hover:border-amber-500/50 text-amber-300 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
-                    >
-                      <BookOpen className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                      <span className="truncate">SRD Rules</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onOpenUniversalCompendium('spells');
-                        closeFlyout();
-                      }}
-                      className="py-2 px-2.5 rounded-xl bg-zinc-850 hover:bg-zinc-800 border border-zinc-700/80 hover:border-amber-500/50 text-amber-300 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
-                    >
-                      <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                      <span className="truncate">Spellbook</span>
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
           {activeGroup === 'fx' && (
-            <div className={`p-3.5 flex flex-col gap-3 ${fxCategory === 'spells' || fxCategory === 'manager' ? 'min-w-[340px] max-w-[390px]' : 'min-w-[320px] max-w-[360px]'}`}>
+            <div className="p-3.5 flex flex-col gap-3 min-w-[320px] max-w-[360px]">
               {/* Header */}
               <div
                 onMouseDown={pinnedGroup ? handleDragStart : undefined}
@@ -3113,7 +3033,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
               >
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-cyan-400" />
-                  <span className="text-xs font-bold font-mono text-zinc-200 uppercase tracking-wider">Tactical & Spell FX</span>
+                  <span className="text-xs font-bold font-mono text-zinc-200 uppercase tracking-wider">Tactical & Weather FX</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <button
@@ -3132,47 +3052,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                 </div>
               </div>
 
-              {/* Category Switcher: Tactical FX vs Animated Spells (JB2A) */}
-              <div className="flex bg-zinc-950/80 p-1 rounded-xl border border-zinc-800 gap-1 shrink-0">
-                <button
-                  id="subtab-tactical-fx"
-                  onClick={() => setFxCategory('environmental')}
-                  className={`flex-1 py-1.5 px-1.5 rounded-lg text-xs font-bold font-mono transition-all flex items-center justify-center gap-1 cursor-pointer ${
-                    fxCategory === 'environmental'
-                      ? 'bg-cyan-500 text-zinc-950 shadow-sm'
-                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850'
-                  }`}
-                >
-                  <Waves className="w-3.5 h-3.5 shrink-0" />
-                  <span className="truncate">Tactical FX</span>
-                  {(boardAnimatedFeatures.length > 0 || boardWeatherEffect !== 'none') && (
-                    <span className={`text-[9px] px-1 rounded-full font-bold ${
-                      fxCategory === 'environmental' ? 'bg-zinc-950 text-cyan-300' : 'bg-zinc-800 text-zinc-300'
-                    }`}>
-                      {boardAnimatedFeatures.length > 0 ? boardAnimatedFeatures.length : '●'}
-                    </span>
-                  )}
-                </button>
-                <button
-                  id="subtab-magic-spells"
-                  onClick={() => setFxCategory('spells')}
-                  className={`flex-1 py-1.5 px-1.5 rounded-lg text-xs font-bold font-mono transition-all flex items-center justify-center gap-1 cursor-pointer ${
-                    fxCategory === 'spells' || fxCategory === 'manager'
-                      ? 'bg-purple-600 text-white shadow-sm'
-                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850'
-                  }`}
-                >
-                  <Sparkles className="w-3.5 h-3.5 shrink-0 text-purple-300" />
-                  <span className="truncate">Animated Spells</span>
-                  {isSpellToolActive && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
-                  )}
-                </button>
-              </div>
-
-              {/* SUBTAB 1: TACTICAL & WEATHER */}
-              {fxCategory === 'environmental' && (
-                <>
               {/* Sub-Tabs: Features vs Weather vs Map Sizing */}
               <div className="flex bg-zinc-950 p-1 rounded-xl border border-zinc-800">
                 <button
@@ -3676,67 +3555,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                       {scaleFeedback}
                     </div>
                   )}
-                </div>
-              )}
-                </>
-              )}
-
-              {/* SUBTAB 2: ANIMATED SPELLS (JB2A) & SPECIAL EFFECTS MANAGER */}
-              {(fxCategory === 'spells' || fxCategory === 'manager') && (
-                <div className="flex flex-col gap-3">
-                  <SpecialEffectsManager
-                    onEquipEffect={onEquipCustomEffect}
-                    onQuickPlaceEffect={onQuickPlaceCustomEffect}
-                    activeEquippedEffectId={activeEquippedCustomEffectId}
-                    gridSize={gridSize}
-                  />
-
-                  {/* Browse 5e SRD Spell Compendium */}
-                  {onOpenUniversalCompendium && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onOpenUniversalCompendium('spells');
-                        closeFlyout();
-                      }}
-                      className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-amber-600/20 to-orange-600/20 hover:from-amber-600/30 hover:to-orange-600/30 border border-amber-500/40 hover:border-amber-500/70 text-amber-300 text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
-                    >
-                      <BookOpen className="w-3.5 h-3.5 text-amber-400" />
-                      Browse 5e SRD Spell Compendium
-                    </button>
-                  )}
-
-                  {/* Clear FX button */}
-                  <button
-                    id="btn-clear-effects-flyout"
-                    onClick={() => setEffects([])}
-                    className="w-full py-2 px-3 rounded-xl bg-zinc-850 hover:bg-red-500/15 border border-zinc-700 hover:border-red-500/40 text-zinc-400 hover:text-red-400 text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    Clear All Active FX On Board
-                  </button>
-
-                  {/* Creative Commons Attribution */}
-                  <div className="pt-1.5 border-t border-zinc-800/60 text-[9px] text-zinc-500 text-center font-mono">
-                    Animated spell effects by{' '}
-                    <a
-                      href="https://jb2a.com"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-purple-400 hover:text-purple-300 underline font-medium"
-                    >
-                      JB2A
-                    </a>{' '}
-                    under{' '}
-                    <a
-                      href="https://creativecommons.org/licenses/by-nc-sa/4.0/"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-zinc-400 hover:text-zinc-200 underline"
-                    >
-                      CC BY-NC-SA 4.0
-                    </a>
-                  </div>
                 </div>
               )}
             </div>

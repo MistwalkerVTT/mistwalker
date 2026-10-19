@@ -106,28 +106,6 @@ export const isMonsterToken = (token?: { name?: string; isPlayer?: boolean; isMo
   return monsterKeywords.some(m => lowerName === m || lowerName.includes(m));
 };
 
-export interface Effect {
-  id: string;
-  type: 'circle' | 'cone' | 'line';
-  x: number;
-  y: number;
-  size: number;
-  rotation: number;
-  color: string;
-  label: string;
-  createdAt?: number;
-  isPersistent?: boolean;
-  imageUrl?: string;
-  videoUrl?: string;
-  loopVideoUrl?: string;
-  thumbUrl?: string;
-  jb2aId?: string;
-  blendMode?: string;
-  opacity?: number; // 0.1 to 1.0
-  placedById?: string;
-  placedByName?: string;
-}
-
 export type AnimatedFeatureType = 'water' | 'lava' | 'torch' | 'arcane' | 'fog' | 'toxic';
 export type WeatherEffectType = 'none' | 'rain' | 'snow' | 'fog' | 'embers' | 'spores';
 
@@ -319,27 +297,6 @@ export const NARRATION_VOICES: NarrationVoice[] = [
 
 export type { Scene, Chapter, Campaign, SceneToken } from './lib/firebase';
 
-export interface CustomSpecialEffect {
-  id: string;
-  name: string;
-  description?: string;
-  category: 'spell' | 'environmental' | 'custom';
-  shape: 'circle' | 'cone' | 'line';
-  defaultSize: number; // in feet (e.g. 5, 10, 15, 20, 30, 40, 60)
-  color: string; // rgba or hex
-  imageUrl: string; // image or gif URL
-  thumbnailUrl?: string;
-  videoUrl?: string;
-  loopVideoUrl?: string;
-  thumbUrl?: string;
-  jb2aId?: string;
-  isPersistent?: boolean;
-  blendMode?: 'normal' | 'screen' | 'lighter' | 'multiply';
-  source: 'upload' | 'gemini' | 'preset';
-  prompt?: string;
-  createdAt: number;
-  updatedAt?: number;
-}
-
 export * from './types/aura';
 export type { Ally, AllyAction, AllyTrait } from './types/ally';
+

@@ -6,7 +6,7 @@ export const TUTORIAL_STEPS = [
     id: 'sidebar-overview',
     phase: 'Step 1 of 11: Sidebar Navigation',
     title: 'Side Bar Exploration & Navigation',
-    description: 'MistWalker organizes all DM controls along the left rail: Maps & Campaigns, Creature Tokens, Dice Roller, Combat Tracker, Tactical Layers (Fog, Walls & Zones), Weather & Spell FX, AI DM Suite, and the Help & Support Center.',
+    description: 'MistWalker organizes all DM controls along the left rail: Maps & Campaigns, Creature Tokens, Dice Roller, Combat Tracker, Tactical Layers (Fog, Walls & Zones), Tactical & Weather FX, AI DM Suite, and the Help & Support Center.',
     taskHint: 'Hover or click each button on the left sidebar to explore their tools',
     targetSelector: '#group-btn-maps',
     fallbackSelector: '[data-tutorial="campaign-manager"]',

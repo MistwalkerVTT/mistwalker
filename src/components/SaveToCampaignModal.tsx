@@ -24,7 +24,7 @@ import {
   publishActiveSession
 } from '../lib/firebase';
 import { createThumbnailDataUrl, saveLocalAsset, isVideoAsset } from '../lib/storageCache';
-import { WallSegment, VisionConfig, RoomAnnotation, Effect, AnimatedFeature, WeatherEffectType } from '../types';
+import { WallSegment, VisionConfig, RoomAnnotation, AnimatedFeature, WeatherEffectType } from '../types';
 
 interface SaveToCampaignModalProps {
   isOpen: boolean;
@@ -53,7 +53,6 @@ interface SaveToCampaignModalProps {
   currentWalls?: WallSegment[];
   currentVisionConfig?: VisionConfig;
   currentRoomAnnotations?: RoomAnnotation[];
-  currentEffects?: Effect[];
   currentBoardAnimatedFeatures?: AnimatedFeature[];
   currentBoardAnimatedEnabled?: boolean;
   currentBoardWeatherEffect?: WeatherEffectType;
@@ -85,7 +84,6 @@ export const SaveToCampaignModal: React.FC<SaveToCampaignModalProps> = ({
   currentWalls = [],
   currentVisionConfig,
   currentRoomAnnotations = [],
-  currentEffects = [],
   currentBoardAnimatedFeatures = [],
   currentBoardAnimatedEnabled = true,
   currentBoardWeatherEffect = 'none',
@@ -219,7 +217,6 @@ export const SaveToCampaignModal: React.FC<SaveToCampaignModalProps> = ({
         walls: currentWalls || [],
         visionConfig: currentVisionConfig,
         roomAnnotations: currentRoomAnnotations || [],
-        effects: currentEffects || [],
         boardAnimatedFeatures: currentBoardAnimatedFeatures || [],
         boardAnimatedEnabled: currentBoardAnimatedEnabled !== undefined ? currentBoardAnimatedEnabled : true,
         boardWeatherEffect: currentBoardWeatherEffect || 'none',
@@ -277,7 +274,6 @@ export const SaveToCampaignModal: React.FC<SaveToCampaignModalProps> = ({
         walls: sceneToSave.walls,
         visionConfig: sceneToSave.visionConfig,
         roomAnnotations: sceneToSave.roomAnnotations,
-        effects: sceneToSave.effects,
         boardAnimatedFeatures: sceneToSave.boardAnimatedFeatures,
         boardAnimatedEnabled: sceneToSave.boardAnimatedEnabled,
         boardWeatherEffect: sceneToSave.boardWeatherEffect,

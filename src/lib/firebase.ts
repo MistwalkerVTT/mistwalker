@@ -33,7 +33,7 @@ import {
   getVideoNaturalDimensions,
   isVideoAsset
 } from './storageCache';
-import type { CustomSpecialEffect, Effect, AnimatedFeature, WeatherEffectType } from '../types';
+import type { AnimatedFeature, WeatherEffectType } from '../types';
 
 // Initialize Firebase App
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
@@ -232,7 +232,6 @@ export interface Scene {
   walls?: WallSegment[];
   visionConfig?: VisionConfig;
   roomAnnotations?: RoomAnnotation[];
-  effects?: Effect[];
   boardAnimatedFeatures?: AnimatedFeature[];
   boardAnimatedEnabled?: boolean;
   boardWeatherEffect?: WeatherEffectType;
@@ -280,7 +279,6 @@ export interface ActiveSessionData {
   walls?: WallSegment[];
   visionConfig?: VisionConfig;
   roomAnnotations?: RoomAnnotation[];
-  effects?: Effect[];
   boardAnimatedFeatures?: AnimatedFeature[];
   boardAnimatedEnabled?: boolean;
   boardWeatherEffect?: WeatherEffectType;
@@ -1888,154 +1886,3 @@ export async function deleteCharacter(characterId: string): Promise<void> {
   }
 }
 
-// ==========================================
-// SPECIAL EFFECTS STORAGE & FIRESTORE
-// ==========================================
-
-const LOCAL_STORAGE_FX_KEY = 'mistwalker_special_effects';
-
-/**
- * Upload an image or animated GIF for a Special Effect to Firebase Storage,
- * with fallbacks to server upload and local Base64 cache.
- */
-export async function uploadSpecialEffectImage(
-  fileOrBlob: File | Blob,
-  effectName: string
-): Promise<string> {
-  const isBlob = !(fileOrBlob instanceof File);
-  const cleanName = (effectName || 'effect').replace(/[^a-zA-Z0-9_\-]/g, '_');
-  const ext = fileOrBlob.type.includes('gif') ? 'gif' : fileOrBlob.type.includes('webp') ? 'webp' : 'png';
-  const fileName = `fx_${Date.now()}_${cleanName}.${ext}`;
-  const file = isBlob ? new File([fileOrBlob], fileName, { type: fileOrBlob.type || 'image/png' }) : fileOrBlob;
-
-  // 1. Try Firebase Storage directly
-  try {
-    const storageRef = ref(storage, `special_effects/${fileName}`);
-    const snapshot = await uploadBytes(storageRef, file);
-    const downloadUrl = await getDownloadURL(snapshot.ref);
-    if (downloadUrl) {
-      await saveLocalAsset(downloadUrl, file).catch(() => {});
-      return downloadUrl;
-    }
-  } catch (storageErr) {
-    console.warn('[uploadSpecialEffectImage] Firebase Storage direct upload notice:', storageErr);
-  }
-
-  // 2. Try uploadAndRegisterAsset server upload
-  try {
-    const asset = await uploadAndRegisterAsset(file, 'other', { customName: cleanName });
-    if (asset && asset.url) {
-      return asset.url;
-    }
-  } catch (serverErr) {
-    console.warn('[uploadSpecialEffectImage] uploadAndRegisterAsset notice:', serverErr);
-  }
-
-  // 3. Fallback: convert to base64 Data URL and cache locally
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result as string;
-      saveLocalAsset(`local_fx_${Date.now()}`, file).catch(() => {});
-      resolve(dataUrl);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
-/**
- * Persist a custom special effect to Firestore and local storage.
- */
-export async function saveSpecialEffectToFirestore(effect: CustomSpecialEffect): Promise<void> {
-  const path = `special_effects/${effect.id}`;
-  // Save to localStorage immediately as local backup
-  try {
-    const localRaw = localStorage.getItem(LOCAL_STORAGE_FX_KEY);
-    const localList: CustomSpecialEffect[] = localRaw ? JSON.parse(localRaw) : [];
-    const filtered = localList.filter(e => e.id !== effect.id);
-    filtered.unshift(effect);
-    localStorage.setItem(LOCAL_STORAGE_FX_KEY, JSON.stringify(filtered));
-  } catch (e) {
-    console.warn('[saveSpecialEffectToFirestore] LocalStorage cache notice:', e);
-  }
-
-  // Persist to Firestore
-  try {
-    const docRef = doc(db, 'special_effects', effect.id);
-    await setDoc(docRef, {
-      ...effect,
-      updatedAt: Date.now()
-    }, { merge: true });
-  } catch (error) {
-    console.warn('[saveSpecialEffectToFirestore] Firestore write notice:', error);
-  }
-}
-
-/**
- * Fetch all custom special effects from Firestore merged with local cache.
- */
-export async function fetchSpecialEffectsFromFirestore(): Promise<CustomSpecialEffect[]> {
-  const results: CustomSpecialEffect[] = [];
-  const seenIds = new Set<string>();
-
-  // 1. Try Firestore first
-  try {
-    const q = query(collection(db, 'special_effects'));
-    const snap = await getDocs(q);
-    snap.forEach(d => {
-      const effect = d.data() as CustomSpecialEffect;
-      if (effect && effect.id && !seenIds.has(effect.id)) {
-        seenIds.add(effect.id);
-        results.push(effect);
-      }
-    });
-  } catch (err) {
-    console.warn('[fetchSpecialEffectsFromFirestore] Firestore fetch notice:', err);
-  }
-
-  // 2. Merge with LocalStorage cache
-  try {
-    const localRaw = localStorage.getItem(LOCAL_STORAGE_FX_KEY);
-    if (localRaw) {
-      const localList: CustomSpecialEffect[] = JSON.parse(localRaw);
-      for (const eff of localList) {
-        if (eff && eff.id && !seenIds.has(eff.id)) {
-          seenIds.add(eff.id);
-          results.push(eff);
-        }
-      }
-    }
-  } catch (e) {
-    // ignore
-  }
-
-  // Sort descending by createdAt
-  results.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-  return results;
-}
-
-/**
- * Delete a custom special effect from Firestore and local cache.
- */
-export async function deleteSpecialEffectFromFirestore(effectId: string): Promise<void> {
-  // 1. Remove from local storage
-  try {
-    const localRaw = localStorage.getItem(LOCAL_STORAGE_FX_KEY);
-    if (localRaw) {
-      const localList: CustomSpecialEffect[] = JSON.parse(localRaw);
-      const filtered = localList.filter(e => e.id !== effectId);
-      localStorage.setItem(LOCAL_STORAGE_FX_KEY, JSON.stringify(filtered));
-    }
-  } catch (e) {
-    // ignore
-  }
-
-  // 2. Remove from Firestore
-  try {
-    const docRef = doc(db, 'special_effects', effectId);
-    await deleteDoc(docRef);
-  } catch (err) {
-    console.warn('[deleteSpecialEffectFromFirestore] Firestore delete notice:', err);
-  }
-}

@@ -82,7 +82,7 @@ export const VirtualMouseSimulator: React.FC<VirtualMouseSimulatorProps> = ({
 
       addTimeout(() => {
         setPos({ x: 25, y: 420 });
-        setActiveBadge('Weather & Spell FX');
+        setActiveBadge('Tactical & Weather FX');
       }, 3500);
 
       addTimeout(() => {

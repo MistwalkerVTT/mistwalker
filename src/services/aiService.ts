@@ -402,21 +402,3 @@ export async function digestChapterPdf(params: {
   return data.digest;
 }
 
-export async function generateEffectImage(params: {
-  effectName: string;
-  shape?: 'circle' | 'cone' | 'line';
-  style?: string;
-  color?: string;
-  prompt?: string;
-}): Promise<{ imageUrl: string; dataUrl?: string; engine?: string; prompt?: string }> {
-  const res = await fetch("/api/ai/generate-effect-image", {
-    method: "POST",
-    headers: getAiHeaders(),
-    body: JSON.stringify(params)
-  });
-  if (!res.ok) {
-    const errData = await res.json().catch(() => ({}));
-    throw new Error(errData.error || `Server error (${res.status}) while generating effect image`);
-  }
-  return await res.json();
-}

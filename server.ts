@@ -354,7 +354,6 @@ async function startServer() {
     mapRotation: 0,
     activeSceneInfo: null,
     characters: [],
-    effects: [],
     updatedAt: Date.now()
   };
 
@@ -389,7 +388,6 @@ async function startServer() {
               gridOpacity: sess.gridOpacity ?? 0.3,
               visionConfig: sess.visionConfig || activeVttState.visionConfig,
               roomAnnotations: Array.isArray(sess.roomAnnotations) ? sess.roomAnnotations : [],
-              effects: Array.isArray(sess.effects) ? sess.effects : [],
               activeSceneInfo: {
                 campaignId: sess.campaignId,
                 chapterId: sess.chapterId,
@@ -606,28 +604,6 @@ async function startServer() {
         }
       }
       socket.broadcast.emit("SYNC_COMBAT_STATE", val);
-    });
-
-    socket.on("ADD_EFFECT", (effect: any) => {
-      console.log(`[Server Socket] ADD_EFFECT: ${effect?.label || effect?.type || 'unknown'} at (${effect?.x}, ${effect?.y})`);
-      if (effect && Array.isArray(activeVttState.effects)) {
-        activeVttState.effects.push(effect);
-      }
-      socket.broadcast.emit("ADD_EFFECT", effect);
-    });
-
-    socket.on("REMOVE_EFFECT", (effectId: string) => {
-      console.log(`[Server Socket] REMOVE_EFFECT: ${effectId}`);
-      if (effectId && Array.isArray(activeVttState.effects)) {
-        activeVttState.effects = activeVttState.effects.filter((e: any) => e.id !== effectId);
-      }
-      socket.broadcast.emit("REMOVE_EFFECT", effectId);
-    });
-
-    socket.on("CLEAR_EFFECTS", () => {
-      console.log(`[Server Socket] CLEAR_EFFECTS`);
-      activeVttState.effects = [];
-      socket.broadcast.emit("CLEAR_EFFECTS");
     });
 
     socket.on("disconnect", (reason) => {

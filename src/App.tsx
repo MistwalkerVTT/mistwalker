@@ -42,11 +42,6 @@ import { AnimatedMapOverlay, AnimatedFeaturesKonvaImage } from './components/Ani
 import { DiceTableOverlay } from './components/DiceTableOverlay';
 import { DdbDiceRollEvent } from './types/dice';
 import { EffectContextMenu, ContextMenuData } from './components/EffectContextMenu';
-import { ProceduralSpellEffect } from './components/ProceduralSpellEffect';
-import { SpellEffectsGroup } from './components/SpellEffectsGroup';
-import { ShockwaveOverlay, useShockwaves, triggerShockwave } from './components/ShockwaveOverlay';
-import { spellSoundEngine } from './utils/spellSoundEngine';
-import { getSpecialEffectDefinition } from './data/specialEffectsDatabase';
 import { CampaignBuilderModal } from './components/CampaignBuilderModal';
 import { SaveToCampaignModal } from './components/SaveToCampaignModal';
 import { LoadCampaignModal } from './components/LoadCampaignModal';
@@ -55,9 +50,7 @@ import { DndChatbotModal } from './components/DndChatbotModal';
 import { MonsterCompendiumModal } from './components/MonsterCompendiumModal';
 import { CharacterCompendiumModal } from './components/CharacterCompendiumModal';
 import { AlliesCompendiumModal } from './components/AlliesCompendiumModal';
-import { UniversalCompendiumModal } from './components/UniversalCompendiumModal';
 import { DdbSyncModal } from './components/DdbSyncModal';
-import type { Spell } from './types/spell';
 import {
   isUniversalVttFile,
   parseUniversalVtt,
@@ -115,7 +108,6 @@ import {
   CampaignMode,
   RoomAnnotation,
   isMonsterToken,
-  CustomSpecialEffect,
   AURA_PRESETS,
   AURA_COLOR_PALETTE
 } from './types';
@@ -145,22 +137,6 @@ interface RevealPoint {
   x: number;
   y: number;
   radius: number;
-}
-
-interface Effect {
-  id: string;
-  type: 'circle' | 'cone' | 'line';
-  x: number;
-  y: number;
-  size: number;
-  rotation: number;
-  color: string;
-  label: string;
-  createdAt?: number;
-  isPersistent?: boolean;
-  imageUrl?: string;
-  blendMode?: string;
-  opacity?: number;
 }
 
 interface Token {
@@ -220,7 +196,6 @@ interface SyncState {
   measureStart: { x: number; y: number } | null;
   measureEnd: { x: number; y: number } | null;
   measureType?: 'line' | 'square' | 'cone' | 'rectangle' | 'circle';
-  effects: Effect[];
   tokens: Token[];
   walls?: WallSegment[];
   visionConfig?: VisionConfig;
@@ -932,84 +907,7 @@ const DND_CONDITIONS = [
   'Bloodied'
 ];
 
-const EffectResizeHandle = ({ 
-  effect, 
-  gridSize, 
-  stageScale, 
-  isPlayerView = false, 
-  activeEffectId, 
-  hoveredEffectId, 
-  setActiveEffectId, 
-  setEffects 
-}: any) => {
-  const isInteracting = activeEffectId === effect.id || hoveredEffectId === effect.id;
-  if (!isInteracting) return null;
 
-  const distanceFt = Math.round((effect.size / gridSize) * 5);
-
-  return (
-    <Group x={effect.size} y={0}>
-      <Circle
-        radius={8 / stageScale}
-        fill="white"
-        stroke="#10b981"
-        strokeWidth={2 / stageScale}
-        draggable
-        onDragStart={(e) => {
-          e.cancelBubble = true;
-          setActiveEffectId(effect.id);
-        }}
-        onDragMove={(e) => {
-          e.cancelBubble = true;
-          const node = e.target;
-          const newSize = Math.sqrt(node.x() ** 2 + node.y() ** 2);
-          setEffects((prev: any[]) => prev.map(eff => 
-            eff.id === effect.id ? { ...eff, size: Math.max(5, newSize) } : eff
-          ));
-          // Keep handle at the edge
-          node.x(newSize);
-          node.y(0);
-        }}
-        onDragEnd={(e) => {
-          e.cancelBubble = true;
-          setActiveEffectId(null);
-        }}
-        onMouseEnter={(e: any) => {
-          const container = e.target.getStage().container();
-          container.style.cursor = 'nwse-resize';
-        }}
-        onMouseLeave={(e: any) => {
-          const container = e.target.getStage().container();
-          container.style.cursor = 'default';
-        }}
-      />
-      <Group x={12 / stageScale} y={0}>
-        <Rect
-          x={0}
-          y={-12 / stageScale}
-          width={50 / stageScale}
-          height={24 / stageScale}
-          fill="rgba(0,0,0,0.8)"
-          cornerRadius={4 / stageScale}
-          stroke="#10b981"
-          strokeWidth={1 / stageScale}
-        />
-        <Text
-          text={`${distanceFt} ft`}
-          fontSize={12 / stageScale}
-          fill="white"
-          x={0}
-          y={-12 / stageScale}
-          width={50 / stageScale}
-          height={24 / stageScale}
-          align="center"
-          verticalAlign="middle"
-          fontStyle="bold"
-        />
-      </Group>
-    </Group>
-  );
-};
 
 const getImageTransform = (width: number, height: number, rotation: number) => {
   switch (rotation % 360) {
@@ -1056,7 +954,7 @@ export default function App() {
 
   const socketRef = useRef<any>(null);
   const [socketInstance, setSocketInstance] = useState<any>(null);
-  const { shockwaves, handleRemoveShockwave } = useShockwaves();
+
   const [isReadingFile, setIsReadingFile] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [activeMapId, setActiveMapId] = useState<'DM1'|'DM2'|'DM3'>('DM1');
@@ -1279,7 +1177,7 @@ export default function App() {
   const [selectedTokenIds, setSelectedTokenIds] = useState<string[]>([]);
   const [editingTokenNameId, setEditingTokenNameId] = useState<string | null>(null);
   const [editingTokenNameText, setEditingTokenNameText] = useState<string>('');
-  const [selectedEffectId, setSelectedEffectId] = useState<string | null>(null);
+
   const [selectionBox, setSelectionBox] = useState<{
     startX: number;
     startY: number;
@@ -1302,11 +1200,6 @@ export default function App() {
   const [measureEnd, setMeasureEnd] = useState<{ x: number, y: number } | null>(null);
   const [measureType, setMeasureType] = useState<'line' | 'square' | 'cone' | 'rectangle' | 'circle'>('line');
   const [isMeasuring, setIsMeasuring] = useState(false);
-  const [effects, setEffects] = useState<Effect[]>([]);
-  const [selectedCustomEffect, setSelectedCustomEffect] = useState<CustomSpecialEffect | null>(null);
-  const activeEffectIdRef = useRef<string | null>(null);
-  const [activeEffectId, setActiveEffectId] = useState<string | null>(null);
-  const [hoveredEffectId, setHoveredEffectId] = useState<string | null>(null);
   const [effectContextMenu, setEffectContextMenu] = useState<{
     data: ContextMenuData;
     position: { x: number; y: number };
@@ -1314,23 +1207,6 @@ export default function App() {
   const [stageScale, setStageScale] = useState<number>(1);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const tutorial = useTutorial();
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setEffects(prev => {
-        if (prev.length === 0) return prev;
-        const now = Date.now();
-        const filtered = prev.filter(eff => {
-          if (eff.createdAt && !eff.isPersistent) {
-            return now - eff.createdAt < 5000;
-          }
-          return true;
-        });
-        return filtered.length === prev.length ? prev : filtered;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
 
   const [stagePos, setStagePos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [gridVisible, setGridVisible] = useState<boolean>(true);
@@ -1376,9 +1252,7 @@ export default function App() {
   const [alliesCompendiumInitialSearch, setAlliesCompendiumInitialSearch] = useState<string>('');
   const [compendiumAllies, setCompendiumAllies] = useState<Ally[]>(DEFAULT_ALLIES);
 
-  const [showUniversalCompendium, setShowUniversalCompendium] = useState(false);
-  const [universalCompendiumTab, setUniversalCompendiumTab] = useState<'spells' | 'monsters' | 'equipment' | 'rules'>('spells');
-  const [universalCompendiumQuery, setUniversalCompendiumQuery] = useState<string>('');
+
 
   const [isBugReportModalOpen, setIsBugReportModalOpen] = useState<boolean>(false);
   const [isBugManagerModalOpen, setIsBugManagerModalOpen] = useState<boolean>(false);
@@ -1601,94 +1475,7 @@ export default function App() {
     setShowAlliesCompendium(true);
   }, []);
 
-  const handleOpenUniversalCompendium = useCallback((tab: 'spells' | 'monsters' | 'equipment' | 'rules' = 'spells', query?: string) => {
-    setUniversalCompendiumTab(tab);
-    setUniversalCompendiumQuery(query || '');
-    setShowUniversalCompendium(true);
-  }, []);
 
-  const handleCastCompendiumSpell = useCallback((spell: Spell) => {
-    setShowUniversalCompendium(false);
-    if (spell.effectId) {
-      setTool(spell.effectId);
-      toast.info(`Ready to cast ${spell.name}! Click on the map to place the effect.`, {
-        icon: '✨'
-      });
-    } else {
-      const defaultTool = spell.area?.toLowerCase().includes('cone')
-        ? 'cone_of_cold'
-        : spell.area?.toLowerCase().includes('line')
-        ? 'lightning_bolt'
-        : 'fireball';
-      setTool(defaultTool);
-      toast.info(`Ready to cast ${spell.name}! Click on the map to place the spell.`, {
-        icon: '✨'
-      });
-    }
-  }, []);
-
-  const handleRollCompendiumDice = useCallback((notation: string, label: string) => {
-    const parts = notation.toLowerCase().replace(/\s+/g, '').match(/^(\d+)d(\d+)(?:([+-])(\d+))?$/);
-    if (!parts) {
-      toast.info(`Rolling ${notation} for ${label}`);
-      return;
-    }
-    const count = Math.min(Math.max(parseInt(parts[1], 10) || 1, 1), 20);
-    const sides = parseInt(parts[2], 10) || 6;
-    const sign = parts[3];
-    const modifier = parts[4] ? parseInt(parts[4], 10) : 0;
-
-    const results: number[] = [];
-    let sum = 0;
-    const diceList: { sides: number; result: number; type: string }[] = [];
-
-    for (let i = 0; i < count; i++) {
-      const res = Math.floor(Math.random() * sides) + 1;
-      results.push(res);
-      sum += res;
-      diceList.push({ sides, result: res, type: `d${sides}` });
-    }
-
-    const total = sign === '-' ? sum - modifier : sum + modifier;
-
-    const newRoll: RollResult = {
-      id: Math.random().toString(36).substring(7),
-      dice: notation,
-      results,
-      total,
-      timestamp: Date.now()
-    };
-
-    setDiceHistory(prev => [newRoll, ...prev].slice(0, 30));
-
-    const diceEvent: DdbDiceRollEvent = {
-      id: newRoll.id,
-      characterName: label || 'Compendium',
-      action: label,
-      formula: notation,
-      diceNotation: notation,
-      dice: diceList,
-      total,
-      isCritical: sides === 20 && results.includes(20),
-      isFumble: sides === 20 && results.includes(1),
-      theme: 'default',
-      themeColor: '#d97706',
-      timestamp: Date.now(),
-      source: 'local'
-    };
-
-    if (socketRef.current?.connected) {
-      socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', diceEvent);
-    }
-
-    if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
-      (window as any).__mistwalkerRoll3d(diceEvent);
-    }
-
-    toast.success(`${label}: Rolled ${notation} = ${total}`, {
-      description: `Individual dice: [${results.join(', ')}]${modifier ? ` ${sign} ${modifier}` : ''}`
-    });
-  }, []);
 
   // Universal VTT (.dd2vtt / .uvtt) Importer: extracts map image, grid, walls, doors & lights
   const handleUniversalVttImport = useCallback(async (file: File) => {
@@ -2876,65 +2663,7 @@ export default function App() {
       }
     });
 
-    socket.on('ADD_EFFECT', (newEffect: any) => {
-      if (newEffect?.id) {
-        console.log('[DM Socket] Live ADD_EFFECT from player:', newEffect.label || newEffect.type);
-        const liveSlot = liveMapIdRef.current;
-        if (mapsDataRef.current[liveSlot]) {
-          if (!mapsDataRef.current[liveSlot].effects) mapsDataRef.current[liveSlot].effects = [];
-          if (!mapsDataRef.current[liveSlot].effects.some((e: any) => e.id === newEffect.id)) {
-            mapsDataRef.current[liveSlot].effects.push(newEffect);
-          }
-        }
-        if (activeMapIdRef.current === liveSlot) {
-          setEffects(prev => {
-            if (prev.some(e => e.id === newEffect.id)) return prev;
-            return [...prev, newEffect];
-          });
-        }
 
-        // Trigger procedural sound & shockwave on DM view
-        const def = (newEffect.spellId && getSpecialEffectDefinition(newEffect.spellId))
-          || (newEffect.label && getSpecialEffectDefinition(newEffect.label.toLowerCase().replace(/\s+/g, '_')));
-        const soundToPlay = newEffect.soundEffect || def?.soundEffect;
-        if (soundToPlay && soundToPlay !== 'none') {
-          spellSoundEngine.play(soundToPlay);
-        }
-        const hasShockwave = newEffect.shockwave !== undefined ? newEffect.shockwave : (def?.hasShockwave ?? (def as any)?.shockwave ?? true);
-        if (hasShockwave && newEffect.x != null && newEffect.y != null) {
-          triggerShockwave({
-            x: newEffect.x,
-            y: newEffect.y,
-            maxRadius: (newEffect.size || 60) * 1.5,
-            color: newEffect.color || def?.color || 'rgba(255, 255, 255, 0.9)',
-            duration: 550
-          });
-          triggerShake(false);
-        }
-
-        toast.info(`Player cast: ${newEffect.label || 'Spell Effect'}`);
-      }
-    });
-
-    socket.on('REMOVE_EFFECT', (effectId: string) => {
-      const liveSlot = liveMapIdRef.current;
-      if (mapsDataRef.current[liveSlot]?.effects) {
-        mapsDataRef.current[liveSlot].effects = mapsDataRef.current[liveSlot].effects.filter((e: any) => e.id !== effectId);
-      }
-      if (activeMapIdRef.current === liveSlot) {
-        setEffects(prev => prev.filter(e => e.id !== effectId));
-      }
-    });
-
-    socket.on('CLEAR_EFFECTS', () => {
-      const liveSlot = liveMapIdRef.current;
-      if (mapsDataRef.current[liveSlot]) {
-        mapsDataRef.current[liveSlot].effects = [];
-      }
-      if (activeMapIdRef.current === liveSlot) {
-        setEffects([]);
-      }
-    });
 
     socket.on('SYNC_SHAKE', () => {
       triggerShake(false);
@@ -3196,8 +2925,7 @@ export default function App() {
       broadcastFullStateRef.current?.();
     }, 150);
 
-    return () => clearTimeout(timer);
-  }, [reveals, polygonReveals, isFogVisible, fogResetKey, visionConfig, walls, gridSize, gridOpacity, gridVisible, effects, mapRotation]);
+  }, [reveals, polygonReveals, isFogVisible, fogResetKey, visionConfig, walls, gridSize, gridOpacity, gridVisible, mapRotation]);
 
   // Manual "Force Sync to Players" action
   const handleForceSyncToPlayers = useCallback(() => {
@@ -3389,68 +3117,7 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  const handleEquipCustomEffect = useCallback((effect: CustomSpecialEffect) => {
-    setSelectedCustomEffect(effect);
-    setTool('custom_effect');
-  }, [setTool]);
 
-  const handleQuickPlaceCustomEffect = useCallback((effect: CustomSpecialEffect) => {
-    const dims = getMapDimensions();
-    const centerX = dims.width / 2;
-    const centerY = dims.height / 2;
-    const sizeMultiplier = (effect.defaultSize || 20) / 5;
-    const initialSize = gridSize * sizeMultiplier;
-    const id = Math.random().toString(36).substr(2, 9);
-
-    const def = getSpecialEffectDefinition(effect.id) || getSpecialEffectDefinition(effect.name);
-    const newEffect: Effect = {
-      id,
-      type: effect.shape || def?.shape || 'circle',
-      x: centerX,
-      y: centerY,
-      size: initialSize,
-      rotation: 0,
-      color: effect.color || def?.color || 'rgba(147, 51, 234, 0.4)',
-      label: effect.name,
-      createdAt: Date.now(),
-      isPersistent: effect.isPersistent !== false,
-      imageUrl: effect.imageUrl,
-      videoUrl: (effect as any).videoUrl || def?.videoUrl,
-      loopVideoUrl: (effect as any).loopVideoUrl || def?.loopVideoUrl,
-      thumbUrl: (effect as any).thumbUrl || def?.thumbUrl,
-      jb2aId: (effect as any).jb2aId || def?.jb2aId,
-      blendMode: effect.blendMode || def?.blendMode || 'screen'
-    };
-
-    setEffects(prev => [...prev, newEffect]);
-    activeEffectIdRef.current = id;
-    setActiveEffectId(id);
-
-    // Procedural sound & shockwave
-    const soundToPlay = (effect as any).soundEffect || def?.soundEffect;
-    if (soundToPlay && soundToPlay !== 'none') {
-      spellSoundEngine.play(soundToPlay);
-    }
-    const hasShockwave = (effect as any).shockwave !== undefined 
-      ? (effect as any).shockwave 
-      : ((effect as any).hasShockwave !== undefined ? (effect as any).hasShockwave : (def?.hasShockwave ?? (def as any)?.shockwave ?? true));
-    if (hasShockwave) {
-      triggerShockwave({
-        x: centerX,
-        y: centerY,
-        maxRadius: initialSize * 1.5,
-        color: effect.color,
-        duration: 550
-      });
-      triggerShake(true);
-    }
-
-    if (socketRef.current?.connected) {
-      socketRef.current.emit('ADD_EFFECT', newEffect);
-    }
-
-    toast.success(`Dropped ${effect.name} at center of map!`);
-  }, [getMapDimensions, gridSize]);
 
   // Subscribe to persistent Uploaded Assets (maps, tokens, etc.) from Firebase
   useEffect(() => {
@@ -3644,19 +3311,16 @@ export default function App() {
 
     const authoritativeMapUrl = fullResUrl || scene.mapUrl || '';
 
-    // 5.5 Tactical & Spell FX: effects, animated features, weather
-    const loadedEffects = scene.effects && Array.isArray(scene.effects) ? scene.effects : [];
+    // 5.5 Tactical & Environmental FX: animated features, weather
     const loadedFeatures = scene.boardAnimatedFeatures && Array.isArray(scene.boardAnimatedFeatures) ? scene.boardAnimatedFeatures : [];
     const loadedFeaturesEnabled = scene.boardAnimatedEnabled !== undefined ? scene.boardAnimatedEnabled : true;
     const loadedWeather = scene.boardWeatherEffect || 'none';
 
-    setEffects(loadedEffects);
     setBoardAnimatedFeatures(loadedFeatures);
     setBoardAnimatedEnabled(loadedFeaturesEnabled);
     setBoardWeatherEffect(loadedWeather);
 
     if (mapsDataRef.current[activeMapId]) {
-      mapsDataRef.current[activeMapId].effects = loadedEffects;
       mapsDataRef.current[activeMapId].boardAnimatedFeatures = loadedFeatures;
       mapsDataRef.current[activeMapId].boardAnimatedEnabled = loadedFeaturesEnabled;
       mapsDataRef.current[activeMapId].boardWeatherEffect = loadedWeather;
@@ -3691,7 +3355,6 @@ export default function App() {
       reveals: [],
       polygonReveals: [],
       isFogVisible: scene.isFogVisible ?? true,
-      effects: loadedEffects,
       tokens: loadedTokens,
       gridVisible: true,
       gridOpacity: scene.gridOpacity ?? 0.3,
@@ -3940,7 +3603,7 @@ export default function App() {
     if (backup.activeSceneInfo) setActiveSceneInfo(backup.activeSceneInfo);
     if (backup.activeDmNotes !== undefined) setActiveDmNotes(backup.activeDmNotes);
 
-    if (Array.isArray(backup.effects)) setEffects(backup.effects);
+
     if (Array.isArray(backup.boardAnimatedFeatures)) setBoardAnimatedFeatures(backup.boardAnimatedFeatures);
     if (backup.boardAnimatedEnabled !== undefined) setBoardAnimatedEnabled(backup.boardAnimatedEnabled);
     if (backup.boardWeatherEffect) setBoardWeatherEffect(backup.boardWeatherEffect);
@@ -5023,11 +4686,11 @@ export default function App() {
 
 
 
-    // Check if we clicked on an existing effect, token or its children
+    // Check if we clicked on an existing token or its children
     let target = e.target;
     let isInteractive = false;
     while (target && target !== stage) {
-      if (target.name() === 'effect' || target.name() === 'token') {
+      if (target.name() === 'token') {
         isInteractive = true;
         break;
       }
@@ -5165,7 +4828,6 @@ export default function App() {
 
       if (!e.evt.shiftKey) {
         setSelectedTokenIds([]);
-        setSelectedEffectId(null);
       }
       setSelectionBox({
         startX: point.x,
@@ -5218,210 +4880,7 @@ export default function App() {
         visionEnabled: !isMonster,
         visionRadius: isMonster ? 0 : 60
       };
-    } else if ([
-      'fireball', 'cone_of_cold', 'cone', 'lightning_bolt', 'lightning', 'burning_hands', 'breath',
-      'charm_person', 'charm', 'divine_smite', 'eldritch_blast', 'arms_of_hadar', 'destructive_wave',
-      'fire_bolt', 'hypnotic_pattern', 'spirit_guardians', 'spirit', 'beacon_of_hope', 'beacon',
-      'darkness', 'fog_cloud', 'fog', 'cloudkill', 'poison', 'aura', 'sunbeam', 'eldritch_smite',
-      'shocking_grasp', 'fury_of_blows', 'acid_pool', 'acid'
-    ].includes(tool)) {
-      const id = Math.random().toString(36).substr(2, 9);
-      let isPersistent = [
-        'spirit_guardians', 'spirit', 'beacon_of_hope', 'beacon', 'darkness',
-        'fog_cloud', 'fog', 'cloudkill', 'poison', 'aura', 'sunbeam', 'hypnotic_pattern',
-        'acid_pool', 'acid'
-      ].includes(tool);
-      
-      let type: 'circle' | 'cone' | 'line' = 'circle';
-      if (tool === 'lightning' || tool === 'lightning_bolt' || tool === 'sunbeam') type = 'line';
-      else if (tool === 'cone' || tool === 'cone_of_cold' || tool === 'breath' || tool === 'burning_hands') type = 'cone';
-
-      let color = 'rgba(239, 68, 68, 0.4)';
-      let label = 'Fireball';
-      let initialSize = gridSize * 4; // 20ft radius
-
-      if (tool === 'cone' || tool === 'cone_of_cold') {
-        color = 'rgba(59, 130, 246, 0.4)';
-        label = 'Cone of Cold';
-        initialSize = gridSize * 12; // 60ft
-      } else if (tool === 'lightning' || tool === 'lightning_bolt') {
-        color = 'rgba(234, 179, 8, 0.4)';
-        label = 'Lightning Bolt';
-        initialSize = gridSize * 20; // 100ft
-      } else if (tool === 'sunbeam') {
-        color = 'rgba(255, 255, 100, 0.4)';
-        label = 'Sunbeam';
-        initialSize = gridSize * 12; // 60ft
-      } else if (tool === 'charm' || tool === 'charm_person') {
-        color = 'rgba(255, 105, 180, 0.4)';
-        label = 'Charm Person';
-        initialSize = gridSize * 4; // 20ft
-      } else if (tool === 'hypnotic_pattern') {
-        color = 'rgba(255, 0, 255, 0.4)';
-        label = 'Hypnotic Pattern';
-        initialSize = gridSize * 6; // 30ft
-      } else if (tool === 'eldritch_smite') {
-        color = 'rgba(147, 51, 234, 0.4)';
-        label = 'Eldritch Smite';
-        initialSize = gridSize * 3; // 15ft
-      } else if (tool === 'eldritch_blast') {
-        color = 'rgba(147, 51, 234, 0.4)';
-        label = 'Eldritch Blast';
-        initialSize = gridSize * 1; // 5ft
-      } else if (tool === 'shocking_grasp') {
-        color = 'rgba(59, 130, 246, 0.4)';
-        label = 'Shocking Grasp';
-        initialSize = gridSize * 2; // 10ft
-      } else if (tool === 'fury_of_blows') {
-        color = 'rgba(249, 115, 22, 0.4)';
-        label = 'Fury of Blows';
-        initialSize = gridSize * 2; // 10ft
-      } else if (tool === 'fire_bolt') {
-        color = 'rgba(239, 68, 68, 0.4)';
-        label = 'Fire Bolt';
-        initialSize = gridSize * 1; // 5ft
-      } else if (tool === 'breath' || tool === 'burning_hands') {
-        color = 'rgba(249, 115, 22, 0.4)';
-        label = 'Fire Breath';
-        initialSize = gridSize * 3; // 15ft
-      } else if (tool === 'spirit' || tool === 'spirit_guardians') {
-        color = 'rgba(255, 215, 0, 0.4)'; // Golden
-        label = 'Spirit Guardians';
-        initialSize = gridSize * 3; // 15ft
-      } else if (tool === 'beacon' || tool === 'beacon_of_hope') {
-        color = 'rgba(255, 255, 255, 0.4)'; // White
-        label = 'Beacon of Hope';
-        initialSize = gridSize * 6; // 30ft
-      } else if (tool === 'darkness') {
-        color = 'rgba(0, 0, 0, 0.6)'; // Dark
-        label = 'Darkness';
-        initialSize = gridSize * 3; // 15ft
-      } else if (tool === 'fog' || tool === 'fog_cloud') {
-        color = 'rgba(200, 200, 200, 0.4)'; // Gray
-        label = 'Fog Cloud';
-        initialSize = gridSize * 4; // 20ft
-      } else if (tool === 'poison' || tool === 'cloudkill') {
-        color = 'rgba(34, 197, 94, 0.4)'; // Green
-        label = 'Poison Cloud';
-        initialSize = gridSize * 4; // 20ft
-      } else if (tool === 'divine_smite') {
-        color = 'rgba(251, 191, 36, 0.4)';
-        label = 'Divine Smite';
-        initialSize = gridSize * 2; // 10ft
-      } else if (tool === 'destructive_wave') {
-        color = 'rgba(239, 68, 68, 0.4)';
-        label = 'Destructive Wave';
-        initialSize = gridSize * 6; // 30ft
-      } else if (tool === 'arms_of_hadar') {
-        color = 'rgba(99, 102, 241, 0.4)';
-        label = 'Shadow Grasp';
-        initialSize = gridSize * 2; // 10ft
-      } else if (tool === 'acid_pool' || tool === 'acid') {
-        color = 'rgba(132, 204, 22, 0.4)';
-        label = 'Acid Pool';
-        initialSize = gridSize * 3; // 15ft
-      } else if (tool === 'aura') {
-        color = auraColor;
-        label = 'Aura';
-        initialSize = gridSize * 2; // 10ft
-      }
-      
-      const def = getSpecialEffectDefinition(tool)
-        || getSpecialEffectDefinition(label.toLowerCase().replace(/\s+/g, '_'));
-      
-      const newEffect: Effect = {
-        id,
-        type: def?.shape || type,
-        x: point.x,
-        y: point.y,
-        size: def?.defaultSizeFt ? (def.defaultSizeFt / 5) * gridSize : initialSize,
-        rotation: 0,
-        color: def?.color || color,
-        label: def?.name || label,
-        createdAt: Date.now(),
-        isPersistent: def ? def.isPersistent : isPersistent,
-        opacity: 1.0,
-        videoUrl: def?.videoUrl,
-        loopVideoUrl: def?.loopVideoUrl,
-        thumbUrl: def?.thumbUrl,
-        jb2aId: def?.jb2aId,
-        blendMode: def?.blendMode || 'screen'
-      };
-      setEffects([...effects, newEffect]);
-      activeEffectIdRef.current = id;
-      setActiveEffectId(id);
-
-      // Trigger procedural sound & shockwave
-      const soundToPlay = def?.soundEffect;
-      if (soundToPlay && soundToPlay !== 'none') {
-        spellSoundEngine.play(soundToPlay);
-      }
-      const hasShockwave = def?.hasShockwave ?? true;
-      if (hasShockwave) {
-        triggerShockwave({
-          x: point.x,
-          y: point.y,
-          maxRadius: initialSize * 1.5,
-          color,
-          duration: 550
-        });
-        triggerShake(true);
-      }
-      if (socketRef.current?.connected) {
-        socketRef.current.emit('ADD_EFFECT', newEffect);
-      }
-    } else if (tool === 'custom_effect' && selectedCustomEffect) {
-      const def = getSpecialEffectDefinition(selectedCustomEffect.id)
-        || getSpecialEffectDefinition(selectedCustomEffect.name.toLowerCase().replace(/\s+/g, '_'));
-      const id = Math.random().toString(36).substr(2, 9);
-      const sizeMultiplier = (selectedCustomEffect.defaultSize || 20) / 5;
-      const initialSize = gridSize * sizeMultiplier;
-
-      const newEffect: Effect = {
-        id,
-        type: selectedCustomEffect.shape || def?.shape || 'circle',
-        x: point.x,
-        y: point.y,
-        size: initialSize,
-        rotation: 0,
-        color: selectedCustomEffect.color || def?.color || 'rgba(147, 51, 234, 0.4)',
-        label: selectedCustomEffect.name,
-        createdAt: Date.now(),
-        isPersistent: selectedCustomEffect.isPersistent !== false,
-        imageUrl: selectedCustomEffect.imageUrl,
-        videoUrl: (selectedCustomEffect as any).videoUrl || def?.videoUrl,
-        loopVideoUrl: (selectedCustomEffect as any).loopVideoUrl || def?.loopVideoUrl,
-        thumbUrl: (selectedCustomEffect as any).thumbUrl || def?.thumbUrl,
-        jb2aId: (selectedCustomEffect as any).jb2aId || def?.jb2aId,
-        blendMode: selectedCustomEffect.blendMode || def?.blendMode || 'screen'
-      };
-      setEffects(prev => [...prev, newEffect]);
-      activeEffectIdRef.current = id;
-      setActiveEffectId(id);
-
-      // Trigger procedural sound & shockwave
-      const soundToPlay = (selectedCustomEffect as any).soundEffect || def?.soundEffect;
-      if (soundToPlay && soundToPlay !== 'none') {
-        spellSoundEngine.play(soundToPlay);
-      }
-      const hasShockwave = (selectedCustomEffect as any).hasShockwave !== undefined 
-        ? (selectedCustomEffect as any).hasShockwave 
-        : (def?.hasShockwave ?? true);
-      if (hasShockwave) {
-        triggerShockwave({
-          x: point.x,
-          y: point.y,
-          maxRadius: initialSize * 1.5,
-          color: selectedCustomEffect.color,
-          duration: 550
-        });
-        triggerShake(true);
-      }
-      if (socketRef.current?.connected) {
-        socketRef.current.emit('ADD_EFFECT', newEffect);
-      }
-
-      toast.success(`Placed ${selectedCustomEffect.name} on the map!`);
+      setTokens(prev => [...prev, newToken]);
     }
   };
 
@@ -5483,24 +4942,6 @@ export default function App() {
       });
     } else if (tool === 'measure' && isMeasuring) {
       setMeasureEnd(point);
-    } else if (activeEffectIdRef.current) {
-      setEffects(prevEffects => prevEffects.map(eff => {
-        if (eff.id === activeEffectIdRef.current) {
-          const dx = point.x - eff.x;
-          const dy = point.y - eff.y;
-          const distance = Math.sqrt(dx * dx + dy * dy);
-          const angle = Math.atan2(dy, dx) * (180 / Math.PI);
-          
-          if (eff.type === 'circle') {
-            return { ...eff, size: Math.max(5, distance) };
-          } else if (eff.type === 'cone') {
-            return { ...eff, size: Math.max(5, distance), rotation: angle - 30 };
-          } else if (eff.type === 'line') {
-            return { ...eff, size: Math.max(5, distance), rotation: angle };
-          }
-        }
-        return eff;
-      }));
     }
   };
 
@@ -5635,8 +5076,6 @@ export default function App() {
     if (tool === 'measure') {
       setIsMeasuring(false);
     }
-    activeEffectIdRef.current = null;
-    setActiveEffectId(null);
   };
 
   const handleNudgeSelected = (dx: number, dy: number) => {
@@ -5681,10 +5120,6 @@ export default function App() {
       });
       setSelectedTokenIds([]);
       toast.success(`Removed ${count} token(s)`);
-    } else if (selectedEffectId) {
-      setEffects(prev => prev.filter(e => e.id !== selectedEffectId));
-      setSelectedEffectId(null);
-      toast.success('Effect removed');
     }
   };
 
@@ -5928,7 +5363,7 @@ export default function App() {
         if (selectedWallId) {
           e.preventDefault();
           handleDeleteWall(selectedWallId);
-        } else if (selectedTokenIds.length > 0 || selectedEffectId) {
+        } else if (selectedTokenIds.length > 0) {
           e.preventDefault();
           handleDeleteSelected();
         }
@@ -5940,7 +5375,6 @@ export default function App() {
           setSelectedWallId(null);
         }
         setSelectedTokenIds([]);
-        setSelectedEffectId(null);
         setSelectionBox(null);
       } else if (selectedTokenIds.length > 0 && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
         e.preventDefault();
@@ -5956,7 +5390,7 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedTokenIds, selectedEffectId, gridSize, tokens, selectedWallId, wallDrawStart, handleDeleteWall, handleDeleteSelected]);
+  }, [selectedTokenIds, gridSize, tokens, selectedWallId, wallDrawStart, handleDeleteWall, handleDeleteSelected]);
 
   // Spacebar hold-to-pan handler
   useEffect(() => {
@@ -6162,7 +5596,6 @@ export default function App() {
     setMeasureStart(null);
     setMeasureEnd(null);
     setSelectedTokenIds([]);
-    setSelectedEffectId(null);
 
     // Load new map layer
     const next = mapsDataRef.current[newMapId];
@@ -6176,7 +5609,6 @@ export default function App() {
       setReveals(next.reveals || []);
       setPolygonReveals(next.polygonReveals || []);
       setIsFogVisible(next.isFogVisible !== undefined ? next.isFogVisible : true);
-      setEffects(next.effects || []);
       setTokens(next.tokens || []);
       setGridVisible(next.gridVisible !== undefined ? next.gridVisible : true);
       setGridOpacity(next.gridOpacity !== undefined ? next.gridOpacity : 0.3);
@@ -6202,7 +5634,6 @@ export default function App() {
       setReveals([]);
       setPolygonReveals([]);
       setIsFogVisible(true);
-      setEffects([]);
       setTokens([]);
       setBoardAnimatedFeatures([]);
       setBoardAnimatedEnabled(true);
@@ -6246,7 +5677,6 @@ export default function App() {
       setReveals([]);
       setPolygonReveals([]);
       setIsFogVisible(true);
-      setEffects([]);
       setTokens([]);
       setBoardAnimatedFeatures([]);
       setBoardAnimatedEnabled(true);
@@ -6264,7 +5694,6 @@ export default function App() {
       setMeasureStart(null);
       setMeasureEnd(null);
       setSelectedTokenIds([]);
-      setSelectedEffectId(null);
       setUnsavedSceneBackup(null);
       setUnsavedSceneBackupWasCrash(false);
       try {
@@ -6432,19 +5861,6 @@ export default function App() {
       for (const call of functionCalls) {
         if (call.name === 'move_token') {
           setTokens(prev => prev.map(t => t.id === call.args.id ? { ...t, x: call.args.x, y: call.args.y } : t));
-        } else if (call.name === 'add_effect') {
-          setEffects(prev => [...prev, {
-            id: Math.random().toString(36).substring(7),
-            type: ['circle', 'line', 'cone'].includes(call.args.type) ? call.args.type as any : 'circle',
-            label: call.args.type,
-            color: call.args.color || 'rgba(239, 68, 68, 0.4)',
-            x: call.args.x,
-            y: call.args.y,
-            size: call.args.size,
-            rotation: call.args.rotation || 0,
-            isPersistent: false,
-            createdAt: Date.now()
-          }]);
         } else if (call.name === 'update_hp') {
            console.log(`HP Update: ${call.args.id} changed by ${call.args.hpDelta}`);
         } else if (call.name === 'set_atmosphere') {
@@ -6615,7 +6031,6 @@ export default function App() {
           menuAnchor={menuAnchor}
           handleToolMenuToggle={handleToolMenuToggle}
           handleMenuClick={handleMenuClick}
-          setEffects={setEffects}
           tokens={tokens}
           setTokens={setTokens}
           customTokens={customTokens}
@@ -6659,7 +6074,6 @@ export default function App() {
           onOpenMonsterCompendium={handleOpenMonsterCompendium}
           onOpenCharacterCompendium={handleOpenCharacterCompendium}
           onOpenAlliesCompendium={handleOpenAlliesCompendium}
-          onOpenUniversalCompendium={handleOpenUniversalCompendium}
           compendiumMonsters={compendiumMonsters}
           compendiumCharacters={compendiumCharacters}
           compendiumAllies={compendiumAllies}
@@ -6718,9 +6132,6 @@ export default function App() {
           onStartTutorial={handleStartTutorial}
           onOpenBugReport={() => setIsBugReportModalOpen(true)}
           onOpenBugManager={() => setIsBugManagerModalOpen(true)}
-          onEquipCustomEffect={handleEquipCustomEffect}
-          onQuickPlaceCustomEffect={handleQuickPlaceCustomEffect}
-          activeEquippedCustomEffectId={tool === 'custom_effect' ? selectedCustomEffect?.id : null}
         />
 
         {/* Floating Wall & Creator Toolbar (shown when in creator mode or wall/zone tool active) */}
@@ -6948,7 +6359,6 @@ export default function App() {
                   setAlliesCompendiumInitialSearch('');
                   setShowAlliesCompendium(true);
                 }}
-                onOpenUniversalCompendium={handleOpenUniversalCompendium}
                 onOpenDdbSync={() => setShowDdbModal(true)}
                 onOpenDndChatbot={() => setShowDndChatbot(true)}
                 isFirebaseConnected={isFirebaseConnected}
@@ -7530,30 +6940,6 @@ export default function App() {
                 )}
               </Layer>
 
-              {/* Dedicated Spell Effects Layer (Independent canvas buffer & isolated 25fps re-renders) */}
-              <Layer>
-                <SpellEffectsGroup
-                  effects={effects}
-                  activeEffectId={activeEffectId}
-                  setActiveEffectId={setActiveEffectId}
-                  setEffects={setEffects}
-                  hoveredEffectId={hoveredEffectId}
-                  setHoveredEffectId={setHoveredEffectId}
-                  setEffectContextMenu={setEffectContextMenu}
-                  gridSize={gridSize}
-                  stageScale={stageScale}
-                  coneOfColdImg={coneOfColdImg}
-                  GifImage={GifImage}
-                  EffectResizeHandle={EffectResizeHandle}
-                />
-                {/* Real-time Shockwave Blast Rings & Flash Overlay */}
-                <ShockwaveOverlay
-                  shockwaves={shockwaves}
-                  onRemoveShockwave={handleRemoveShockwave}
-                  stageScale={stageScale}
-                />
-              </Layer>
-
               {/* Tokens Layer */}
               <Layer>
                 {tokens.map((token) => (
@@ -7585,7 +6971,6 @@ export default function App() {
                         } else {
                           setSelectedTokenIds([token.id]);
                         }
-                        setSelectedEffectId(null);
                       }
                     }}
                     onDblClick={() => {
@@ -8242,7 +7627,6 @@ export default function App() {
             setReveals([]);
             setPolygonReveals([]);
             setTokens([]);
-            setEffects([]);
             if (briefing?.readAloud) {
               setAIVoiceScript(briefing.readAloud);
             }
@@ -8293,7 +7677,6 @@ export default function App() {
             }));
           }}
           onPanToToken={(id) => setSelectedTokenIds([id])}
-          onOpenConditionReference={(cond) => handleOpenUniversalCompendium('rules', cond)}
         />
       )}
 
@@ -9209,7 +8592,6 @@ export default function App() {
         currentWalls={walls}
         currentVisionConfig={visionConfig}
         currentRoomAnnotations={roomAnnotations}
-        currentEffects={effects}
         currentBoardAnimatedFeatures={boardAnimatedFeatures}
         currentBoardAnimatedEnabled={boardAnimatedEnabled}
         currentBoardWeatherEffect={boardWeatherEffect}
@@ -9400,20 +8782,6 @@ export default function App() {
         initialSearchQuery={alliesCompendiumInitialSearch}
       />
 
-      {/* Universal 5e SRD Compendium Modal */}
-      <UniversalCompendiumModal
-        isOpen={showUniversalCompendium}
-        onClose={() => {
-          setShowUniversalCompendium(false);
-          setUniversalCompendiumQuery('');
-        }}
-        initialTab={universalCompendiumTab}
-        initialSearchQuery={universalCompendiumQuery}
-        onSpawnMonster={handleSpawnMonsterToken}
-        onCastSpell={handleCastCompendiumSpell}
-        onRollDice={handleRollCompendiumDice}
-      />
-
       {/* D&D Beyond Campaign & Live HP Modal */}
       <DdbSyncModal
         isOpen={showDdbModal}
@@ -9524,19 +8892,11 @@ export default function App() {
         </div>
       )}
 
-      {/* Floating Effect Context Menu (Scalability & Customization for Spells & Tactical Features) */}
+      {/* Floating Effect Context Menu (Scalability & Customization for Tactical Features) */}
       <EffectContextMenu
         data={effectContextMenu?.data || null}
         position={effectContextMenu?.position || null}
         onClose={() => setEffectContextMenu(null)}
-        onUpdateSpell={(updated) => {
-          setEffects(prev => prev.map(eff => eff.id === updated.id ? updated : eff));
-          setEffectContextMenu(prev => prev ? { ...prev, data: { type: 'spell', effect: updated } } : null);
-        }}
-        onDeleteSpell={(id) => {
-          setEffects(prev => prev.filter(eff => eff.id !== id));
-          setEffectContextMenu(null);
-        }}
         onUpdateFeature={(updated) => {
           setBoardAnimatedFeatures(prev => prev.map(feat => feat.id === updated.id ? updated : feat));
           setEffectContextMenu(prev => prev ? { ...prev, data: { type: 'feature', feature: updated } } : null);
@@ -9544,26 +8904,6 @@ export default function App() {
         onDeleteFeature={(id) => {
           setBoardAnimatedFeatures(prev => prev.filter(feat => feat.id !== id));
           setEffectContextMenu(null);
-        }}
-        onDuplicateSpell={(spell) => {
-          const duplicated: Effect = {
-            ...spell,
-            id: `spell-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-            x: spell.x + gridSize,
-            y: spell.y + gridSize,
-            createdAt: Date.now()
-          };
-          setEffects(prev => [...prev, duplicated]);
-          toast.success(`Duplicated ${spell.label || 'spell effect'}`);
-          if (effectContextMenu?.position) {
-            setEffectContextMenu({
-              data: { type: 'spell', effect: duplicated },
-              position: {
-                x: Math.min(window.innerWidth - 300, effectContextMenu.position.x + 25),
-                y: Math.min(window.innerHeight - 360, effectContextMenu.position.y + 25)
-              }
-            });
-          }
         }}
         onDuplicateFeature={handleDuplicateFeature}
         onStartStampingFeature={handleStartStampingFeature}

@@ -60,19 +60,7 @@ import { toast, Toaster } from 'sonner';
 import { DynamicLightingLayer } from './DynamicLightingLayer';
 import { GridLayer } from './GridLayer';
 import { AnimatedFeaturesKonvaImage, AnimatedFeature, WeatherEffectType } from './AnimatedMapOverlay';
-import { ProceduralSpellEffect } from './ProceduralSpellEffect';
-import { Jb2aSpellEffect } from './Jb2aSpellEffect';
-import { findJb2aAsset } from '../data/jb2aDatabase';
-import { ShockwaveOverlay, useShockwaves, triggerShockwave } from './ShockwaveOverlay';
-import {
-  SPECIAL_EFFECTS_DATABASE,
-  getSpecialEffectDefinition,
-  SpecialEffectDefinition
-} from '../data/specialEffectsDatabase';
-import { spellSoundEngine } from '../utils/spellSoundEngine';
 import { DiceTableOverlay } from './DiceTableOverlay';
-import { UniversalCompendiumModal } from './UniversalCompendiumModal';
-import { Spell } from '../types/spell';
 import { DdbDiceRollEvent } from '../types/dice';
 import { DICE_COLOR_PRESETS, DiceColorPreset } from '../graphics/dice/diceTextures';
 import { WallSegment, VisionConfig, RoomAnnotation, Combatant, isMonsterToken, AURA_PRESETS, AURA_COLOR_PALETTE, TokenAura, AuraPreset } from '../types';
@@ -152,87 +140,6 @@ function normalizeToken(t: any): Token {
   };
 }
 
-interface SpellEffect {
-  id: string;
-  type: 'circle' | 'cone' | 'line';
-  x: number;
-  y: number;
-  size: number;
-  rotation: number;
-  color: string;
-  label: string;
-  createdAt?: number;
-  isPersistent?: boolean;
-  imageUrl?: string;
-  videoUrl?: string;
-  loopVideoUrl?: string;
-  thumbUrl?: string;
-  jb2aId?: string;
-  blendMode?: string;
-  opacity?: number;
-  placedById?: string;
-  placedByName?: string;
-}
-
-export interface PlayerSpellDefinition {
-  id: string;
-  name: string;
-  label: string;
-  category: 'instant' | 'persistent' | 'tactical';
-  type: 'circle' | 'cone' | 'line';
-  defaultSizeFt: number; // in feet (5, 10, 15, 20, 30, 60, 100)
-  color: string;
-  isPersistent: boolean;
-  defaultOpacity?: number;
-  description: string;
-  iconName: 'flame' | 'zap' | 'sun' | 'snowflake' | 'moon' | 'cloud' | 'droplets' | 'wind' | 'shield' | 'sparkles';
-  badgeColor: string;
-  soundEffect?: string;
-  shockwave?: boolean;
-  videoUrl?: string;
-  loopVideoUrl?: string;
-  thumbUrl?: string;
-  jb2aId?: string;
-}
-export const PLAYER_EFFECTS_CATALOG: PlayerSpellDefinition[] = SPECIAL_EFFECTS_DATABASE.map(s => ({
-  id: s.id,
-  name: s.name,
-  label: s.label,
-  category: (s.category === 'instant' ? 'instant' : s.category === 'persistent' ? 'persistent' : 'tactical') as any,
-  type: s.shape,
-  defaultSizeFt: s.defaultSizeFt,
-  color: s.color,
-  isPersistent: s.isPersistent,
-  defaultOpacity: s.defaultOpacity,
-  description: s.description,
-  iconName: s.iconName as any,
-  badgeColor: s.badgeColor,
-  soundEffect: s.soundEffect,
-  shockwave: s.hasShockwave,
-  videoUrl: s.videoUrl,
-  loopVideoUrl: s.loopVideoUrl,
-  thumbUrl: s.thumbUrl,
-  jb2aId: s.jb2aId
-}));
-
-
-export const renderSpellIcon = (iconName: string, className: string = "w-4 h-4") => {
-  switch (iconName) {
-    case 'flame': return <Flame className={className} />;
-    case 'zap': return <Zap className={className} />;
-    case 'sun': return <Sun className={className} />;
-    case 'snowflake': return <Snowflake className={className} />;
-    case 'moon': return <Moon className={className} />;
-    case 'cloud': return <Cloud className={className} />;
-    case 'droplets': return <Droplets className={className} />;
-    case 'wind': return <Wind className={className} />;
-    case 'shield': return <Shield className={className} />;
-    case 'sparkles':
-    default:
-      return <Sparkles className={className} />;
-  }
-};
-
 interface SyncState {
   reveals?: { x: number; y: number; radius: number }[];
   polygonReveals?: number[][];
@@ -249,7 +156,6 @@ interface SyncState {
   roomAnnotations?: RoomAnnotation[];
   mapRotation?: number;
   imageFile?: string | null;
-  effects?: SpellEffect[];
   boardAnimatedFeatures?: AnimatedFeature[];
   boardAnimatedEnabled?: boolean;
   boardWeatherEffect?: WeatherEffectType;
@@ -453,8 +359,7 @@ const PlayerToken = React.memo(({
   onDragMoveToken,
   onDragStartToken,
   onClaimToken,
-  onContextMenu,
-  isAimingSpell = false
+  onContextMenu
 }: {
   token: Token;
   gridSize: number;
@@ -467,7 +372,6 @@ const PlayerToken = React.memo(({
   onDragStartToken?: (id: string) => void;
   onClaimToken?: (id: string) => void;
   onContextMenu?: (id: string, clientX: number, clientY: number) => void;
-  isAimingSpell?: boolean;
 }) => {
   // Directly tie AC and HP to character sheet
   const stats = useMemo(() => {
@@ -669,10 +573,10 @@ const PlayerToken = React.memo(({
       x={token.x}
       y={token.y}
       name="token"
-      draggable={!isCondition && !isAimingSpell}
+      draggable={!isCondition}
       dragDistance={10}
       onMouseDown={(e: any) => {
-        if (!isCondition && !isAimingSpell && e.evt?.button !== 2) {
+        if (!isCondition && e.evt?.button !== 2) {
           e.cancelBubble = true;
           pointerDownTimeRef.current = Date.now();
           pointerDownPosRef.current = {
@@ -689,7 +593,7 @@ const PlayerToken = React.memo(({
         }
       }}
       onTouchStart={(e: any) => {
-        if (!isCondition && !isAimingSpell) {
+        if (!isCondition) {
           e.cancelBubble = true;
           pointerDownTimeRef.current = Date.now();
           const t0 = e.evt?.touches?.[0];
@@ -729,7 +633,7 @@ const PlayerToken = React.memo(({
         if (holdTimerRef.current) {
           clearTimeout(holdTimerRef.current);
         }
-        if (!isAimingSpell && !isCurrentlyDraggingRef.current) {
+        if (!isCurrentlyDraggingRef.current) {
           e.cancelBubble = true;
           if (!isMonster && !isCondition && onClaimToken) {
             onClaimToken(token.id);
@@ -740,7 +644,7 @@ const PlayerToken = React.memo(({
         if (holdTimerRef.current) {
           clearTimeout(holdTimerRef.current);
         }
-        if (!isAimingSpell && !isCurrentlyDraggingRef.current) {
+        if (!isCurrentlyDraggingRef.current) {
           e.cancelBubble = true;
           if (!isMonster && !isCondition && onClaimToken) {
             onClaimToken(token.id);
@@ -1051,8 +955,7 @@ const PlayerToken = React.memo(({
     prevProps.isClaimed === nextProps.isClaimed &&
     prevProps.characters === nextProps.characters &&
     prevProps.combatants === nextProps.combatants &&
-    prevProps.stageScale === nextProps.stageScale &&
-    prevProps.isAimingSpell === nextProps.isAimingSpell
+    prevProps.stageScale === nextProps.stageScale
   );
 });
 
@@ -1096,11 +999,9 @@ export default function PlayerView() {
   const [polygonReveals, setPolygonReveals] = useState<number[][]>(() => Array.isArray(initialBackup?.polygonReveals) ? initialBackup.polygonReveals : []);
   const [isFogVisible, setIsFogVisible] = useState<boolean>(() => initialBackup?.isFogVisible !== undefined ? initialBackup.isFogVisible : true);
   const [fogResetKey, setFogResetKey] = useState<number>(() => initialBackup?.fogResetKey || 0);
-  const [effects, setEffects] = useState<SpellEffect[]>(() => Array.isArray(initialBackup?.effects) ? initialBackup.effects : []);
   const [boardAnimatedFeatures, setBoardAnimatedFeatures] = useState<AnimatedFeature[]>(() => Array.isArray(initialBackup?.boardAnimatedFeatures) ? initialBackup.boardAnimatedFeatures : []);
   const [boardAnimatedEnabled, setBoardAnimatedEnabled] = useState<boolean>(() => initialBackup?.boardAnimatedEnabled !== undefined ? initialBackup.boardAnimatedEnabled : true);
   const [boardWeatherEffect, setBoardWeatherEffect] = useState<WeatherEffectType>(() => initialBackup?.boardWeatherEffect || 'none');
-  const { shockwaves, handleRemoveShockwave } = useShockwaves();
 
   // Grid Settings
   const [gridVisible, setGridVisible] = useState<boolean>(() => initialBackup?.gridVisible !== undefined ? initialBackup.gridVisible : true);
@@ -1297,70 +1198,7 @@ export default function PlayerView() {
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
   const [showCharacterFlyout, setShowCharacterFlyout] = useState(false);
 
-  // Universal 5e SRD Compendium Modal State
-  const [showUniversalCompendium, setShowUniversalCompendium] = useState(false);
-  const [universalCompendiumTab, setUniversalCompendiumTab] = useState<'spells' | 'monsters' | 'equipment' | 'rules'>('spells');
-  const [universalCompendiumQuery, setUniversalCompendiumQuery] = useState('');
-
-  // Effects Tab and Interactive Placement State
-  const [showEffectsPanel, setShowEffectsPanel] = useState(false);
-  const [effectsTab, setEffectsTab] = useState<'instant' | 'persistent' | 'tactical' | 'active'>('instant');
-  const [activePlayerTool, setActivePlayerTool] = useState<string | null>(null);
-  const [equippedSpell, setEquippedSpell] = useState<PlayerSpellDefinition | null>(null);
-  const [effectsSearchQuery, setEffectsSearchQuery] = useState('');
-  const [pinnedEffectsPanel, setPinnedEffectsPanel] = useState(false);
-  const [panelPos, setPanelPos] = useState({ x: 20, y: 72 });
-  const [isDraggingPanel, setIsDraggingPanel] = useState(false);
-  const panelDragStartRef = useRef({ mouseX: 0, mouseY: 0, posX: 20, posY: 72 });
-
-  // Click-to-aim interactive placement state
-  const [isAiming, setIsAiming] = useState(false);
-  const [aimOrigin, setAimOrigin] = useState<{ x: number; y: number } | null>(null);
-  const [aimCurrent, setAimCurrent] = useState<{ x: number; y: number } | null>(null);
-
   const stageRef = useRef<any>(null);
-  const effectsRef = useRef<SpellEffect[]>(effects);
-  useEffect(() => {
-    effectsRef.current = effects;
-  }, [effects]);
-
-  // Window mousemove / mouseup listener for dragging effects panel smoothly
-  useEffect(() => {
-    if (!isDraggingPanel) return;
-    const onMouseMove = (e: MouseEvent) => {
-      const dx = e.clientX - panelDragStartRef.current.mouseX;
-      const dy = e.clientY - panelDragStartRef.current.mouseY;
-      const newX = Math.max(10, Math.min(window.innerWidth - 340, panelDragStartRef.current.posX + dx));
-      const newY = Math.max(10, Math.min(window.innerHeight - 200, panelDragStartRef.current.posY + dy));
-      setPanelPos({ x: newX, y: newY });
-    };
-    const onMouseUp = () => {
-      setIsDraggingPanel(false);
-    };
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', onMouseUp);
-    return () => {
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', onMouseUp);
-    };
-  }, [isDraggingPanel]);
-
-  // Automatic 5-second lifetime expiration for non-persistent spells
-  useEffect(() => {
-    const timer = setInterval(() => {
-      const now = Date.now();
-      setEffects(prev => {
-        const filtered = prev.filter(eff => {
-          if (eff.createdAt && !eff.isPersistent) {
-            return now - eff.createdAt < 5000;
-          }
-          return true;
-        });
-        return filtered.length === prev.length ? prev : filtered;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   // Handle window resizing
   useEffect(() => {
@@ -1477,28 +1315,6 @@ export default function PlayerView() {
       if (state.walls && Array.isArray(state.walls)) setWalls(state.walls);
       if (state.reveals) setReveals(state.reveals);
       if (state.polygonReveals) setPolygonReveals(state.polygonReveals);
-      if (state.effects && Array.isArray(state.effects)) {
-        const newEffects = state.effects.filter(e => !effectsRef.current.some(old => old.id === e.id));
-        newEffects.forEach(e => {
-          const def = (e.spellId && getSpecialEffectDefinition(e.spellId))
-            || (e.label && getSpecialEffectDefinition(e.label.toLowerCase().replace(/\s+/g, '_')));
-          const soundToPlay = e.soundEffect || def?.soundEffect;
-          if (soundToPlay && soundToPlay !== 'none') {
-            spellSoundEngine.play(soundToPlay);
-          }
-          const hasShockwave = e.shockwave !== undefined ? e.shockwave : (def?.hasShockwave ?? (def as any)?.shockwave ?? true);
-          if (hasShockwave && e.x != null && e.y != null) {
-            triggerShockwave({
-              x: e.x,
-              y: e.y,
-              maxRadius: (e.size || 60) * 1.5,
-              color: e.color || def?.color || 'rgba(255, 255, 255, 0.9)',
-              duration: 550
-            });
-          }
-        });
-        setEffects(state.effects);
-      }
       if (state.boardAnimatedFeatures && Array.isArray(state.boardAnimatedFeatures)) {
         setBoardAnimatedFeatures(state.boardAnimatedFeatures);
       }
@@ -1862,44 +1678,6 @@ export default function PlayerView() {
       });
     });
 
-    // Real-time spell effects synchronization from server and DM
-    socket.on('ADD_EFFECT', (newEffect: any) => {
-      if (newEffect?.id) {
-        setEffects(prev => {
-          if (prev.some(e => e.id === newEffect.id)) return prev;
-          return [...prev, newEffect];
-        });
-
-        // Trigger procedural sound & shockwave if configured
-        const def = (newEffect.spellId && getSpecialEffectDefinition(newEffect.spellId))
-          || (newEffect.label && getSpecialEffectDefinition(newEffect.label.toLowerCase().replace(/\s+/g, '_')));
-        const soundToPlay = newEffect.soundEffect || def?.soundEffect;
-        if (soundToPlay && soundToPlay !== 'none') {
-          spellSoundEngine.play(soundToPlay);
-        }
-        const hasShockwave = newEffect.shockwave !== undefined ? newEffect.shockwave : (def?.hasShockwave ?? (def as any)?.shockwave ?? true);
-        if (hasShockwave && newEffect.x != null && newEffect.y != null) {
-          triggerShockwave({
-            x: newEffect.x,
-            y: newEffect.y,
-            maxRadius: (newEffect.size || 60) * 1.5,
-            color: newEffect.color || def?.color || 'rgba(255, 255, 255, 0.9)',
-            duration: 550
-          });
-        }
-      }
-    });
-
-    socket.on('REMOVE_EFFECT', (effectId: string) => {
-      if (effectId) {
-        setEffects(prev => prev.filter(e => e.id !== effectId));
-      }
-    });
-
-    socket.on('CLEAR_EFFECTS', () => {
-      setEffects([]);
-    });
-
     // Auto-sync D&D Beyond party health on initial load
     fetch('/api/ddb/campaigns/sync-status')
       .then(res => res.json())
@@ -2212,358 +1990,13 @@ export default function PlayerView() {
     }
   }, []);
 
-  // Effect placement & management handlers
-  const createAndPlaceEffect = useCallback(({
-    spellDef,
-    x,
-    y,
-    size,
-    rotation = 0
-  }: {
-    spellDef: PlayerSpellDefinition;
-    x: number;
-    y: number;
-    size: number;
-    rotation?: number;
-  }) => {
-    const id = Math.random().toString(36).substring(2, 11);
-    const claimedChar = claimedTokenId ? tokens.find(t => t.id === claimedTokenId) : null;
-    const newEffect: SpellEffect = {
-      id,
-      type: spellDef.type,
-      x,
-      y,
-      size,
-      rotation,
-      color: spellDef.color,
-      label: spellDef.label,
-      createdAt: Date.now(),
-      isPersistent: spellDef.isPersistent,
-      opacity: spellDef.defaultOpacity !== undefined ? spellDef.defaultOpacity : 1.0,
-      placedById: claimedTokenId || 'player',
-      placedByName: claimedChar?.name || 'Player',
-      videoUrl: spellDef.videoUrl || findJb2aAsset(spellDef.id)?.webm || findJb2aAsset(spellDef.name)?.webm,
-      loopVideoUrl: spellDef.loopVideoUrl || findJb2aAsset(spellDef.id)?.loopWebm || findJb2aAsset(spellDef.name)?.loopWebm,
-      thumbUrl: spellDef.thumbUrl || findJb2aAsset(spellDef.id)?.thumb || findJb2aAsset(spellDef.name)?.thumb,
-      jb2aId: spellDef.jb2aId || findJb2aAsset(spellDef.id)?.id || findJb2aAsset(spellDef.name)?.id
-    };
 
-    setEffects(prev => [...prev, newEffect]);
-    effectsRef.current = [...effectsRef.current, newEffect];
-
-    // Procedural sound & shockwave
-    const def = getSpecialEffectDefinition(spellDef.id);
-    const soundToPlay = spellDef.soundEffect || def?.soundEffect;
-    if (soundToPlay && soundToPlay !== 'none') {
-      spellSoundEngine.play(soundToPlay);
-    }
-    const hasShockwave = spellDef.shockwave !== undefined ? spellDef.shockwave : (def?.hasShockwave ?? (def as any)?.shockwave ?? true);
-    if (hasShockwave) {
-      triggerShockwave({
-        x,
-        y,
-        maxRadius: size * 1.5,
-        color: spellDef.color,
-        duration: 550
-      });
-    }
-
-    if (socketRef.current?.connected) {
-      socketRef.current.emit('ADD_EFFECT', newEffect);
-    }
-
-    toast.success(`Cast ${newEffect.label}!`, {
-      description: spellDef.isPersistent ? 'Persistent AoE placed on scene' : 'Instant spell triggered'
-    });
-  }, [claimedTokenId, tokens]);
-
-  const handleRemoveEffect = useCallback((effectId: string) => {
-    setEffects(prev => prev.filter(e => e.id !== effectId));
-    effectsRef.current = effectsRef.current.filter(e => e.id !== effectId);
-    if (socketRef.current?.connected) {
-      socketRef.current.emit('REMOVE_EFFECT', effectId);
-    }
-    toast.info('Effect dismissed');
-  }, []);
-
-  const handleClearAllEffects = useCallback(() => {
-    setEffects([]);
-    effectsRef.current = [];
-    if (socketRef.current?.connected) {
-      socketRef.current.emit('CLEAR_EFFECTS');
-    }
-    toast.info('All effects cleared');
-  }, []);
-
-  const handleEquipSpell = useCallback((spell: PlayerSpellDefinition) => {
-    setActivePlayerTool(spell.id);
-    setEquippedSpell(spell);
-    toast.info(`Aiming ${spell.name}`, {
-      description: 'Click and drag on the map to place and orient. Press ESC to cancel.'
-    });
-  }, []);
-
-  // 5e SRD Universal Compendium Handlers
-  const handleCastCompendiumSpell = useCallback((spell: Spell) => {
-    setShowUniversalCompendium(false);
-
-    // 1. Check if spell has direct match in PLAYER_EFFECTS_CATALOG
-    const normalizedName = spell.name.toLowerCase().trim();
-    const matched = PLAYER_EFFECTS_CATALOG.find(
-      s => (spell.effectId && s.id === spell.effectId) ||
-           s.id.toLowerCase() === spell.id.toLowerCase() ||
-           s.name.toLowerCase().trim() === normalizedName
-    );
-
-    if (matched) {
-      handleEquipSpell(matched);
-      return;
-    }
-
-    // 2. Synthesize a procedural PlayerSpellDefinition from the 5e SRD Spell
-    const isCone = spell.area?.toLowerCase().includes('cone');
-    const isLine = spell.area?.toLowerCase().includes('line');
-    const type: 'circle' | 'cone' | 'line' = isCone ? 'cone' : isLine ? 'line' : 'circle';
-
-    // Parse size in feet from area (e.g. "20-foot radius sphere", "15-foot cone")
-    let defaultSizeFt = 20;
-    if (spell.area) {
-      const match = spell.area.match(/(\d+)[-\s]foot/i);
-      if (match) {
-        defaultSizeFt = parseInt(match[1], 10);
-      }
-    } else if (spell.range) {
-      const match = spell.range.match(/(\d+)[-\s]foot/i);
-      if (match && parseInt(match[1], 10) <= 60) {
-        defaultSizeFt = Math.max(10, Math.min(30, parseInt(match[1], 10)));
-      }
-    }
-
-    // Theme color and icon based on damageType / school
-    let color = '#a855f7';
-    let iconName: 'flame' | 'zap' | 'sun' | 'snowflake' | 'moon' | 'cloud' | 'droplets' | 'wind' | 'shield' | 'sparkles' = 'sparkles';
-    const dmg = spell.damageType?.toLowerCase() || '';
-    const school = spell.school?.toLowerCase() || '';
-
-    if (dmg.includes('fire') || normalizedName.includes('flame') || normalizedName.includes('fire')) {
-      color = '#f97316';
-      iconName = 'flame';
-    } else if (dmg.includes('lightning') || dmg.includes('thunder') || normalizedName.includes('shock')) {
-      color = '#38bdf8';
-      iconName = 'zap';
-    } else if (dmg.includes('cold') || normalizedName.includes('ice') || normalizedName.includes('frost')) {
-      color = '#06b6d4';
-      iconName = 'snowflake';
-    } else if (dmg.includes('radiant') || school.includes('evocation')) {
-      color = '#fbbf24';
-      iconName = 'sun';
-    } else if (dmg.includes('necrotic') || school.includes('necromancy')) {
-      color = '#84cc16';
-      iconName = 'moon';
-    } else if (school.includes('abjuration')) {
-      color = '#3b82f6';
-      iconName = 'shield';
-    } else if (dmg.includes('acid') || dmg.includes('poison')) {
-      color = '#22c55e';
-      iconName = 'droplets';
-    }
-
-    const isPersistent = spell.duration.toLowerCase().includes('minute') ||
-                         spell.duration.toLowerCase().includes('hour') ||
-                         spell.concentration;
-
-    const jb = findJb2aAsset(spell.name) || findJb2aAsset(spell.id) || (spell.effectId ? findJb2aAsset(spell.effectId) : undefined);
-
-    const synthesizedSpell: PlayerSpellDefinition = {
-      id: spell.effectId || `compendium_${spell.id}`,
-      name: spell.name,
-      label: spell.name,
-      category: isPersistent ? 'persistent' : 'instant',
-      type: jb?.shape || type,
-      defaultSizeFt: jb?.defaultSizeFt || defaultSizeFt,
-      color: jb?.color || color,
-      isPersistent,
-      defaultOpacity: 0.9,
-      description: spell.description.slice(0, 120) + (spell.description.length > 120 ? '...' : ''),
-      iconName,
-      badgeColor: jb?.color || color,
-      soundEffect: (jb?.soundEffect as any) || (dmg.includes('fire') ? 'fire' : dmg.includes('lightning') ? 'lightning' : dmg.includes('cold') ? 'frost' : 'arcane'),
-      shockwave: true,
-      videoUrl: jb?.webm,
-      loopVideoUrl: jb?.loopWebm,
-      thumbUrl: jb?.thumb,
-      jb2aId: jb?.id
-    };
-
-    handleEquipSpell(synthesizedSpell);
-  }, [handleEquipSpell]);
-
-  const handleRollCompendiumDice = useCallback((notation: string, label: string = 'Compendium Roll') => {
-    const clean = notation.toLowerCase().replace(/\s+/g, '');
-    const match = clean.match(/^(\d*)d(\d+)(?:([+-])(\d+))?/i);
-
-    if (!match) {
-      toast.info(`Rolling ${notation} for ${label}`);
-      return;
-    }
-
-    const count = Math.min(Math.max(parseInt(match[1] || '1', 10), 1), 30);
-    const sides = parseInt(match[2], 10) || 6;
-    const sign = match[3];
-    const modifier = match[4] ? parseInt(match[4], 10) : 0;
-
-    const results: number[] = [];
-    let sum = 0;
-    const diceList: { sides: number; result: number; type: string }[] = [];
-
-    for (let i = 0; i < count; i++) {
-      const res = Math.floor(Math.random() * sides) + 1;
-      results.push(res);
-      sum += res;
-      diceList.push({ sides, result: res, type: `d${sides}` });
-    }
-
-    const total = sign === '-' ? sum - modifier : sum + modifier;
-
-    const diceEvent: DdbDiceRollEvent = {
-      id: `player-spell-${Date.now()}-${Math.random().toString(36).substring(7)}`,
-      characterName: claimedToken?.name || 'Local Player',
-      action: label,
-      formula: notation,
-      diceNotation: notation,
-      dice: diceList,
-      total,
-      isCritical: sides === 20 && results.includes(20),
-      isFumble: sides === 20 && results.includes(1),
-      theme: selectedDicePreset.id,
-      themeColor: selectedDicePreset.theme.primaryColor,
-      timestamp: Date.now(),
-      source: 'player' as any
-    };
-
-    if (socketRef.current?.connected) {
-      socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', diceEvent);
-    }
-
-    if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
-      (window as any).__mistwalkerRoll3d(diceEvent);
-    }
-
-    toast.success(`${label}: Rolled ${notation} = ${total}`, {
-      description: `[${results.join(', ')}]${modifier ? ` ${sign} ${modifier}` : ''}`
-    });
-  }, [claimedToken?.name, selectedDicePreset]);
-
-  const handlePanelDragStart = useCallback((e: React.MouseEvent) => {
-    if (pinnedEffectsPanel) return;
-    setIsDraggingPanel(true);
-    panelDragStartRef.current = {
-      mouseX: e.clientX,
-      mouseY: e.clientY,
-      posX: panelPos.x,
-      posY: panelPos.y
-    };
-  }, [pinnedEffectsPanel, panelPos]);
-
-  const handleStageDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
-  }, []);
-
-  const handleStageDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    const spellId = e.dataTransfer.getData('application/dnd-effect') || e.dataTransfer.getData('text/plain');
-    if (!spellId) return;
-    const spellDef = PLAYER_EFFECTS_CATALOG.find(s => s.id === spellId);
-    if (!spellDef) return;
-
-    const stage = stageRef.current;
-    if (!stage) return;
-    const containerRect = stage.container().getBoundingClientRect();
-    const screenX = e.clientX - containerRect.left;
-    const screenY = e.clientY - containerRect.top;
-    const mapX = (screenX - stagePos.x) / stageScale;
-    const mapY = (screenY - stagePos.y) / stageScale;
-
-    createAndPlaceEffect({
-      spellDef,
-      x: mapX,
-      y: mapY,
-      size: (spellDef.defaultSizeFt / 5) * gridSize,
-      rotation: 0
-    });
-  }, [stagePos, stageScale, gridSize, createAndPlaceEffect]);
-
-  const handleStageMouseDown = useCallback((e: any) => {
-    if (activePlayerTool && equippedSpell) {
-      const stage = e.target.getStage();
-      if (!stage) return;
-      const pointer = stage.getPointerPosition();
-      if (!pointer) return;
-      const mapX = (pointer.x - stagePos.x) / stageScale;
-      const mapY = (pointer.y - stagePos.y) / stageScale;
-      setIsAiming(true);
-      setAimOrigin({ x: mapX, y: mapY });
-      setAimCurrent({ x: mapX, y: mapY });
-    }
-  }, [activePlayerTool, equippedSpell, stagePos, stageScale]);
-
-  const handleStageMouseMove = useCallback((e: any) => {
-    if (isAiming && aimOrigin) {
-      const stage = e.target.getStage();
-      if (!stage) return;
-      const pointer = stage.getPointerPosition();
-      if (!pointer) return;
-      const mapX = (pointer.x - stagePos.x) / stageScale;
-      const mapY = (pointer.y - stagePos.y) / stageScale;
-      setAimCurrent({ x: mapX, y: mapY });
-    }
-  }, [isAiming, aimOrigin, stagePos, stageScale]);
-
-  const handleStageMouseUp = useCallback((e: any) => {
-    if (isAiming && aimOrigin && equippedSpell) {
-      const stage = e.target.getStage();
-      const pointer = stage ? stage.getPointerPosition() : null;
-      const mapX = pointer ? (pointer.x - stagePos.x) / stageScale : (aimCurrent?.x ?? aimOrigin.x);
-      const mapY = pointer ? (pointer.y - stagePos.y) / stageScale : (aimCurrent?.y ?? aimOrigin.y);
-
-      const dx = mapX - aimOrigin.x;
-      const dy = mapY - aimOrigin.y;
-      const dragDist = Math.hypot(dx, dy);
-      const rotation = (Math.atan2(dy, dx) * 180) / Math.PI;
-
-      const size = dragDist >= 15 ? dragDist : (equippedSpell.defaultSizeFt / 5) * gridSize;
-
-      createAndPlaceEffect({
-        spellDef: equippedSpell,
-        x: aimOrigin.x,
-        y: aimOrigin.y,
-        size,
-        rotation: (equippedSpell.type === 'cone' || equippedSpell.type === 'line') ? rotation : 0
-      });
-
-      setIsAiming(false);
-      setAimOrigin(null);
-      setAimCurrent(null);
-      setActivePlayerTool(null);
-      setEquippedSpell(null);
-    }
-  }, [isAiming, aimOrigin, aimCurrent, equippedSpell, stagePos, stageScale, gridSize, createAndPlaceEffect]);
 
   // Arrow-Key & WASD Movement for Seized Token + Escape key handling
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Handle Escape key to cancel aiming or close modals/menus
+      // Handle Escape key to close modals/menus
       if (e.key === 'Escape') {
-        if (activePlayerTool) {
-          setActivePlayerTool(null);
-          setEquippedSpell(null);
-          setIsAiming(false);
-          setAimOrigin(null);
-          setAimCurrent(null);
-          return;
-        }
-        setShowEffectsPanel(false);
         setActiveTokenMenu(null);
         setShowClaimMenu(false);
         if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) {
@@ -2623,7 +2056,7 @@ export default function PlayerView() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [claimedTokenId, tokens, gridSize, handleMoveToken, activePlayerTool]);
+  }, [claimedTokenId, tokens, gridSize, handleMoveToken]);
 
   // Quick 3D Physics Dice Roll (d20)
   const handleQuickRollDice = useCallback(() => {
@@ -2846,7 +2279,6 @@ export default function PlayerView() {
           polygonReveals,
           isFogVisible,
           fogResetKey,
-          effects,
           boardAnimatedFeatures,
           boardAnimatedEnabled,
           boardWeatherEffect,
@@ -2873,7 +2305,7 @@ export default function PlayerView() {
     return () => clearTimeout(timer);
   }, [
     imageFile, mapRotation, tokens, walls, reveals, polygonReveals, isFogVisible, fogResetKey,
-    effects, boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect, gridVisible,
+    boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect, gridVisible,
     gridOpacity, gridSize, gridOffsetX, gridOffsetY, visionConfig, stageScale, stagePos,
     activeSceneInfo, combatState, claimedTokenId, targetMapW, targetMapH
   ]);
@@ -2891,7 +2323,6 @@ export default function PlayerView() {
           polygonReveals,
           isFogVisible,
           fogResetKey,
-          effects,
           boardAnimatedFeatures,
           boardAnimatedEnabled,
           boardWeatherEffect,
@@ -2917,7 +2348,7 @@ export default function PlayerView() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [
     imageFile, mapRotation, tokens, walls, reveals, polygonReveals, isFogVisible, fogResetKey,
-    effects, boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect, gridVisible,
+    boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect, gridVisible,
     gridOpacity, gridSize, gridOffsetX, gridOffsetY, visionConfig, stageScale, stagePos,
     activeSceneInfo, combatState, claimedTokenId, targetMapW, targetMapH
   ]);
@@ -3130,78 +2561,7 @@ export default function PlayerView() {
     return false;
   }, [isFogVisible, claimedTokenId, gridSize, reveals, polygonReveals, visionConfig.enabled, activeFovPolygons, walls]);
 
-  // Determine if a spell / AoE effect is revealed to players through the fog of war
-  const isEffectVisibleToPlayer = useCallback((eff: SpellEffect): boolean => {
-    // If the effect was cast by the active claimed character, they can always see their own spell
-    if (claimedTokenId && eff.placedById === claimedTokenId) return true;
 
-    // On shared display view without a single claimed token, party spells are visible
-    if (!claimedTokenId && eff.placedById) {
-      const placer = tokens.find(t => t.id === eff.placedById);
-      if (placer && (placer.isPlayer || placer.category === 'character' || placer.category === 'ally')) return true;
-    }
-
-    // If fog is completely disabled, all effects are visible
-    if (!isFogVisible) return true;
-
-    const r = eff.size || 50;
-    const cx = eff.x;
-    const cy = eff.y;
-
-    // Test points: center, cardinal edges, and diagonals
-    const testPoints = [
-      { x: cx, y: cy },
-      { x: cx - r * 0.7, y: cy },
-      { x: cx + r * 0.7, y: cy },
-      { x: cx, y: cy - r * 0.7 },
-      { x: cx, y: cy + r * 0.7 },
-    ];
-
-    if (eff.type === 'cone' || eff.type === 'line') {
-      const rotRad = ((eff.rotation || 0) * Math.PI) / 180;
-      testPoints.push(
-        { x: cx + Math.cos(rotRad) * r * 0.5, y: cy + Math.sin(rotRad) * r * 0.5 },
-        { x: cx + Math.cos(rotRad) * r * 0.9, y: cy + Math.sin(rotRad) * r * 0.9 }
-      );
-    }
-
-    // 1. Check circle brush reveals
-    for (const rev of reveals) {
-      for (const pt of testPoints) {
-        if (distanceBetween(pt.x, pt.y, rev.x, rev.y) <= rev.radius) {
-          return true;
-        }
-      }
-    }
-
-    // 2. Check polygon room reveals
-    for (const poly of polygonReveals) {
-      if (poly.length >= 6) {
-        for (const pt of testPoints) {
-          if (isPointInPolygon(pt.x, pt.y, poly)) {
-            return true;
-          }
-        }
-      }
-    }
-
-    // 3. Check active dynamic FOV line-of-sight (tokens & torches)
-    if (visionConfig.enabled && activeFovPolygons.length > 0) {
-      for (const fov of activeFovPolygons) {
-        if (fov.points.length >= 6) {
-          const isInsideFov = testPoints.some(pt => isPointInPolygon(pt.x, pt.y, fov.points));
-          if (!isInsideFov) continue;
-          const hasClearLos = testPoints.some(pt => !isLineOfSightBlocked(fov.center, pt, walls));
-          if (hasClearLos) {
-            return true;
-          }
-        }
-      }
-    }
-
-    // If no part of the effect is in revealed areas or active vision -> NOT visible
-    return false;
-  }, [claimedTokenId, isFogVisible, reveals, polygonReveals, visionConfig.enabled, activeFovPolygons, walls, tokens]);
 
   // Candidate Tokens for Claiming (Only non-monster player characters and friendly summons)
   const candidateTokens = useMemo(() => {
@@ -3469,51 +2829,7 @@ export default function PlayerView() {
                 </button>
               )}
 
-              {/* Spell & AoE Effects Panel */}
-              <button
-                onClick={() => setShowEffectsPanel(prev => !prev)}
-                className={`w-full flex items-center rounded-xl transition-all cursor-pointer border ${
-                  showEffectsPanel || activePlayerTool
-                    ? 'bg-purple-600/80 hover:bg-purple-600 text-white border-purple-500/70 shadow-lg shadow-purple-950/50'
-                    : 'bg-zinc-900/80 hover:bg-zinc-900 border-zinc-800 text-zinc-300 hover:text-white'
-                } ${isSidebarExpanded ? 'px-2.5 py-2 justify-between text-xs font-medium' : 'p-2.5 justify-center'}`}
-                title="Spell & AoE Effects Library"
-              >
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-purple-400" />
-                  {isSidebarExpanded && <span>Spells & FX</span>}
-                </div>
-                {effects.length > 0 && (
-                  <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full bg-purple-950 text-purple-300 border border-purple-700/50">
-                    {effects.length}
-                  </span>
-                )}
-              </button>
 
-              {/* 5e SRD Spell Compendium */}
-              <button
-                onClick={() => {
-                  setUniversalCompendiumTab('spells');
-                  setUniversalCompendiumQuery('');
-                  setShowUniversalCompendium(true);
-                }}
-                className={`w-full flex items-center rounded-xl transition-all cursor-pointer border ${
-                  showUniversalCompendium
-                    ? 'bg-amber-600/80 hover:bg-amber-600 text-white border-amber-500/70 shadow-lg shadow-amber-950/50'
-                    : 'bg-zinc-900/80 hover:bg-zinc-900 border-zinc-800 text-zinc-300 hover:text-white'
-                } ${isSidebarExpanded ? 'px-2.5 py-2 justify-between text-xs font-medium' : 'p-2.5 justify-center'}`}
-                title="Browse 5e SRD Spell Compendium"
-              >
-                <div className="flex items-center gap-2">
-                  <BookOpen className="w-4 h-4 text-amber-400 shrink-0" />
-                  {isSidebarExpanded && <span>Spell Compendium</span>}
-                </div>
-                {isSidebarExpanded && (
-                  <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-700/50">
-                    5e SRD
-                  </span>
-                )}
-              </button>
 
               {/* Quick 3D Physics Dice Roller */}
               <button
@@ -4022,12 +3338,9 @@ export default function PlayerView() {
         scaleY={stageScale}
         x={stagePos.x}
         y={stagePos.y}
-        draggable={!activePlayerTool && !isDraggingToken}
-        className={activePlayerTool ? 'cursor-crosshair' : 'cursor-default'}
+        draggable={!isDraggingToken}
+        className="cursor-default"
         onContextMenu={(e) => e.evt.preventDefault()}
-        onMouseDown={handleStageMouseDown}
-        onMouseMove={handleStageMouseMove}
-        onMouseUp={handleStageMouseUp}
         onDragMove={(e) => {
           if (e.target === e.target.getStage() && !activeDraggingTokenIdRef.current) {
             setStagePos({ x: e.target.x(), y: e.target.y() });
@@ -4109,263 +3422,7 @@ export default function PlayerView() {
           </Layer>
         )}
 
-        {/* Layer 2.7: Spell Effects Layer (Synchronized AOE Templates & Procedural Spells - Rendered UNDERNEATH Fog of War so unrevealed effects stay hidden) */}
-        <Layer listening={false}>
-          {effects
-            .filter(isEffectVisibleToPlayer)
-            .map((effect) => {
-              const isCircle = effect.type === 'circle';
-              const isCone = effect.type === 'cone';
-              const isLine = effect.type === 'line';
-              const effectColor = effect.color || '#3b82f6';
-              const hasJb2a = !!(effect.videoUrl || effect.jb2aId || findJb2aAsset(effect.label || effect.name || effect.id));
 
-              const age = effect.createdAt ? (Date.now() - effect.createdAt) : 0;
-              const computedOpacity = ((effect.createdAt && !effect.isPersistent && age > 4000)
-                ? Math.max(0, 1 - (age - 4000) / 1000)
-                : 1) * (effect.opacity !== undefined ? effect.opacity : 1.0);
-
-              return (
-                <Group key={effect.id} x={effect.x} y={effect.y} listening={false} opacity={computedOpacity}>
-                  {isCircle && (
-                    effect.imageUrl && !hasJb2a ? (
-                      <Group>
-                        <Circle
-                          radius={effect.size}
-                          fill={effectColor}
-                          opacity={0.15}
-                          stroke={effectColor}
-                          strokeWidth={2 / stageScale}
-                          dash={[6, 4]}
-                          shadowColor={effectColor}
-                          shadowBlur={8}
-                        />
-                        <GifImage
-                          src={effect.imageUrl}
-                          x={0}
-                          y={0}
-                          width={effect.size * 2}
-                          height={effect.size * 2}
-                          offsetX={effect.size}
-                          offsetY={effect.size}
-                          opacity={0.85}
-                          rotation={effect.rotation || 0}
-                          globalCompositeOperation={effect.blendMode || "screen"}
-                        />
-                      </Group>
-                    ) : (
-                      <Jb2aSpellEffect
-                        effect={effect as any}
-                        gridSize={gridSize}
-                        stageScale={stageScale}
-                      />
-                    )
-                  )}
-                  {isCone && (
-                    <>
-                      {effect.imageUrl && !hasJb2a ? (
-                        <GifImage
-                          src={effect.imageUrl}
-                          x={0}
-                          y={0}
-                          width={effect.size * 2}
-                          height={effect.size * 2}
-                          offsetX={0}
-                          offsetY={effect.size}
-                          rotation={effect.rotation || 0}
-                          opacity={0.85}
-                          globalCompositeOperation={effect.blendMode || "lighter"}
-                        />
-                      ) : (
-                        <Jb2aSpellEffect
-                          effect={effect as any}
-                          gridSize={gridSize}
-                          stageScale={stageScale}
-                        />
-                      )}
-                      <Arc
-                        angle={60}
-                        innerRadius={0}
-                        outerRadius={effect.size}
-                        rotation={(effect.rotation || 0) - 30}
-                        stroke={effectColor}
-                        strokeWidth={1.5 / stageScale}
-                        dash={[6, 4]}
-                        shadowColor={effectColor}
-                        shadowBlur={6}
-                      />
-                    </>
-                  )}
-                  {isLine && (
-                    <>
-                      {effect.imageUrl && !hasJb2a ? (
-                        <GifImage
-                          src={effect.imageUrl}
-                          x={0}
-                          y={0}
-                          width={effect.size}
-                          height={gridSize * 2}
-                          offsetY={gridSize}
-                          rotation={effect.rotation || 0}
-                          opacity={0.85}
-                          globalCompositeOperation={effect.blendMode || "lighter"}
-                        />
-                      ) : (
-                        <Jb2aSpellEffect
-                          effect={effect as any}
-                          gridSize={gridSize}
-                          stageScale={stageScale}
-                        />
-                      )}
-                      <Rect
-                        width={effect.size}
-                        height={gridSize}
-                        offsetY={gridSize / 2}
-                        rotation={effect.rotation || 0}
-                        stroke={effectColor}
-                        strokeWidth={1.5 / stageScale}
-                        dash={[6, 4]}
-                        shadowColor={effectColor}
-                        shadowBlur={6}
-                      />
-                    </>
-                  )}
-                  {effect.label && (
-                    <Text
-                      text={effect.label}
-                      fill="white"
-                      fontSize={12}
-                      fontStyle="bold"
-                      align="center"
-                      shadowColor="black"
-                      shadowBlur={4}
-                      y={-14}
-                    />
-                  )}
-                </Group>
-              );
-            })}
-
-          {/* Interactive Player Aiming Preview */}
-          {isAiming && aimOrigin && equippedSpell && (
-            <Group listening={false}>
-              {(() => {
-                const currentX = aimCurrent ? aimCurrent.x : aimOrigin.x;
-                const currentY = aimCurrent ? aimCurrent.y : aimOrigin.y;
-                const dx = currentX - aimOrigin.x;
-                const dy = currentY - aimOrigin.y;
-                const dragDist = Math.hypot(dx, dy);
-                const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
-                const previewSize = dragDist >= 15 ? dragDist : (equippedSpell.defaultSizeFt / 5) * gridSize;
-                const previewColor = equippedSpell.color || '#a855f7';
-
-                if (equippedSpell.type === 'cone') {
-                  return (
-                    <Group x={aimOrigin.x} y={aimOrigin.y}>
-                      <Arc
-                        angle={60}
-                        innerRadius={0}
-                        outerRadius={previewSize}
-                        rotation={angle - 30}
-                        fill={previewColor}
-                        opacity={0.35}
-                        stroke="#ffffff"
-                        strokeWidth={2 / stageScale}
-                        dash={[6, 4]}
-                        shadowColor="#ffffff"
-                        shadowBlur={10}
-                      />
-                      <Line
-                        points={[0, 0, Math.cos((angle * Math.PI) / 180) * previewSize, Math.sin((angle * Math.PI) / 180) * previewSize]}
-                        stroke="#ffffff"
-                        strokeWidth={1.5 / stageScale}
-                        dash={[4, 4]}
-                      />
-                      <Text
-                        text={`${equippedSpell.name} (${Math.round((previewSize / gridSize) * 5)}ft cone)`}
-                        fill="white"
-                        fontSize={13 / stageScale}
-                        fontStyle="bold"
-                        shadowColor="black"
-                        shadowBlur={4}
-                        x={previewSize * 0.5 * Math.cos((angle * Math.PI) / 180)}
-                        y={previewSize * 0.5 * Math.sin((angle * Math.PI) / 180) - 20 / stageScale}
-                      />
-                    </Group>
-                  );
-                } else if (equippedSpell.type === 'line') {
-                  return (
-                    <Group x={aimOrigin.x} y={aimOrigin.y} rotation={angle}>
-                      <Rect
-                        width={previewSize}
-                        height={gridSize}
-                        offsetY={gridSize / 2}
-                        fill={previewColor}
-                        opacity={0.35}
-                        stroke="#ffffff"
-                        strokeWidth={2 / stageScale}
-                        dash={[6, 4]}
-                        shadowColor="#ffffff"
-                        shadowBlur={10}
-                      />
-                      <Text
-                        text={`${equippedSpell.name} (${Math.round((previewSize / gridSize) * 5)}ft line)`}
-                        fill="white"
-                        fontSize={13 / stageScale}
-                        fontStyle="bold"
-                        shadowColor="black"
-                        shadowBlur={4}
-                        x={previewSize / 2 - 40 / stageScale}
-                        y={-18 / stageScale}
-                      />
-                    </Group>
-                  );
-                } else {
-                  return (
-                    <Group x={aimOrigin.x} y={aimOrigin.y}>
-                      <Circle
-                        radius={previewSize}
-                        fill={previewColor}
-                        opacity={0.3}
-                        stroke="#ffffff"
-                        strokeWidth={2 / stageScale}
-                        dash={[6, 4]}
-                        shadowColor="#ffffff"
-                        shadowBlur={10}
-                      />
-                      {dragDist >= 15 && (
-                        <Line
-                          points={[0, 0, dx, dy]}
-                          stroke="#ffffff"
-                          strokeWidth={1.5 / stageScale}
-                          dash={[4, 4]}
-                        />
-                      )}
-                      <Text
-                        text={`${equippedSpell.name} (${Math.round((previewSize / gridSize) * 5)}ft radius)`}
-                        fill="white"
-                        fontSize={13 / stageScale}
-                        fontStyle="bold"
-                        shadowColor="black"
-                        shadowBlur={4}
-                        align="center"
-                        x={-60 / stageScale}
-                        y={-previewSize - 18 / stageScale}
-                      />
-                    </Group>
-                  );
-                }
-              })()}
-            </Group>
-          )}
-
-          {/* Real-time Shockwave Blast Rings & Flash Overlay */}
-          <ShockwaveOverlay
-            shockwaves={shockwaves}
-            onRemoveShockwave={handleRemoveShockwave}
-            stageScale={stageScale}
-          />
-        </Layer>
 
         {/* Layer 3: Dynamic Lighting & Fog of War (Raycasting with Doors, Walls & Torches) */}
         <DynamicLightingLayer
@@ -4409,7 +3466,6 @@ export default function PlayerView() {
                 onDragStartToken={handleDragStartToken}
                 onClaimToken={handleClaimToken}
                 onContextMenu={handleOpenTokenContextMenu}
-                isAimingSpell={Boolean(activePlayerTool)}
               />
           ))}
         </Layer>
@@ -4843,469 +3899,7 @@ export default function PlayerView() {
         />
       )}
 
-      {/* Interactive Aiming Banner */}
-      {activePlayerTool && equippedSpell && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-purple-950/95 border border-purple-500/70 text-white px-5 py-2.5 rounded-2xl shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-top-3 pointer-events-auto">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-purple-400 animate-ping" />
-            <Sparkles className="w-4 h-4 text-purple-300" />
-            <span className="font-bold text-sm tracking-wide text-purple-100">
-              Aiming: {equippedSpell.name}
-            </span>
-          </div>
-          <span className="text-xs text-purple-300/80 hidden md:inline">
-            Click & drag on the map to size & aim. Release to cast.
-          </span>
-          <button
-            onClick={() => {
-              setActivePlayerTool(null);
-              setEquippedSpell(null);
-              setIsAiming(false);
-              setAimOrigin(null);
-              setAimCurrent(null);
-            }}
-            className="ml-2 flex items-center gap-1 bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 hover:text-white px-2.5 py-1 rounded-xl text-xs font-mono border border-zinc-700 transition-colors cursor-pointer"
-            title="Cancel casting (Escape)"
-          >
-            <X className="w-3.5 h-3.5" />
-            <span>Cancel (ESC)</span>
-          </button>
-        </div>
-      )}
 
-      {/* ========================================================= */}
-      {/* Player Spell & AoE Effects Floating Panel                 */}
-      {/* ========================================================= */}
-      {showEffectsPanel && !isUiMinimized && (
-        <div
-          style={{
-            left: pinnedEffectsPanel ? (isSidebarExpanded ? 256 : 80) : panelPos.x,
-            top: pinnedEffectsPanel ? 16 : panelPos.y
-          }}
-          className="fixed z-50 w-88 sm:w-96 max-h-[calc(100vh-90px)] flex flex-col bg-zinc-950/95 backdrop-blur-xl border border-zinc-800/90 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.85)] ring-1 ring-white/10 animate-in fade-in zoom-in-95 pointer-events-auto select-none"
-        >
-          {/* Header & Move Handle */}
-          <div
-            onMouseDown={handlePanelDragStart}
-            className={`flex items-center justify-between px-4 py-3 border-b border-zinc-800/80 ${
-              pinnedEffectsPanel ? '' : 'cursor-move'
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-purple-500/15 border border-purple-500/30 flex items-center justify-center">
-                <Sparkles className="w-4 h-4 text-purple-400" />
-              </div>
-              <div className="flex flex-col">
-                <div className="flex items-center gap-1.5">
-                  <span className="font-bold text-xs tracking-wide text-zinc-100 font-mono">
-                    SPELL & AOE EFFECTS
-                  </span>
-                  {effects.length > 0 && (
-                    <span className="px-1.5 py-0.2 rounded-full text-[9px] font-mono font-bold bg-purple-950 text-purple-300 border border-purple-800/50">
-                      {effects.length} Active
-                    </span>
-                  )}
-                </div>
-                <span className="text-[10px] text-zinc-400">
-                  {pinnedEffectsPanel ? 'Pinned to top-left' : 'Drag header to move panel'}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => setPinnedEffectsPanel(prev => !prev)}
-                className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
-                  pinnedEffectsPanel
-                    ? 'bg-purple-950/60 border-purple-700/60 text-purple-300'
-                    : 'border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800'
-                }`}
-                title={pinnedEffectsPanel ? 'Unpin Panel' : 'Pin Panel to Side'}
-              >
-                <Pin className={`w-3.5 h-3.5 ${pinnedEffectsPanel ? 'fill-purple-400' : ''}`} />
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowEffectsPanel(false)}
-                className="p-1.5 rounded-lg border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
-                title="Close Panel (Escape)"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-
-          {/* Quick Search */}
-          <div className="px-3 pt-2.5 pb-1">
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
-              <input
-                type="text"
-                value={effectsSearchQuery}
-                onChange={(e) => setEffectsSearchQuery(e.target.value)}
-                placeholder="Search spells or hazards..."
-                className="w-full bg-zinc-900/90 border border-zinc-800 rounded-xl pl-8 pr-7 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-purple-500/70"
-              />
-              {effectsSearchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setEffectsSearchQuery('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 cursor-pointer"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Tabs Navigation */}
-          <div className="flex items-center gap-1 px-3 py-1.5 border-b border-zinc-800/60 overflow-x-auto">
-            <button
-              type="button"
-              onClick={() => setEffectsTab('instant')}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-medium transition-all cursor-pointer ${
-                effectsTab === 'instant'
-                  ? 'bg-purple-600/80 text-white shadow-sm'
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
-              }`}
-            >
-              Instant
-            </button>
-            <button
-              type="button"
-              onClick={() => setEffectsTab('persistent')}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-medium transition-all cursor-pointer ${
-                effectsTab === 'persistent'
-                  ? 'bg-purple-600/80 text-white shadow-sm'
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
-              }`}
-            >
-              Persistent
-            </button>
-            <button
-              type="button"
-              onClick={() => setEffectsTab('tactical')}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-medium transition-all cursor-pointer ${
-                effectsTab === 'tactical'
-                  ? 'bg-purple-600/80 text-white shadow-sm'
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
-              }`}
-            >
-              Tactical
-            </button>
-            <button
-              type="button"
-              onClick={() => setEffectsTab('active')}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-medium transition-all flex items-center gap-1 cursor-pointer ${
-                effectsTab === 'active'
-                  ? 'bg-purple-600/80 text-white shadow-sm'
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
-              }`}
-            >
-              <span>On Board</span>
-              {effects.length > 0 && (
-                <span className="w-4 h-4 rounded-full bg-purple-900 text-purple-200 text-[9px] flex items-center justify-center font-bold">
-                  {effects.length}
-                </span>
-              )}
-            </button>
-          </div>
-
-          {/* Tab Body */}
-          <div className="flex-1 overflow-y-auto p-3 space-y-2 max-h-[50vh] min-h-[160px]">
-            {effectsTab === 'active' ? (
-              // Active Effects on Scene
-              effects.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8 text-center text-zinc-500">
-                  <Sparkles className="w-8 h-8 mb-2 opacity-40 text-purple-400" />
-                  <p className="text-xs font-medium text-zinc-400">No active effects on board</p>
-                  <p className="text-[11px] text-zinc-600 mt-1">
-                    Drag or cast an effect from the Instant, Persistent, or Tactical tabs.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between pb-1 px-1">
-                    <span className="text-[10px] font-mono text-zinc-500 uppercase">
-                      {effects.length} Active {effects.length === 1 ? 'Effect' : 'Effects'}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleClearAllEffects}
-                      className="text-[10px] text-rose-400 hover:text-rose-300 font-mono hover:underline flex items-center gap-1 cursor-pointer"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                      <span>Clear All</span>
-                    </button>
-                  </div>
-
-                  {effects.map((eff) => {
-                    const isMine = claimedTokenId && eff.placedById === claimedTokenId;
-                    return (
-                      <div
-                        key={eff.id}
-                        className="flex items-center justify-between p-2.5 rounded-xl bg-zinc-900/80 border border-zinc-800/90 hover:border-zinc-700 transition-colors"
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <div
-                            className="w-3 h-3 rounded-full shrink-0"
-                            style={{ backgroundColor: eff.color || '#a855f7' }}
-                          />
-                          <div className="flex flex-col min-w-0">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-xs font-bold text-zinc-200 truncate">
-                                {eff.label || 'Spell Effect'}
-                              </span>
-                              {eff.isPersistent ? (
-                                <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-amber-950/80 text-amber-300 border border-amber-800/50">
-                                  Persistent
-                                </span>
-                              ) : (
-                                <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-zinc-800 text-zinc-400">
-                                  5s
-                                </span>
-                              )}
-                            </div>
-                            <span className="text-[10px] text-zinc-500 font-mono">
-                              {eff.type.toUpperCase()} • {Math.round((eff.size / gridSize) * 5)}ft • {isMine ? 'Cast by you' : (eff.placedByName || 'Scene')}
-                            </span>
-                          </div>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveEffect(eff.id)}
-                          className="p-1.5 rounded-lg border border-zinc-800 text-zinc-500 hover:text-rose-400 hover:bg-rose-950/30 hover:border-rose-800/60 transition-colors shrink-0 cursor-pointer"
-                          title="Dismiss Effect"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )
-            ) : (
-              // Spell Catalog List (Instant, Persistent, Tactical)
-              (() => {
-                const filteredSpells = PLAYER_EFFECTS_CATALOG
-                  .filter(s => s.category === effectsTab)
-                  .filter(s => {
-                    if (!effectsSearchQuery) return true;
-                    const q = effectsSearchQuery.toLowerCase();
-                    return (
-                      s.name.toLowerCase().includes(q) ||
-                      s.label.toLowerCase().includes(q) ||
-                      s.description.toLowerCase().includes(q) ||
-                      s.type.toLowerCase().includes(q)
-                    );
-                  });
-
-                if (filteredSpells.length === 0) {
-                  return (
-                    <div className="py-8 text-center text-zinc-500 text-xs space-y-3">
-                      <p>No quick effects found for &quot;{effectsSearchQuery}&quot;.</p>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setUniversalCompendiumTab('spells');
-                          setUniversalCompendiumQuery(effectsSearchQuery);
-                          setShowUniversalCompendium(true);
-                        }}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-950/70 hover:bg-amber-900 border border-amber-700/60 text-amber-200 hover:text-white transition-all text-xs font-medium cursor-pointer"
-                      >
-                        <BookOpen className="w-3.5 h-3.5 text-amber-400" />
-                        <span>Search in 5e Compendium</span>
-                      </button>
-                    </div>
-                  );
-                }
-
-                return (
-                  <div className="space-y-2">
-                    {filteredSpells.map((spell) => {
-                      const isEquipped = activePlayerTool === spell.id;
-                      return (
-                        <div
-                          key={spell.id}
-                          draggable={true}
-                          onDragStart={(e) => {
-                            e.dataTransfer.setData('application/dnd-effect', spell.id);
-                            e.dataTransfer.setData('text/plain', spell.id);
-                            e.dataTransfer.effectAllowed = 'copy';
-                          }}
-                          className={`group relative p-2.5 rounded-xl border transition-all cursor-grab active:cursor-grabbing ${
-                            isEquipped
-                              ? 'bg-purple-950/50 border-purple-500 shadow-md ring-1 ring-purple-500/40'
-                              : 'bg-zinc-900/70 border-zinc-800/90 hover:bg-zinc-900 hover:border-zinc-700'
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex items-start gap-2.5 min-w-0">
-                              <div className="w-9 h-9 rounded-lg bg-zinc-800/90 border border-zinc-700/60 overflow-hidden flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform bg-black/40">
-                                {spell.thumbUrl ? (
-                                  <img
-                                    src={spell.thumbUrl}
-                                    alt={spell.name}
-                                    className="w-full h-full object-cover"
-                                    loading="lazy"
-                                  />
-                                ) : (
-                                  renderSpellIcon(spell.iconName, "w-4 h-4 text-purple-400")
-                                )}
-                              </div>
-                              <div className="flex flex-col min-w-0">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className="text-xs font-bold text-zinc-100 group-hover:text-purple-300 transition-colors">
-                                    {spell.name}
-                                  </span>
-                                  {spell.jb2aId && (
-                                    <span className="text-[9px] font-mono font-bold px-1 py-0.2 rounded bg-amber-950/90 text-amber-300 border border-amber-700/60">
-                                      JB2A
-                                    </span>
-                                  )}
-                                  <span className={`text-[9px] font-mono font-semibold px-1.5 py-0.2 rounded border ${spell.badgeColor}`}>
-                                    {spell.defaultSizeFt}ft {spell.type}
-                                  </span>
-                                  {spell.isPersistent && (
-                                    <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-amber-950/70 text-amber-300 border border-amber-800/50">
-                                      AoE
-                                    </span>
-                                  )}
-                                </div>
-                                <p className="text-[11px] text-zinc-400 leading-snug mt-1 font-sans">
-                                  {spell.description}
-                                </p>
-                              </div>
-                            </div>
-
-                            {/* Cast / Aim Action Button */}
-                            <div className="flex items-center gap-1 shrink-0">
-                              {spell.soundEffect && spell.soundEffect !== 'none' && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    spellSoundEngine.play(spell.soundEffect!);
-                                  }}
-                                  className="p-1.5 rounded-lg text-zinc-400 hover:text-cyan-400 hover:bg-zinc-800 transition-colors cursor-pointer"
-                                  title="Preview Sound FX"
-                                >
-                                  <Volume2 className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (isEquipped) {
-                                    setActivePlayerTool(null);
-                                    setEquippedSpell(null);
-                                    setIsAiming(false);
-                                  } else {
-                                    handleEquipSpell(spell);
-                                  }
-                                }}
-                                className={`px-2.5 py-1.5 rounded-lg text-xs font-mono font-semibold flex items-center gap-1 transition-all shadow-sm cursor-pointer ${
-                                  isEquipped
-                                    ? 'bg-rose-600 hover:bg-rose-700 text-white'
-                                    : 'bg-purple-600 hover:bg-purple-500 text-white hover:shadow-purple-900/30'
-                                }`}
-                                title={isEquipped ? 'Cancel Aiming' : 'Click & drag on map to aim'}
-                              >
-                                {isEquipped ? (
-                                  <>
-                                    <X className="w-3 h-3" />
-                                    <span>Cancel</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Target className="w-3 h-3" />
-                                    <span>Cast</span>
-                                  </>
-                                )}
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Drag Hint Pill */}
-                          <div className="mt-2 pt-1.5 border-t border-zinc-800/40 flex items-center justify-between text-[10px] text-zinc-500 font-mono">
-                            <span className="flex items-center gap-1">
-                              <GripHorizontal className="w-3 h-3 text-zinc-600" />
-                              <span>Drag card directly onto map</span>
-                            </span>
-                            <span className="text-zinc-600">or click Cast</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-
-                    {/* Compendium Discovery Banner */}
-                    <div className="pt-2 border-t border-zinc-800/60">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setUniversalCompendiumTab('spells');
-                          setUniversalCompendiumQuery(effectsSearchQuery);
-                          setShowUniversalCompendium(true);
-                        }}
-                        className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-amber-950/40 via-zinc-900 to-purple-950/40 hover:from-amber-950/60 hover:to-purple-950/60 border border-amber-600/40 text-amber-300 hover:text-white flex items-center justify-between text-xs font-medium transition-all shadow-sm cursor-pointer group"
-                      >
-                        <div className="flex items-center gap-2">
-                          <BookOpen className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform shrink-0" />
-                          <span>Browse 5e SRD Compendium</span>
-                        </div>
-                        <span className="text-[10px] font-mono font-bold text-amber-300 bg-amber-950/90 px-1.5 py-0.5 rounded border border-amber-700/60">
-                          300+ Spells
-                        </span>
-                      </button>
-                    </div>
-                  </div>
-                );
-              })()
-            )}
-          </div>
-
-          {/* Panel Footer & Attribution */}
-          <div className="px-3 py-2 border-t border-zinc-800/80 bg-zinc-900/50 rounded-b-2xl flex flex-col gap-1.5 text-[10px] text-zinc-500 font-mono">
-            <div className="flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => {
-                  setUniversalCompendiumTab('spells');
-                  setShowUniversalCompendium(true);
-                }}
-                className="text-amber-400 hover:text-amber-300 flex items-center gap-1 hover:underline cursor-pointer"
-              >
-                <BookOpen className="w-3 h-3" />
-                <span>Full 5e Spell Compendium</span>
-              </button>
-              <span className="text-purple-400">MistWalker FX</span>
-            </div>
-            <div className="text-[9px] text-zinc-500 text-center border-t border-zinc-800/50 pt-1">
-              Animated spell effects by{' '}
-              <a
-                href="https://jb2a.com"
-                target="_blank"
-                rel="noreferrer"
-                className="text-amber-400/90 hover:text-amber-300 underline"
-              >
-                JB2A
-              </a>{' '}
-              under{' '}
-              <a
-                href="https://creativecommons.org/licenses/by-nc-sa/4.0/"
-                target="_blank"
-                rel="noreferrer"
-                className="text-zinc-400 hover:text-zinc-200 underline"
-              >
-                CC BY-NC-SA 4.0
-              </a>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* 3D Dice Color Customization Modal */}
       {showDicePaletteModal && (
@@ -5470,18 +4064,7 @@ export default function PlayerView() {
         </div>
       )}
 
-      {/* 5e SRD Universal Compendium Modal for Players */}
-      <UniversalCompendiumModal
-        isOpen={showUniversalCompendium}
-        onClose={() => {
-          setShowUniversalCompendium(false);
-          setUniversalCompendiumQuery('');
-        }}
-        initialTab={universalCompendiumTab}
-        initialSearchQuery={universalCompendiumQuery}
-        onCastSpell={handleCastCompendiumSpell}
-        onRollDice={handleRollCompendiumDice}
-      />
+
 
       {/* 3D Physics Dice Table Overlay */}
       <DiceTableOverlay
