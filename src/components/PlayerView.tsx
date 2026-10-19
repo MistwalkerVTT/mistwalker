@@ -2848,8 +2848,12 @@ export default function PlayerView() {
   return (
     <div
       className={`relative w-screen h-screen overflow-hidden bg-zinc-950 select-none ${isShaking ? 'animate-shake' : ''}`}
-      onDragOver={handleStageDragOver}
-      onDrop={handleStageDrop}
+      onDragOver={(e) => {
+        e.preventDefault();
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+      }}
     >
       {/* Critical Hit Impact Flash Overlay */}
       {isShaking && (

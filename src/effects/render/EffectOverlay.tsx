@@ -4,6 +4,7 @@
 import React, { useEffect } from 'react';
 import { Group } from 'react-konva';
 import { VttEffectInstance } from '../types/effect';
+import { soundCatalog } from '../db/soundCatalog';
 import { Jb2aCanvasNode } from './Jb2aCanvasNode';
 import { TrajectoryNode } from './TrajectoryNode';
 

@@ -41,13 +41,13 @@ class EffectsSoundEngine {
     }
   }
 
-  public play(type: SoundEffectType | string, customUrl?: string) {
+  public play(type: SoundEffectType | string, customUrlOrVolume?: string | number) {
     if (this.isMuted) return;
 
-    // 1. Play custom audio file if provided
-    if (customUrl && typeof Audio !== 'undefined') {
+    // 1. Play custom audio file if provided as string
+    if (typeof customUrlOrVolume === 'string' && typeof Audio !== 'undefined') {
       try {
-        const audio = new Audio(customUrl);
+        const audio = new Audio(customUrlOrVolume);
         audio.volume = 0.3;
         audio.play().catch(() => {});
         return;

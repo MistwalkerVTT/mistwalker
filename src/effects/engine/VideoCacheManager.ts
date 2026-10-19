@@ -55,6 +55,19 @@ export class VideoCacheManager {
   }
 
   /**
+   * Pre-warm top iconic spells for zero-latency instant playback in PlayerView / DMView.
+   */
+  public async prewarmTopSpells(): Promise<void> {
+    try {
+      const { JB2A_REGISTRY } = await import('../db/jb2aRegistry');
+      const topUrls = JB2A_REGISTRY.slice(0, 10).map(a => a.webm);
+      await this.prewarmUrls(topUrls);
+    } catch {
+      // Non-blocking failover
+    }
+  }
+
+  /**
    * Get an active Object URL from cache if available, or return the CDN URL.
    */
   public async resolvePlayableUrl(cdnUrl: string): Promise<string> {

@@ -430,6 +430,7 @@ async function startServer() {
     mapRotation: 0,
     activeSceneInfo: null,
     characters: [],
+    effects: [],
     updatedAt: Date.now()
   };
 

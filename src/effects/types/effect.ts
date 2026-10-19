@@ -37,6 +37,9 @@ export interface VttEffectInstance {
   paradigm: EffectParadigm;
   x: number;
   y: number;
+  originX?: number;
+  originY?: number;
+  trajectory?: EffectTrajectoryConfig;
   targetX?: number;
   targetY?: number;
   attachedTokenId?: string;
@@ -52,6 +55,18 @@ export interface VttEffectInstance {
   color?: string;            // Secondary tint or outline indicator
   ownerId?: string;          // Player or DM userId who cast it
   spellId?: string;          // Associated 5e spell ID if cast from Compendium
+}
+
+export interface EffectTrajectoryConfig {
+  startX?: number;
+  startY?: number;
+  endX?: number;
+  endY?: number;
+  speedPxSec?: number;
+  burstOnImpact?: boolean;
+  burstVideoUrl?: string;
+  burstSoundKey?: string;
+  burstEffect?: VttEffectInstance;
 }
 
 /**
@@ -75,6 +90,7 @@ export interface Jb2aAssetDefinition {
   tags: string[];
   soundKey?: string;
   projectileWebm?: string;   // Optional travel bolt WebM for spells with both travel + impact
+  burstWebm?: string;        // Optional impact detonation burst WebM
 }
 
 /**
