@@ -484,6 +484,30 @@ export const SpecialEffectsManager: React.FC<SpecialEffectsManagerProps> = ({
               );
             })}
           </div>
+
+          {/* Creative Commons Attribution */}
+          <div className="pt-2 border-t border-zinc-800/80 text-[10px] text-zinc-500 flex items-center justify-between px-1">
+            <span>
+              Animated spell effects by{' '}
+              <a
+                href="https://jb2a.com"
+                target="_blank"
+                rel="noreferrer"
+                className="text-purple-400 hover:text-purple-300 underline font-medium"
+              >
+                Jules and Ben (JB2A)
+              </a>{' '}
+              under{' '}
+              <a
+                href="https://creativecommons.org/licenses/by-nc-sa/4.0/"
+                target="_blank"
+                rel="noreferrer"
+                className="text-zinc-400 hover:text-zinc-200 underline"
+              >
+                CC BY-NC-SA 4.0
+              </a>
+            </span>
+          </div>
         </div>
       )}
 

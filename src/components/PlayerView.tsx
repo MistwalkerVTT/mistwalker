@@ -5267,20 +5267,42 @@ export default function PlayerView() {
             )}
           </div>
 
-          {/* Panel Footer */}
-          <div className="px-3 py-2 border-t border-zinc-800/80 bg-zinc-900/50 rounded-b-2xl flex items-center justify-between text-[10px] text-zinc-500 font-mono">
-            <button
-              type="button"
-              onClick={() => {
-                setUniversalCompendiumTab('spells');
-                setShowUniversalCompendium(true);
-              }}
-              className="text-amber-400 hover:text-amber-300 flex items-center gap-1 hover:underline cursor-pointer"
-            >
-              <BookOpen className="w-3 h-3" />
-              <span>Full 5e Spell Compendium</span>
-            </button>
-            <span className="text-purple-400">MistWalker FX</span>
+          {/* Panel Footer & Attribution */}
+          <div className="px-3 py-2 border-t border-zinc-800/80 bg-zinc-900/50 rounded-b-2xl flex flex-col gap-1.5 text-[10px] text-zinc-500 font-mono">
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => {
+                  setUniversalCompendiumTab('spells');
+                  setShowUniversalCompendium(true);
+                }}
+                className="text-amber-400 hover:text-amber-300 flex items-center gap-1 hover:underline cursor-pointer"
+              >
+                <BookOpen className="w-3 h-3" />
+                <span>Full 5e Spell Compendium</span>
+              </button>
+              <span className="text-purple-400">MistWalker FX</span>
+            </div>
+            <div className="text-[9px] text-zinc-500 text-center border-t border-zinc-800/50 pt-1">
+              Animated spell effects by{' '}
+              <a
+                href="https://jb2a.com"
+                target="_blank"
+                rel="noreferrer"
+                className="text-amber-400/90 hover:text-amber-300 underline"
+              >
+                JB2A
+              </a>{' '}
+              under{' '}
+              <a
+                href="https://creativecommons.org/licenses/by-nc-sa/4.0/"
+                target="_blank"
+                rel="noreferrer"
+                className="text-zinc-400 hover:text-zinc-200 underline"
+              >
+                CC BY-NC-SA 4.0
+              </a>
+            </div>
           </div>
         </div>
       )}

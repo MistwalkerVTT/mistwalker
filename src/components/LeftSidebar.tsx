@@ -635,7 +635,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   const isFogActive = isFogVisible;
   const isGridActive = gridVisible;
   const isCombatActive = showCombatTracker;
-  const isSpellToolActive = [
+  const isSpellToolActive = (activeEquippedCustomEffectId !== null && tool === 'custom_effect') || [
     'fireball', 'cone_of_cold', 'lightning_bolt', 'burning_hands',
     'charm_person', 'divine_smite', 'eldritch_blast', 'arms_of_hadar',
     'destructive_wave', 'fire_bolt', 'hypnotic_pattern', 'spirit_guardians',
@@ -3105,7 +3105,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
           )}
 
           {activeGroup === 'fx' && (
-            <div className={`p-3.5 flex flex-col gap-3 ${fxCategory === 'manager' ? 'min-w-[340px] max-w-[390px]' : 'min-w-[320px] max-w-[360px]'}`}>
+            <div className={`p-3.5 flex flex-col gap-3 ${fxCategory === 'spells' || fxCategory === 'manager' ? 'min-w-[340px] max-w-[390px]' : 'min-w-[320px] max-w-[360px]'}`}>
               {/* Header */}
               <div
                 onMouseDown={pinnedGroup ? handleDragStart : undefined}
@@ -3132,7 +3132,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                 </div>
               </div>
 
-              {/* Category Switcher: Tactical & Weather FX vs Magic & Spell FX vs FX Manager */}
+              {/* Category Switcher: Tactical FX vs Animated Spells (JB2A) */}
               <div className="flex bg-zinc-950/80 p-1 rounded-xl border border-zinc-800 gap-1 shrink-0">
                 <button
                   id="subtab-tactical-fx"
@@ -3144,7 +3144,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                   }`}
                 >
                   <Waves className="w-3.5 h-3.5 shrink-0" />
-                  <span className="truncate">Tactical</span>
+                  <span className="truncate">Tactical FX</span>
                   {(boardAnimatedFeatures.length > 0 || boardWeatherEffect !== 'none') && (
                     <span className={`text-[9px] px-1 rounded-full font-bold ${
                       fxCategory === 'environmental' ? 'bg-zinc-950 text-cyan-300' : 'bg-zinc-800 text-zinc-300'
@@ -3157,28 +3157,16 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                   id="subtab-magic-spells"
                   onClick={() => setFxCategory('spells')}
                   className={`flex-1 py-1.5 px-1.5 rounded-lg text-xs font-bold font-mono transition-all flex items-center justify-center gap-1 cursor-pointer ${
-                    fxCategory === 'spells'
-                      ? 'bg-orange-500 text-zinc-950 shadow-sm'
-                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850'
-                  }`}
-                >
-                  <Sparkles className="w-3.5 h-3.5 shrink-0" />
-                  <span className="truncate">Spells</span>
-                  {isSpellToolActive && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse" />
-                  )}
-                </button>
-                <button
-                  id="subtab-fx-manager"
-                  onClick={() => setFxCategory('manager')}
-                  className={`flex-1 py-1.5 px-1.5 rounded-lg text-xs font-bold font-mono transition-all flex items-center justify-center gap-1 cursor-pointer ${
-                    fxCategory === 'manager'
+                    fxCategory === 'spells' || fxCategory === 'manager'
                       ? 'bg-purple-600 text-white shadow-sm'
                       : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850'
                   }`}
                 >
-                  <Wand2 className="w-3.5 h-3.5 shrink-0" />
-                  <span className="truncate">Manager</span>
+                  <Sparkles className="w-3.5 h-3.5 shrink-0 text-purple-300" />
+                  <span className="truncate">Animated Spells</span>
+                  {isSpellToolActive && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
+                  )}
                 </button>
               </div>
 
@@ -3693,101 +3681,15 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                 </>
               )}
 
-              {/* SUBTAB 2: MAGIC & SPELL FX */}
-              {fxCategory === 'spells' && (
+              {/* SUBTAB 2: ANIMATED SPELLS (JB2A) & SPECIAL EFFECTS MANAGER */}
+              {(fxCategory === 'spells' || fxCategory === 'manager') && (
                 <div className="flex flex-col gap-3">
-                  {/* Sub-Tabs: Instant vs Persistent */}
-                  <div className="flex bg-zinc-950 p-1 rounded-xl border border-zinc-800">
-                    <button
-                      onClick={() => setSpellTab('instant')}
-                      className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                        spellTab === 'instant' ? 'bg-orange-500 text-zinc-950 shadow-sm' : 'text-zinc-400 hover:text-zinc-200'
-                      }`}
-                    >
-                      Instant FX
-                    </button>
-                    <button
-                      onClick={() => setSpellTab('persistent')}
-                      className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                        spellTab === 'persistent' ? 'bg-blue-500 text-zinc-950 shadow-sm' : 'text-zinc-400 hover:text-zinc-200'
-                      }`}
-                    >
-                      Persistent AoE
-                    </button>
-                  </div>
-
-                  {/* Spells List */}
-                  <div className="flex flex-col gap-1 max-h-[300px] overflow-y-auto pr-1 sidebar-scrollbar">
-                    {spellTab === 'instant' ? (
-                      <>
-                        {[
-                          { id: 'fireball', name: 'Fireball (20ft)', icon: Flame, color: 'text-orange-400' },
-                          { id: 'cone_of_cold', name: 'Cone of Cold (60ft)', icon: Snowflake, color: 'text-cyan-400' },
-                          { id: 'lightning_bolt', name: 'Lightning Bolt (100ft)', icon: Zap, color: 'text-yellow-400' },
-                          { id: 'burning_hands', name: 'Fire Breath (15ft Cone)', icon: Wind, color: 'text-orange-400' },
-                          { id: 'charm_person', name: 'Charm / Love Burst', icon: Heart, color: 'text-pink-400' },
-                          { id: 'divine_smite', name: 'Divine Smite', icon: Sun, color: 'text-amber-400' },
-                          { id: 'eldritch_blast', name: 'Eldritch Blast', icon: Zap, color: 'text-purple-400' },
-                          { id: 'arms_of_hadar', name: 'Shadow Grasp (10ft)', icon: Moon, color: 'text-indigo-400' },
-                          { id: 'acid_pool', name: 'Acid Pool (15ft)', icon: Droplets, color: 'text-lime-400' },
-                          { id: 'destructive_wave', name: 'Destructive Wave (30ft)', icon: Sparkles, color: 'text-red-400' },
-                          { id: 'fire_bolt', name: 'Fire Bolt', icon: Flame, color: 'text-orange-400' },
-                          { id: 'hypnotic_pattern', name: 'Hypnotic Pattern (30ft)', icon: Disc, color: 'text-teal-400' }
-                        ].map((sp) => {
-                          const Icon = sp.icon;
-                          const isActive = tool === sp.id;
-                          return (
-                            <button
-                              key={sp.id}
-                              onClick={() => setTool(sp.id)}
-                              className={`flex items-center justify-between px-2.5 py-2 rounded-xl transition-all border ${
-                                isActive
-                                  ? 'bg-orange-500/20 border-orange-500/50 text-orange-300 font-bold'
-                                  : 'bg-zinc-800/40 border-transparent text-zinc-300 hover:bg-zinc-800'
-                              }`}
-                            >
-                              <span className="flex items-center gap-2.5 text-xs">
-                                <Icon className={`w-4 h-4 ${sp.color}`} />
-                                {sp.name}
-                              </span>
-                              {isActive && <span className="w-1.5 h-1.5 rounded-full bg-orange-400" />}
-                            </button>
-                          );
-                        })}
-                      </>
-                    ) : (
-                      <>
-                        {[
-                          { id: 'spirit_guardians', name: 'Spirit Guardians (15ft)', icon: Shield, color: 'text-blue-400' },
-                          { id: 'beacon_of_hope', name: 'Beacon of Hope (30ft)', icon: Sun, color: 'text-amber-400' },
-                          { id: 'darkness', name: 'Darkness (15ft)', icon: Moon, color: 'text-purple-400' },
-                          { id: 'fog_cloud', name: 'Fog Cloud (20ft)', icon: Cloud, color: 'text-slate-300' },
-                          { id: 'cloudkill', name: 'Poison Cloud (20ft)', icon: Cloud, color: 'text-emerald-400' },
-                          { id: 'sunbeam', name: 'Sunbeam (60ft Line)', icon: Sun, color: 'text-yellow-400' }
-                        ].map((sp) => {
-                          const Icon = sp.icon;
-                          const isActive = tool === sp.id;
-                          return (
-                            <button
-                              key={sp.id}
-                              onClick={() => setTool(sp.id)}
-                              className={`flex items-center justify-between px-2.5 py-2 rounded-xl transition-all border ${
-                                isActive
-                                  ? 'bg-blue-500/20 border-blue-500/50 text-blue-300 font-bold'
-                                  : 'bg-zinc-800/40 border-transparent text-zinc-300 hover:bg-zinc-800'
-                              }`}
-                            >
-                              <span className="flex items-center gap-2.5 text-xs">
-                                <Icon className={`w-4 h-4 ${sp.color}`} />
-                                {sp.name}
-                              </span>
-                              {isActive && <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />}
-                            </button>
-                          );
-                        })}
-                      </>
-                    )}
-                  </div>
+                  <SpecialEffectsManager
+                    onEquipEffect={onEquipCustomEffect}
+                    onQuickPlaceEffect={onQuickPlaceCustomEffect}
+                    activeEquippedEffectId={activeEquippedCustomEffectId}
+                    gridSize={gridSize}
+                  />
 
                   {/* Browse 5e SRD Spell Compendium */}
                   {onOpenUniversalCompendium && (
@@ -3813,17 +3715,29 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                     <RotateCcw className="w-3.5 h-3.5" />
                     Clear All Active FX On Board
                   </button>
-                </div>
-              )}
 
-              {/* SUBTAB 3: SPECIAL EFFECTS MANAGER */}
-              {fxCategory === 'manager' && (
-                <SpecialEffectsManager
-                  onEquipEffect={onEquipCustomEffect}
-                  onQuickPlaceEffect={onQuickPlaceCustomEffect}
-                  activeEquippedEffectId={activeEquippedCustomEffectId}
-                  gridSize={gridSize}
-                />
+                  {/* Creative Commons Attribution */}
+                  <div className="pt-1.5 border-t border-zinc-800/60 text-[9px] text-zinc-500 text-center font-mono">
+                    Animated spell effects by{' '}
+                    <a
+                      href="https://jb2a.com"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-purple-400 hover:text-purple-300 underline font-medium"
+                    >
+                      JB2A
+                    </a>{' '}
+                    under{' '}
+                    <a
+                      href="https://creativecommons.org/licenses/by-nc-sa/4.0/"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-zinc-400 hover:text-zinc-200 underline"
+                    >
+                      CC BY-NC-SA 4.0
+                    </a>
+                  </div>
+                </div>
               )}
             </div>
           )}
