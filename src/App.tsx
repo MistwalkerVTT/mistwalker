@@ -27,8 +27,7 @@ import {
   Scan,
   Users,
   Flame,
-  Undo2,
-  FlaskConical
+  Undo2
 } from 'lucide-react';
 import { Stage, Layer, Image as KonvaImage, Rect, Circle, Line, Text, Group, Wedge } from 'react-konva';
 import useImage from 'use-image';
@@ -134,7 +133,6 @@ import { useTutorial } from './hooks/useTutorial';
 import { BugReportModal } from './components/BugReportModal';
 import { BugReportManagerModal } from './components/BugReportManagerModal';
 import { DEMO_GV_CAMPAIGN, DEMO_GV_SCENE, DEMO_GV_CHAPTER, DEMO_GV_ROOM_ZONES, DEMO_GV_TOKENS } from './data/demoCampaignGv';
-import { TEST_SANDBOX_SCENE, TEST_SANDBOX_CAMPAIGN, TEST_SANDBOX_CHAPTER } from './data/testSceneData';
 import ReactMarkdown from 'react-markdown';
 import { snapPointToGrid, findNearestWall, segmentsIntersect } from './lib/visionEngine';
 import { Toaster, toast } from 'sonner';
@@ -1836,28 +1834,6 @@ export default function App() {
     toast.success('Loaded "The Guild House - Main Level" with Fog of War, 64 walls/doors and 13 room zones!');
   };
 
-  // Launch Preconfigured Featured Test Scene (Skeleton Crypt)
-  const handleLoadTestScene = () => {
-    handleLoadSceneFromCampaign(TEST_SANDBOX_SCENE, TEST_SANDBOX_CAMPAIGN.campaignId, TEST_SANDBOX_CHAPTER.chapterId);
-    setIsFogVisible(true);
-
-    // Immediately monitor and sync D&D Beyond characters for this test scene
-    const ddbIds = TEST_SANDBOX_SCENE.tokens
-      .map((t: any) => t.ddbCharacterId)
-      .filter(Boolean)
-      .map(String);
-    if (ddbIds.length > 0) {
-      fetch('/api/ddb/monitor-characters', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ characterIds: ddbIds })
-      }).catch(() => {});
-      fetch('/api/ddb/campaigns/poll-now', { method: 'POST' }).catch(() => {});
-    }
-
-    toast.success('🧪 Loaded Featured Test Scene (Skeleton Crypt) with preloaded Player & Enemy tokens!');
-  };
-
   const handleActivateWallTool = () => {
     setTool('wall');
     tutorial.triggerTaskCompletion('draw-walls');
@@ -3170,24 +3146,10 @@ export default function App() {
 
 
 
-  // Preload Featured Test Scene map asset in browser cache for instant zero-latency loading
+  // Subscribe to Campaigns list in real-time
   useEffect(() => {
-    if (TEST_SANDBOX_SCENE.mapUrl) {
-      const img = new Image();
-      img.src = TEST_SANDBOX_SCENE.mapUrl;
-    }
-  }, []);
-
-  // Subscribe to Campaigns list in real-time & ensure Featured Test Scene is persisted and available
-  useEffect(() => {
-    saveCampaignDoc(TEST_SANDBOX_CAMPAIGN).catch(err => {
-      console.warn('[App] Test scene campaign doc save notice:', err);
-    });
-
     const unsub = subscribeToCampaigns((list) => {
-      const hasTestCamp = list.some(c => c.campaignId === TEST_SANDBOX_CAMPAIGN.campaignId);
-      const combined = hasTestCamp ? list : [TEST_SANDBOX_CAMPAIGN, ...list];
-      setCampaignsList(combined);
+      setCampaignsList(list);
     });
     return () => unsub();
   }, []);
@@ -6567,49 +6529,22 @@ export default function App() {
                   <Sliders className="w-4 h-4 text-amber-400" />
                   Campaign Manager
                 </button>
-
-                <button
-                  type="button"
-                  id="btn-load-test-scene-empty-screen"
-                  onClick={handleLoadTestScene}
-                  className="px-6 py-3.5 bg-gradient-to-r from-cyan-600 via-teal-600 to-emerald-600 hover:from-cyan-500 hover:via-teal-500 hover:to-emerald-500 text-white font-extrabold rounded-xl transition-all transform hover:scale-105 active:scale-95 shadow-xl shadow-cyan-950/60 font-mono text-xs flex items-center gap-2 border border-cyan-400/40 cursor-pointer"
-                  title="Launch preconfigured test lab scene for testing dynamic vision, doors, secret doors, summons, and live D&D Beyond HP"
-                >
-                  <FlaskConical className="w-4 h-4 text-cyan-200 animate-pulse" />
-                  <span>Launch Test Scene</span>
-                  <span className="px-1.5 py-0.5 text-[9px] bg-cyan-400/20 text-cyan-200 border border-cyan-400/30 rounded font-mono">
-                    Sandbox Lab
-                  </span>
-                </button>
               </div>
 
-              {/* Interactive Tutorial Guide & Feature Test Lab Bar */}
-              <div className="mt-5 w-full flex flex-wrap items-center justify-center gap-3">
+              {/* Interactive Tutorial Guide Button */}
+              <div className="mt-5 w-full flex justify-center">
                 <button
                   type="button"
                   id="btn-start-tutorial-guide-home"
                   onClick={() => {
                     handleStartTutorial();
                   }}
-                  className="group px-6 py-2.5 bg-gradient-to-r from-amber-500/20 via-zinc-900/90 to-amber-500/15 hover:from-amber-500/30 hover:to-amber-500/25 border border-amber-500/50 hover:border-amber-400 text-amber-300 hover:text-amber-200 font-bold rounded-xl transition-all font-mono text-xs flex items-center gap-2 shadow-xl shadow-amber-950/40 cursor-pointer transform hover:scale-105 active:scale-95"
+                  className="group px-7 py-3 bg-gradient-to-r from-amber-500/20 via-zinc-900/90 to-amber-500/15 hover:from-amber-500/30 hover:to-amber-500/25 border border-amber-500/50 hover:border-amber-400 text-amber-300 hover:text-amber-200 font-bold rounded-xl transition-all font-mono text-xs flex items-center gap-2.5 shadow-xl shadow-amber-950/40 cursor-pointer transform hover:scale-105 active:scale-95"
                 >
                   <HelpCircle className="w-4 h-4 text-amber-400 group-hover:rotate-12 transition-transform" />
                   <span>Interactive DM Tutorial Guide</span>
                   <span className="px-2 py-0.5 text-[9px] bg-amber-500/20 border border-amber-500/40 rounded-full text-amber-300 font-sans">
                     11 Steps
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  id="btn-quick-test-scene-home-sub"
-                  onClick={handleLoadTestScene}
-                  className="group px-6 py-2.5 bg-gradient-to-r from-cyan-950/80 via-zinc-900/90 to-cyan-950/80 hover:from-cyan-900/60 hover:to-teal-900/60 border border-cyan-500/50 hover:border-cyan-400 text-cyan-300 hover:text-cyan-200 font-bold rounded-xl transition-all font-mono text-xs flex items-center gap-2 shadow-xl shadow-cyan-950/40 cursor-pointer transform hover:scale-105 active:scale-95"
-                >
-                  <FlaskConical className="w-4 h-4 text-cyan-400 group-hover:rotate-12 transition-transform" />
-                  <span>Feature Test Scene (Sandbox)</span>
-                  <span className="px-2 py-0.5 text-[9px] bg-cyan-500/20 border border-cyan-500/40 rounded-full text-cyan-300 font-sans">
-                    Ready to Test
                   </span>
                 </button>
               </div>
