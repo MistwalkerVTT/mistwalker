@@ -23,6 +23,7 @@ uploads/*.bin
 uploads/*.mp4
 uploads/*.zip
 uploads/*.json
+uploads/jb2a_cache/
 !uploads/.gitkeep
 scratch/*
 !scratch/.gitkeep

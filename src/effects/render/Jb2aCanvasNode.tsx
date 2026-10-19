@@ -1,7 +1,8 @@
 // src/effects/render/Jb2aCanvasNode.tsx
 // High-performance Konva node rendering hardware-accelerated transparent WebMs
+// Full Sequencer & JB2A paradigm support (Cones vertex-anchored, Lines stretched, Spheres true 5e diameter)
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { Image as KonvaImage, Group } from 'react-konva';
 import { VttEffectInstance } from '../types/effect';
 import { videoPool } from '../engine/VideoPool';
@@ -10,24 +11,64 @@ interface Jb2aCanvasNodeProps {
   effect: VttEffectInstance;
   gridSize: number;
   stageScale: number;
+  onComplete?: (effectId: string) => void;
 }
 
 export const Jb2aCanvasNode: React.FC<Jb2aCanvasNodeProps> = React.memo(({
   effect,
   gridSize,
-  stageScale
+  stageScale,
+  onComplete
 }) => {
   const imageRef = useRef<any>(null);
   const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null);
+  const isCompletedRef = useRef(false);
 
-  // Compute physical pixel dimensions from 5e grid feet: 5ft = 1 grid square
-  const pixelRadius = ((effect.sizeFt || 20) / 5) * (gridSize / 2);
-  const pixelWidth = pixelRadius * 2;
-  const pixelHeight = pixelRadius * 2;
+  // Compute paradigm-accurate physical dimensions and anchor offsets
+  const { width, height, offsetX, offsetY } = useMemo(() => {
+    const sizeFt = effect.sizeFt || 20;
+
+    if (effect.paradigm === 'cone') {
+      // 5e Cone: length = sizeFt. In JB2A, cone vertex is at the left-center edge (x: 0, y: 0.5)
+      // Base width of a 5e cone equals its length
+      const coneLength = (sizeFt / 5) * gridSize;
+      const coneSpread = coneLength;
+      return {
+        width: coneLength,
+        height: coneSpread,
+        offsetX: 0, // Vertex anchored at caster token center
+        offsetY: coneSpread / 2
+      };
+    }
+
+    if (effect.paradigm === 'line') {
+      // 5e Line: length = sizeFt. In JB2A, beam begins at left-center edge (x: 0, y: 0.5)
+      const lineLength = (sizeFt / 5) * gridSize;
+      const beamHeight = Math.max(gridSize, (lineLength / 10)); // Maintain high aspect ratio beam
+      return {
+        width: lineLength,
+        height: beamHeight,
+        offsetX: 0, // Origin anchored at caster
+        offsetY: beamHeight / 2
+      };
+    }
+
+    // Default: Point / Sphere / Circle / Aura AoE
+    // In 5e, sizeFt is the RADIUS (e.g. 20ft Fireball = 40ft diameter = 8 grid squares)
+    const diameterFt = sizeFt * 2;
+    const pixelDiameter = (diameterFt / 5) * gridSize;
+    return {
+      width: pixelDiameter,
+      height: pixelDiameter,
+      offsetX: pixelDiameter / 2, // Centered on target point
+      offsetY: pixelDiameter / 2
+    };
+  }, [effect.paradigm, effect.sizeFt, gridSize]);
 
   useEffect(() => {
     let active = true;
     let acquiredVideo: HTMLVideoElement | null = null;
+    isCompletedRef.current = false;
 
     async function setupVideo() {
       if (!effect.videoUrl) return;
@@ -51,7 +92,7 @@ export const Jb2aCanvasNode: React.FC<Jb2aCanvasNodeProps> = React.memo(({
     };
   }, [effect.videoUrl, effect.loop, effect.isPersistent]);
 
-  // Reliable RAF loop to synchronize Konva layer drawing with video playback
+  // Reliable RAF rendering loop & completion detection
   useEffect(() => {
     if (!videoElement) return;
 
@@ -73,9 +114,19 @@ export const Jb2aCanvasNode: React.FC<Jb2aCanvasNodeProps> = React.memo(({
       imageRef.current?.getLayer()?.batchDraw();
     };
 
+    const onEndedEvent = () => {
+      if (!effect.loop && !effect.isPersistent && !isCompletedRef.current) {
+        isCompletedRef.current = true;
+        if (onComplete) {
+          onComplete(effect.id);
+        }
+      }
+    };
+
     videoElement.addEventListener('playing', onPlayEvent);
     videoElement.addEventListener('loadeddata', onPlayEvent);
     videoElement.addEventListener('timeupdate', onPlayEvent);
+    videoElement.addEventListener('ended', onEndedEvent);
 
     return () => {
       isMounted = false;
@@ -83,8 +134,9 @@ export const Jb2aCanvasNode: React.FC<Jb2aCanvasNodeProps> = React.memo(({
       videoElement.removeEventListener('playing', onPlayEvent);
       videoElement.removeEventListener('loadeddata', onPlayEvent);
       videoElement.removeEventListener('timeupdate', onPlayEvent);
+      videoElement.removeEventListener('ended', onEndedEvent);
     };
-  }, [videoElement]);
+  }, [videoElement, effect.loop, effect.isPersistent, effect.id, onComplete]);
 
   if (!videoElement) {
     return null;
@@ -112,10 +164,10 @@ export const Jb2aCanvasNode: React.FC<Jb2aCanvasNodeProps> = React.memo(({
         image={videoElement}
         x={0}
         y={0}
-        width={pixelWidth}
-        height={pixelHeight}
-        offsetX={pixelWidth / 2}
-        offsetY={pixelHeight / 2}
+        width={width}
+        height={height}
+        offsetX={offsetX}
+        offsetY={offsetY}
         globalCompositeOperation={compositeOp}
         listening={false}
       />

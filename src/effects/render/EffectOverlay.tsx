@@ -84,8 +84,13 @@ export const EffectOverlay: React.FC<EffectOverlayProps> = React.memo(({
                   if (burstEffect.soundKey) {
                     soundCatalog.play(burstEffect.soundKey);
                   }
-                } else if (onEffectComplete) {
-                  onEffectComplete(effect.id);
+                } else {
+                  if (setEffects) {
+                    setEffects(prev => prev.filter(e => e.id !== effect.id));
+                  }
+                  if (onEffectComplete) {
+                    onEffectComplete(effect.id);
+                  }
                 }
               }}
             />
@@ -98,6 +103,14 @@ export const EffectOverlay: React.FC<EffectOverlayProps> = React.memo(({
             effect={effect}
             gridSize={gridSize}
             stageScale={stageScale}
+            onComplete={(id) => {
+              if (setEffects) {
+                setEffects(prev => prev.filter(e => e.id !== id));
+              }
+              if (onEffectComplete) {
+                onEffectComplete(id);
+              }
+            }}
           />
         );
       })}

@@ -1,5 +1,6 @@
 // src/effects/ui/AimReticle.tsx
 // Interactive battlemap targeting reticle for spells, cones, lines, and projectiles
+// Accurately calibrated to official 5e rules and JB2A asset dimensions
 
 import React from 'react';
 import { Group, Circle, Line, Wedge, Rect, Text } from 'react-konva';
@@ -29,27 +30,28 @@ export const AimReticle: React.FC<AimReticleProps> = React.memo(({
   const angleDeg = Math.atan2(dy, dx) * (180 / Math.PI);
   const color = asset.color || '#a855f7';
 
-  // 1. Point-Targeted Circle
+  // 1. Point-Targeted Circle / Sphere AoE (Fireball, Darkness, Fog Cloud)
   if (asset.paradigm === 'point' || asset.shape === 'circle') {
-    const radiusPx = ((asset.defaultSizeFt || 20) / 5) * (gridSize / 2);
+    // 5e rule: defaultSizeFt is the RADIUS (e.g. 20ft radius = 4 grid squares radius)
+    const radiusPx = ((asset.defaultSizeFt || 20) / 5) * gridSize;
     return (
       <Group x={current.x} y={current.y} listening={false}>
         <Circle
           radius={radiusPx}
           stroke={color}
-          strokeWidth={2 / stageScale}
-          dash={[6, 4]}
+          strokeWidth={2.5 / stageScale}
+          dash={[8, 4]}
           fill={color}
-          opacity={0.25}
+          opacity={0.22}
         />
         <Circle
-          radius={4 / stageScale}
+          radius={5 / stageScale}
           fill={color}
         />
         <Text
-          text={`${asset.name} (${asset.defaultSizeFt}ft)`}
+          text={`${asset.name} (${asset.defaultSizeFt}ft Radius)`}
           x={-radiusPx}
-          y={-radiusPx - (18 / stageScale)}
+          y={-radiusPx - (20 / stageScale)}
           fill="#ffffff"
           fontSize={12 / stageScale}
           fontFamily="monospace"
@@ -58,25 +60,26 @@ export const AimReticle: React.FC<AimReticleProps> = React.memo(({
     );
   }
 
-  // 2. Cone
+  // 2. Cone (Burning Hands, Cone of Cold)
   if (asset.paradigm === 'cone' || asset.shape === 'cone') {
-    const coneRadius = Math.max(distancePx, (asset.defaultSizeFt / 5) * gridSize);
+    // 5e rule: Cone length = sizeFt (15ft, 60ft, etc.)
+    const coneRadius = (asset.defaultSizeFt / 5) * gridSize;
     return (
       <Group x={origin.x} y={origin.y} listening={false}>
         <Wedge
           radius={coneRadius}
-          angle={60}
-          rotation={angleDeg - 30}
+          angle={53} // Standard 5e cone angle (~53 degrees)
+          rotation={angleDeg - 26.5}
           stroke={color}
-          strokeWidth={2 / stageScale}
-          dash={[6, 4]}
+          strokeWidth={2.5 / stageScale}
+          dash={[8, 4]}
           fill={color}
           opacity={0.25}
         />
         <Text
-          text={`${asset.name} (${Math.round((coneRadius / gridSize) * 5)}ft cone)`}
-          x={current.x - origin.x + 10}
-          y={current.y - origin.y + 10}
+          text={`${asset.name} (${asset.defaultSizeFt}ft Cone)`}
+          x={current.x - origin.x + (12 / stageScale)}
+          y={current.y - origin.y + (12 / stageScale)}
           fill="#ffffff"
           fontSize={12 / stageScale}
           fontFamily="monospace"
@@ -85,7 +88,36 @@ export const AimReticle: React.FC<AimReticleProps> = React.memo(({
     );
   }
 
-  // 3. Projectile / Ray
+  // 3. Line (Lightning Bolt, Sunbeam)
+  if (asset.paradigm === 'line') {
+    const lineLength = (asset.defaultSizeFt / 5) * gridSize;
+    const beamHeight = Math.max(gridSize, (lineLength / 10));
+    return (
+      <Group x={origin.x} y={origin.y} rotation={angleDeg} listening={false}>
+        <Rect
+          x={0}
+          y={-beamHeight / 2}
+          width={lineLength}
+          height={beamHeight}
+          stroke={color}
+          strokeWidth={2 / stageScale}
+          dash={[8, 4]}
+          fill={color}
+          opacity={0.25}
+        />
+        <Text
+          text={`${asset.name} (${asset.defaultSizeFt}ft Line)`}
+          x={10 / stageScale}
+          y={(-beamHeight / 2) - (18 / stageScale)}
+          fill="#ffffff"
+          fontSize={12 / stageScale}
+          fontFamily="monospace"
+        />
+      </Group>
+    );
+  }
+
+  // 4. Projectile / Ray (Fire Bolt, Eldritch Blast, Ray of Frost)
   return (
     <Group listening={false}>
       {/* Travel Vector Line */}
@@ -102,9 +134,9 @@ export const AimReticle: React.FC<AimReticleProps> = React.memo(({
         y={current.y}
         radius={(gridSize / 2)}
         stroke={color}
-        strokeWidth={1.5 / stageScale}
+        strokeWidth={2 / stageScale}
         fill={color}
-        opacity={0.3}
+        opacity={0.28}
       />
       {/* Range readout */}
       <Text

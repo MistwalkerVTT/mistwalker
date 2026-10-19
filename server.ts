@@ -721,6 +721,23 @@ async function startServer() {
     });
   });
 
+  // Local static JB2A animated assets directory (zero-network-latency serving)
+  const jb2aLocalDir = path.join(process.cwd(), 'public', 'jb2a');
+  if (fs.existsSync(jb2aLocalDir)) {
+    app.use('/jb2a', express.static(jb2aLocalDir, {
+      maxAge: '7d',
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.webm')) {
+          res.setHeader('Content-Type', 'video/webm');
+        } else if (filePath.endsWith('.webp')) {
+          res.setHeader('Content-Type', 'image/webp');
+        }
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Accept-Ranges', 'bytes');
+      }
+    }));
+  }
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
