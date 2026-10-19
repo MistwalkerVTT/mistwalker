@@ -110,6 +110,7 @@ import { DEFAULT_ALLIES } from '../data/defaultAllies';
 import { PRESET_BATTLEMAPS, PresetBattlemap } from '../data/presetBattlemaps';
 import { toast } from 'sonner';
 import { HelpDrawer } from './HelpDrawer';
+import { EffectsDrawer, Jb2aAssetDefinition } from '../effects';
 
 interface LeftSidebarProps {
   isPlayerView?: boolean;
@@ -253,6 +254,10 @@ interface LeftSidebarProps {
   onStartTutorial?: () => void;
   onOpenBugReport?: () => void;
   onOpenBugManager?: () => void;
+  activeEquippedAsset?: Jb2aAssetDefinition | null;
+  onEquipAsset?: (asset: Jb2aAssetDefinition) => void;
+  onQuickPlaceAsset?: (asset: Jb2aAssetDefinition) => void;
+  onClearEffects?: () => void;
 }
 
 type GroupMenuId = 'maps' | 'zones' | 'fog-grid' | 'lighting' | 'combat' | 'fx' | 'spells' | 'tokens' | 'dice' | 'ai' | 'help';
@@ -262,6 +267,10 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   activeMapId,
   liveMapId,
   onForceSync,
+  activeEquippedAsset,
+  onEquipAsset,
+  onQuickPlaceAsset,
+  onClearEffects,
   handleMapSwitch,
   onClearMapSlot,
   handleFileUpload,
@@ -411,6 +420,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   const [tokenCategoryFilter, setTokenCategoryFilter] = useState<'all' | 'characters' | 'monsters' | 'allies' | 'custom'>('all');
   const [tokenSearchQuery, setTokenSearchQuery] = useState<string>('');
   const [lightingSubTab, setLightingSubTab] = useState<'lighting' | 'fog' | 'zones'>('fog');
+  const [fxCategory, setFxCategory] = useState<'spells' | 'tactical'>('spells');
   const [fxSubTab, setFxSubTab] = useState<'features' | 'weather' | 'scale'>('features');
   const [selectedScalePreset, setSelectedScalePreset] = useState<MapSizePresetKey>('medium');
   const [customCols, setCustomCols] = useState<number>(30);
@@ -3025,7 +3035,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
           )}
 
           {activeGroup === 'fx' && (
-            <div className="p-3.5 flex flex-col gap-3 min-w-[320px] max-w-[360px]">
+            <div className={`p-3.5 flex flex-col gap-3 ${fxCategory === 'spells' ? 'min-w-[340px] max-w-[390px]' : 'min-w-[320px] max-w-[360px]'}`}>
               {/* Header */}
               <div
                 onMouseDown={pinnedGroup ? handleDragStart : undefined}
@@ -3033,7 +3043,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
               >
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-cyan-400" />
-                  <span className="text-xs font-bold font-mono text-zinc-200 uppercase tracking-wider">Tactical & Weather FX</span>
+                  <span className="text-xs font-bold font-mono text-zinc-200 uppercase tracking-wider">Tactical & Spell FX</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <button
@@ -3052,6 +3062,56 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                 </div>
               </div>
 
+              {/* Category Switcher: Animated Spells (JB2A) vs Tactical & Weather FX */}
+              <div className="flex bg-zinc-950/80 p-1 rounded-xl border border-zinc-800 gap-1 shrink-0">
+                <button
+                  onClick={() => setFxCategory('spells')}
+                  className={`flex-1 py-1.5 px-1.5 rounded-lg text-xs font-bold font-mono transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                    fxCategory === 'spells'
+                      ? 'bg-purple-600 text-white shadow-sm'
+                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850'
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5 shrink-0 text-purple-300" />
+                  <span className="truncate">Animated Spells</span>
+                  {activeEquippedAsset && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
+                  )}
+                </button>
+                <button
+                  onClick={() => setFxCategory('tactical')}
+                  className={`flex-1 py-1.5 px-1.5 rounded-lg text-xs font-bold font-mono transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                    fxCategory === 'tactical'
+                      ? 'bg-cyan-500 text-zinc-950 shadow-sm'
+                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850'
+                  }`}
+                >
+                  <Waves className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">Tactical FX</span>
+                  {(boardAnimatedFeatures.length > 0 || boardWeatherEffect !== 'none') && (
+                    <span className={`text-[9px] px-1 rounded-full font-bold ${
+                      fxCategory === 'tactical' ? 'bg-zinc-950 text-cyan-300' : 'bg-zinc-800 text-zinc-300'
+                    }`}>
+                      {boardAnimatedFeatures.length > 0 ? boardAnimatedFeatures.length : '●'}
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              {/* TAB 1: ANIMATED SPELLS (JB2A) */}
+              {fxCategory === 'spells' && (
+                <EffectsDrawer
+                  onEquipEffect={onEquipAsset}
+                  onQuickPlaceEffect={onQuickPlaceAsset}
+                  onClearEffects={onClearEffects}
+                  activeEquippedId={activeEquippedAsset?.id}
+                  gridSize={gridSize}
+                />
+              )}
+
+              {/* TAB 2: TACTICAL & WEATHER */}
+              {fxCategory === 'tactical' && (
+                <>
               {/* Sub-Tabs: Features vs Weather vs Map Sizing */}
               <div className="flex bg-zinc-950 p-1 rounded-xl border border-zinc-800">
                 <button
@@ -3556,6 +3616,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                     </div>
                   )}
                 </div>
+              )}
+                </>
               )}
             </div>
           )}

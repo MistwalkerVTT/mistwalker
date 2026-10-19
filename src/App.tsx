@@ -42,6 +42,14 @@ import { AnimatedMapOverlay, AnimatedFeaturesKonvaImage } from './components/Ani
 import { DiceTableOverlay } from './components/DiceTableOverlay';
 import { DdbDiceRollEvent } from './types/dice';
 import { EffectContextMenu, ContextMenuData } from './components/EffectContextMenu';
+import {
+  VttEffectInstance,
+  Jb2aAssetDefinition,
+  EffectOverlay,
+  AimReticle,
+  videoCacheManager,
+  soundCatalog
+} from './effects';
 import { CampaignBuilderModal } from './components/CampaignBuilderModal';
 import { SaveToCampaignModal } from './components/SaveToCampaignModal';
 import { LoadCampaignModal } from './components/LoadCampaignModal';
@@ -1118,6 +1126,13 @@ export default function App() {
   const [brushSize, setBrushSize] = useState(50);
   const [isFogVisible, setIsFogVisible] = useState<boolean>(true);
   const [tool, setToolState] = useState<string>('pan');
+
+  // MistWalker 4.0 Effects Engine State
+  const [effects, setEffects] = useState<VttEffectInstance[]>([]);
+  const [activeEquippedAsset, setActiveEquippedAsset] = useState<Jb2aAssetDefinition | null>(null);
+  const [aimOrigin, setAimOrigin] = useState<{ x: number; y: number } | null>(null);
+  const [aimCurrent, setAimCurrent] = useState<{ x: number; y: number } | null>(null);
+
   const [isSpacePressed, setIsSpacePressed] = useState<boolean>(false);
   const spacePanActiveRef = useRef<boolean>(false);
   const [isShiftPressed, setIsShiftPressed] = useState<boolean>(false);
@@ -3554,6 +3569,101 @@ export default function App() {
     toast.success(`Saved scene "${scene.sceneTitle}" into Campaign!`);
   };
 
+  // ==========================================
+  // MistWalker 4.0 Effects Engine Handlers
+  // ==========================================
+  useEffect(() => {
+    // Pre-warm top 15 combat spells in background CacheStorage
+    videoCacheManager.prewarmUrls([
+      'https://cdn.jsdelivr.net/gh/Jules-Bens-Aa/JB2A_DnD5e@latest/Spells/3rd_Level/Fireball/Fireball_01_Orange_800x800.webm',
+      'https://cdn.jsdelivr.net/gh/Jules-Bens-Aa/JB2A_DnD5e@latest/Spells/Cantrip/Eldritch_Blast/EldritchBlast_01_Regular_Purple_Impact_800x800.webm',
+      'https://cdn.jsdelivr.net/gh/Jules-Bens-Aa/JB2A_DnD5e@latest/Spells/Cantrip/Fire_Bolt/FireBolt_01_Regular_Orange_Impact_800x800.webm',
+      'https://cdn.jsdelivr.net/gh/Jules-Bens-Aa/JB2A_DnD5e@latest/Spells/1st_Level/Shield/Shield_01_Regular_Blue_400x400.webm',
+      'https://cdn.jsdelivr.net/gh/Jules-Bens-Aa/JB2A_DnD5e@latest/Spells/3rd_Level/Spirit_Guardians/SpiritGuardians_01_Light_Blue_600x600.webm'
+    ]);
+  }, []);
+
+  useEffect(() => {
+    if (!socketRef.current) return;
+    const socket = socketRef.current;
+    const onSpawn = (eff: VttEffectInstance) => {
+      setEffects(prev => [...prev.filter(e => e.id !== eff.id), eff]);
+    };
+    const onUpdate = (data: { id: string; updates: any }) => {
+      setEffects(prev => prev.map(e => e.id === data.id ? { ...e, ...data.updates } : e));
+    };
+    const onRemove = (data: { id: string }) => {
+      setEffects(prev => prev.filter(e => e.id !== data.id));
+    };
+    const onClearAll = () => {
+      setEffects([]);
+    };
+    socket.on('EFFECT_SPAWN', onSpawn);
+    socket.on('EFFECT_UPDATE', onUpdate);
+    socket.on('EFFECT_REMOVE', onRemove);
+    socket.on('EFFECT_CLEAR_ALL', onClearAll);
+    return () => {
+      socket.off('EFFECT_SPAWN', onSpawn);
+      socket.off('EFFECT_UPDATE', onUpdate);
+      socket.off('EFFECT_REMOVE', onRemove);
+      socket.off('EFFECT_CLEAR_ALL', onClearAll);
+    };
+  }, [socketRef.current]);
+
+  const handleEquipAsset = useCallback((asset: Jb2aAssetDefinition) => {
+    setActiveEquippedAsset(asset);
+    setTool('spell_aim');
+    toast.info(`Aiming ${asset.name}`, {
+      description: 'Click and drag on the battlemap to target and cast.'
+    });
+  }, [setTool]);
+
+  const handleQuickPlaceAsset = useCallback((asset: Jb2aAssetDefinition) => {
+    const dims = getMapDimensions();
+    const centerX = dims.width / 2;
+    const centerY = dims.height / 2;
+
+    const newEffect: VttEffectInstance = {
+      id: `eff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      name: asset.name,
+      label: asset.label,
+      assetKey: asset.id,
+      videoUrl: asset.webm,
+      loopVideoUrl: asset.loopWebm,
+      thumbUrl: asset.thumb,
+      paradigm: asset.paradigm,
+      x: centerX,
+      y: centerY,
+      sizeFt: asset.defaultSizeFt,
+      rotation: 0,
+      opacity: 1.0,
+      blendMode: asset.blendMode,
+      isPersistent: asset.isPersistent,
+      loop: asset.isPersistent,
+      castTime: Date.now(),
+      durationMs: 5000,
+      soundKey: asset.soundKey,
+      color: asset.color
+    };
+
+    setEffects(prev => [...prev, newEffect]);
+    if (asset.soundKey) soundCatalog.play(asset.soundKey);
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('EFFECT_SPAWN', newEffect);
+    }
+    toast.success(`Cast ${asset.name}!`, {
+      description: `${asset.defaultSizeFt}ft ${asset.shape} placed at map center.`
+    });
+  }, [getMapDimensions]);
+
+  const handleClearEffects = useCallback(() => {
+    setEffects([]);
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('EFFECT_CLEAR_ALL');
+    }
+    toast.info('Cleared all visual effects from battlemap.');
+  }, []);
+
   const handleRestoreUnsavedScene = useCallback(() => {
     if (!unsavedSceneBackup) return;
     const backup = unsavedSceneBackup;
@@ -4686,6 +4796,13 @@ export default function App() {
       return;
     }
 
+    // MistWalker 4.0 Spell & Projectile Aiming
+    if (tool === 'spell_aim' && activeEquippedAsset) {
+      setAimOrigin(point);
+      setAimCurrent(point);
+      return;
+    }
+
     // Wall eraser tool (remove individual sections or start drag cut)
     if (tool === 'erase_wall') {
       const hit = findNearestWall(point.x, point.y, walls, 24 / stageScale);
@@ -4882,6 +4999,11 @@ export default function App() {
       y: (pointer.y - stage.y()) / scale
     };
 
+    if (tool === 'spell_aim' && aimOrigin) {
+      setAimCurrent(point);
+      return;
+    }
+
 
 
     // Only update React mousePos state if an active drawing tool actually requires cursor tracking
@@ -4998,6 +5120,53 @@ export default function App() {
       if (stageRef.current) {
         stageRef.current.container().style.cursor = 'grab';
       }
+      return;
+    }
+
+    if (tool === 'spell_aim' && activeEquippedAsset && aimOrigin && aimCurrent) {
+      const dx = aimCurrent.x - aimOrigin.x;
+      const dy = aimCurrent.y - aimOrigin.y;
+      const rotation = Math.atan2(dy, dx) * (180 / Math.PI);
+      const isProjectile = activeEquippedAsset.paradigm === 'projectile' || activeEquippedAsset.paradigm === 'ray';
+
+      const newEffect: VttEffectInstance = {
+        id: `eff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        name: activeEquippedAsset.name,
+        label: activeEquippedAsset.label,
+        assetKey: activeEquippedAsset.id,
+        videoUrl: (isProjectile && activeEquippedAsset.projectileWebm)
+          ? activeEquippedAsset.projectileWebm
+          : activeEquippedAsset.webm,
+        loopVideoUrl: activeEquippedAsset.loopWebm,
+        thumbUrl: activeEquippedAsset.thumb,
+        paradigm: activeEquippedAsset.paradigm,
+        x: aimOrigin.x,
+        y: aimOrigin.y,
+        targetX: aimCurrent.x,
+        targetY: aimCurrent.y,
+        sizeFt: activeEquippedAsset.defaultSizeFt,
+        rotation,
+        opacity: 1.0,
+        blendMode: activeEquippedAsset.blendMode,
+        isPersistent: activeEquippedAsset.isPersistent,
+        loop: activeEquippedAsset.isPersistent,
+        castTime: Date.now(),
+        durationMs: 5000,
+        soundKey: activeEquippedAsset.soundKey,
+        color: activeEquippedAsset.color
+      };
+
+      setEffects(prev => [...prev, newEffect]);
+      if (activeEquippedAsset.soundKey) soundCatalog.play(activeEquippedAsset.soundKey);
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('EFFECT_SPAWN', newEffect);
+      }
+      toast.success(`Cast ${activeEquippedAsset.name}!`);
+
+      setAimOrigin(null);
+      setAimCurrent(null);
+      setActiveEquippedAsset(null);
+      setTool('pan');
       return;
     }
 
@@ -5981,6 +6150,10 @@ export default function App() {
           activeMapId={activeMapId}
           liveMapId={liveMapId}
           onForceSync={handleForceSyncToPlayers}
+          activeEquippedAsset={activeEquippedAsset}
+          onEquipAsset={handleEquipAsset}
+          onQuickPlaceAsset={handleQuickPlaceAsset}
+          onClearEffects={handleClearEffects}
           handleMapSwitch={handleMapSwitch}
           onClearMapSlot={handleClearMapSlot}
           handleFileUpload={handleFileUpload}
@@ -7059,6 +7232,25 @@ export default function App() {
                     }}
                   />
                 ))}
+              </Layer>
+
+              {/* Dynamic JB2A Animated Spell & Visual Effects Layer */}
+              <Layer listening={false}>
+                <EffectOverlay
+                  effects={effects}
+                  setEffects={setEffects}
+                  gridSize={gridSize}
+                  stageScale={stageScale}
+                />
+                {activeEquippedAsset && aimOrigin && aimCurrent && (
+                  <AimReticle
+                    asset={activeEquippedAsset}
+                    origin={aimOrigin}
+                    current={aimCurrent}
+                    gridSize={gridSize}
+                    stageScale={stageScale}
+                  />
+                )}
               </Layer>
 
               {/* Marquee Selection Layer */}

@@ -606,6 +606,39 @@ async function startServer() {
       socket.broadcast.emit("SYNC_COMBAT_STATE", val);
     });
 
+    // ==========================================
+    // MistWalker 4.0 Effects Engine Handlers
+    // ==========================================
+    socket.on("EFFECT_SPAWN", (effect: any) => {
+      if (effect && effect.id) {
+        if (!Array.isArray(activeVttState.effects)) activeVttState.effects = [];
+        activeVttState.effects.push(effect);
+        socket.broadcast.emit("EFFECT_SPAWN", effect);
+      }
+    });
+
+    socket.on("EFFECT_UPDATE", (data: { id: string; updates: Record<string, any> }) => {
+      if (data?.id && data.updates && Array.isArray(activeVttState.effects)) {
+        activeVttState.effects = activeVttState.effects.map((e: any) =>
+          e.id === data.id ? { ...e, ...data.updates } : e
+        );
+        socket.broadcast.emit("EFFECT_UPDATE", data);
+      }
+    });
+
+    socket.on("EFFECT_REMOVE", (data: { id: string } | string) => {
+      const targetId = typeof data === 'string' ? data : data?.id;
+      if (targetId && Array.isArray(activeVttState.effects)) {
+        activeVttState.effects = activeVttState.effects.filter((e: any) => e.id !== targetId);
+        socket.broadcast.emit("EFFECT_REMOVE", { id: targetId });
+      }
+    });
+
+    socket.on("EFFECT_CLEAR_ALL", () => {
+      activeVttState.effects = [];
+      socket.broadcast.emit("EFFECT_CLEAR_ALL");
+    });
+
     socket.on("disconnect", (reason) => {
       console.log(`[Server] User disconnected: ${socket.id} (reason: ${reason})`);
     });

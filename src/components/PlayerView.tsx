@@ -87,6 +87,15 @@ import {
   VisibilityPolygon
 } from '../lib/visionEngine';
 import { subscribeToActiveSession } from '../lib/firebase';
+import {
+  VttEffectInstance,
+  Jb2aAssetDefinition,
+  EffectOverlay,
+  AimReticle,
+  EffectsDrawer,
+  videoCacheManager,
+  soundCatalog
+} from '../effects';
 
 interface Token {
   id: string;
@@ -161,6 +170,7 @@ interface SyncState {
   boardWeatherEffect?: WeatherEffectType;
   characters?: Character[];
   combatants?: Combatant[];
+  effects?: VttEffectInstance[];
   combatRound?: number;
   combatTurnIndex?: number;
   showCombatTracker?: boolean;
@@ -1003,6 +1013,13 @@ export default function PlayerView() {
   const [boardAnimatedEnabled, setBoardAnimatedEnabled] = useState<boolean>(() => initialBackup?.boardAnimatedEnabled !== undefined ? initialBackup.boardAnimatedEnabled : true);
   const [boardWeatherEffect, setBoardWeatherEffect] = useState<WeatherEffectType>(() => initialBackup?.boardWeatherEffect || 'none');
 
+  // Dynamic JB2A Animated Spell & Visual Effects State
+  const [effects, setEffects] = useState<VttEffectInstance[]>([]);
+  const [activeEquippedAsset, setActiveEquippedAsset] = useState<Jb2aAssetDefinition | null>(null);
+  const [aimOrigin, setAimOrigin] = useState<{ x: number; y: number } | null>(null);
+  const [aimCurrent, setAimCurrent] = useState<{ x: number; y: number } | null>(null);
+  const [showEffectsDrawer, setShowEffectsDrawer] = useState<boolean>(false);
+
   // Grid Settings
   const [gridVisible, setGridVisible] = useState<boolean>(() => initialBackup?.gridVisible !== undefined ? initialBackup.gridVisible : true);
   const [gridOpacity, setGridOpacity] = useState<number>(() => initialBackup?.gridOpacity !== undefined ? initialBackup.gridOpacity : 0.3);
@@ -1045,6 +1062,11 @@ export default function PlayerView() {
 
   // Compendium Characters synced from DM
   const [compendiumCharacters, setCompendiumCharacters] = useState<Character[]>(DEFAULT_CHARACTERS);
+
+  // Pre-warm top JB2A spell animations into browser CacheStorage for instant zero-latency playback
+  useEffect(() => {
+    videoCacheManager.prewarmTopSpells();
+  }, []);
 
   // Automatically reconcile claimedTokenId when tokens change (e.g. across scene transitions where token IDs differ)
   useEffect(() => {
@@ -1329,6 +1351,7 @@ export default function PlayerView() {
       if (state.visionConfig) setVisionConfig(state.visionConfig);
       if (state.fogResetKey !== undefined) setFogResetKey(state.fogResetKey);
       if (state.mapRotation !== undefined) setMapRotation(state.mapRotation);
+      if (state.effects && Array.isArray(state.effects)) setEffects(state.effects);
       if (state.activeSceneInfo) {
         setActiveSceneInfo(prev => {
           if (prev?.sceneId && state.activeSceneInfo?.sceneId && prev.sceneId !== state.activeSceneInfo.sceneId) {
@@ -1763,8 +1786,32 @@ export default function PlayerView() {
       })
       .catch(() => {});
 
+    // 6. JB2A Animated Effects Synchronizers
+    socket.on('EFFECT_SPAWN', (instance: VttEffectInstance) => {
+      setEffects(prev => [...prev.filter(e => e.id !== instance.id), instance]);
+      if (instance.soundKey) {
+        soundCatalog.play(instance.soundKey, 0.4);
+      }
+    });
+
+    socket.on('EFFECT_UPDATE', (updated: VttEffectInstance) => {
+      setEffects(prev => prev.map(e => e.id === updated.id ? updated : e));
+    });
+
+    socket.on('EFFECT_REMOVE', (effectId: string) => {
+      setEffects(prev => prev.filter(e => e.id !== effectId));
+    });
+
+    socket.on('EFFECT_CLEAR_ALL', () => {
+      setEffects([]);
+    });
+
     return () => {
       socket.off('SYNC_SHAKE');
+      socket.off('EFFECT_SPAWN');
+      socket.off('EFFECT_UPDATE');
+      socket.off('EFFECT_REMOVE');
+      socket.off('EFFECT_CLEAR_ALL');
       if (activeNarrationAudioRef.current) {
         activeNarrationAudioRef.current.pause();
         activeNarrationAudioRef.current = null;
@@ -1999,6 +2046,10 @@ export default function PlayerView() {
       if (e.key === 'Escape') {
         setActiveTokenMenu(null);
         setShowClaimMenu(false);
+        setShowEffectsDrawer(false);
+        setActiveEquippedAsset(null);
+        setAimOrigin(null);
+        setAimCurrent(null);
         if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) {
           (e.target as HTMLElement).blur();
         }
@@ -2228,6 +2279,156 @@ export default function PlayerView() {
     applyTvScale();
     toast.info('Reset to 1" grid scale for 32" TV');
   }, [applyTvScale]);
+
+  // JB2A Visual Effects & Spell Engine Handlers
+  const handleEquipAsset = useCallback((asset: Jb2aAssetDefinition) => {
+    setActiveEquippedAsset(asset);
+    setShowEffectsDrawer(false);
+    toast.info(`Aiming ${asset.name}`, {
+      description: 'Click and drag on the map to target and cast.'
+    });
+  }, []);
+
+  const handleQuickPlaceAsset = useCallback((asset: Jb2aAssetDefinition) => {
+    let posX = targetMapW / 2;
+    let posY = targetMapH / 2;
+
+    if (claimedToken) {
+      posX = claimedToken.x + (gridSize / 2);
+      posY = claimedToken.y + (gridSize / 2);
+    }
+
+    const newEffect: VttEffectInstance = {
+      id: `eff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      name: asset.name,
+      label: asset.label,
+      assetKey: asset.id,
+      videoUrl: asset.webm,
+      loopVideoUrl: asset.loopWebm,
+      thumbUrl: asset.thumb,
+      paradigm: asset.paradigm,
+      x: posX,
+      y: posY,
+      sizeFt: asset.defaultSizeFt,
+      rotation: 0,
+      opacity: 1.0,
+      blendMode: asset.blendMode,
+      isPersistent: asset.isPersistent,
+      loop: asset.isPersistent,
+      castTime: Date.now(),
+      durationMs: 5000,
+      soundKey: asset.soundKey,
+      color: asset.color
+    };
+
+    setEffects(prev => [...prev, newEffect]);
+    if (asset.soundKey) soundCatalog.play(asset.soundKey);
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('EFFECT_SPAWN', newEffect);
+    }
+    toast.success(`Cast ${asset.name}!`, {
+      description: `${asset.defaultSizeFt}ft ${asset.shape} placed at character position.`
+    });
+  }, [claimedToken, targetMapW, targetMapH, gridSize]);
+
+  const handleClearEffects = useCallback(() => {
+    setEffects([]);
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('EFFECT_CLEAR_ALL');
+    }
+  }, []);
+
+  const getStageRelativePointerPosition = (stage: any) => {
+    const pointer = stage.getPointerPosition();
+    if (!pointer) return null;
+    return {
+      x: (pointer.x - stage.x()) / stage.scaleX(),
+      y: (pointer.y - stage.y()) / stage.scaleY(),
+    };
+  };
+
+  const handleStageMouseDown = (e: any) => {
+    if (!activeEquippedAsset) return;
+    if (e.evt?.button === 2) {
+      setActiveEquippedAsset(null);
+      setAimOrigin(null);
+      setAimCurrent(null);
+      return;
+    }
+    const stage = e.target.getStage();
+    if (!stage) return;
+    const point = getStageRelativePointerPosition(stage);
+    if (!point) return;
+    setAimOrigin(point);
+    setAimCurrent(point);
+  };
+
+  const handleStageMouseMove = (e: any) => {
+    if (!activeEquippedAsset || !aimOrigin) return;
+    const stage = e.target.getStage();
+    if (!stage) return;
+    const point = getStageRelativePointerPosition(stage);
+    if (!point) return;
+    setAimCurrent(point);
+  };
+
+  const handleStageMouseUp = () => {
+    if (activeEquippedAsset && aimOrigin && aimCurrent) {
+      const dx = aimCurrent.x - aimOrigin.x;
+      const dy = aimCurrent.y - aimOrigin.y;
+      const rotation = Math.atan2(dy, dx) * (180 / Math.PI);
+      const isProjectile = activeEquippedAsset.paradigm === 'projectile' || activeEquippedAsset.paradigm === 'ray';
+
+      const newEffect: VttEffectInstance = {
+        id: `eff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        name: activeEquippedAsset.name,
+        label: activeEquippedAsset.label,
+        assetKey: activeEquippedAsset.id,
+        videoUrl: (isProjectile && activeEquippedAsset.projectileWebm)
+          ? activeEquippedAsset.projectileWebm
+          : activeEquippedAsset.webm,
+        loopVideoUrl: activeEquippedAsset.loopWebm,
+        thumbUrl: activeEquippedAsset.thumb,
+        paradigm: activeEquippedAsset.paradigm,
+        x: isProjectile ? aimOrigin.x : aimCurrent.x,
+        y: isProjectile ? aimOrigin.y : aimCurrent.y,
+        sizeFt: activeEquippedAsset.defaultSizeFt,
+        rotation,
+        opacity: 1.0,
+        blendMode: activeEquippedAsset.blendMode,
+        isPersistent: activeEquippedAsset.isPersistent,
+        loop: activeEquippedAsset.isPersistent,
+        castTime: Date.now(),
+        durationMs: isProjectile ? 2000 : 5000,
+        soundKey: activeEquippedAsset.soundKey,
+        color: activeEquippedAsset.color,
+        originX: aimOrigin.x,
+        originY: aimOrigin.y,
+        targetX: aimCurrent.x,
+        targetY: aimCurrent.y,
+        trajectory: isProjectile ? {
+          startX: aimOrigin.x,
+          startY: aimOrigin.y,
+          endX: aimCurrent.x,
+          endY: aimCurrent.y,
+          speedPxSec: 1400,
+          burstOnImpact: true,
+          burstVideoUrl: activeEquippedAsset.burstWebm || activeEquippedAsset.webm,
+          burstSoundKey: activeEquippedAsset.soundKey
+        } : undefined
+      };
+
+      setEffects(prev => [...prev, newEffect]);
+      if (activeEquippedAsset.soundKey) soundCatalog.play(activeEquippedAsset.soundKey);
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('EFFECT_SPAWN', newEffect);
+      }
+      toast.success(`Cast ${activeEquippedAsset.name}!`);
+      setActiveEquippedAsset(null);
+      setAimOrigin(null);
+      setAimCurrent(null);
+    }
+  };
 
   // Auto-calibrate 1"x1" scale for 32" TV and center on party when scene changes
   const lastCalibratedSceneRef = useRef<string | null>(initialBackup?.activeSceneInfo?.sceneId || initialBackup?.imageFile || null);
@@ -2865,6 +3066,27 @@ export default function PlayerView() {
                 )}
               </button>
 
+              {/* Animated Spells & Visual FX (JB2A) */}
+              <button
+                onClick={() => setShowEffectsDrawer(prev => !prev)}
+                className={`w-full flex items-center rounded-xl transition-all cursor-pointer border ${
+                  showEffectsDrawer
+                    ? 'bg-amber-500/20 border-amber-500/60 text-amber-300 shadow-sm'
+                    : 'bg-zinc-900/80 hover:bg-zinc-900 border-zinc-800 text-zinc-300 hover:text-white'
+                } ${isSidebarExpanded ? 'px-2.5 py-2 gap-2 text-xs font-medium' : 'p-2.5 justify-center'}`}
+                title="Cast Animated Spells & FX (JB2A)"
+              >
+                <Sparkles className="w-4 h-4 text-amber-400 group-hover:rotate-12 transition-transform shrink-0" />
+                {isSidebarExpanded && (
+                  <div className="flex items-center justify-between flex-1 min-w-0">
+                    <span>Spells & FX</span>
+                    <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-700/50">
+                      JB2A
+                    </span>
+                  </div>
+                )}
+              </button>
+
               {/* Audio Mute/Unmute */}
               <button
                 onClick={() => setIsAudioMuted(prev => !prev)}
@@ -3004,6 +3226,36 @@ export default function PlayerView() {
         >
           <Move className="w-3.5 h-3.5 text-emerald-400" />
           <span>Use <b>Arrow Keys</b> or <b>Drag</b> to move {claimedToken.name}</span>
+        </div>
+      )}
+
+      {/* JB2A Effects Drawer Slide-Out Modal / Panel */}
+      {showEffectsDrawer && (
+        <div 
+          className="fixed top-3 left-20 sm:left-64 bottom-3 z-50 w-96 max-w-[calc(100vw-90px)] bg-zinc-950/95 backdrop-blur-2xl border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in fade-in slide-in-from-left duration-200"
+        >
+          <div className="p-3 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-amber-400" />
+              <span className="text-xs font-bold text-white tracking-wide uppercase font-mono">
+                Spell Compendium & FX
+              </span>
+            </div>
+            <button
+              onClick={() => setShowEffectsDrawer(false)}
+              className="text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-zinc-800 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-hidden p-3">
+            <EffectsDrawer
+              activeEquippedAsset={activeEquippedAsset}
+              onEquipAsset={handleEquipAsset}
+              onQuickPlaceAsset={handleQuickPlaceAsset}
+              onClearEffects={handleClearEffects}
+            />
+          </div>
         </div>
       )}
 
@@ -3338,9 +3590,12 @@ export default function PlayerView() {
         scaleY={stageScale}
         x={stagePos.x}
         y={stagePos.y}
-        draggable={!isDraggingToken}
-        className="cursor-default"
+        draggable={!isDraggingToken && !activeEquippedAsset}
+        className={activeEquippedAsset ? "cursor-crosshair" : "cursor-default"}
         onContextMenu={(e) => e.evt.preventDefault()}
+        onMouseDown={handleStageMouseDown}
+        onMouseMove={handleStageMouseMove}
+        onMouseUp={handleStageMouseUp}
         onDragMove={(e) => {
           if (e.target === e.target.getStage() && !activeDraggingTokenIdRef.current) {
             setStagePos({ x: e.target.x(), y: e.target.y() });
@@ -3468,6 +3723,25 @@ export default function PlayerView() {
                 onContextMenu={handleOpenTokenContextMenu}
               />
           ))}
+        </Layer>
+
+        {/* Dynamic JB2A Animated Spell & Visual Effects Layer */}
+        <Layer listening={false}>
+          <EffectOverlay
+            effects={effects}
+            setEffects={setEffects}
+            gridSize={gridSize}
+            stageScale={stageScale}
+          />
+          {activeEquippedAsset && aimOrigin && aimCurrent && (
+            <AimReticle
+              asset={activeEquippedAsset}
+              origin={aimOrigin}
+              current={aimCurrent}
+              gridSize={gridSize}
+              stageScale={stageScale}
+            />
+          )}
         </Layer>
       </Stage>
 
