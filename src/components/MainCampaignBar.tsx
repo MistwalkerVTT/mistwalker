@@ -43,6 +43,7 @@ interface MainCampaignBarProps {
   onOpenMonsterCompendium?: () => void;
   onOpenCharacterCompendium?: () => void;
   onOpenAlliesCompendium?: () => void;
+  onOpenUniversalCompendium?: (tab?: 'spells' | 'monsters' | 'equipment' | 'rules', search?: string) => void;
   onOpenDdbSync?: () => void;
   onOpenDndChatbot?: () => void;
   isFirebaseConnected?: boolean;
@@ -70,6 +71,7 @@ export const MainCampaignBar: React.FC<MainCampaignBarProps> = React.memo(({
   onOpenMonsterCompendium,
   onOpenCharacterCompendium,
   onOpenAlliesCompendium,
+  onOpenUniversalCompendium,
   onOpenDdbSync,
   onOpenDndChatbot,
   onOpenTutorial,
@@ -388,6 +390,19 @@ export const MainCampaignBar: React.FC<MainCampaignBarProps> = React.memo(({
           >
             <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
             <span>Allies</span>
+          </button>
+        )}
+
+        {/* Universal 5e SRD Compendium Link */}
+        {onOpenUniversalCompendium && (
+          <button
+            id="btn-main-open-universal-compendium"
+            onClick={() => onOpenUniversalCompendium()}
+            className="px-2 py-1 rounded-xl bg-purple-950/40 hover:bg-purple-900/50 text-purple-200 border border-purple-500/40 text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer"
+            title="Open Universal 5e SRD Compendium (Spells, Items, Monsters & Rules)"
+          >
+            <BookOpen className="w-3.5 h-3.5 text-purple-400" />
+            <span>5e Compendium</span>
           </button>
         )}
 

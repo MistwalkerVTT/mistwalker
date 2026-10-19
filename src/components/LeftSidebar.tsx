@@ -198,6 +198,7 @@ interface LeftSidebarProps {
   onOpenMonsterCompendium?: (initialSearch?: string) => void;
   onOpenCharacterCompendium?: (initialSearch?: string) => void;
   onOpenAlliesCompendium?: (initialSearch?: string) => void;
+  onOpenUniversalCompendium?: (tab?: 'spells' | 'monsters' | 'equipment' | 'rules', search?: string) => void;
   compendiumMonsters?: Monster[];
   compendiumCharacters?: Character[];
   compendiumAllies?: Ally[];
@@ -340,6 +341,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   onOpenMonsterCompendium,
   onOpenCharacterCompendium,
   onOpenAlliesCompendium,
+  onOpenUniversalCompendium,
   compendiumMonsters = [],
   compendiumCharacters = [],
   compendiumAllies = [],
@@ -839,6 +841,23 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
             )}
           </button>
         </div>
+
+        {/* Universal 5e SRD Compendium Group */}
+        {onOpenUniversalCompendium && (
+          <div className="relative group shrink-0">
+            <button
+              id="group-btn-compendium"
+              onClick={() => onOpenUniversalCompendium()}
+              className="w-11 h-11 rounded-xl flex flex-col items-center justify-center transition-all relative text-zinc-400 hover:text-amber-300 hover:bg-zinc-850 hover:border hover:border-zinc-700/60 cursor-pointer"
+              title="Universal 5e SRD Compendium (Spells, Items, Monsters & Rules)"
+            >
+              <BookOpen className="w-5 h-5 text-amber-400/90" />
+              <span className="text-[6.5px] font-black font-mono tracking-wider text-amber-400/80 -mt-0.5 leading-none">
+                SRD
+              </span>
+            </button>
+          </div>
+        )}
 
         <div className="w-8 h-px bg-zinc-800/80 my-1 shrink-0" />
 
@@ -3051,6 +3070,37 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                   })}
                 </div>
               </div>
+
+              {/* SRD Compendium & Quick Rules */}
+              {onOpenUniversalCompendium && (
+                <div className="flex flex-col gap-2 pt-2 border-t border-zinc-800">
+                  <span className="text-[10px] uppercase font-bold font-mono text-zinc-400">Rules & Compendium</span>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onOpenUniversalCompendium('rules');
+                        closeFlyout();
+                      }}
+                      className="py-2 px-2.5 rounded-xl bg-zinc-850 hover:bg-zinc-800 border border-zinc-700/80 hover:border-amber-500/50 text-amber-300 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                    >
+                      <BookOpen className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                      <span className="truncate">SRD Rules</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onOpenUniversalCompendium('spells');
+                        closeFlyout();
+                      }}
+                      className="py-2 px-2.5 rounded-xl bg-zinc-850 hover:bg-zinc-800 border border-zinc-700/80 hover:border-amber-500/50 text-amber-300 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                      <span className="truncate">Spellbook</span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -3738,6 +3788,21 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                       </>
                     )}
                   </div>
+
+                  {/* Browse 5e SRD Spell Compendium */}
+                  {onOpenUniversalCompendium && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onOpenUniversalCompendium('spells');
+                        closeFlyout();
+                      }}
+                      className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-amber-600/20 to-orange-600/20 hover:from-amber-600/30 hover:to-orange-600/30 border border-amber-500/40 hover:border-amber-500/70 text-amber-300 text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                    >
+                      <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+                      Browse 5e SRD Spell Compendium
+                    </button>
+                  )}
 
                   {/* Clear FX button */}
                   <button

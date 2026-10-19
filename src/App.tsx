@@ -52,7 +52,9 @@ import { DndChatbotModal } from './components/DndChatbotModal';
 import { MonsterCompendiumModal } from './components/MonsterCompendiumModal';
 import { CharacterCompendiumModal } from './components/CharacterCompendiumModal';
 import { AlliesCompendiumModal } from './components/AlliesCompendiumModal';
+import { UniversalCompendiumModal } from './components/UniversalCompendiumModal';
 import { DdbSyncModal } from './components/DdbSyncModal';
+import type { Spell } from './types/spell';
 import {
   isUniversalVttFile,
   parseUniversalVtt,
@@ -1370,6 +1372,10 @@ export default function App() {
   const [alliesCompendiumInitialSearch, setAlliesCompendiumInitialSearch] = useState<string>('');
   const [compendiumAllies, setCompendiumAllies] = useState<Ally[]>(DEFAULT_ALLIES);
 
+  const [showUniversalCompendium, setShowUniversalCompendium] = useState(false);
+  const [universalCompendiumTab, setUniversalCompendiumTab] = useState<'spells' | 'monsters' | 'equipment' | 'rules'>('spells');
+  const [universalCompendiumQuery, setUniversalCompendiumQuery] = useState<string>('');
+
   const [isBugReportModalOpen, setIsBugReportModalOpen] = useState<boolean>(false);
   const [isBugManagerModalOpen, setIsBugManagerModalOpen] = useState<boolean>(false);
 
@@ -1589,6 +1595,95 @@ export default function App() {
       setAlliesCompendiumInitialSearch('');
     }
     setShowAlliesCompendium(true);
+  }, []);
+
+  const handleOpenUniversalCompendium = useCallback((tab: 'spells' | 'monsters' | 'equipment' | 'rules' = 'spells', query?: string) => {
+    setUniversalCompendiumTab(tab);
+    setUniversalCompendiumQuery(query || '');
+    setShowUniversalCompendium(true);
+  }, []);
+
+  const handleCastCompendiumSpell = useCallback((spell: Spell) => {
+    setShowUniversalCompendium(false);
+    if (spell.effectId) {
+      setTool(spell.effectId);
+      toast.info(`Ready to cast ${spell.name}! Click on the map to place the effect.`, {
+        icon: '✨'
+      });
+    } else {
+      const defaultTool = spell.area?.toLowerCase().includes('cone')
+        ? 'cone_of_cold'
+        : spell.area?.toLowerCase().includes('line')
+        ? 'lightning_bolt'
+        : 'fireball';
+      setTool(defaultTool);
+      toast.info(`Ready to cast ${spell.name}! Click on the map to place the spell.`, {
+        icon: '✨'
+      });
+    }
+  }, []);
+
+  const handleRollCompendiumDice = useCallback((notation: string, label: string) => {
+    const parts = notation.toLowerCase().replace(/\s+/g, '').match(/^(\d+)d(\d+)(?:([+-])(\d+))?$/);
+    if (!parts) {
+      toast.info(`Rolling ${notation} for ${label}`);
+      return;
+    }
+    const count = Math.min(Math.max(parseInt(parts[1], 10) || 1, 1), 20);
+    const sides = parseInt(parts[2], 10) || 6;
+    const sign = parts[3];
+    const modifier = parts[4] ? parseInt(parts[4], 10) : 0;
+
+    const results: number[] = [];
+    let sum = 0;
+    const diceList: { sides: number; result: number; type: string }[] = [];
+
+    for (let i = 0; i < count; i++) {
+      const res = Math.floor(Math.random() * sides) + 1;
+      results.push(res);
+      sum += res;
+      diceList.push({ sides, result: res, type: `d${sides}` });
+    }
+
+    const total = sign === '-' ? sum - modifier : sum + modifier;
+
+    const newRoll: RollResult = {
+      id: Math.random().toString(36).substring(7),
+      dice: notation,
+      results,
+      total,
+      timestamp: Date.now()
+    };
+
+    setDiceHistory(prev => [newRoll, ...prev].slice(0, 30));
+
+    const diceEvent: DdbDiceRollEvent = {
+      id: newRoll.id,
+      characterName: label || 'Compendium',
+      action: label,
+      formula: notation,
+      diceNotation: notation,
+      dice: diceList,
+      total,
+      isCritical: sides === 20 && results.includes(20),
+      isFumble: sides === 20 && results.includes(1),
+      theme: 'default',
+      themeColor: '#d97706',
+      timestamp: Date.now(),
+      source: 'local'
+    };
+
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', diceEvent);
+    }
+
+    if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+      (window as any).__mistwalkerRoll3d(diceEvent);
+    }
+
+    toast.success(`${label}: Rolled ${notation} = ${total}`, {
+      description: `Individual dice: [${results.join(', ')}]${modifier ? ` ${sign} ${modifier}` : ''}`
+    });
   }, []);
 
   // Universal VTT (.dd2vtt / .uvtt) Importer: extracts map image, grid, walls, doors & lights
@@ -6454,6 +6549,7 @@ export default function App() {
           onOpenMonsterCompendium={handleOpenMonsterCompendium}
           onOpenCharacterCompendium={handleOpenCharacterCompendium}
           onOpenAlliesCompendium={handleOpenAlliesCompendium}
+          onOpenUniversalCompendium={handleOpenUniversalCompendium}
           compendiumMonsters={compendiumMonsters}
           compendiumCharacters={compendiumCharacters}
           compendiumAllies={compendiumAllies}
@@ -6742,6 +6838,7 @@ export default function App() {
                   setAlliesCompendiumInitialSearch('');
                   setShowAlliesCompendium(true);
                 }}
+                onOpenUniversalCompendium={handleOpenUniversalCompendium}
                 onOpenDdbSync={() => setShowDdbModal(true)}
                 onOpenDndChatbot={() => setShowDndChatbot(true)}
                 isFirebaseConnected={isFirebaseConnected}
@@ -8080,6 +8177,7 @@ export default function App() {
             }));
           }}
           onPanToToken={(id) => setSelectedTokenIds([id])}
+          onOpenConditionReference={(cond) => handleOpenUniversalCompendium('rules', cond)}
         />
       )}
 
@@ -9184,6 +9282,20 @@ export default function App() {
         }}
         onSpawnTokenOnMap={handleSpawnAllyToken}
         initialSearchQuery={alliesCompendiumInitialSearch}
+      />
+
+      {/* Universal 5e SRD Compendium Modal */}
+      <UniversalCompendiumModal
+        isOpen={showUniversalCompendium}
+        onClose={() => {
+          setShowUniversalCompendium(false);
+          setUniversalCompendiumQuery('');
+        }}
+        initialTab={universalCompendiumTab}
+        initialSearchQuery={universalCompendiumQuery}
+        onSpawnMonster={handleSpawnMonsterToken}
+        onCastSpell={handleCastCompendiumSpell}
+        onRollDice={handleRollCompendiumDice}
       />
 
       {/* D&D Beyond Campaign & Live HP Modal */}

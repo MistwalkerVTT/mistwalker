@@ -35,6 +35,7 @@ interface Props {
   tokens?: any[];
   onUpdateToken?: (id: string, updates: any) => void;
   onPanToToken?: (id: string) => void;
+  onOpenConditionReference?: (condition: string) => void;
 }
 
 export const CombatTracker = React.memo(function CombatTracker({
@@ -49,7 +50,8 @@ export const CombatTracker = React.memo(function CombatTracker({
   setIsMinimized,
   tokens = [],
   onUpdateToken,
-  onPanToToken
+  onPanToToken,
+  onOpenConditionReference
 }: Props) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [isConfirmingClear, setIsConfirmingClear] = useState(false);
@@ -478,6 +480,7 @@ export const CombatTracker = React.memo(function CombatTracker({
                   isCurrentTurn={i === turnIndex}
                   onUpdate={handleUpdate}
                   onRemove={handleRemove}
+                  onOpenConditionReference={onOpenConditionReference}
                 />
               ))}
             </div>

@@ -9,9 +9,10 @@ interface Props {
   isCurrentTurn: boolean;
   onUpdate: (id: string, updates: Partial<Combatant>) => void;
   onRemove: (id: string) => void;
+  onOpenConditionReference?: (condition: string) => void;
 }
 
-export function CombatantRow({ combatant, isCurrentTurn, onUpdate, onRemove }: Props) {
+export function CombatantRow({ combatant, isCurrentTurn, onUpdate, onRemove, onOpenConditionReference }: Props) {
   const [hpInput, setHpInput] = useState('');
   const [showConditions, setShowConditions] = useState(false);
 
@@ -161,9 +162,16 @@ export function CombatantRow({ combatant, isCurrentTurn, onUpdate, onRemove }: P
       {combatant.conditions.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2">
            {combatant.conditions.map(c => (
-             <span key={c} className="px-2 py-1 bg-zinc-900 border border-zinc-800 rounded-md text-[10px] uppercase tracking-wider text-amber-500/70 font-bold flex items-center gap-1">
-               {c}
-               <button onClick={() => toggleCondition(c)} className="hover:text-red-400">
+             <span key={c} className="px-2 py-1 bg-zinc-900 border border-zinc-800 rounded-md text-[10px] uppercase tracking-wider text-amber-500/70 font-bold flex items-center gap-1.5">
+               <button
+                 type="button"
+                 onClick={() => onOpenConditionReference?.(c)}
+                 className="hover:text-amber-400 hover:underline cursor-pointer"
+                 title={`View 5e SRD rule for ${c}`}
+               >
+                 {c}
+               </button>
+               <button onClick={() => toggleCondition(c)} className="hover:text-red-400 text-zinc-500">
                  <X className="w-3 h-3" />
                </button>
              </span>
