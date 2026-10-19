@@ -90,7 +90,7 @@ import { subscribeToActiveSession } from '../lib/firebase';
 import {
   VttEffectInstance,
   Jb2aAssetDefinition,
-  EffectOverlay,
+  DomEffectOverlay,
   AimReticle,
   EffectsDrawer,
   videoCacheManager,
@@ -3761,15 +3761,9 @@ export default function PlayerView() {
           ))}
         </Layer>
 
-        {/* Dynamic JB2A Animated Spell & Visual Effects Layer */}
-        <Layer listening={false}>
-          <EffectOverlay
-            effects={effects}
-            setEffects={setEffects}
-            gridSize={gridSize}
-            stageScale={stageScale}
-          />
-          {activeEquippedAsset && aimOrigin && aimCurrent && (
+        {/* Dynamic JB2A Reticle Layer (Targeting Preview while Aiming) */}
+        {activeEquippedAsset && aimOrigin && aimCurrent && (
+          <Layer listening={false}>
             <AimReticle
               asset={activeEquippedAsset}
               origin={aimOrigin}
@@ -3777,9 +3771,18 @@ export default function PlayerView() {
               gridSize={gridSize}
               stageScale={stageScale}
             />
-          )}
-        </Layer>
+          </Layer>
+        )}
       </Stage>
+
+      {/* Native GPU-Accelerated JB2A DOM Video Overlay Layer */}
+      <DomEffectOverlay
+        effects={effects}
+        setEffects={setEffects}
+        stagePos={stagePos}
+        stageScale={stageScale}
+        gridSize={gridSize}
+      />
 
       {/* ========================================================= */}
       {/* Token Right-Click Context Menu Popup (Mirrored from DM)   */}

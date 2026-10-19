@@ -45,7 +45,7 @@ import { EffectContextMenu, ContextMenuData } from './components/EffectContextMe
 import {
   VttEffectInstance,
   Jb2aAssetDefinition,
-  EffectOverlay,
+  DomEffectOverlay,
   AimReticle,
   videoCacheManager,
   soundCatalog
@@ -7298,15 +7298,9 @@ export default function App() {
                 ))}
               </Layer>
 
-              {/* Dynamic JB2A Animated Spell & Visual Effects Layer */}
-              <Layer listening={false}>
-                <EffectOverlay
-                  effects={effects}
-                  setEffects={setEffects}
-                  gridSize={gridSize}
-                  stageScale={stageScale}
-                />
-                {activeEquippedAsset && aimOrigin && aimCurrent && (
+              {/* Dynamic JB2A Reticle Layer (Targeting Preview while Aiming) */}
+              {activeEquippedAsset && aimOrigin && aimCurrent && (
+                <Layer listening={false}>
                   <AimReticle
                     asset={activeEquippedAsset}
                     origin={aimOrigin}
@@ -7314,8 +7308,8 @@ export default function App() {
                     gridSize={gridSize}
                     stageScale={stageScale}
                   />
-                )}
-              </Layer>
+                </Layer>
+              )}
 
               {/* Marquee Selection Layer */}
               {tool === 'select' && selectionBox?.active && (
@@ -7333,6 +7327,15 @@ export default function App() {
                 </Layer>
               )}
             </Stage>
+
+            {/* Native GPU-Accelerated JB2A DOM Video Overlay Layer */}
+            <DomEffectOverlay
+              effects={effects}
+              setEffects={setEffects}
+              stagePos={stagePos}
+              stageScale={stageScale}
+              gridSize={gridSize}
+            />
 
             {/* Environmental & Animated Map FX Overlay (Uploaded & Generated Maps) */}
             {(() => {

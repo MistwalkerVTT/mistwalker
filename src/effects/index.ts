@@ -9,6 +9,7 @@ export * from './engine/VideoPool';
 export * from './engine/VideoCacheManager';
 export * from './engine/Sequencer';
 export * from './render/EffectOverlay';
+export * from './render/DomEffectOverlay';
 export * from './render/Jb2aCanvasNode';
 export * from './render/TrajectoryNode';
 export * from './ui/EffectsDrawer';
