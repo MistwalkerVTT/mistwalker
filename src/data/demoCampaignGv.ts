@@ -2158,7 +2158,7 @@ export const DEMO_GV_SCENE: Scene = {
   tokens: DEMO_GV_TOKENS,
   gridSize: 50,
   gridOpacity: 0.3,
-  isFogVisible: true, // Fog of War enabled for the tutorial walkthrough
+  isFogVisible: true, // Fog of War enabled by default
   walls: DEMO_GV_WALLS,
   visionConfig: {
     enabled: true,
