@@ -629,6 +629,12 @@ const PlayerToken = React.memo(({
       }}
       onTouchStart={(e: any) => {
         if (!isCondition) {
+          // If 2 or more touches on screen, do not swallow - let Stage handle multi-touch pinch-to-zoom!
+          if (e.evt?.touches && e.evt.touches.length >= 2) {
+            if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
+            if (groupRef.current?.isDragging()) groupRef.current.stopDrag();
+            return;
+          }
           e.cancelBubble = true;
           pointerDownTimeRef.current = Date.now();
           const t0 = e.evt?.touches?.[0];
@@ -3048,6 +3054,9 @@ export default function PlayerView() {
     if (touches && touches.length === 2) {
       const stage = e.target.getStage();
       if (!stage) return;
+      if (stage.isDragging()) {
+        stage.stopDrag();
+      }
       const t1 = touches[0];
       const t2 = touches[1];
       const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
@@ -3074,6 +3083,9 @@ export default function PlayerView() {
       e.evt.preventDefault();
       const stage = e.target.getStage();
       if (!stage) return;
+      if (stage.isDragging()) {
+        stage.stopDrag();
+      }
 
       const t1 = touches[0];
       const t2 = touches[1];
@@ -3084,30 +3096,34 @@ export default function PlayerView() {
       };
       const { lastDist, lastCenter } = touchStateRef.current;
 
-      if (lastDist > 0) {
+      if (lastDist > 5 && dist > 5) {
         const scaleFactor = dist / lastDist;
         const oldScale = stage.scaleX();
-        const newScale = Math.max(0.12, Math.min(oldScale * scaleFactor, 4.5));
+        if (Number.isFinite(oldScale) && oldScale > 0) {
+          const newScale = Math.max(0.12, Math.min(oldScale * scaleFactor, 4.5));
 
-        const stageCurrentPos = { x: stage.x(), y: stage.y() };
-        const pointTo = {
-          x: (center.x - stageCurrentPos.x) / oldScale,
-          y: (center.y - stageCurrentPos.y) / oldScale
-        };
+          const stageCurrentPos = { x: stage.x(), y: stage.y() };
+          const pointTo = {
+            x: (center.x - stageCurrentPos.x) / oldScale,
+            y: (center.y - stageCurrentPos.y) / oldScale
+          };
 
-        const dx = center.x - lastCenter.x;
-        const dy = center.y - lastCenter.y;
+          const dx = center.x - lastCenter.x;
+          const dy = center.y - lastCenter.y;
 
-        const newPos = {
-          x: center.x - pointTo.x * newScale + dx,
-          y: center.y - pointTo.y * newScale + dy
-        };
+          const newPos = {
+            x: center.x - pointTo.x * newScale + dx,
+            y: center.y - pointTo.y * newScale + dy
+          };
 
-        setStageScale(newScale);
-        setStagePos(newPos);
+          if (Number.isFinite(newScale) && Number.isFinite(newPos.x) && Number.isFinite(newPos.y)) {
+            setStageScale(newScale);
+            setStagePos(newPos);
+          }
 
-        touchStateRef.current.lastDist = dist;
-        touchStateRef.current.lastCenter = center;
+          touchStateRef.current.lastDist = dist;
+          touchStateRef.current.lastCenter = center;
+        }
       }
       return;
     }

@@ -49,45 +49,50 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
   // Fallback defaults if DDB character not yet loaded
   const name = characterData?.name || claimedToken?.name || 'Hero';
   const avatarUrl = characterData?.avatarUrl || claimedToken?.avatarUrl || claimedToken?.url || '';
-  const currentHp = characterData?.currentHp ?? claimedToken?.currentHp ?? claimedToken?.hp ?? 25;
-  const maxHp = characterData?.maxHp ?? claimedToken?.maxHp ?? claimedToken?.hp ?? 25;
-  const tempHp = characterData?.tempHp ?? claimedToken?.tempHp ?? 0;
-  const ac = characterData?.ac ?? claimedToken?.ac ?? 14;
+  const rawCurrentHp = Number(characterData?.currentHp ?? claimedToken?.currentHp ?? claimedToken?.hp ?? 25);
+  const rawMaxHp = Number(characterData?.maxHp ?? claimedToken?.maxHp ?? claimedToken?.hp ?? 25);
+  const currentHp = Number.isFinite(rawCurrentHp) ? Math.max(0, rawCurrentHp) : 25;
+  const maxHp = Number.isFinite(rawMaxHp) && rawMaxHp > 0 ? rawMaxHp : Math.max(1, currentHp);
+  const tempHp = Number.isFinite(Number(characterData?.tempHp ?? claimedToken?.tempHp)) ? Number(characterData?.tempHp ?? claimedToken?.tempHp) : 0;
+  const rawAc = Number(characterData?.ac ?? claimedToken?.ac ?? 14);
+  const ac = Number.isFinite(rawAc) ? rawAc : 14;
   const speed = characterData?.speed || '30 ft.';
-  const passivePerception = characterData?.passivePerception ?? 12;
+  const passivePerception = Number.isFinite(Number(characterData?.passivePerception)) ? Number(characterData?.passivePerception) : 12;
   const spellSaveDc = characterData?.spellSaveDc;
 
-  // Radial HP percentage calculation
-  const hpPercent = Math.max(0, Math.min(100, (currentHp / (maxHp || 1)) * 100));
+  // Radial HP percentage calculation (guaranteed finite between 0 and 100)
+  const hpPercent = Math.max(0, Math.min(100, (currentHp / maxHp) * 100));
   const strokeDashoffset = 283 - (283 * hpPercent) / 100;
 
-  // Actions grouped by category
-  const actionsList = characterData?.actions || [
-    {
-      id: 'default-attack',
-      name: 'Main Attack',
-      category: 'actions',
-      type: 'action',
-      hitBonus: '+5',
-      damageFormula: '1d8 + 3',
-      damageType: 'slashing',
-      description: 'Standard melee attack with equipped weapon.',
-      jb2aAssetId: 'attack_sword_slash',
-      rangeFt: 5
-    },
-    {
-      id: 'default-dash',
-      name: 'Dash',
-      category: 'actions',
-      type: 'action',
-      description: 'Double movement speed for the turn.',
-      rangeFt: 0
-    }
-  ];
+  // Actions grouped by category with strict Array checks
+  const actionsList = Array.isArray(characterData?.actions) && characterData.actions.length > 0
+    ? characterData.actions
+    : [
+        {
+          id: 'default-attack',
+          name: 'Main Attack',
+          category: 'actions' as const,
+          type: 'action' as const,
+          hitBonus: '+5',
+          damageFormula: '1d8 + 3',
+          damageType: 'slashing',
+          description: 'Standard melee attack with equipped weapon.',
+          jb2aAssetId: 'attack_sword_slash',
+          rangeFt: 5
+        },
+        {
+          id: 'default-dash',
+          name: 'Dash',
+          category: 'actions' as const,
+          type: 'action' as const,
+          description: 'Double movement speed for the turn.',
+          rangeFt: 0
+        }
+      ];
 
-  const bonusActionsList = characterData?.bonusActions || [];
-  const spellsList = characterData?.spells || [];
-  const itemsList = characterData?.items || [];
+  const bonusActionsList = Array.isArray(characterData?.bonusActions) ? characterData.bonusActions : [];
+  const spellsList = Array.isArray(characterData?.spells) ? characterData.spells : [];
+  const itemsList = Array.isArray(characterData?.items) ? characterData.items : [];
 
   const currentCategoryList = activeCategory === 'actions'
     ? actionsList
