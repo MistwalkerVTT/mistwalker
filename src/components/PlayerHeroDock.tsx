@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Shield,
   Heart,
@@ -71,21 +71,20 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
   const [isTrayCollapsed, setIsTrayCollapsed] = useState<boolean>(false);
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState<boolean>(false);
   const [isDockMinimizedWhileAiming, setIsDockMinimizedWhileAiming] = useState<boolean>(false);
-  const wasTrayOpenBeforeAimingRef = useRef<boolean>(true);
 
   // Auto-minimize the HUD whenever an action/effect is selected to be placed/aimed
+  // Keep the HUD minimized after placing so the player can watch the animation unobstructed
   const isTargetingActive = Boolean(currentTargetingAction || activeEquippedAsset);
   useEffect(() => {
     if (isTargetingActive) {
-      wasTrayOpenBeforeAimingRef.current = !isTrayCollapsed;
       setIsTrayCollapsed(true);
       setIsMobileDrawerOpen(false);
       setIsDockMinimizedWhileAiming(true);
     } else {
       setIsDockMinimizedWhileAiming(false);
-      if (wasTrayOpenBeforeAimingRef.current) {
-        setIsTrayCollapsed(false);
-      }
+      // Keep minimized after placing so the animation is clearly visible
+      setIsTrayCollapsed(true);
+      setIsMobileDrawerOpen(false);
     }
   }, [isTargetingActive]);
 
@@ -952,10 +951,21 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
             <button
               type="button"
               onClick={() => setIsTrayCollapsed(prev => !prev)}
-              className="p-1.5 rounded-xl bg-zinc-950 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 transition-colors cursor-pointer"
+              className={`p-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                isTrayCollapsed
+                  ? 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/50 px-2.5 shadow-sm shadow-amber-500/10'
+                  : 'bg-zinc-950 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800'
+              }`}
               title={isTrayCollapsed ? 'Expand Character Action Sheet' : 'Minimize Character Action Sheet'}
             >
-              {isTrayCollapsed ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              {isTrayCollapsed ? (
+                <>
+                  <ChevronUp className="w-4 h-4 text-amber-400 animate-pulse" />
+                  <span className="text-xs font-mono font-bold text-amber-300">Actions</span>
+                </>
+              ) : (
+                <ChevronDown className="w-4 h-4" />
+              )}
             </button>
           </div>
         </div>
