@@ -33,11 +33,14 @@ export function synthesizeElementalTemplate(ctx: SpellSynthesisContext): Jb2aAss
     if (normShape === 'cone') {
       return JB2A_REGISTRY.find(a => a.id === 'cone_of_cold')!;
     }
-    return JB2A_REGISTRY.find(a => a.id === 'template_circle_cold') || JB2A_REGISTRY.find(a => a.id === 'cone_of_cold')!;
+    return JB2A_REGISTRY.find(a => a.id === 'ice_storm') || JB2A_REGISTRY.find(a => a.id === 'template_circle_cold') || JB2A_REGISTRY.find(a => a.id === 'cone_of_cold')!;
   }
 
   // 3. Acid / Poison
   if (normDamage.includes('acid') || normDamage.includes('poison') || normDamage.includes('toxic')) {
+    if (normShape === 'line') {
+      return JB2A_REGISTRY.find(a => a.id === 'caustic_brew') || JB2A_REGISTRY.find(a => a.id === 'lightning_bolt')!;
+    }
     return JB2A_REGISTRY.find(a => a.id === 'template_circle_acid') || JB2A_REGISTRY.find(a => a.id === 'fog_cloud') || JB2A_REGISTRY[0];
   }
 
@@ -48,12 +51,12 @@ export function synthesizeElementalTemplate(ctx: SpellSynthesisContext): Jb2aAss
 
   // 5. Radiant / Holy
   if (normDamage.includes('radiant') || normDamage.includes('holy') || normSchool === 'abjuration') {
-    return JB2A_REGISTRY.find(a => a.id === 'template_circle_radiant') || JB2A_REGISTRY.find(a => a.id === 'bless') || JB2A_REGISTRY.find(a => a.id === 'shield') || JB2A_REGISTRY[0];
+    return JB2A_REGISTRY.find(a => a.id === 'divine_smite') || JB2A_REGISTRY.find(a => a.id === 'healing_word') || JB2A_REGISTRY.find(a => a.id === 'template_circle_radiant') || JB2A_REGISTRY.find(a => a.id === 'bless') || JB2A_REGISTRY.find(a => a.id === 'shield') || JB2A_REGISTRY[0];
   }
 
   // 6. Necrotic / Dark
   if (normDamage.includes('necrotic') || normDamage.includes('death') || normSchool === 'necromancy') {
-    return JB2A_REGISTRY.find(a => a.id === 'template_circle_necrotic') || JB2A_REGISTRY.find(a => a.id === 'arms_of_hadar') || JB2A_REGISTRY.find(a => a.id === 'darkness') || JB2A_REGISTRY[0];
+    return JB2A_REGISTRY.find(a => a.id === 'toll_the_dead') || JB2A_REGISTRY.find(a => a.id === 'black_tentacles') || JB2A_REGISTRY.find(a => a.id === 'template_circle_necrotic') || JB2A_REGISTRY.find(a => a.id === 'arms_of_hadar') || JB2A_REGISTRY.find(a => a.id === 'darkness') || JB2A_REGISTRY[0];
   }
 
   // 7. General Arcane / Force / Illusion
