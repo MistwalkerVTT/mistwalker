@@ -2832,10 +2832,19 @@ export default function PlayerView() {
     setAimOrigin(null);
     setAimCurrent(null);
     setActiveEquippedAsset(null);
+    setActiveTargetingAction(null);
   }, [activeEquippedAsset]);
 
   const handleEquipAsset = useCallback((asset: Jb2aAssetDefinition) => {
     setActiveEquippedAsset(asset);
+    setActiveTargetingAction({
+      id: asset.id,
+      name: asset.name,
+      description: asset.label,
+      category: 'spells',
+      rangeFt: asset.defaultSizeFt,
+      jb2aAssetId: asset.id
+    });
     setShowEffectsDrawer(false);
 
     if (claimedToken) {
@@ -3221,6 +3230,7 @@ export default function PlayerView() {
     if (!activeEquippedAsset) return;
     if (e.evt?.button === 2) {
       setActiveEquippedAsset(null);
+      setActiveTargetingAction(null);
       setAimOrigin(null);
       setAimCurrent(null);
       return;
@@ -5422,6 +5432,7 @@ export default function PlayerView() {
           claimedToken={claimedToken}
           onSelectAction={handleSelectHudAction}
           activeTargetingAction={activeTargetingAction}
+          activeEquippedAsset={activeEquippedAsset}
           onCancelTargeting={() => {
             setActiveTargetingAction(null);
             setActiveEquippedAsset(null);

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Shield,
   Heart,
@@ -28,6 +28,7 @@ interface PlayerHeroDockProps {
   onSelectAction: (action: HudActionItem) => void;
   activeTargetingAction?: HudActionItem | null;
   selectedAction?: HudActionItem | null;
+  activeEquippedAsset?: any | null;
   onCancelTargeting?: () => void;
   onEndTurn?: () => void;
   isMyTurn?: boolean;
@@ -44,6 +45,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
   onSelectAction,
   activeTargetingAction,
   selectedAction,
+  activeEquippedAsset,
   onCancelTargeting,
   onEndTurn,
   isMyTurn = false,
@@ -52,7 +54,15 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
   onRefreshDdb,
   isSyncingDdb = false
 }) => {
-  const currentTargetingAction = activeTargetingAction ?? selectedAction ?? null;
+  const currentTargetingAction = activeTargetingAction ?? selectedAction ?? (
+    activeEquippedAsset ? {
+      id: activeEquippedAsset.id,
+      name: activeEquippedAsset.name,
+      description: activeEquippedAsset.label,
+      category: 'spells',
+      rangeFt: activeEquippedAsset.defaultSizeFt
+    } as HudActionItem : null
+  );
 
   const [activeCategory, setActiveCategory] = useState<HudActionCategory>('attacks');
   const [selectedSpellLevel, setSelectedSpellLevel] = useState<number | 'all'>('all');
@@ -60,6 +70,24 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
   const [hoveredAction, setHoveredAction] = useState<HudActionItem | null>(null);
   const [isTrayCollapsed, setIsTrayCollapsed] = useState<boolean>(false);
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState<boolean>(false);
+  const [isDockMinimizedWhileAiming, setIsDockMinimizedWhileAiming] = useState<boolean>(false);
+  const wasTrayOpenBeforeAimingRef = useRef<boolean>(true);
+
+  // Auto-minimize the HUD whenever an action/effect is selected to be placed/aimed
+  const isTargetingActive = Boolean(currentTargetingAction || activeEquippedAsset);
+  useEffect(() => {
+    if (isTargetingActive) {
+      wasTrayOpenBeforeAimingRef.current = !isTrayCollapsed;
+      setIsTrayCollapsed(true);
+      setIsMobileDrawerOpen(false);
+      setIsDockMinimizedWhileAiming(true);
+    } else {
+      setIsDockMinimizedWhileAiming(false);
+      if (wasTrayOpenBeforeAimingRef.current) {
+        setIsTrayCollapsed(false);
+      }
+    }
+  }, [isTargetingActive]);
 
   // Reset filters when switching characters
   useEffect(() => {
@@ -354,15 +382,26 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
               </span>
             )}
           </div>
-          <button
-            type="button"
-            onClick={handleCancelActiveTargeting}
-            className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-700 hover:bg-zinc-800 text-zinc-300 hover:text-white transition-colors cursor-pointer text-[11px] font-bold flex items-center gap-1 shrink-0"
-            title="Cancel Targeting (Esc)"
-          >
-            <X className="w-3.5 h-3.5" />
-            <span>Cancel</span>
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => setIsDockMinimizedWhileAiming(prev => !prev)}
+              className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-700 hover:bg-zinc-800 text-zinc-300 hover:text-white transition-colors cursor-pointer text-[11px] font-bold flex items-center gap-1 shrink-0"
+              title={isDockMinimizedWhileAiming ? "Expand Character Dock" : "Minimize Character Dock"}
+            >
+              {isDockMinimizedWhileAiming ? <ChevronUp className="w-3.5 h-3.5 text-amber-400" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              <span>{isDockMinimizedWhileAiming ? "Show HUD" : "Minimize"}</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleCancelActiveTargeting}
+              className="px-2.5 py-1 rounded-lg bg-rose-950/60 border border-rose-500/40 hover:bg-rose-900/80 text-rose-200 hover:text-white transition-colors cursor-pointer text-[11px] font-bold flex items-center gap-1 shrink-0"
+              title="Cancel Targeting (Esc)"
+            >
+              <X className="w-3.5 h-3.5" />
+              <span>Cancel</span>
+            </button>
+          </div>
         </div>
       )}
 
@@ -435,81 +474,83 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
       {/* ========================================================================= */}
       {/* MOBILE COMPACT BAR (< 768px)                                              */}
       {/* ========================================================================= */}
-      <div className="flex md:hidden pointer-events-auto items-center justify-between gap-2.5 w-full max-w-md mx-auto p-2.5 rounded-xl bg-zinc-950/95 backdrop-blur-xl border border-zinc-800 shadow-[0_10px_30px_rgba(0,0,0,0.9)]">
-        {/* Square Character Portrait */}
-        <div className="relative w-11 h-11 rounded-lg overflow-hidden border border-zinc-700 bg-zinc-900 shrink-0">
-          {avatarUrl ? (
-            <img src={avatarUrl} alt={name} className="w-full h-full object-cover" />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-xs font-bold text-zinc-400 font-mono">
-              {name.slice(0, 2).toUpperCase()}
+      {!isDockMinimizedWhileAiming && (
+        <div className="flex md:hidden pointer-events-auto items-center justify-between gap-2.5 w-full max-w-md mx-auto p-2.5 rounded-xl bg-zinc-950/95 backdrop-blur-xl border border-zinc-800 shadow-[0_10px_30px_rgba(0,0,0,0.9)]">
+          {/* Square Character Portrait */}
+          <div className="relative w-11 h-11 rounded-lg overflow-hidden border border-zinc-700 bg-zinc-900 shrink-0">
+            {avatarUrl ? (
+              <img src={avatarUrl} alt={name} className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-xs font-bold text-zinc-400 font-mono">
+                {name.slice(0, 2).toUpperCase()}
+              </div>
+            )}
+            <div className="absolute bottom-0 right-0 px-1 bg-zinc-950/90 border-t border-l border-zinc-700 text-amber-300 font-mono font-bold text-[9px] flex items-center">
+              <Shield className="w-2.5 h-2.5 text-amber-400 mr-0.5" />
+              {ac}
             </div>
-          )}
-          <div className="absolute bottom-0 right-0 px-1 bg-zinc-950/90 border-t border-l border-zinc-700 text-amber-300 font-mono font-bold text-[9px] flex items-center">
-            <Shield className="w-2.5 h-2.5 text-amber-400 mr-0.5" />
-            {ac}
           </div>
-        </div>
 
-        {/* Character Summary & Open Sheet Trigger */}
-        <button
-          type="button"
-          onClick={() => setIsMobileDrawerOpen(prev => !prev)}
-          className="flex-1 flex flex-col items-start px-2 py-1 rounded-lg hover:bg-zinc-900/80 transition-colors text-left min-w-0 cursor-pointer"
-        >
-          <div className="flex items-center gap-1.5 w-full">
-            <span className="text-xs font-bold text-white font-mono truncate">{name}</span>
-            <span className="text-[10px] font-mono font-bold text-emerald-400 shrink-0">
-              HP {currentHp}/{maxHp}
-            </span>
-            {isLiveSynced && (
-              <span className="px-1 py-0.2 rounded bg-red-500/20 border border-red-500/40 text-red-300 text-[8px] font-mono font-bold shrink-0">
-                DDB
+          {/* Character Summary & Open Sheet Trigger */}
+          <button
+            type="button"
+            onClick={() => setIsMobileDrawerOpen(prev => !prev)}
+            className="flex-1 flex flex-col items-start px-2 py-1 rounded-lg hover:bg-zinc-900/80 transition-colors text-left min-w-0 cursor-pointer"
+          >
+            <div className="flex items-center gap-1.5 w-full">
+              <span className="text-xs font-bold text-white font-mono truncate">{name}</span>
+              <span className="text-[10px] font-mono font-bold text-emerald-400 shrink-0">
+                HP {currentHp}/{maxHp}
               </span>
+              {isLiveSynced && (
+                <span className="px-1 py-0.2 rounded bg-red-500/20 border border-red-500/40 text-red-300 text-[8px] font-mono font-bold shrink-0">
+                  DDB
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1 text-[10px] font-mono text-zinc-300 mt-0.5">
+              <Swords className="w-3 h-3 text-rose-400" />
+              <span className="font-semibold">
+                {attacksList.length} Atk • {bonusActionsList.length} Bonus • {spellsList.length} Spells
+              </span>
+              <ChevronUp className={`w-3.5 h-3.5 text-amber-400 transition-transform ${isMobileDrawerOpen ? 'rotate-180' : ''}`} />
+            </div>
+          </button>
+
+          {/* Sync & Turn Controls */}
+          <div className="flex items-center gap-1 shrink-0">
+            {onRefreshDdb && (
+              <button
+                type="button"
+                onClick={onRefreshDdb}
+                className="p-2 rounded-lg bg-zinc-900 text-emerald-400 hover:text-emerald-300 border border-zinc-800 cursor-pointer"
+                title="Sync Live from D&D Beyond"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncingDdb ? 'animate-spin' : ''}`} />
+              </button>
+            )}
+
+            {onEndTurn && (
+              <button
+                type="button"
+                onClick={onEndTurn}
+                className={`px-3 py-2 rounded-lg font-mono text-[11px] font-bold cursor-pointer ${
+                  isMyTurn
+                    ? 'bg-amber-500 text-zinc-950 shadow-md'
+                    : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800'
+                }`}
+              >
+                {isMyTurn ? 'End Turn' : 'Pass'}
+              </button>
             )}
           </div>
-          <div className="flex items-center gap-1 text-[10px] font-mono text-zinc-300 mt-0.5">
-            <Swords className="w-3 h-3 text-rose-400" />
-            <span className="font-semibold">
-              {attacksList.length} Atk • {bonusActionsList.length} Bonus • {spellsList.length} Spells
-            </span>
-            <ChevronUp className={`w-3.5 h-3.5 text-amber-400 transition-transform ${isMobileDrawerOpen ? 'rotate-180' : ''}`} />
-          </div>
-        </button>
-
-        {/* Sync & Turn Controls */}
-        <div className="flex items-center gap-1 shrink-0">
-          {onRefreshDdb && (
-            <button
-              type="button"
-              onClick={onRefreshDdb}
-              className="p-2 rounded-lg bg-zinc-900 text-emerald-400 hover:text-emerald-300 border border-zinc-800 cursor-pointer"
-              title="Sync Live from D&D Beyond"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isSyncingDdb ? 'animate-spin' : ''}`} />
-            </button>
-          )}
-
-          {onEndTurn && (
-            <button
-              type="button"
-              onClick={onEndTurn}
-              className={`px-3 py-2 rounded-lg font-mono text-[11px] font-bold cursor-pointer ${
-                isMyTurn
-                  ? 'bg-amber-500 text-zinc-950 shadow-md'
-                  : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800'
-              }`}
-            >
-              {isMyTurn ? 'End Turn' : 'Pass'}
-            </button>
-          )}
         </div>
-      </div>
+      )}
 
       {/* ========================================================================= */}
       {/* MOBILE SLIDE-UP D&D BEYOND ACTION SHEET                                   */}
       {/* ========================================================================= */}
-      {isMobileDrawerOpen && (
+      {isMobileDrawerOpen && !isDockMinimizedWhileAiming && (
         <div className="fixed inset-x-0 bottom-0 z-[120] max-h-[86dvh] flex flex-col bg-zinc-950/98 backdrop-blur-2xl border-t border-zinc-800 rounded-t-2xl shadow-[0_-20px_50px_rgba(0,0,0,0.95)] p-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pointer-events-auto animate-in slide-in-from-bottom duration-200 md:hidden">
           <div className="w-12 h-1.5 bg-zinc-700/80 rounded-full mx-auto mb-2 shrink-0" />
           <div className="flex items-center justify-between pb-3 border-b border-zinc-800 shrink-0">
@@ -691,7 +732,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
         </div>
       )}
 
-      {isMobileDrawerOpen && (
+      {isMobileDrawerOpen && !isDockMinimizedWhileAiming && (
         <div
           className="fixed inset-0 z-[115] bg-black/60 backdrop-blur-xs pointer-events-auto md:hidden"
           onClick={() => setIsMobileDrawerOpen(false)}
@@ -701,7 +742,8 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
       {/* ========================================================================= */}
       {/* DESKTOP D&D BEYOND TACTICAL CHARACTER SHEET HUD (>= 768px)                */}
       {/* ========================================================================= */}
-      <div className="hidden md:flex pointer-events-auto flex-col w-full max-w-5xl rounded-2xl bg-zinc-950/95 backdrop-blur-xl border border-zinc-800 shadow-[0_12px_40px_rgba(0,0,0,0.9)] overflow-hidden">
+      {!isDockMinimizedWhileAiming && (
+        <div className="hidden md:flex pointer-events-auto flex-col w-full max-w-5xl rounded-2xl bg-zinc-950/95 backdrop-blur-xl border border-zinc-800 shadow-[0_12px_40px_rgba(0,0,0,0.9)] overflow-hidden">
         {/* Top Crimson/Amber D&D Beyond Accent Trim */}
         <div className="h-0.5 w-full bg-gradient-to-r from-red-600 via-amber-500 to-red-600" />
 
@@ -1136,6 +1178,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
           </div>
         )}
       </div>
+      )}
     </div>
   );
 };
