@@ -244,8 +244,8 @@ function computeDdbCharacterSheet(c: any): {
   };
 }
 
-// Fetch single character sheet from D&D Beyond character-service
-export async function fetchDdbCharacterData(charId: string): Promise<Partial<DdbCampaignCharacter> | null> {
+// Fetch raw character payload from D&D Beyond (supports both character-service v5 and characters/json fallback)
+export async function fetchRawDdbCharacter(charId: string): Promise<any | null> {
   const headers = getDdbHeaders();
   try {
     let c: any = null;
@@ -270,7 +270,17 @@ export async function fetchDdbCharacterData(charId: string): Promise<Partial<Ddb
         // Fallback fetch failed
       }
     }
+    return c;
+  } catch (err) {
+    console.warn(`[DdbCampaign] Error fetching raw character ${charId}:`, err);
+    return null;
+  }
+}
 
+// Fetch single character sheet from D&D Beyond character-service
+export async function fetchDdbCharacterData(charId: string): Promise<Partial<DdbCampaignCharacter> | null> {
+  try {
+    const c = await fetchRawDdbCharacter(charId);
     if (!c) return null;
 
     const computed = computeDdbCharacterSheet(c);
@@ -407,6 +417,304 @@ export async function fetchDdbCampaignCharacters(campaignId: string): Promise<{ 
     console.error(`[DdbCampaign] Error fetching characters for campaign ${campaignId}:`, err);
     return { campaignTitle: `Campaign ${campaignId}`, characters: [] };
   }
+}
+
+// Map spell names or common weapon attacks to JB2A asset IDs
+function matchJb2aAssetId(name: string): string | undefined {
+  if (!name) return undefined;
+  const n = name.toLowerCase().trim();
+
+  // Spell mapping
+  if (n.includes('fireball')) return 'fireball';
+  if (n.includes('fire bolt') || n.includes('firebolt')) return 'fire_bolt';
+  if (n.includes('eldritch blast')) return 'eldritch_blast';
+  if (n.includes('magic missile')) return 'magic_missile';
+  if (n.includes('cure wounds')) return 'cure_wounds';
+  if (n.includes('healing word')) return 'healing_word';
+  if (n.includes('shield of faith')) return 'shield_of_faith';
+  if (n.includes('shield')) return 'shield';
+  if (n.includes('sacred flame')) return 'sacred_flame';
+  if (n.includes('guiding bolt')) return 'guiding_bolt';
+  if (n.includes('spiritual weapon')) return 'spiritual_weapon';
+  if (n.includes('spirit guardians')) return 'spirit_guardians';
+  if (n.includes('misty step')) return 'misty_step';
+  if (n.includes('thunderwave')) return 'thunderwave';
+  if (n.includes('lightning bolt')) return 'lightning_bolt';
+  if (n.includes('hold person')) return 'hold_person';
+  if (n.includes('bless')) return 'bless';
+  if (n.includes('bane')) return 'bane';
+  if (n.includes('toll the dead')) return 'toll_the_dead';
+  if (n.includes('shatter')) return 'shatter';
+  if (n.includes('moonbeam')) return 'moonbeam';
+  if (n.includes('call lightning')) return 'call_lightning';
+  if (n.includes('disintegrate')) return 'disintegrate';
+
+  // Weapon & Martial mapping
+  if (n.includes('sword') || n.includes('scimitar') || n.includes('rapier') || n.includes('slash')) return 'attack_sword_slash';
+  if (n.includes('axe') || n.includes('halberd') || n.includes('glaive')) return 'attack_greataxe_cleave';
+  if (n.includes('hammer') || n.includes('mace') || n.includes('flail') || n.includes('club')) return 'attack_warhammer_smash';
+  if (n.includes('bow') || n.includes('arrow')) return 'attack_arrow_shot';
+  if (n.includes('crossbow') || n.includes('bolt')) return 'attack_crossbow_bolt';
+  if (n.includes('dagger') || n.includes('spear') || n.includes('javelin') || n.includes('pierce')) return 'attack_dagger_stab';
+  if (n.includes('unarmed') || n.includes('punch') || n.includes('fist') || n.includes('martial arts')) return 'attack_unarmed';
+  if (n.includes('bite')) return 'attack_bite';
+  if (n.includes('claw')) return 'attack_claw';
+
+  return undefined;
+}
+
+// Full D&D Beyond Character normalizer for BG3-Inspired Hero Bottom HUD
+export function normalizeDdbCharacterToHud(c: any, charId: string): any {
+  if (!c) return null;
+  const computed = computeDdbCharacterSheet(c);
+
+  let avatarUrl = c.decorations?.avatarUrl || c.avatarUrl || '';
+  if (avatarUrl && avatarUrl.includes('/thumbnails/')) {
+    avatarUrl = avatarUrl.replace(/\/thumbnails\/([0-9]+)\/([0-9]+)\/[0-9]+\/[0-9]+\//, '/thumbnails/$1/$2/1000/1000/');
+  }
+
+  const classLevel = Array.isArray(c.classes)
+    ? c.classes.map((cl: any) => `${cl.definition?.name || 'Class'} ${cl.level || 1}`).join(' / ')
+    : `Level ${computed.totalLevel}`;
+
+  const walkSpeed = c.speed?.walk || 30;
+
+  // Passives
+  const wisMod = Math.floor((computed.stats.wis - 10) / 2);
+  const intMod = Math.floor((computed.stats.int - 10) / 2);
+  const profBonus = Math.ceil(computed.totalLevel / 4) + 1;
+  const passivePerception = 10 + wisMod + (c.characterValues?.some((v: any) => v.typeId === 2 && v.valueId === 14) ? profBonus : 0);
+  const passiveInsight = 10 + wisMod;
+  const passiveInvestigation = 10 + intMod;
+
+  // Spellcasting metrics
+  let spellSaveDc = 10 + profBonus;
+  let spellAttackBonus = profBonus;
+  if (Array.isArray(c.classes)) {
+    for (const cl of c.classes) {
+      const abilityId = cl.definition?.spellCastingAbilityId;
+      if (abilityId) {
+        const abilityMap: Record<number, keyof typeof computed.stats> = { 1: 'str', 2: 'dex', 3: 'con', 4: 'int', 5: 'wis', 6: 'cha' };
+        const key = abilityMap[abilityId];
+        if (key) {
+          const mod = Math.floor((computed.stats[key] - 10) / 2);
+          spellSaveDc = 8 + profBonus + mod;
+          spellAttackBonus = profBonus + mod;
+          break;
+        }
+      }
+    }
+  }
+
+  const actions: any[] = [];
+  const bonusActions: any[] = [];
+  const spells: any[] = [];
+  const items: any[] = [];
+
+  // Standard 5e Actions
+  actions.push({
+    id: 'action-dash',
+    name: 'Dash',
+    category: 'actions',
+    type: 'action',
+    description: 'Gain extra movement equal to your speed for the current turn.',
+    rangeFt: 0
+  });
+  actions.push({
+    id: 'action-disengage',
+    name: 'Disengage',
+    category: 'actions',
+    type: 'action',
+    description: 'Your movement does not provoke opportunity attacks for the rest of the turn.',
+    rangeFt: 0
+  });
+  actions.push({
+    id: 'action-dodge',
+    name: 'Dodge',
+    category: 'actions',
+    type: 'action',
+    description: 'Attack rolls against you have disadvantage until the start of your next turn.',
+    rangeFt: 0
+  });
+  actions.push({
+    id: 'action-help',
+    name: 'Help',
+    category: 'actions',
+    type: 'action',
+    description: 'Lend aid to an ally, giving them advantage on their next ability check or attack roll.',
+    rangeFt: 5
+  });
+
+  // Inventory / Weapons & Items
+  if (Array.isArray(c.inventory)) {
+    c.inventory.forEach((item: any, idx: number) => {
+      const def = item.definition;
+      if (!def) return;
+      const itemName = def.name || 'Item';
+      const isEquipped = !!item.equipped;
+      const jb2aAssetId = matchJb2aAssetId(itemName);
+
+      if (def.filterType === 'Weapon') {
+        const dmgDice = def.damage?.diceString || '1d6';
+        const dmgType = def.damageType?.toLowerCase() || 'physical';
+        const isRanged = def.attackType === 2;
+        const rangeFt = def.range || (isRanged ? 80 : 5);
+        const strMod = Math.floor((computed.stats.str - 10) / 2);
+        const dexMod = Math.floor((computed.stats.dex - 10) / 2);
+        const weaponMod = isRanged ? dexMod : Math.max(strMod, def.properties?.some((p: any) => p.name === 'Finesse') ? dexMod : strMod);
+        const hitBonus = profBonus + weaponMod;
+
+        actions.push({
+          id: `wpn-${idx}-${def.id || idx}`,
+          name: itemName,
+          category: 'actions',
+          type: 'action',
+          rangeFt,
+          castingTime: '1 Action',
+          hitBonus: `+${hitBonus}`,
+          damageFormula: `${dmgDice} + ${weaponMod}`,
+          damageType: dmgType,
+          description: def.description || `Attack with ${itemName}`,
+          jb2aAssetId: jb2aAssetId || (isRanged ? 'attack_arrow_shot' : 'attack_sword_slash'),
+          iconUrl: def.avatarUrl
+        });
+      } else if (def.filterType === 'Potion' || def.filterType === 'Scroll' || def.canUse || itemName.toLowerCase().includes('potion')) {
+        const isHealingPotion = itemName.toLowerCase().includes('healing');
+        items.push({
+          id: `item-${idx}-${def.id || idx}`,
+          name: itemName,
+          category: 'items',
+          type: 'item',
+          quantity: item.quantity || 1,
+          description: def.description || 'Consumable item',
+          jb2aAssetId: isHealingPotion ? 'cure_wounds' : undefined,
+          isHeal: isHealingPotion,
+          damageFormula: isHealingPotion ? (itemName.toLowerCase().includes('greater') ? '4d4 + 4' : '2d4 + 2') : undefined,
+          iconUrl: def.avatarUrl
+        });
+      }
+    });
+  }
+
+  // Spells extraction
+  const rawSpellsList: any[] = [];
+  if (Array.isArray(c.classSpells)) {
+    c.classSpells.forEach((cs: any) => {
+      if (Array.isArray(cs.spells)) {
+        cs.spells.forEach((sp: any) => rawSpellsList.push(sp));
+      }
+    });
+  }
+  if (Array.isArray(c.spells?.race)) rawSpellsList.push(...c.spells.race);
+  if (Array.isArray(c.spells?.class)) rawSpellsList.push(...c.spells.class);
+  if (Array.isArray(c.spells?.feat)) rawSpellsList.push(...c.spells.feat);
+  if (Array.isArray(c.spells?.item)) rawSpellsList.push(...c.spells.item);
+
+  const seenSpellNames = new Set<string>();
+  rawSpellsList.forEach((sp: any, idx: number) => {
+    const def = sp.definition;
+    if (!def) return;
+    const name = def.name;
+    if (seenSpellNames.has(name.toLowerCase())) return;
+    seenSpellNames.add(name.toLowerCase());
+
+    const level = def.level || 0;
+    const school = def.school?.toLowerCase() || 'evocation';
+    const rangeFt = def.range?.rangeValue || (def.range?.origin === 'Self' ? 0 : 30);
+    const castingTime = def.activation?.activationType === 3 ? '1 Bonus Action' : def.activation?.activationType === 4 ? '1 Reaction' : '1 Action';
+    const isBonusAction = def.activation?.activationType === 3;
+    const jb2aAssetId = matchJb2aAssetId(name);
+    const isHeal = name.toLowerCase().includes('cure') || name.toLowerCase().includes('heal') || name.toLowerCase().includes('restoration');
+
+    const hudSpell = {
+      id: `spell-${idx}-${def.id || idx}`,
+      name,
+      category: isBonusAction ? 'bonus_actions' : 'spells',
+      type: isBonusAction ? 'bonus_action' : 'action',
+      level,
+      school,
+      rangeFt,
+      castingTime,
+      spellSlotRequired: level > 0 ? level : undefined,
+      description: def.description || '',
+      jb2aAssetId,
+      isHeal,
+      isPrepared: sp.prepared || level === 0,
+      damageFormula: isHeal ? (level === 1 ? '1d8 + 3' : '2d8 + 3') : undefined
+    };
+
+    spells.push(hudSpell);
+    if (isBonusAction) {
+      bonusActions.push(hudSpell);
+    }
+  });
+
+  // Spell Slots calculation
+  const spellSlots: Record<number, any> = {};
+  if (Array.isArray(c.spellSlots)) {
+    c.spellSlots.forEach((slot: any, idx: number) => {
+      const lvl = idx + 1;
+      const total = slot.max || 0;
+      const used = slot.used || 0;
+      if (total > 0) {
+        spellSlots[lvl] = {
+          level: lvl,
+          total,
+          used,
+          available: Math.max(0, total - used)
+        };
+      }
+    });
+  }
+
+  // Pact Magic Slots
+  if (Array.isArray(c.pactMagic)) {
+    c.pactMagic.forEach((pact: any) => {
+      if (pact.level && pact.max > 0) {
+        const lvl = pact.level;
+        const total = pact.max;
+        const used = pact.used || 0;
+        spellSlots[lvl] = {
+          level: lvl,
+          total: (spellSlots[lvl]?.total || 0) + total,
+          used: (spellSlots[lvl]?.used || 0) + used,
+          available: Math.max(0, ((spellSlots[lvl]?.total || 0) + total) - ((spellSlots[lvl]?.used || 0) + used))
+        };
+      }
+    });
+  }
+
+  return {
+    id: charId,
+    name: c.name || 'Character',
+    avatarUrl,
+    race: c.race?.fullName || 'Humanoid',
+    classLevel,
+    totalLevel: computed.totalLevel,
+    ac: computed.ac,
+    currentHp: computed.currentHp,
+    maxHp: computed.maxHp,
+    tempHp: computed.tempHp,
+    speed: `${walkSpeed} ft.`,
+    walkSpeedFt: walkSpeed,
+    passivePerception,
+    passiveInsight,
+    passiveInvestigation,
+    spellSaveDc,
+    spellAttackBonus,
+    deathSaves: {
+      successes: c.deathSaveInfo?.successCount || 0,
+      failures: c.deathSaveInfo?.failCount || 0
+    },
+    actions,
+    bonusActions,
+    spells,
+    items,
+    spellSlots,
+    resources: [],
+    readonlyUrl: c.readonlyUrl || `https://www.dndbeyond.com/characters/${charId}`,
+    lastUpdated: Date.now()
+  };
 }
 
 // Global live sync state

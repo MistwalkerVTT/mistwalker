@@ -4,6 +4,7 @@ import path from 'path';
 import type { Monster } from '../src/types/monster';
 import {
   getCobaltToken,
+  getDmCobaltToken,
   DDB_SUPPORTED_BOOKS,
   loadCachedCompendium,
   saveCachedCompendium,
@@ -15,6 +16,8 @@ import {
   fetchDdbCampaigns,
   fetchDdbCampaignCharacters,
   fetchDdbCharacterData,
+  fetchRawDdbCharacter,
+  normalizeDdbCharacterToHud,
   DdbHpSyncDaemon
 } from './ddbCampaignService';
 import { DdbGameLogDaemon } from './ddbGameLogDaemon';
@@ -27,11 +30,14 @@ export const ddbRouter = Router();
 // GET /api/ddb/status
 ddbRouter.get('/status', (req: Request, res: Response) => {
   const token = getCobaltToken();
+  const dmToken = getDmCobaltToken();
   const cached = loadCachedCompendium();
 
   res.json({
     hasToken: !!token && token.length > 20,
     tokenPreview: token ? `${token.slice(0, 4)}...${token.slice(-4)}` : null,
+    hasDmToken: !!dmToken && dmToken.length > 20,
+    dmTokenPreview: dmToken ? `${dmToken.slice(0, 4)}...${dmToken.slice(-4)}` : null,
     totalCachedMonsters: cached.length,
     booksAvailable: DDB_SUPPORTED_BOOKS.length
   });
@@ -279,26 +285,44 @@ ddbRouter.get('/characters/:id', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/ddb/characters/:id/hud-data - Fetch normalized BG3-style action dock payload
+ddbRouter.get('/characters/:id/hud-data', async (req: Request, res: Response) => {
+  try {
+    const charId = req.params.id;
+    const raw = await fetchRawDdbCharacter(charId);
+    if (!raw) {
+      return res.status(404).json({ error: `Character ${charId} not found on D&D Beyond` });
+    }
+    const hudPayload = normalizeDdbCharacterToHud(raw, charId);
+    res.json(hudPayload);
+  } catch (err: any) {
+    console.error(`[DdbRoutes] Error generating HUD data for ${req.params.id}:`, err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/ddb/set-token - Update CobaltSession in .env
 ddbRouter.post('/set-token', (req: Request, res: Response) => {
-  const { token } = req.body;
+  const { token, isDmToken } = req.body;
   if (!token || typeof token !== 'string') {
     return res.status(400).json({ error: 'Valid token string required' });
   }
 
+  const envKey = isDmToken ? 'DND_BEYOND_DM_COBALT_SESSION' : 'DND_BEYOND_COBALT_SESSION';
+
   try {
-    process.env.DND_BEYOND_COBALT_SESSION = token.trim();
+    process.env[envKey] = token.trim();
     const envPath = path.resolve(process.cwd(), '.env');
     if (fs.existsSync(envPath)) {
       let content = fs.readFileSync(envPath, 'utf-8');
-      if (content.includes('DND_BEYOND_COBALT_SESSION=')) {
-        content = content.replace(/DND_BEYOND_COBALT_SESSION="[^"]*"/, `DND_BEYOND_COBALT_SESSION="${token.trim()}"`);
+      if (content.includes(`${envKey}=`)) {
+        content = content.replace(new RegExp(`${envKey}="[^"]*"`), `${envKey}="${token.trim()}"`);
       } else {
-        content += `\nDND_BEYOND_COBALT_SESSION="${token.trim()}"\n`;
+        content += `\n${envKey}="${token.trim()}"\n`;
       }
       fs.writeFileSync(envPath, content, 'utf-8');
     }
-    res.json({ success: true, message: 'Cobalt token updated successfully' });
+    res.json({ success: true, message: `${isDmToken ? 'DM' : 'Player'} Cobalt token updated successfully` });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

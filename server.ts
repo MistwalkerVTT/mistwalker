@@ -716,6 +716,57 @@ async function startServer() {
       socket.broadcast.emit("EFFECT_CLEAR_ALL");
     });
 
+    // Targeted Healing / Damage Interaction Pipeline
+    socket.on("REQUEST_TOKEN_MUTATION", (payload: {
+      sourceTokenId: string;
+      sourceName: string;
+      targetTokenId: string;
+      targetName: string;
+      actionName: string;
+      deltaHp: number;        // positive for heal, negative for damage
+      requiresApproval: boolean;
+      requestId?: string;
+    }) => {
+      console.log(`[Server] REQUEST_TOKEN_MUTATION: ${payload.sourceName} -> ${payload.targetName} (${payload.actionName}): ${payload.deltaHp > 0 ? '+' : ''}${payload.deltaHp} HP (requiresApproval: ${payload.requiresApproval})`);
+      if (!payload.requiresApproval) {
+        // Auto-apply mutation without waiting for prompt approval
+        if (payload.targetTokenId && Array.isArray(activeVttState.tokens)) {
+          activeVttState.tokens = activeVttState.tokens.map((t: any) => {
+            if (t.id === payload.targetTokenId) {
+              const current = typeof t.currentHp === 'number' ? t.currentHp : (t.hp || 10);
+              const max = typeof t.maxHp === 'number' ? t.maxHp : (t.hp || 10);
+              const nextHp = Math.max(0, Math.min(max, current + payload.deltaHp));
+              return { ...t, currentHp: nextHp, hp: nextHp };
+            }
+            return t;
+          });
+        }
+        io.emit("APPLY_TOKEN_MUTATION", payload);
+      } else {
+        socket.broadcast.emit("TOKEN_MUTATION_PROMPT", payload);
+      }
+    });
+
+    socket.on("APPROVE_TOKEN_MUTATION", (payload: {
+      requestId: string;
+      targetTokenId: string;
+      deltaHp: number;
+    }) => {
+      console.log(`[Server] APPROVE_TOKEN_MUTATION accepted for ${payload.targetTokenId} (${payload.deltaHp})`);
+      if (payload.targetTokenId && Array.isArray(activeVttState.tokens)) {
+        activeVttState.tokens = activeVttState.tokens.map((t: any) => {
+          if (t.id === payload.targetTokenId) {
+            const current = typeof t.currentHp === 'number' ? t.currentHp : (t.hp || 10);
+            const max = typeof t.maxHp === 'number' ? t.maxHp : (t.hp || 10);
+            const nextHp = Math.max(0, Math.min(max, current + payload.deltaHp));
+            return { ...t, currentHp: nextHp, hp: nextHp };
+          }
+          return t;
+        });
+      }
+      io.emit("APPLY_TOKEN_MUTATION", payload);
+    });
+
     socket.on("disconnect", (reason) => {
       console.log(`[Server] User disconnected: ${socket.id} (reason: ${reason})`);
     });

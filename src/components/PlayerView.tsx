@@ -94,8 +94,12 @@ import {
   AimReticle,
   EffectsDrawer,
   videoCacheManager,
-  soundCatalog
+  soundCatalog,
+  JB2A_REGISTRY
 } from '../effects';
+import { PlayerStationModal, PlayerStationMode } from './PlayerStationModal';
+import { PlayerHeroDock } from './PlayerHeroDock';
+import { HudCharacterData, HudActionItem } from '../types/hud';
 
 interface Token {
   id: string;
@@ -365,6 +369,9 @@ const PlayerToken = React.memo(({
   characters,
   combatants,
   stageScale = 1,
+  canDrag = true,
+  isTargetingActive = false,
+  onTargetToken,
   onMoveToken,
   onDragMoveToken,
   onDragStartToken,
@@ -377,6 +384,9 @@ const PlayerToken = React.memo(({
   characters?: Character[];
   combatants?: Combatant[];
   stageScale?: number;
+  canDrag?: boolean;
+  isTargetingActive?: boolean;
+  onTargetToken?: (token: Token) => void;
   onMoveToken: (id: string, x: number, y: number) => void;
   onDragMoveToken?: (id: string, x: number, y: number) => void;
   onDragStartToken?: (id: string) => void;
@@ -465,6 +475,18 @@ const PlayerToken = React.memo(({
     const dx = pointerDownPosRef.current ? clientX - pointerDownPosRef.current.x : 0;
     const dy = pointerDownPosRef.current ? clientY - pointerDownPosRef.current.y : 0;
     const dist = Math.sqrt(dx * dx + dy * dy);
+
+    // If targeting is active, abort dragging and execute action against clicked target token
+    if (isTargetingActive) {
+      if (holdTimerRef.current) {
+        clearTimeout(holdTimerRef.current);
+      }
+      e.target.stopDrag();
+      if (onTargetToken) {
+        onTargetToken(token);
+      }
+      return;
+    }
 
     // If hold requirement not met (user clicked quickly without holding down or dragging far), abort drag and select token
     if (!isHoldMetRef.current && elapsed < 160 && dist < 24) {
@@ -583,7 +605,7 @@ const PlayerToken = React.memo(({
       x={token.x}
       y={token.y}
       name="token"
-      draggable={!isCondition}
+      draggable={!isCondition && canDrag}
       dragDistance={10}
       onMouseDown={(e: any) => {
         if (!isCondition && e.evt?.button !== 2) {
@@ -645,6 +667,12 @@ const PlayerToken = React.memo(({
         }
         if (!isCurrentlyDraggingRef.current) {
           e.cancelBubble = true;
+          if (isTargetingActive) {
+            if (onTargetToken) {
+              onTargetToken(token);
+            }
+            return;
+          }
           if (!isMonster && !isCondition && onClaimToken) {
             onClaimToken(token.id);
           }
@@ -656,6 +684,12 @@ const PlayerToken = React.memo(({
         }
         if (!isCurrentlyDraggingRef.current) {
           e.cancelBubble = true;
+          if (isTargetingActive) {
+            if (onTargetToken) {
+              onTargetToken(token);
+            }
+            return;
+          }
           if (!isMonster && !isCondition && onClaimToken) {
             onClaimToken(token.id);
           }
@@ -965,7 +999,9 @@ const PlayerToken = React.memo(({
     prevProps.isClaimed === nextProps.isClaimed &&
     prevProps.characters === nextProps.characters &&
     prevProps.combatants === nextProps.combatants &&
-    prevProps.stageScale === nextProps.stageScale
+    prevProps.stageScale === nextProps.stageScale &&
+    prevProps.canDrag === nextProps.canDrag &&
+    prevProps.isTargetingActive === nextProps.isTargetingActive
   );
 });
 
@@ -978,6 +1014,155 @@ const loadPlayerBackupState = () => {
   } catch {
     return null;
   }
+};
+
+const buildFallbackHudData = (token: Token, stats: any): HudCharacterData => {
+  const hp = stats?.currentHp ?? token.currentHp ?? token.hp ?? 25;
+  const maxHp = stats?.maxHp ?? token.maxHp ?? token.hp ?? 25;
+  const ac = stats?.ac ?? token.ac ?? 14;
+  const name = token.name || 'Hero';
+  const avatarUrl = token.url || token.avatarUrl || getCharacterTokenUrl(name);
+
+  return {
+    id: token.id,
+    name,
+    avatarUrl,
+    race: 'Adventurer',
+    classLevel: 'Level 3 Hero',
+    totalLevel: 3,
+    ac,
+    currentHp: hp,
+    maxHp,
+    tempHp: stats?.tempHp || 0,
+    speed: '30 ft.',
+    walkSpeedFt: 30,
+    passivePerception: 12,
+    passiveInsight: 12,
+    passiveInvestigation: 11,
+    deathSaves: { successes: 0, failures: 0 },
+    actions: [
+      {
+        id: 'fallback-attack',
+        name: 'Main Weapon Attack',
+        category: 'actions',
+        type: 'action',
+        hitBonus: '+5',
+        damageFormula: '1d8 + 3',
+        damageType: 'slashing',
+        description: 'Standard melee attack with equipped weapon.',
+        rangeFt: 5,
+        jb2aAssetId: 'attack_sword_slash'
+      },
+      {
+        id: 'fallback-ranged-attack',
+        name: 'Ranged Strike',
+        category: 'actions',
+        type: 'action',
+        hitBonus: '+5',
+        damageFormula: '1d6 + 3',
+        damageType: 'piercing',
+        description: 'Ranged shot with bow or thrown weapon.',
+        rangeFt: 60,
+        jb2aAssetId: 'attack_arrow'
+      },
+      {
+        id: 'fallback-dash',
+        name: 'Dash',
+        category: 'actions',
+        type: 'action',
+        description: 'Gain extra movement speed for the current turn.',
+        rangeFt: 0
+      },
+      {
+        id: 'fallback-disengage',
+        name: 'Disengage',
+        category: 'actions',
+        type: 'action',
+        description: 'Your movement does not provoke opportunity attacks for the rest of the turn.',
+        rangeFt: 0
+      },
+      {
+        id: 'fallback-dodge',
+        name: 'Dodge',
+        category: 'actions',
+        type: 'action',
+        description: 'Focus entirely on evading attacks until start of your next turn.',
+        rangeFt: 0
+      }
+    ],
+    bonusActions: [
+      {
+        id: 'fallback-offhand',
+        name: 'Offhand Attack',
+        category: 'bonus_actions',
+        type: 'bonus_action',
+        damageFormula: '1d6',
+        description: 'Light weapon secondary attack.',
+        rangeFt: 5
+      },
+      {
+        id: 'fallback-second-wind',
+        name: 'Second Wind',
+        category: 'bonus_actions',
+        type: 'bonus_action',
+        damageFormula: '1d10 + 3',
+        isHeal: true,
+        description: 'Regain 1d10 + 3 hit points.',
+        rangeFt: 0,
+        jb2aAssetId: 'cure_wounds'
+      }
+    ],
+    spells: [
+      {
+        id: 'fallback-fire-bolt',
+        name: 'Fire Bolt',
+        category: 'spells',
+        type: 'action',
+        level: 0,
+        school: 'evocation',
+        hitBonus: '+5',
+        damageFormula: '1d10',
+        damageType: 'fire',
+        description: 'Hurl a mote of fire at a creature or object within range.',
+        rangeFt: 120,
+        jb2aAssetId: 'fire_bolt'
+      },
+      {
+        id: 'fallback-cure-wounds',
+        name: 'Cure Wounds',
+        category: 'spells',
+        type: 'action',
+        level: 1,
+        school: 'evocation',
+        damageFormula: '1d8 + 3',
+        isHeal: true,
+        description: 'A creature you touch regains 1d8 + 3 hit points.',
+        rangeFt: 5,
+        jb2aAssetId: 'cure_wounds'
+      }
+    ],
+    items: [
+      {
+        id: 'fallback-potion-heal',
+        name: 'Potion of Healing',
+        category: 'items',
+        type: 'action',
+        quantity: 2,
+        isHeal: true,
+        damageFormula: '2d4 + 2',
+        description: 'Drink or administer to restore 2d4 + 2 hit points.',
+        rangeFt: 5,
+        jb2aAssetId: 'cure_wounds'
+      }
+    ],
+    spellSlots: {
+      1: { level: 1, total: 4, used: 1, available: 3 },
+      2: { level: 2, total: 2, used: 0, available: 2 }
+    },
+    resources: [],
+    readonlyUrl: '',
+    lastUpdated: Date.now()
+  };
 };
 
 export default function PlayerView() {
@@ -1060,6 +1245,31 @@ export default function PlayerView() {
   });
   const [showClaimMenu, setShowClaimMenu] = useState(false);
 
+  // Player Station Mode: 'tv_table' (Digital TV Table) or 'remote_player' (Laptop/PC Remote Player)
+  const [stationMode, setStationMode] = useState<PlayerStationMode | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return (sessionStorage.getItem('mistwalker_player_station_mode') as PlayerStationMode) || null;
+  });
+  const [showStationModal, setShowStationModal] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return !sessionStorage.getItem('mistwalker_player_station_mode');
+  });
+
+  // Baldur's Gate 3 Inspired Bottom Hero Dock State
+  const [hudCharacterData, setHudCharacterData] = useState<HudCharacterData | null>(null);
+  const [activeTargetingAction, setActiveTargetingAction] = useState<HudActionItem | null>(null);
+
+  // Incoming Token Mutation Prompt (Targeted Healing or Damage from another player)
+  const [incomingMutationPrompt, setIncomingMutationPrompt] = useState<{
+    requestId: string;
+    sourceTokenId: string;
+    sourceName: string;
+    targetTokenId: string;
+    targetName: string;
+    actionName: string;
+    deltaHp: number;
+  } | null>(null);
+
   // Compendium Characters synced from DM
   const [compendiumCharacters, setCompendiumCharacters] = useState<Character[]>(DEFAULT_CHARACTERS);
 
@@ -1117,6 +1327,38 @@ export default function PlayerView() {
     if (!claimedToken) return null;
     return resolveTokenCharacterStats(claimedToken, compendiumCharacters);
   }, [claimedToken, compendiumCharacters]);
+
+  // Fetch or synthesize Baldur's Gate 3 HUD Character Data when claimedToken changes
+  useEffect(() => {
+    if (!claimedToken) {
+      setHudCharacterData(null);
+      return;
+    }
+
+    const ddbId = (claimedToken as any).ddbCharacterId ||
+      compendiumCharacters.find(c =>
+        c.id === claimedToken.id ||
+        (c.name && claimedToken.name && c.name.toLowerCase().trim() === claimedToken.name.toLowerCase().trim())
+      )?.ddbCharacterId;
+
+    if (ddbId) {
+      fetch(`/api/ddb/characters/${ddbId}/hud-data`)
+        .then(res => res.ok ? res.json() : null)
+        .then(data => {
+          if (data && data.name) {
+            setHudCharacterData(data);
+          } else {
+            setHudCharacterData(buildFallbackHudData(claimedToken, claimedStats));
+          }
+        })
+        .catch(err => {
+          console.warn('[PlayerView] Failed fetching DDB HUD data:', err);
+          setHudCharacterData(buildFallbackHudData(claimedToken, claimedStats));
+        });
+    } else {
+      setHudCharacterData(buildFallbackHudData(claimedToken, claimedStats));
+    }
+  }, [claimedToken?.id, claimedToken?.name, compendiumCharacters]);
 
   // 3D Dice Customization State (persisted in localStorage)
   const [dicePresetId, setDicePresetId] = useState<string>(() => {
@@ -1699,6 +1941,55 @@ export default function PlayerView() {
         }
         return next;
       });
+
+      // 3. Update active Hero Dock if claimed character matches
+      setHudCharacterData(prev => {
+        if (!prev) return null;
+        if (String(prev.id) === charIdStr || prev.name.toLowerCase().trim() === ddbName.toLowerCase()) {
+          return {
+            ...prev,
+            currentHp: data.currentHp,
+            maxHp: data.maxHp,
+            tempHp: data.tempHp || 0
+          };
+        }
+        return prev;
+      });
+    });
+
+    // Targeted Healing & Damage Mutation Pipeline
+    socket.on('TOKEN_MUTATION_PROMPT', (data: any) => {
+      if (claimedTokenIdRef.current && data.targetTokenId === claimedTokenIdRef.current) {
+        setIncomingMutationPrompt(data);
+        toast.info(`${data.sourceName} targeted you with ${data.actionName}!`, {
+          description: `${data.deltaHp > 0 ? '+' : ''}${data.deltaHp} HP. Check prompt to confirm.`
+        });
+      }
+    });
+
+    socket.on('APPLY_TOKEN_MUTATION', (data: { targetTokenId: string; deltaHp: number; actionName?: string; targetName?: string }) => {
+      setTokens(prev => {
+        const next = prev.map(t => {
+          if (t.id === data.targetTokenId) {
+            const current = typeof t.currentHp === 'number' ? t.currentHp : (t.hp || 10);
+            const max = typeof t.maxHp === 'number' ? t.maxHp : (t.hp || 10);
+            const nextHp = Math.max(0, Math.min(max, current + data.deltaHp));
+            return { ...t, currentHp: nextHp, hp: nextHp };
+          }
+          return t;
+        });
+        tokensRef.current = next;
+        return next;
+      });
+
+      setHudCharacterData(prev => {
+        if (!prev) return null;
+        if (claimedTokenIdRef.current === data.targetTokenId) {
+          const nextHp = Math.max(0, Math.min(prev.maxHp, prev.currentHp + data.deltaHp));
+          return { ...prev, currentHp: nextHp };
+        }
+        return prev;
+      });
     });
 
     // Auto-sync D&D Beyond party health on initial load
@@ -2078,6 +2369,8 @@ export default function PlayerView() {
         setActiveEquippedAsset(null);
         setAimOrigin(null);
         setAimCurrent(null);
+        setActiveTargetingAction(null);
+        setShowStationModal(false);
         if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) {
           (e.target as HTMLElement).blur();
         }
@@ -2438,6 +2731,214 @@ export default function PlayerView() {
       socketRef.current.emit('EFFECT_CLEAR_ALL');
     }
   }, []);
+
+  const handleSelectStationMode = useCallback((mode: PlayerStationMode) => {
+    setStationMode(mode);
+    setShowStationModal(false);
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('mistwalker_player_station_mode', mode);
+    }
+    toast.success(
+      mode === 'tv_table'
+        ? 'Digital TV Table Mode active: Clean battlemap presentation.'
+        : "Remote Player Mode active: Baldur's Gate 3 Hero HUD ready."
+    );
+  }, []);
+
+  const handleSelectHudAction = useCallback((action: HudActionItem) => {
+    if (activeTargetingAction?.id === action.id) {
+      setActiveTargetingAction(null);
+      setActiveEquippedAsset(null);
+      setAimOrigin(null);
+      setAimCurrent(null);
+      return;
+    }
+
+    setActiveTargetingAction(action);
+
+    // Find matching JB2A visual asset definition
+    let matchedAsset: Jb2aAssetDefinition | undefined;
+    if (action.jb2aAssetId) {
+      matchedAsset = JB2A_REGISTRY.find(a => a.id === action.jb2aAssetId);
+    }
+    if (!matchedAsset) {
+      const cleanName = action.name.toLowerCase().trim();
+      matchedAsset = JB2A_REGISTRY.find(a =>
+        a.id.toLowerCase() === cleanName ||
+        a.name.toLowerCase() === cleanName ||
+        a.tags?.some(t => cleanName.includes(t))
+      );
+    }
+
+    if (matchedAsset) {
+      setActiveEquippedAsset(matchedAsset);
+    }
+
+    if (claimedToken) {
+      const tokenRadius = ((claimedToken.size || 1) * gridSize) / 2;
+      setAimOrigin({ x: claimedToken.x + tokenRadius, y: claimedToken.y + tokenRadius });
+    }
+
+    toast.info(`Targeting: ${action.name}`, {
+      description: 'Click target token to execute action, or press Esc to cancel.'
+    });
+  }, [activeTargetingAction, claimedToken, gridSize]);
+
+  const handleTargetToken = useCallback((targetToken: Token) => {
+    if (!activeTargetingAction) return;
+    const action = activeTargetingAction;
+    const caster = claimedToken;
+    if (!caster) {
+      toast.warning('Claim a character first before executing actions.');
+      return;
+    }
+
+    // 1. Calculate distance on battlemap grid
+    const cRadius = ((caster.size || 1) * gridSize) / 2;
+    const tRadius = ((targetToken.size || 1) * gridSize) / 2;
+    const casterCenter = { x: caster.x + cRadius, y: caster.y + cRadius };
+    const targetCenter = { x: targetToken.x + tRadius, y: targetToken.y + tRadius };
+    const distPx = Math.hypot(targetCenter.x - casterCenter.x, targetCenter.y - casterCenter.y);
+    const distFt = Math.round((distPx / gridSize) * 5);
+
+    if (action.rangeFt && action.rangeFt > 0 && distFt > action.rangeFt + 2) {
+      toast.error(`Out of range! Target is ${distFt} ft away (Max range: ${action.rangeFt} ft).`);
+      return;
+    }
+
+    // 2. Play JB2A Spell Animation & Sound
+    if (activeEquippedAsset) {
+      castSpellAt(casterCenter, targetCenter);
+    } else if (action.jb2aAssetId) {
+      const asset = JB2A_REGISTRY.find(a => a.id === action.jb2aAssetId);
+      if (asset) {
+        const isTrajectory = (asset.paradigm === 'projectile' || asset.paradigm === 'ray') || Boolean(asset.projectileWebm);
+        const newEffect: VttEffectInstance = {
+          id: `eff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          name: asset.name,
+          label: asset.label,
+          assetKey: asset.id,
+          videoUrl: (isTrajectory && asset.projectileWebm) ? asset.projectileWebm : asset.webm,
+          thumbUrl: asset.thumb,
+          paradigm: isTrajectory ? 'projectile' : asset.paradigm,
+          x: isTrajectory ? casterCenter.x : targetCenter.x,
+          y: isTrajectory ? casterCenter.y : targetCenter.y,
+          originX: casterCenter.x,
+          originY: casterCenter.y,
+          targetX: targetCenter.x,
+          targetY: targetCenter.y,
+          sizeFt: asset.defaultSizeFt,
+          rotation: Math.atan2(targetCenter.y - casterCenter.y, targetCenter.x - casterCenter.x) * (180 / Math.PI),
+          opacity: 1.0,
+          blendMode: asset.blendMode,
+          isPersistent: asset.isPersistent,
+          loop: asset.isPersistent,
+          castTime: Date.now(),
+          durationMs: isTrajectory ? 2500 : 5000,
+          soundKey: asset.soundKey,
+          color: asset.color
+        };
+        setEffects(prev => [...prev, newEffect]);
+        if (asset.soundKey) soundCatalog.play(asset.soundKey);
+        if (socketRef.current?.connected) {
+          socketRef.current.emit('EFFECT_SPAWN', newEffect);
+        }
+      }
+    }
+
+    // 3. Roll 3D Physics Dice if action has damageFormula or hitBonus
+    let calculatedDeltaHp = 0;
+    if (action.damageFormula) {
+      const rollParts = action.damageFormula.match(/(\d+)d(\d+)(?:\s*([+-])\s*(\d+))?/i);
+      let rolledTotal = 0;
+      const diceResults: Array<{ sides: number; result: number; type: string }> = [];
+      if (rollParts) {
+        const numDice = parseInt(rollParts[1], 10) || 1;
+        const sides = parseInt(rollParts[2], 10) || 6;
+        const sign = rollParts[3] === '-' ? -1 : 1;
+        const mod = parseInt(rollParts[4], 10) || 0;
+        let diceSum = 0;
+        for (let i = 0; i < numDice; i++) {
+          const r = Math.floor(Math.random() * sides) + 1;
+          diceSum += r;
+          diceResults.push({ sides, result: r, type: `d${sides}` });
+        }
+        rolledTotal = Math.max(1, diceSum + (sign * mod));
+      } else {
+        rolledTotal = Math.floor(Math.random() * 8) + 3;
+      }
+
+      calculatedDeltaHp = action.isHeal ? rolledTotal : -rolledTotal;
+
+      // Trigger 3D dice physics
+      if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+        (window as any).__mistwalkerRoll3d({
+          id: `roll-${Date.now()}`,
+          characterName: caster.name || 'Hero',
+          action: `${action.name} (${action.isHeal ? 'Healing' : 'Damage'})`,
+          rollType: action.isHeal ? 'heal' : 'damage',
+          formula: action.damageFormula,
+          diceNotation: action.damageFormula,
+          dice: diceResults.length > 0 ? diceResults : [{ sides: 20, result: 15, type: 'd20' }],
+          total: Math.abs(calculatedDeltaHp),
+          isCritical: false,
+          isFumble: false,
+          theme: selectedDicePreset.id,
+          themeColor: selectedDicePreset.theme.primaryColor,
+          timestamp: Date.now(),
+          source: 'player'
+        });
+      }
+    }
+
+    // 4. Emit REQUEST_TOKEN_MUTATION
+    const isTargetOtherPlayer = targetToken.isPlayer && targetToken.id !== caster.id;
+    const payload = {
+      sourceTokenId: caster.id,
+      sourceName: caster.name || 'Hero',
+      targetTokenId: targetToken.id,
+      targetName: targetToken.name || 'Target',
+      actionName: action.name,
+      deltaHp: calculatedDeltaHp,
+      requiresApproval: isTargetOtherPlayer,
+      requestId: `req_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
+    };
+
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('REQUEST_TOKEN_MUTATION', payload);
+    }
+
+    toast.success(`${action.name} executed on ${targetToken.name}!`, {
+      description: calculatedDeltaHp !== 0
+        ? `${calculatedDeltaHp > 0 ? '+' : ''}${calculatedDeltaHp} HP`
+        : 'Action delivered.'
+    });
+
+    // Reset targeting state
+    setActiveTargetingAction(null);
+    setActiveEquippedAsset(null);
+    setAimOrigin(null);
+    setAimCurrent(null);
+  }, [activeTargetingAction, claimedToken, gridSize, activeEquippedAsset, selectedDicePreset, castSpellAt]);
+
+  const handleApproveMutation = useCallback(() => {
+    if (!incomingMutationPrompt) return;
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('APPROVE_TOKEN_MUTATION', {
+        requestId: incomingMutationPrompt.requestId,
+        targetTokenId: incomingMutationPrompt.targetTokenId,
+        deltaHp: incomingMutationPrompt.deltaHp
+      });
+    }
+    toast.success(`Accepted ${incomingMutationPrompt.actionName} (${incomingMutationPrompt.deltaHp > 0 ? '+' : ''}${incomingMutationPrompt.deltaHp} HP)`);
+    setIncomingMutationPrompt(null);
+  }, [incomingMutationPrompt]);
+
+  const handleDeclineMutation = useCallback(() => {
+    if (!incomingMutationPrompt) return;
+    toast.info(`Declined ${incomingMutationPrompt.actionName}`);
+    setIncomingMutationPrompt(null);
+  }, [incomingMutationPrompt]);
 
   const getStageRelativePointerPosition = (stage: any) => {
     const pointer = stage.getPointerPosition();
@@ -2977,11 +3478,28 @@ export default function PlayerView() {
                       {activeSceneInfo.sceneTitle}
                     </span>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => setShowStationModal(true)}
+                    className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-700/80 hover:border-amber-500/50 text-[9px] font-mono text-zinc-300 hover:text-amber-300 transition-colors cursor-pointer w-fit"
+                    title="Switch Station Mode (Digital TV Table / Remote Player)"
+                  >
+                    <Tv className="w-2.5 h-2.5 text-amber-400" />
+                    <span>{stationMode === 'tv_table' ? 'TV Table' : 'Remote Player'}</span>
+                  </button>
                 </div>
               </div>
             ) : (
-              <div className="mx-auto" title={isConnected ? `Live Session: ${activeSceneInfo?.sceneTitle || 'Online'}` : 'Connecting...'}>
+              <div className="flex flex-col items-center gap-1 mx-auto" title={isConnected ? `Live Session: ${activeSceneInfo?.sceneTitle || 'Online'}` : 'Connecting...'}>
                 <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-emerald-500 animate-pulse ring-2 ring-emerald-500/20' : 'bg-amber-500'}`} />
+                <button
+                  type="button"
+                  onClick={() => setShowStationModal(true)}
+                  className="mt-1 p-1 rounded bg-zinc-900 border border-zinc-700/80 hover:border-amber-500/50 text-zinc-400 hover:text-amber-400 transition-colors cursor-pointer"
+                  title={`Station Mode: ${stationMode === 'tv_table' ? 'Digital TV Table' : 'Remote Player'}`}
+                >
+                  <Tv className="w-3 h-3 text-amber-400" />
+                </button>
               </div>
             )}
 
@@ -3794,6 +4312,9 @@ export default function PlayerView() {
                 characters={compendiumCharacters}
                 combatants={combatState.combatants}
                 isClaimed={claimedTokenId === token.id}
+                canDrag={stationMode === 'tv_table' ? true : claimedTokenId === token.id}
+                isTargetingActive={Boolean(activeTargetingAction)}
+                onTargetToken={handleTargetToken}
                 onMoveToken={handleMoveToken}
                 onDragMoveToken={handleDragMoveToken}
                 onDragStartToken={handleDragStartToken}
@@ -4436,6 +4957,97 @@ export default function PlayerView() {
           setTimeout(() => setIsShaking(false), 600);
         }}
       />
+
+      {/* ========================================================= */}
+      {/* Baldur's Gate 3-Inspired Hero Bottom HUD (Remote Player)  */}
+      {/* ========================================================= */}
+      {stationMode === 'remote_player' && !isUiMinimized && (
+        <PlayerHeroDock
+          characterData={hudCharacterData}
+          claimedToken={claimedToken}
+          onSelectAction={handleSelectHudAction}
+          activeTargetingAction={activeTargetingAction}
+          onCancelTargeting={() => {
+            setActiveTargetingAction(null);
+            setActiveEquippedAsset(null);
+            setAimOrigin(null);
+            setAimCurrent(null);
+          }}
+          isMyTurn={Boolean(visibleCombatants.find(c => c.isClaimed)?.isCurrentTurn)}
+          onEndTurn={() => {
+            if (socketRef.current?.connected) {
+              socketRef.current.emit('PLAYER_END_TURN', {
+                tokenId: claimedToken?.id,
+                name: claimedToken?.name
+              });
+            }
+            toast.info('Turn passed.');
+          }}
+          onSwitchStationMode={() => setShowStationModal(true)}
+        />
+      )}
+
+      {/* ========================================================= */}
+      {/* Player Station Mode Modal (Digital TV Table / Remote)     */}
+      {/* ========================================================= */}
+      <PlayerStationModal
+        isOpen={showStationModal}
+        onSelectStation={handleSelectStationMode}
+        characterName={claimedToken?.name}
+      />
+
+      {/* ========================================================= */}
+      {/* 1-Tap Mutation Approval Prompt (Incoming Healing/Damage)  */}
+      {/* ========================================================= */}
+      {incomingMutationPrompt && (
+        <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 pointer-events-auto animate-in fade-in duration-150">
+          <div className="bg-zinc-950/95 border border-zinc-700/80 rounded-2xl p-5 max-w-sm w-full shadow-2xl flex flex-col gap-3 ring-1 ring-white/10 text-center">
+            <div className={`w-12 h-12 rounded-2xl mx-auto flex items-center justify-center border shadow-md ${
+              incomingMutationPrompt.deltaHp >= 0
+                ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
+                : 'bg-rose-500/20 border-rose-500/40 text-rose-400'
+            }`}>
+              {incomingMutationPrompt.deltaHp >= 0 ? <Heart className="w-6 h-6" /> : <Swords className="w-6 h-6" />}
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-white font-mono">
+                {incomingMutationPrompt.deltaHp >= 0 ? 'Incoming Healing' : 'Incoming Damage'}
+              </h4>
+              <p className="text-xs text-zinc-300 mt-1">
+                <strong className="text-amber-300">{incomingMutationPrompt.sourceName}</strong> targeted you with{' '}
+                <strong className="text-white">{incomingMutationPrompt.actionName}</strong>.
+              </p>
+              <div className={`mt-2 py-1 px-3 rounded-lg font-mono font-bold text-sm inline-block ${
+                incomingMutationPrompt.deltaHp >= 0
+                  ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/40'
+                  : 'bg-rose-950/80 text-rose-300 border border-rose-500/40'
+              }`}>
+                {incomingMutationPrompt.deltaHp >= 0 ? `+${incomingMutationPrompt.deltaHp} HP` : `${incomingMutationPrompt.deltaHp} HP`}
+              </div>
+            </div>
+            <div className="flex items-center gap-2 mt-2 pt-2 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={handleDeclineMutation}
+                className="flex-1 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 font-mono text-xs font-semibold border border-zinc-700 transition-colors cursor-pointer"
+              >
+                Decline
+              </button>
+              <button
+                type="button"
+                onClick={handleApproveMutation}
+                className={`flex-1 py-2 rounded-xl text-zinc-950 font-mono text-xs font-bold transition-all shadow-md cursor-pointer ${
+                  incomingMutationPrompt.deltaHp >= 0
+                    ? 'bg-emerald-400 hover:bg-emerald-300'
+                    : 'bg-rose-400 hover:bg-rose-300 text-white'
+                }`}
+              >
+                Accept
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toast Notification Container for Player View */}
       <Toaster position="bottom-right" theme="dark" richColors />

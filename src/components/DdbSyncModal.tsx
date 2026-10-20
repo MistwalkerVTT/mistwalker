@@ -46,6 +46,8 @@ interface DdbBookStatus {
 interface DdbStatusResponse {
   hasToken: boolean;
   tokenPreview: string | null;
+  hasDmToken?: boolean;
+  dmTokenPreview?: string | null;
   totalCachedMonsters: number;
   booksAvailable: number;
 }
@@ -74,10 +76,15 @@ export const DdbSyncModal: React.FC<DdbSyncModalProps> = ({
   initialSearchQuery = '',
   initialTab = 'live_search'
 }) => {
-  const [activeTab, setActiveTab] = useState<'live_search' | 'campaign' | 'books' | 'catalog'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'live_search' | 'campaign' | 'books' | 'catalog' | 'settings'>(initialTab);
   const [status, setStatus] = useState<DdbStatusResponse | null>(null);
   const [books, setBooks] = useState<DdbBookStatus[]>([]);
   const [isLoadingStatus, setIsLoadingStatus] = useState(false);
+
+  // Settings & DM Token state
+  const [dmTokenInput, setDmTokenInput] = useState('');
+  const [playerTokenInput, setPlayerTokenInput] = useState('');
+  const [isSavingToken, setIsSavingToken] = useState(false);
 
   // Sync state
   const [syncingBookId, setSyncingBookId] = useState<string | null>(null);
@@ -544,6 +551,18 @@ export const DdbSyncModal: React.FC<DdbSyncModalProps> = ({
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 Offline Catalog ({status?.totalCachedMonsters || 0})
+              </button>
+              <button
+                onClick={() => setActiveTab('settings')}
+                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  activeTab === 'settings'
+                    ? 'bg-red-600 text-white shadow-md shadow-red-950'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
+                }`}
+                title="D&D Beyond Session & DM Token Settings"
+              >
+                <Shield className="w-3.5 h-3.5" />
+                Settings
               </button>
             </div>
 
@@ -1367,6 +1386,162 @@ export const DdbSyncModal: React.FC<DdbSyncModalProps> = ({
                   })}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* TAB 5: D&D Beyond & DM Cobalt Settings */}
+          {activeTab === 'settings' && (
+            <div className="max-w-3xl mx-auto space-y-6">
+              
+              {/* Informational Hero Card */}
+              <div className="p-5 rounded-2xl bg-gradient-to-br from-slate-800/80 via-slate-800/40 to-slate-900 border border-slate-700/80 shadow-xl flex items-start gap-4">
+                <div className="p-3 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0 mt-0.5">
+                  <Shield className="w-6 h-6" />
+                </div>
+                <div className="space-y-1.5">
+                  <h3 className="text-base font-bold text-white font-mono flex items-center gap-2">
+                    D&D Beyond Session & DM Permission Settings
+                  </h3>
+                  <p className="text-xs text-slate-300 leading-relaxed font-sans">
+                    MistWalker connects directly to D&D Beyond via your secure <code>CobaltSession</code> cookie to stream character stats, live HP, and spell slot levels.
+                  </p>
+                  <p className="text-xs text-slate-400 leading-relaxed font-sans">
+                    <strong>Player Permission Model:</strong> If your DM enters their <strong>DM CobaltSession</strong> token below, spells and heals cast on party members in MistWalker will update their D&D Beyond sheets automatically! Without a DM token, players are safely prompted with a 1-tap approval prompt.
+                  </p>
+                </div>
+              </div>
+
+              {/* DM Cobalt Session Configuration Card */}
+              <div className="p-6 rounded-2xl bg-slate-850/80 border border-amber-500/40 shadow-xl space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
+                    <h4 className="text-sm font-bold font-mono text-amber-300 uppercase tracking-wider">
+                      Dungeon Master Cobalt Session
+                    </h4>
+                  </div>
+                  {status?.hasDmToken ? (
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+                      DM Token Active ({status.dmTokenPreview})
+                    </span>
+                  ) : (
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-mono text-slate-400 bg-slate-800 border border-slate-700">
+                      Not Configured (Approval Mode Active)
+                    </span>
+                  )}
+                </div>
+
+                <p className="text-xs text-slate-300">
+                  Allows automatic cloud synchronization when players cast healing or restoration spells on other party members.
+                </p>
+
+                <div className="flex items-center gap-3">
+                  <input
+                    type="password"
+                    placeholder={status?.hasDmToken ? "Enter new DM CobaltSession to replace..." : "Paste DM CobaltSession cookie value here..."}
+                    value={dmTokenInput}
+                    onChange={(e) => setDmTokenInput(e.target.value)}
+                    className="flex-1 px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono"
+                  />
+                  <button
+                    onClick={async () => {
+                      if (!dmTokenInput.trim()) {
+                        toast.error('Please enter a valid Cobalt token');
+                        return;
+                      }
+                      setIsSavingToken(true);
+                      try {
+                        const res = await fetch('/api/ddb/set-token', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ token: dmTokenInput.trim(), isDmToken: true })
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                          toast.success('DM Cobalt token saved! Automatic D&D Beyond sheet mutation unlocked.');
+                          setDmTokenInput('');
+                          fetchStatusAndBooks();
+                        } else {
+                          toast.error(data.error || 'Failed to update token');
+                        }
+                      } catch (err: any) {
+                        toast.error(err.message || 'Network error');
+                      } finally {
+                        setIsSavingToken(false);
+                      }
+                    }}
+                    disabled={isSavingToken || !dmTokenInput.trim()}
+                    className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold text-xs rounded-xl font-mono transition-all cursor-pointer shadow-md shadow-amber-950/40 shrink-0"
+                  >
+                    {isSavingToken ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save DM Token'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Player Default Cobalt Session Configuration */}
+              <div className="p-6 rounded-2xl bg-slate-850/60 border border-slate-700/80 shadow-xl space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-bold font-mono text-slate-200 uppercase tracking-wider">
+                    Primary / Compendium Cobalt Session
+                  </h4>
+                  {status?.hasToken ? (
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+                      Active ({status.tokenPreview})
+                    </span>
+                  ) : (
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-mono text-amber-400 bg-amber-500/10 border border-amber-500/30">
+                      Missing
+                    </span>
+                  )}
+                </div>
+
+                <p className="text-xs text-slate-400">
+                  Primary token used for Compendium book ingestion, live monster searches, and game log streaming.
+                </p>
+
+                <div className="flex items-center gap-3">
+                  <input
+                    type="password"
+                    placeholder={status?.hasToken ? "Enter new CobaltSession to replace..." : "Paste CobaltSession cookie value here..."}
+                    value={playerTokenInput}
+                    onChange={(e) => setPlayerTokenInput(e.target.value)}
+                    className="flex-1 px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-red-500 font-mono"
+                  />
+                  <button
+                    onClick={async () => {
+                      if (!playerTokenInput.trim()) {
+                        toast.error('Please enter a valid Cobalt token');
+                        return;
+                      }
+                      setIsSavingToken(true);
+                      try {
+                        const res = await fetch('/api/ddb/set-token', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ token: playerTokenInput.trim(), isDmToken: false })
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                          toast.success('Cobalt token updated successfully!');
+                          setPlayerTokenInput('');
+                          fetchStatusAndBooks();
+                        } else {
+                          toast.error(data.error || 'Failed to update token');
+                        }
+                      } catch (err: any) {
+                        toast.error(err.message || 'Network error');
+                      } finally {
+                        setIsSavingToken(false);
+                      }
+                    }}
+                    disabled={isSavingToken || !playerTokenInput.trim()}
+                    className="px-5 py-2.5 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl font-mono transition-all cursor-pointer shadow-md shadow-red-950/40 shrink-0"
+                  >
+                    {isSavingToken ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save Token'}
+                  </button>
+                </div>
+              </div>
+
             </div>
           )}
         </div>

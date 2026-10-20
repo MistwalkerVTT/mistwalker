@@ -67,8 +67,12 @@ export function getCobaltToken(): string {
   return process.env.DND_BEYOND_COBALT_SESSION || '';
 }
 
+export function getDmCobaltToken(): string {
+  return process.env.DND_BEYOND_DM_COBALT_SESSION || '';
+}
+
 export function getDdbHeaders(token?: string): Record<string, string> {
-  const activeToken = token || getCobaltToken();
+  const activeToken = token || getDmCobaltToken() || getCobaltToken();
   return {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Cookie': 'CobaltSession=' + activeToken,
