@@ -9,7 +9,6 @@ import {
   ChevronUp,
   MessageSquare,
   Send,
-  Play,
   RotateCcw,
   Bug,
   Shield,
@@ -21,7 +20,6 @@ import {
   Bot,
   User,
   ExternalLink,
-  GraduationCap,
   CheckCircle2,
   AlertCircle
 } from 'lucide-react';
@@ -31,7 +29,6 @@ interface HelpDrawerProps {
   pinnedGroup: string | null;
   handleDragStart?: (e: React.MouseEvent) => void;
   onClose: () => void;
-  onStartTutorial?: () => void;
   onOpenBugReport?: () => void;
 }
 
@@ -127,7 +124,6 @@ export const HelpDrawer: React.FC<HelpDrawerProps> = ({
   pinnedGroup,
   handleDragStart,
   onClose,
-  onStartTutorial,
   onOpenBugReport
 }) => {
   const [activeTab, setActiveTab] = useState<'faq' | 'chat'>('faq');
@@ -202,7 +198,7 @@ export const HelpDrawer: React.FC<HelpDrawerProps> = ({
       } else if (lower.includes('fog') || lower.includes('player') || lower.includes('vision')) {
         fallbackText += `• **Player Vision**: Click "Share Player View" in the top bar. Players only see what their tokens illuminate, and vision strictly respects walls and closed doors.`;
       } else {
-        fallbackText += `You can explore these features anytime via the **Interactive Tutorial** button above, or browse the searchable FAQ tab!`;
+        fallbackText += `You can explore these features anytime by browsing the searchable FAQ tab or asking me a question below!`;
       }
 
       setChatMessages(prev => [
@@ -242,7 +238,7 @@ export const HelpDrawer: React.FC<HelpDrawerProps> = ({
             <h3 className="text-xs font-bold text-white font-mono tracking-wide flex items-center gap-1.5">
               Help & DM Guide
             </h3>
-            <p className="text-[10px] text-zinc-400">Knowledge base, interactive tutorial & AI assistant</p>
+            <p className="text-[10px] text-zinc-400">Knowledge base & AI assistant</p>
           </div>
         </div>
 
@@ -255,37 +251,6 @@ export const HelpDrawer: React.FC<HelpDrawerProps> = ({
           <X className="w-4 h-4" />
         </button>
       </div>
-
-      {/* Tutorial Launcher Hero Card */}
-      {onStartTutorial && (
-        <div className="p-3 rounded-xl bg-gradient-to-r from-indigo-950/60 via-purple-950/40 to-indigo-950/60 border border-indigo-500/40 shadow-lg space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-indigo-200 flex items-center gap-1.5 font-mono">
-              <GraduationCap className="w-4 h-4 text-indigo-400" />
-              Interactive DM Tutorial
-            </span>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-              11 Steps
-            </span>
-          </div>
-          <p className="text-[11px] text-zinc-300 leading-relaxed">
-            Step-by-step walkthrough covering sidebar tools, loading Golden Vault scenes, drawing walls, operating doors, and right-clicking room zones with animated mouse cursor demonstrations.
-          </p>
-          <div className="pt-1 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                onClose();
-                onStartTutorial();
-              }}
-              className="flex-1 py-1.5 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
-            >
-              <Play className="w-3.5 h-3.5 fill-current" />
-              <span>Start Interactive Tutorial</span>
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Mode Navigation Tabs: FAQ vs AI Assistant */}
       <div className="flex items-center p-0.5 rounded-xl bg-zinc-950 border border-zinc-800">

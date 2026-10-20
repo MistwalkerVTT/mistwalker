@@ -132,8 +132,6 @@ import { AssignPolygonRoomModal } from './components/AssignPolygonRoomModal';
 import { ZoneDetailsSidePanel } from './components/ZoneDetailsSidePanel';
 import { RoomBriefingDrawer } from './components/RoomBriefingDrawer';
 import { GridLayer } from './components/GridLayer';
-import { TutorialOverlay } from './components/TutorialOverlay';
-import { useTutorial } from './hooks/useTutorial';
 import { BugReportModal } from './components/BugReportModal';
 import { BugReportManagerModal } from './components/BugReportManagerModal';
 import { DEMO_GV_CAMPAIGN, DEMO_GV_SCENE, DEMO_GV_CHAPTER, DEMO_GV_ROOM_ZONES, DEMO_GV_TOKENS } from './data/demoCampaignGv';
@@ -1225,7 +1223,6 @@ export default function App() {
   } | null>(null);
   const [stageScale, setStageScale] = useState<number>(1);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
-  const tutorial = useTutorial();
 
   const [stagePos, setStagePos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [gridVisible, setGridVisible] = useState<boolean>(true);
@@ -1788,106 +1785,6 @@ export default function App() {
     toast.info(`Click anywhere on map to stamp copies of modified ${feature.type} (Esc to finish)`);
   }, []);
 
-  // Tutorial Interactive Task Progression Gates
-  useEffect(() => {
-    if (tutorial.isActive && (activeSceneInfo || imageFile)) {
-      tutorial.triggerTaskCompletion('load-demo-campaign');
-      tutorial.triggerTaskCompletion('load-scene');
-    }
-  }, [activeSceneInfo, imageFile, tutorial.isActive, tutorial.triggerTaskCompletion]);
-
-  const prevTokenCountRef = useRef(tokens.length);
-  useEffect(() => {
-    if (tutorial.isActive && tokens.length > prevTokenCountRef.current) {
-      tutorial.triggerTaskCompletion('add-token');
-    }
-    prevTokenCountRef.current = tokens.length;
-  }, [tokens.length, tutorial.isActive, tutorial.triggerTaskCompletion]);
-
-  useEffect(() => {
-    if (tutorial.isActive && (isRoomDrawerOpen || isZoneSidePanelOpen)) {
-      tutorial.triggerTaskCompletion('inspect-zone');
-    }
-  }, [isRoomDrawerOpen, isZoneSidePanelOpen, tutorial.isActive, tutorial.triggerTaskCompletion]);
-
-  useEffect(() => {
-    if (tutorial.isActive && tool === 'wall') {
-      tutorial.triggerTaskCompletion('draw-walls');
-    } else if (tutorial.isActive && tool === 'erase_wall') {
-      tutorial.triggerTaskCompletion('erase-walls');
-    } else if (tutorial.isActive && (tool === 'zone' || tool === 'polygon_zone')) {
-      tutorial.triggerTaskCompletion('draw-zones');
-    }
-  }, [tool, tutorial.isActive, tutorial.triggerTaskCompletion]);
-
-  // Ensure Fog of War remains active during tutorial walkthrough
-  useEffect(() => {
-    if (!tutorial.isActive) return;
-    setIsFogVisible(true);
-  }, [tutorial.isActive]);
-
-  // Launch tutorial with preloaded "The Guild House - Main Level" scene and Fog of War enabled
-  const handleStartTutorial = () => {
-    handleLoadSceneFromCampaign(DEMO_GV_SCENE, DEMO_GV_CAMPAIGN.campaignId, DEMO_GV_CHAPTER.chapterId);
-    setIsFogVisible(true);
-    tutorial.startTutorial();
-  };
-
-  // Demo Action Handlers for Tutorial
-  const handleLoadDemoGv = () => {
-    handleLoadSceneFromCampaign(DEMO_GV_SCENE, DEMO_GV_CAMPAIGN.campaignId, DEMO_GV_CHAPTER.chapterId);
-    setIsFogVisible(true);
-    tutorial.triggerTaskCompletion('load-demo-campaign');
-    toast.success('Loaded "The Guild House - Main Level" with Fog of War, 64 walls/doors and 13 room zones!');
-  };
-
-  const handleActivateWallTool = () => {
-    setTool('wall');
-    tutorial.triggerTaskCompletion('draw-walls');
-  };
-
-  const handleActivateWallEraser = () => {
-    setTool('erase_wall');
-    tutorial.triggerTaskCompletion('erase-walls');
-  };
-
-  const handleActivateZoneTool = () => {
-    setTool('zone');
-    tutorial.triggerTaskCompletion('draw-zones');
-  };
-
-  const handleOpenRoomZones = () => {
-    tutorial.triggerTaskCompletion('erase-zones');
-    toast.info('Inspect room zones list or click delete to remove zones');
-  };
-
-  const handleOpenDemoRoomBriefing = () => {
-    const targetZone = roomAnnotations.find(r => r.roomNumber === 'G10') || DEMO_GV_ROOM_ZONES[0];
-    setSelectedRoomAnnotation(targetZone);
-    setSelectedZoneForSidePanel(targetZone);
-    setIsZoneSidePanelOpen(false);
-    setIsRoomDrawerOpen(true);
-    tutorial.triggerTaskCompletion('inspect-zone');
-  };
-
-  const handleBroadcastDemo = () => {
-    const targetZone = roomAnnotations.find(r => r.roomNumber === 'G10') || DEMO_GV_ROOM_ZONES[0];
-    handleBroadcastRoomReadAloud(targetZone.boxedText, targetZone.label);
-    tutorial.triggerTaskCompletion('broadcast-players');
-    toast.success('Broadcasted read-aloud description to Player View!');
-  };
-
-  const handleSpawnDemoMonster = () => {
-    handleSpawnMonsterToken({
-      name: 'Agile Hand Lookout',
-      avatarUrl: 'https://images.unsplash.com/photo-1579783902614-a3fb3927b675?auto=format&fit=crop&w=150&q=80',
-      hp: 11,
-      ac: 12,
-      size: 1
-    });
-    tutorial.triggerTaskCompletion('add-token');
-  };
-  
   // Lifted Combat Tracker State
   const [combatTrackerCombatants, setCombatTrackerCombatants] = useState<Combatant[]>([]);
   const [combatTrackerRound, setCombatTrackerRound] = useState<number>(1);
@@ -3390,7 +3287,6 @@ export default function App() {
       mapHeight: scene.mapHeight
     });
     setActiveDmNotes(scene.dmNotes || '');
-    tutorial.triggerTaskCompletion('load-scene');
 
     // Automatically fit the entire map inside the DM view
     fitWholeMapToScreen(scene.mapWidth, scene.mapHeight);
@@ -6466,7 +6362,6 @@ export default function App() {
           currentMapImage={imageFile}
           onExportUniversalVtt={handleExportUniversalVtt}
           onImportUniversalVtt={handleUniversalVttImport}
-          onStartTutorial={handleStartTutorial}
           onOpenBugReport={() => setIsBugReportModalOpen(true)}
           onOpenBugManager={() => setIsBugManagerModalOpen(true)}
         />
@@ -6539,7 +6434,6 @@ export default function App() {
             onOpenCharacterCompendium={() => setShowCharacterCompendium(true)}
             onOpenAlliesCompendium={() => setShowAlliesCompendium(true)}
             onOpenDdbSync={() => setShowDdbModal(true)}
-            onStartTutorial={handleStartTutorial}
             onOpenBugReport={() => setIsBugReportModalOpen(true)}
             onLoadSceneFromCampaign={handleLoadSceneFromCampaign}
             campaignsList={campaignsList}
@@ -9067,37 +8961,6 @@ export default function App() {
         currentMapName={activeSceneInfo?.sceneTitle || (imageFile ? 'Tactical Battlemap' : 'Blank Battlemap')}
         combatantsCount={combatTrackerCombatants.length}
         activeRound={combatTrackerRound}
-      />
-
-      <TutorialOverlay
-        {...tutorial}
-        onOpenCampaignBuilder={() => setShowCampaignBuilder(true)}
-        onOpenLoadCampaign={() => setShowLoadCampaignModal(true)}
-        onLoadDemoCampaign={handleLoadDemoGv}
-        onOpenTokens={() => {
-          const tokenBtn = document.querySelector<HTMLButtonElement>('#group-btn-tokens');
-          if (tokenBtn) tokenBtn.click();
-          else setShowCharacterCompendium(true);
-        }}
-        onOpenRoomBriefing={handleOpenDemoRoomBriefing}
-        onActivateWallTool={handleActivateWallTool}
-        onActivateWallEraser={handleActivateWallEraser}
-        onActivateZoneTool={handleActivateZoneTool}
-        onOpenRoomZones={handleOpenRoomZones}
-        onBroadcastDemo={handleBroadcastDemo}
-        onSpawnDemoMonster={handleSpawnDemoMonster}
-        onOpenBugReport={() => setIsBugReportModalOpen(true)}
-        campaignMode={campaignMode}
-        onToggleCampaignMode={() => handleModeChange(campaignMode === 'run' ? 'creator' : 'run')}
-        onSetCampaignMode={handleModeChange}
-        onToggleDemoDoor={() => {
-          const door = walls.find(w => w.id === 'gv-wall-div-door1' || w.wallType === 'door');
-          if (door) handleToggleDoor(door.id);
-        }}
-        onOpenHelp={() => {
-          const helpBtn = document.querySelector<HTMLButtonElement>('#group-btn-help');
-          if (helpBtn) helpBtn.click();
-        }}
       />
 
       {/* Bug Report Submission Modal */}

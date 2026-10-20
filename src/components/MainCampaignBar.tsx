@@ -15,7 +15,6 @@ import {
   DoorOpen,
   Pentagon,
   Layers,
-  GraduationCap,
   Radio,
   Share2
 } from 'lucide-react';
@@ -55,7 +54,6 @@ interface MainCampaignBarProps {
   activeMapId?: 'DM1' | 'DM2' | 'DM3';
   liveMapId?: 'DM1' | 'DM2' | 'DM3';
   onMapSwitch?: (id: 'DM1' | 'DM2' | 'DM3') => void;
-  onOpenTutorial?: () => void;
 }
 
 export const MainCampaignBar: React.FC<MainCampaignBarProps> = React.memo(({
@@ -72,7 +70,6 @@ export const MainCampaignBar: React.FC<MainCampaignBarProps> = React.memo(({
   onOpenAlliesCompendium,
   onOpenDdbSync,
   onOpenDndChatbot,
-  onOpenTutorial,
   isFirebaseConnected = true,
   onRelinkMap,
   onForceSync,
@@ -425,19 +422,6 @@ export const MainCampaignBar: React.FC<MainCampaignBarProps> = React.memo(({
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
             <span>D&D Oracle</span>
-          </button>
-        )}
-
-        {/* Tutorial & DM Guide Launcher */}
-        {onOpenTutorial && (
-          <button
-            id="btn-main-open-tutorial"
-            onClick={onOpenTutorial}
-            className="px-2.5 py-1 rounded-xl bg-indigo-950/50 hover:bg-indigo-900/60 text-indigo-300 hover:text-indigo-200 border border-indigo-500/40 text-[11px] font-bold flex items-center gap-1.5 transition-all shadow-md shadow-indigo-950/40 active:scale-95 cursor-pointer"
-            title="Open Interactive Tutorial & DM Campaign Guide"
-          >
-            <GraduationCap className="w-3.5 h-3.5 text-indigo-400" />
-            <span>Tutorial</span>
           </button>
         )}
       </div>

@@ -31,7 +31,6 @@ interface DashboardHomeHubProps {
   onOpenCharacterCompendium: () => void;
   onOpenAlliesCompendium: () => void;
   onOpenDdbSync: () => void;
-  onStartTutorial: () => void;
   onOpenBugReport?: () => void;
   onLoadSceneFromCampaign: (scene: Scene, campaignId: string, chapterId: string) => void;
   campaignsList: Campaign[];
@@ -52,7 +51,6 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
   onOpenCharacterCompendium,
   onOpenAlliesCompendium,
   onOpenDdbSync,
-  onStartTutorial,
   onOpenBugReport,
   onLoadSceneFromCampaign,
   campaignsList,
@@ -532,24 +530,6 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
                   </div>
                 </button>
               </div>
-            </div>
-
-            {/* Tutorial Walkthrough Link */}
-            <div className="pt-2 border-t border-zinc-850/80">
-              <button
-                type="button"
-                id="btn-start-tutorial-guide-home"
-                onClick={onStartTutorial}
-                className="w-full py-2.5 px-3 bg-zinc-900/90 hover:bg-zinc-850 border border-amber-500/30 hover:border-amber-400 text-amber-300 hover:text-amber-200 font-bold rounded-xl transition-all font-mono text-[11px] flex items-center justify-between cursor-pointer group/tut"
-              >
-                <div className="flex items-center gap-2">
-                  <HelpCircle className="w-4 h-4 text-amber-400 group-hover/tut:rotate-12 transition-transform" />
-                  <span>Interactive DM Tutorial</span>
-                </div>
-                <span className="px-1.5 py-0.5 text-[9px] bg-amber-500/20 border border-amber-500/40 rounded-md text-amber-300 font-sans">
-                  11 Steps
-                </span>
-              </button>
             </div>
           </div>
         </div>

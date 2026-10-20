@@ -63,12 +63,80 @@ export const DDB_SUPPORTED_BOOKS: DdbBookConfig[] = [
 
 const COMPENDIUM_FILE_PATH = path.resolve(process.cwd(), 'public', 'data', 'dndbeyond_compendium.json');
 
+export interface DmCobaltTokenEntry {
+  id: string;
+  label: string;
+  token: string;
+}
+
+export function getAllDmCobaltEntries(): DmCobaltTokenEntry[] {
+  const entries: DmCobaltTokenEntry[] = [];
+
+  // 1. Check primary single token first
+  const primary = process.env.DND_BEYOND_DM_COBALT_SESSION;
+  if (primary && primary.trim().length > 15) {
+    entries.push({
+      id: 'primary_dm_token',
+      label: 'Primary DM Key',
+      token: primary.trim()
+    });
+  }
+
+  // 2. Parse DND_BEYOND_DM_COBALT_SESSIONS JSON or list
+  const rawSessions = process.env.DND_BEYOND_DM_COBALT_SESSIONS;
+  if (rawSessions) {
+    try {
+      const parsed = JSON.parse(rawSessions);
+      if (Array.isArray(parsed)) {
+        parsed.forEach((item, idx) => {
+          if (typeof item === 'string' && item.trim().length > 15) {
+            if (!entries.some(e => e.token === item.trim())) {
+              entries.push({
+                id: `dm_token_${idx + 1}`,
+                label: `DM Key #${idx + 1}`,
+                token: item.trim()
+              });
+            }
+          } else if (item && typeof item.token === 'string' && item.token.trim().length > 15) {
+            if (!entries.some(e => e.token === item.token.trim())) {
+              entries.push({
+                id: item.id || `dm_token_${idx + 1}`,
+                label: item.label || `DM Key #${idx + 1}`,
+                token: item.token.trim()
+              });
+            }
+          }
+        });
+      }
+    } catch {
+      // Fallback: comma separated tokens
+      rawSessions.split(',').forEach((tok, idx) => {
+        const clean = tok.trim();
+        if (clean.length > 15 && !entries.some(e => e.token === clean)) {
+          entries.push({
+            id: `dm_token_${idx + 1}`,
+            label: `DM Key #${idx + 1}`,
+            token: clean
+          });
+        }
+      });
+    }
+  }
+
+  return entries;
+}
+
+export function getAllDmCobaltTokens(): string[] {
+  return getAllDmCobaltEntries().map(e => e.token);
+}
+
 export function getCobaltToken(): string {
   return process.env.DND_BEYOND_COBALT_SESSION || '';
 }
 
 export function getDmCobaltToken(): string {
-  return process.env.DND_BEYOND_DM_COBALT_SESSION || '';
+  const all = getAllDmCobaltTokens();
+  return all[0] || process.env.DND_BEYOND_DM_COBALT_SESSION || '';
 }
 
 export function getDdbHeaders(token?: string): Record<string, string> {
@@ -86,14 +154,15 @@ let cachedCobaltSource = '';
 
 // Exchange CobaltSession cookie for a D&D Beyond Bearer JWT token (required by character-service v5)
 export async function getDdbBearerToken(forceRefresh = false): Promise<string | null> {
-  const cobalt = getDmCobaltToken() || getCobaltToken();
+  const allDmTokens = getAllDmCobaltTokens();
+  const cobalt = allDmTokens[0] || getDmCobaltToken() || getCobaltToken();
   if (!cobalt) return null;
 
   if (!forceRefresh && cachedBearerToken && cachedCobaltSource === cobalt && Date.now() < cachedBearerExpiry) {
     return cachedBearerToken;
   }
 
-  const candidateTokens = Array.from(new Set([getDmCobaltToken(), getCobaltToken()].filter(Boolean)));
+  const candidateTokens = Array.from(new Set([...allDmTokens, getDmCobaltToken(), getCobaltToken()].filter(Boolean)));
   for (const tokenCandidate of candidateTokens) {
     try {
       const res = await fetch('https://auth-service.dndbeyond.com/v1/cobalt-token', {

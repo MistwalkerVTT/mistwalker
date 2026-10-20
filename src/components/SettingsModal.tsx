@@ -19,8 +19,9 @@ import {
   Sparkles,
   Volume2,
   RefreshCw,
-  Layers,
-  CheckCircle2
+  Plus,
+  CheckCircle2,
+  Users
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { CobaltInstructionsModal } from './CobaltInstructionsModal';
@@ -31,8 +32,22 @@ interface SettingsModalProps {
   initialTab?: 'cobalt' | 'ai' | 'danger';
 }
 
+interface DmTokenItem {
+  id: string;
+  label: string;
+  preview: string;
+  hasToken: boolean;
+}
+
+interface GeminiFallbackItem {
+  id: string;
+  label: string;
+  preview: string;
+}
+
 interface SettingsStatus {
   cobalt: {
+    dmTokens: DmTokenItem[];
     hasDmToken: boolean;
     dmTokenPreview: string | null;
     hasToken: boolean;
@@ -42,6 +57,8 @@ interface SettingsStatus {
   gemini: {
     hasKey: boolean;
     maskedKey: string | null;
+    fallbackKeys: GeminiFallbackItem[];
+    poolCount: number;
   };
   elevenlabs: {
     hasKey: boolean;
@@ -58,20 +75,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [status, setStatus] = useState<SettingsStatus | null>(null);
   const [isLoadingStatus, setIsLoadingStatus] = useState(false);
 
-  // Cobalt state
-  const [dmTokenInput, setDmTokenInput] = useState('');
-  const [showDmToken, setShowDmToken] = useState(false);
-  const [isSavingDmToken, setIsSavingDmToken] = useState(false);
-  const [isTestingDmToken, setIsTestingDmToken] = useState(false);
+  // New DM Key form state
+  const [showAddDmForm, setShowAddDmForm] = useState(false);
+  const [newDmLabel, setNewDmLabel] = useState('');
+  const [newDmToken, setNewDmToken] = useState('');
+  const [showNewDmToken, setShowNewDmToken] = useState(false);
+  const [isAddingDmToken, setIsAddingDmToken] = useState(false);
+  const [testingTokenId, setTestingTokenId] = useState<string | null>(null);
 
+  // Compendium Token state
   const [playerTokenInput, setPlayerTokenInput] = useState('');
   const [showPlayerToken, setShowPlayerToken] = useState(false);
   const [isSavingPlayerToken, setIsSavingPlayerToken] = useState(false);
   const [isTestingPlayerToken, setIsTestingPlayerToken] = useState(false);
 
+  // Campaign ID state
   const [campaignIdInput, setCampaignIdInput] = useState('');
   const [isSavingCampaignId, setIsSavingCampaignId] = useState(false);
 
+  // Instructions popup state
   const [showHowToModal, setShowHowToModal] = useState(false);
 
   // Gemini state
@@ -79,6 +101,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [showGemini, setShowGemini] = useState(false);
   const [isSavingGemini, setIsSavingGemini] = useState(false);
   const [isTestingGemini, setIsTestingGemini] = useState(false);
+
+  // Fallback Gemini state
+  const [newFallbackGeminiKey, setNewFallbackGeminiKey] = useState('');
+  const [showFallbackGeminiInput, setShowFallbackGeminiInput] = useState(false);
+  const [isAddingFallbackGemini, setIsAddingFallbackGemini] = useState(false);
 
   // ElevenLabs state
   const [elevenInput, setElevenInput] = useState('');
@@ -132,53 +159,104 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   };
 
-  // Save DM Token
+  // Add / Save DM Key
   const handleSaveDmToken = async () => {
-    if (!dmTokenInput.trim()) {
-      toast.error('Please enter a valid Cobalt token');
+    if (!newDmToken.trim()) {
+      toast.error('Please enter a valid CobaltSession token (min 15 characters).');
       return;
     }
-    setIsSavingDmToken(true);
+    setIsAddingDmToken(true);
     try {
-      const res = await fetch('/api/ddb/set-token', {
+      const res = await fetch('/api/settings/save-dm-token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: dmTokenInput.trim(), isDmToken: true })
+        body: JSON.stringify({
+          label: newDmLabel.trim() || undefined,
+          token: newDmToken.trim()
+        })
       });
       const data = await res.json();
       if (data.success) {
-        toast.success('DM Cobalt token saved! Automatic D&D Beyond sheet mutation unlocked.');
-        setDmTokenInput('');
+        toast.success(data.message || 'DM Key added successfully!');
+        setNewDmLabel('');
+        setNewDmToken('');
+        setShowAddDmForm(false);
         fetchStatus();
       } else {
-        toast.error(data.error || 'Failed to update DM token');
+        toast.error(data.error || 'Failed to add DM Key');
       }
     } catch (err: any) {
-      toast.error(err.message || 'Network error');
+      toast.error(err.message || 'Network error adding DM Key');
     } finally {
-      setIsSavingDmToken(false);
+      setIsAddingDmToken(false);
     }
   };
 
-  // Test DM Token
-  const handleTestDmToken = async () => {
-    setIsTestingDmToken(true);
+  // Delete a specific DM Key
+  const handleDeleteDmToken = async (id: string, label: string) => {
+    try {
+      const res = await fetch('/api/settings/delete-dm-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`Removed ${label} from DM key pool.`);
+        fetchStatus();
+      } else {
+        toast.error(data.error || 'Failed to remove DM key');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Network error');
+    }
+  };
+
+  // Test an existing DM Key by ID
+  const handleTestDmTokenById = async (id: string, label: string) => {
+    setTestingTokenId(id);
     try {
       const res = await fetch('/api/settings/test-cobalt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: dmTokenInput.trim() || undefined, isDmToken: true })
+        body: JSON.stringify({ id, isDmToken: true })
       });
       const data = await res.json();
       if (data.success) {
-        toast.success(data.message || 'DM Cobalt token is valid and active!');
+        toast.success(`${label}: Verified with D&D Beyond! Token is active.`);
       } else {
-        toast.error(data.error || 'Failed to verify Cobalt token with D&D Beyond.');
+        toast.error(`${label}: ${data.error || 'D&D Beyond rejected this token.'}`);
       }
     } catch (err: any) {
       toast.error(err.message || 'Network error testing Cobalt token');
     } finally {
-      setIsTestingDmToken(false);
+      setTestingTokenId(null);
+    }
+  };
+
+  // Test current input before saving
+  const handleTestNewDmToken = async () => {
+    if (!newDmToken.trim()) {
+      toast.error('Paste a token first to test it.');
+      return;
+    }
+    setTestingTokenId('new');
+    try {
+      const res = await fetch('/api/settings/test-cobalt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: newDmToken.trim(), isDmToken: true })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success('Token is valid and active with D&D Beyond!');
+      } else {
+        toast.error(data.error || 'D&D Beyond rejected this token.');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Network error testing token');
+    } finally {
+      setTestingTokenId(null);
     }
   };
 
@@ -255,7 +333,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   };
 
-  // Save Gemini Key
+  // Save Primary Gemini Key
   const handleSaveGemini = async () => {
     if (!geminiInput.trim()) {
       toast.error('Please enter a valid Gemini API key.');
@@ -283,7 +361,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   };
 
-  // Test Gemini Key
+  // Test Primary Gemini Key
   const handleTestGemini = async () => {
     setIsTestingGemini(true);
     try {
@@ -302,6 +380,55 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       toast.error(err.message || 'Network error');
     } finally {
       setIsTestingGemini(false);
+    }
+  };
+
+  // Add Fallback Gemini Key
+  const handleAddFallbackGemini = async () => {
+    if (!newFallbackGeminiKey.trim()) {
+      toast.error('Please enter a valid fallback Gemini API key.');
+      return;
+    }
+    setIsAddingFallbackGemini(true);
+    try {
+      const res = await fetch('/api/settings/save-gemini-fallback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: newFallbackGeminiKey.trim() })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success('Fallback Gemini key added to rotation pool!');
+        setNewFallbackGeminiKey('');
+        setShowFallbackGeminiInput(false);
+        fetchStatus();
+      } else {
+        toast.error(data.error || 'Failed to add fallback Gemini key');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Network error');
+    } finally {
+      setIsAddingFallbackGemini(false);
+    }
+  };
+
+  // Delete Fallback Gemini Key
+  const handleDeleteFallbackGemini = async (index: number) => {
+    try {
+      const res = await fetch('/api/settings/delete-gemini-fallback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ index })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success('Fallback key removed from rotation pool.');
+        fetchStatus();
+      } else {
+        toast.error(data.error || 'Failed to remove fallback key');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Network error');
     }
   };
 
@@ -355,7 +482,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   };
 
-  // Wipe Single Credential
+  // Wipe Single Credential Category
   const handleWipeSingle = async (target: string, name: string) => {
     try {
       const res = await fetch('/api/settings/wipe-single', {
@@ -385,17 +512,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       });
       const data = await res.json();
       if (data.success) {
-        // Also clear local client fallback storage
         if (typeof window !== 'undefined') {
           localStorage.removeItem('mistwalker_gemini_api_key');
           localStorage.removeItem('mistwalker_elevenlabs_api_key');
           localStorage.removeItem('mistwalker_ddb_campaign_id');
         }
-        toast.success('All stored secrets and Cobalt sessions wiped successfully!');
-        setDmTokenInput('');
+        toast.success('All stored secrets, DM keys, and Cobalt sessions wiped successfully!');
+        setNewDmLabel('');
+        setNewDmToken('');
         setPlayerTokenInput('');
         setCampaignIdInput('');
         setGeminiInput('');
+        setNewFallbackGeminiKey('');
         setElevenInput('');
         setShowConfirmWipeAll(false);
         fetchStatus();
@@ -408,6 +536,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       setIsWipingAll(false);
     }
   };
+
+  const dmTokensList = status?.cobalt.dmTokens || [];
+  const geminiFallbacksList = status?.gemini.fallbackKeys || [];
 
   return (
     <>
@@ -427,7 +558,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   MistWalker Settings &amp; Secrets Vault
                 </h2>
                 <p className="text-xs text-zinc-400">
-                  Manage D&amp;D Beyond Cobalt sync, AI intelligence keys, and security credentials
+                  Manage D&amp;D Beyond Cobalt sync (with multiple DM keys), AI intelligence keys, and security credentials
                 </p>
               </div>
             </div>
@@ -460,8 +591,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             >
               <Cookie className="w-4 h-4 text-amber-400" />
               D&amp;D Beyond (Cobalt)
-              {status?.cobalt.hasDmToken && (
-                <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
+              {dmTokensList.length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/40 text-[10px] font-bold">
+                  {dmTokensList.length}
+                </span>
               )}
             </button>
 
@@ -496,7 +629,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* Tab Body */}
           <div className="flex-1 overflow-y-auto p-6 space-y-6 text-xs sidebar-scrollbar">
             {/* ========================================================= */}
-            {/* TAB 1: D&D BEYOND (COBALT)                                */}
+            {/* TAB 1: D&D BEYOND (COBALT & MULTIPLE DM KEYS)             */}
             {/* ========================================================= */}
             {activeTab === 'cobalt' && (
               <div className="space-y-6">
@@ -508,10 +641,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                     <div>
                       <h3 className="text-sm font-bold text-white font-mono flex items-center gap-2">
-                        D&amp;D Beyond Real-Time Synchronization
+                        D&amp;D Beyond Synchronization &amp; Multiple DM Keys
                       </h3>
                       <p className="text-zinc-400 leading-relaxed font-sans mt-0.5">
-                        MistWalker communicates directly with D&amp;D Beyond via your secure <code>CobaltSession</code> cookie to sync character stats, live HP damage, spell slots, and live 3D dice rolls.
+                        MistWalker communicates directly with D&amp;D Beyond via secure <code>CobaltSession</code> cookies. You can store multiple DM keys for co-DMs, West Marches campaigns, or secondary accounts.
                       </p>
                     </div>
                   </div>
@@ -525,93 +658,162 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </button>
                 </div>
 
-                {/* 1. DM Cobalt Token Card */}
-                <div className="p-5 rounded-2xl bg-zinc-950/70 border border-amber-500/40 shadow-md space-y-3.5">
+                {/* ========================================================= */}
+                {/* SECTION 1: MULTIPLE DM KEYS POOL                          */}
+                {/* ========================================================= */}
+                <div className="p-5 rounded-2xl bg-zinc-950/70 border border-amber-500/40 shadow-md space-y-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
-                      <h4 className="text-xs font-bold font-mono text-amber-300 uppercase tracking-wider">
-                        Dungeon Master Cobalt Session (Write-Back Permission)
+                      <h4 className="text-xs font-bold font-mono text-amber-300 uppercase tracking-wider flex items-center gap-2">
+                        <Users className="w-3.5 h-3.5" />
+                        Dungeon Master Cobalt Keys ({dmTokensList.length})
                       </h4>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      {status?.cobalt.hasDmToken ? (
-                        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3" />
-                          DM Token Active ({status.cobalt.dmTokenPreview})
-                        </span>
-                      ) : (
-                        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono text-amber-400/80 bg-amber-500/10 border border-amber-500/30">
-                          Missing (Approval Mode Active)
-                        </span>
-                      )}
-
-                      {status?.cobalt.hasDmToken && (
-                        <button
-                          onClick={() => handleWipeSingle('dm_cobalt', 'DM Cobalt Token')}
-                          title="Wipe DM Cobalt Token"
-                          className="p-1 rounded-lg text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
+                    <button
+                      onClick={() => setShowAddDmForm(!showAddDmForm)}
+                      className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-mono font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>{showAddDmForm ? 'Cancel' : 'Add Another DM Key'}</span>
+                    </button>
                   </div>
 
                   <p className="text-zinc-400 font-sans leading-relaxed">
-                    <strong>Primary Permission Token:</strong> Allows MistWalker to write damage, healing, and condition updates directly back into your players&apos; D&amp;D Beyond character sheets in real time without prompting them for manual confirmation.
+                    <strong>Automatic Sheet Mutator:</strong> When spells, damage, or healing affect tokens, MistWalker cycles through your authorized DM keys to update players&apos; official D&amp;D Beyond character sheets in real time.
                   </p>
 
-                  <div className="flex items-center gap-2">
-                    <div className="relative flex-1">
-                      <input
-                        type={showDmToken ? 'text' : 'password'}
-                        placeholder={status?.cobalt.hasDmToken ? 'Enter new DM CobaltSession to replace...' : 'Paste DM CobaltSession cookie value here...'}
-                        value={dmTokenInput}
-                        onChange={(e) => setDmTokenInput(e.target.value)}
-                        className="w-full pl-3.5 pr-20 py-2.5 rounded-xl bg-zinc-900 border border-zinc-700 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-400 font-mono"
-                      />
-                      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                  {/* List of Configured DM Keys */}
+                  {dmTokensList.length > 0 ? (
+                    <div className="space-y-2.5">
+                      {dmTokensList.map((entry, index) => (
+                        <div
+                          key={entry.id || index}
+                          className="p-3.5 rounded-xl bg-zinc-900 border border-zinc-700/80 flex items-center justify-between gap-3 transition-colors hover:border-amber-500/50"
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="w-6 h-6 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[11px] font-mono font-bold flex items-center justify-center shrink-0">
+                              {index + 1}
+                            </span>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-white font-mono text-xs">
+                                  {entry.label}
+                                </span>
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center gap-1">
+                                  <CheckCircle2 className="w-2.5 h-2.5" />
+                                  Active ({entry.preview})
+                                </span>
+                              </div>
+                              <span className="text-[11px] text-zinc-500 font-mono">
+                                ID: {entry.id}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleTestDmTokenById(entry.id, entry.label)}
+                              disabled={testingTokenId === entry.id}
+                              className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-xs font-mono transition-colors cursor-pointer flex items-center gap-1"
+                              title="Test connection with D&D Beyond"
+                            >
+                              {testingTokenId === entry.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                'Test'
+                              )}
+                            </button>
+
+                            <button
+                              onClick={() => handleDeleteDmToken(entry.id, entry.label)}
+                              title="Delete this DM key"
+                              className="p-1.5 rounded-lg text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-4 rounded-xl bg-zinc-900/60 border border-dashed border-zinc-800 text-center space-y-1">
+                      <p className="text-zinc-400 font-sans">No DM Cobalt Keys configured yet.</p>
+                      <p className="text-[11px] text-zinc-500 font-mono">Add your first DM key below to enable live two-way character sheet updates.</p>
+                    </div>
+                  )}
+
+                  {/* Add New DM Key Inline Form */}
+                  {showAddDmForm && (
+                    <div className="p-4 rounded-xl bg-zinc-900 border border-amber-500/60 space-y-3 animate-in fade-in duration-150">
+                      <span className="text-xs font-bold font-mono text-amber-300 block">
+                        Add New Dungeon Master Key
+                      </span>
+
+                      <div className="space-y-2">
+                        <input
+                          type="text"
+                          placeholder="DM Key Label / Nickname (e.g. DM Scott, Co-DM Sarah, Campaign 2)"
+                          value={newDmLabel}
+                          onChange={(e) => setNewDmLabel(e.target.value)}
+                          className="w-full px-3.5 py-2 rounded-xl bg-zinc-950 border border-zinc-700 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-400 font-mono"
+                        />
+
+                        <div className="relative">
+                          <input
+                            type={showNewDmToken ? 'text' : 'password'}
+                            placeholder="Paste CobaltSession cookie value here..."
+                            value={newDmToken}
+                            onChange={(e) => setNewDmToken(e.target.value)}
+                            className="w-full pl-3.5 pr-20 py-2.5 rounded-xl bg-zinc-950 border border-zinc-700 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-400 font-mono"
+                          />
+                          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setShowNewDmToken(!showNewDmToken)}
+                              className="p-1 rounded-md text-zinc-400 hover:text-white"
+                              title={showNewDmToken ? 'Hide token' : 'Show token'}
+                            >
+                              {showNewDmToken ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handlePaste(setNewDmToken)}
+                              className="p-1 rounded-md text-zinc-400 hover:text-amber-400"
+                              title="Paste from clipboard"
+                            >
+                              <ClipboardPaste className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-end gap-2 pt-1">
                         <button
                           type="button"
-                          onClick={() => setShowDmToken(!showDmToken)}
-                          className="p-1 rounded-md text-zinc-400 hover:text-white"
-                          title={showDmToken ? 'Hide token' : 'Show token'}
+                          onClick={handleTestNewDmToken}
+                          disabled={testingTokenId === 'new' || !newDmToken.trim()}
+                          className="px-3.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 text-zinc-200 text-xs font-mono border border-zinc-700 cursor-pointer"
                         >
-                          {showDmToken ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                          {testingTokenId === 'new' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Test Token'}
                         </button>
                         <button
                           type="button"
-                          onClick={() => handlePaste(setDmTokenInput)}
-                          className="p-1 rounded-md text-zinc-400 hover:text-amber-400"
-                          title="Paste from clipboard"
+                          onClick={handleSaveDmToken}
+                          disabled={isAddingDmToken || !newDmToken.trim()}
+                          className="px-4 py-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-zinc-950 font-bold text-xs rounded-xl font-mono cursor-pointer"
                         >
-                          <ClipboardPaste className="w-3.5 h-3.5" />
+                          {isAddingDmToken ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Save DM Key'}
                         </button>
                       </div>
                     </div>
-
-                    <button
-                      onClick={handleSaveDmToken}
-                      disabled={isSavingDmToken || !dmTokenInput.trim()}
-                      className="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-zinc-950 font-bold text-xs rounded-xl font-mono transition-all cursor-pointer shrink-0 shadow-sm"
-                    >
-                      {isSavingDmToken ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save DM Token'}
-                    </button>
-
-                    <button
-                      onClick={handleTestDmToken}
-                      disabled={isTestingDmToken || (!status?.cobalt.hasDmToken && !dmTokenInput.trim())}
-                      className="px-3.5 py-2.5 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 text-zinc-200 font-mono text-xs rounded-xl border border-zinc-700 transition-colors cursor-pointer shrink-0"
-                      title="Verify token with D&D Beyond Auth API"
-                    >
-                      {isTestingDmToken ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Test Connection'}
-                    </button>
-                  </div>
+                  )}
                 </div>
 
-                {/* 2. Player / Compendium Cobalt Token Card */}
+                {/* ========================================================= */}
+                {/* SECTION 2: COMPENDIUM COBALT TOKEN                        */}
+                {/* ========================================================= */}
                 <div className="p-5 rounded-2xl bg-zinc-950/70 border border-zinc-800 shadow-md space-y-3.5">
                   <div className="flex items-center justify-between">
                     <h4 className="text-xs font-bold font-mono text-zinc-300 uppercase tracking-wider">
@@ -626,7 +828,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         </span>
                       ) : (
                         <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono text-zinc-400 bg-zinc-850 border border-zinc-700">
-                          Not Set (Uses DM Token)
+                          Not Set (Uses Primary DM Key)
                         </span>
                       )}
 
@@ -693,7 +895,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 </div>
 
-                {/* 3. D&D Beyond Campaign ID or URL */}
+                {/* ========================================================= */}
+                {/* SECTION 3: CAMPAIGN URL / ID                              */}
+                {/* ========================================================= */}
                 <div className="p-5 rounded-2xl bg-zinc-950/70 border border-zinc-800 shadow-md space-y-3.5">
                   <div className="flex items-center justify-between">
                     <h4 className="text-xs font-bold font-mono text-zinc-300 uppercase tracking-wider">
@@ -731,24 +935,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             )}
 
             {/* ========================================================= */}
-            {/* TAB 2: AI & SPEECH API KEYS                               */}
+            {/* TAB 2: AI & SPEECH API KEYS (MULTIPLE GEMINI KEYS)        */}
             {/* ========================================================= */}
             {activeTab === 'ai' && (
               <div className="space-y-6">
-                {/* 1. Google Gemini API Key */}
-                <div className="p-5 rounded-2xl bg-zinc-950/70 border border-sky-500/30 shadow-md space-y-3.5">
+                {/* 1. Google Gemini API Key Pool */}
+                <div className="p-5 rounded-2xl bg-zinc-950/70 border border-sky-500/30 shadow-md space-y-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Sparkles className="w-4 h-4 text-sky-400" />
                       <h4 className="text-xs font-bold font-mono text-sky-300 uppercase tracking-wider">
-                        Google Gemini API Key
+                        Google Gemini API Keys ({status?.gemini.poolCount || 0} in Pool)
                       </h4>
                       {/* Hover Info Tooltip */}
                       <div className="relative group">
                         <Info className="w-3.5 h-3.5 text-zinc-400 hover:text-sky-400 cursor-help" />
                         <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block w-72 p-3 rounded-xl bg-zinc-900 border border-zinc-700 text-[11px] text-zinc-300 shadow-2xl z-50 pointer-events-none font-sans leading-relaxed">
                           <strong className="text-white block font-mono mb-1">What this powers:</strong>
-                          Powers the AI Dungeon Master, DM Assistant chatbot, procedural room briefing descriptions, NPC dialog, dynamic lighting suggestions, and automated battlemap generation.
+                          Powers the AI Dungeon Master, DM Assistant chatbot, procedural room briefing descriptions, NPC dialog, dynamic lighting suggestions, and automated battlemap generation. If multiple keys are configured, MistWalker rotates automatically on quota limits.
                         </div>
                       </div>
                     </div>
@@ -757,7 +961,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       {status?.gemini.hasKey ? (
                         <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center gap-1">
                           <CheckCircle2 className="w-3 h-3" />
-                          Active ({status.gemini.maskedKey})
+                          Primary ({status.gemini.maskedKey})
                         </span>
                       ) : (
                         <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono text-rose-400 bg-rose-500/10 border border-rose-500/30">
@@ -767,8 +971,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                       {status?.gemini.hasKey && (
                         <button
-                          onClick={() => handleWipeSingle('gemini', 'Gemini Key')}
-                          title="Wipe Gemini Key"
+                          onClick={() => handleWipeSingle('gemini', 'All Gemini Keys')}
+                          title="Wipe All Gemini Keys"
                           className="p-1 rounded-lg text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -789,11 +993,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </a>
                   </div>
 
+                  {/* Primary Key Input */}
                   <div className="flex items-center gap-2">
                     <div className="relative flex-1">
                       <input
                         type={showGemini ? 'text' : 'password'}
-                        placeholder={status?.gemini.hasKey ? 'Enter new Gemini key to replace...' : 'AIzaSy... Paste your Google Gemini API key'}
+                        placeholder={status?.gemini.hasKey ? 'Enter new primary Gemini key to replace...' : 'AIzaSy... Paste your Google Gemini API key'}
                         value={geminiInput}
                         onChange={(e) => setGeminiInput(e.target.value)}
                         className="w-full pl-3.5 pr-20 py-2.5 rounded-xl bg-zinc-900 border border-zinc-700 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-sky-400 font-mono"
@@ -823,7 +1028,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       disabled={isSavingGemini || !geminiInput.trim()}
                       className="px-4 py-2.5 bg-sky-600 hover:bg-sky-500 disabled:opacity-40 text-white font-bold text-xs rounded-xl font-mono transition-all cursor-pointer shrink-0"
                     >
-                      {isSavingGemini ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save Gemini Key'}
+                      {isSavingGemini ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save Primary'}
                     </button>
 
                     <button
@@ -833,6 +1038,63 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     >
                       {isTestingGemini ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Test Key'}
                     </button>
+                  </div>
+
+                  {/* Fallback Gemini Keys Pool */}
+                  <div className="pt-2 border-t border-zinc-800 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold font-mono text-zinc-400 uppercase tracking-wider">
+                        Fallback Keys Pool ({geminiFallbacksList.length})
+                      </span>
+                      <button
+                        onClick={() => setShowFallbackGeminiInput(!showFallbackGeminiInput)}
+                        className="text-[11px] text-sky-400 hover:text-sky-300 font-mono font-bold flex items-center gap-1 cursor-pointer"
+                      >
+                        <Plus className="w-3 h-3" />
+                        {showFallbackGeminiInput ? 'Cancel' : 'Add Fallback Key'}
+                      </button>
+                    </div>
+
+                    {geminiFallbacksList.length > 0 && (
+                      <div className="space-y-1.5">
+                        {geminiFallbacksList.map((fb, idx) => (
+                          <div
+                            key={fb.id || idx}
+                            className="p-2.5 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-between text-xs"
+                          >
+                            <span className="font-mono text-zinc-300">
+                              {fb.label}: {fb.preview}
+                            </span>
+                            <button
+                              onClick={() => handleDeleteFallbackGemini(idx)}
+                              className="p-1 text-zinc-400 hover:text-rose-400 cursor-pointer"
+                              title="Delete fallback key"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {showFallbackGeminiInput && (
+                      <div className="flex items-center gap-2 pt-1">
+                        <input
+                          type="password"
+                          placeholder="Paste additional fallback Gemini API key..."
+                          value={newFallbackGeminiKey}
+                          onChange={(e) => setNewFallbackGeminiKey(e.target.value)}
+                          className="flex-1 px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-700 text-xs text-white placeholder-zinc-500 font-mono"
+                        />
+                        <button
+                          onClick={handleAddFallbackGemini}
+                          disabled={isAddingFallbackGemini || !newFallbackGeminiKey.trim()}
+                          className="px-3.5 py-2 bg-sky-600 hover:bg-sky-500 disabled:opacity-40 text-white font-bold text-xs rounded-xl font-mono cursor-pointer"
+                        >
+                          {isAddingFallbackGemini ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Add'}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -965,17 +1227,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="p-4 rounded-xl bg-zinc-950/60 border border-zinc-800 flex items-center justify-between">
                       <div>
-                        <span className="font-bold text-white block">DM CobaltSession</span>
+                        <span className="font-bold text-white block">All DM Cobalt Keys</span>
                         <span className="text-[11px] text-zinc-500 font-mono">
-                          {status?.cobalt.hasDmToken ? 'Currently configured' : 'Not set'}
+                          {dmTokensList.length > 0 ? `${dmTokensList.length} configured` : 'None configured'}
                         </span>
                       </div>
                       <button
-                        onClick={() => handleWipeSingle('dm_cobalt', 'DM Cobalt Token')}
-                        disabled={!status?.cobalt.hasDmToken}
+                        onClick={() => handleWipeSingle('dm_cobalt', 'All DM Cobalt Keys')}
+                        disabled={dmTokensList.length === 0}
                         className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-rose-500/20 hover:text-rose-300 text-zinc-300 disabled:opacity-30 border border-zinc-700 text-xs font-mono font-bold transition-colors cursor-pointer"
                       >
-                        Wipe
+                        Wipe All DM Keys
                       </button>
                     </div>
 
@@ -997,13 +1259,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                     <div className="p-4 rounded-xl bg-zinc-950/60 border border-zinc-800 flex items-center justify-between">
                       <div>
-                        <span className="font-bold text-white block">Google Gemini Key</span>
+                        <span className="font-bold text-white block">Google Gemini Keys</span>
                         <span className="text-[11px] text-zinc-500 font-mono">
-                          {status?.gemini.hasKey ? 'Currently active' : 'Not set'}
+                          {status?.gemini.hasKey ? `${status.gemini.poolCount} in pool` : 'Not set'}
                         </span>
                       </div>
                       <button
-                        onClick={() => handleWipeSingle('gemini', 'Gemini Key')}
+                        onClick={() => handleWipeSingle('gemini', 'Gemini Keys')}
                         disabled={!status?.gemini.hasKey}
                         className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-rose-500/20 hover:text-rose-300 text-zinc-300 disabled:opacity-30 border border-zinc-700 text-xs font-mono font-bold transition-colors cursor-pointer"
                       >
@@ -1039,7 +1301,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
 
                   <p className="text-xs text-zinc-300 leading-relaxed font-sans">
-                    This will permanently remove all CobaltSession tokens, Gemini API keys, ElevenLabs keys, and campaign identifiers from your server&apos;s environment file and browser storage.
+                    This will permanently remove all CobaltSession tokens, DM keys, Gemini API keys, ElevenLabs keys, and campaign identifiers from your server&apos;s environment file and browser storage.
                   </p>
 
                   {!showConfirmWipeAll ? (
@@ -1080,7 +1342,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* Footer */}
           <div className="px-6 py-4 bg-zinc-950/90 border-t border-zinc-800 flex items-center justify-between">
             <span className="text-[11px] text-zinc-500 font-mono">
-              MistWalker VTT • Confidential Configuration
+              MistWalker VTT • Multiple DM Keys &amp; Secrets
             </span>
             <button
               onClick={onClose}

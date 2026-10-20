@@ -254,7 +254,6 @@ interface LeftSidebarProps {
   currentMapImage?: string;
   onExportUniversalVtt?: () => void;
   onImportUniversalVtt?: (file: File) => void;
-  onStartTutorial?: () => void;
   onOpenBugReport?: () => void;
   onOpenBugManager?: () => void;
   onOpenSettings?: (tab?: 'cobalt' | 'ai' | 'danger') => void;
@@ -407,7 +406,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   currentMapImage,
   onExportUniversalVtt,
   onImportUniversalVtt,
-  onStartTutorial,
   onOpenBugReport,
   onOpenBugManager,
   onOpenSettings
@@ -684,7 +682,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
         <div className="relative group shrink-0">
           <button
             id="group-btn-maps"
-            data-tutorial="campaign-manager"
             onMouseEnter={(e) => handleMouseEnter('maps', e)}
             onMouseLeave={handleMouseLeave}
             onClick={(e) => handleGroupClick('maps', e)}
@@ -707,7 +704,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
         <div className="relative group shrink-0">
           <button
             id="group-btn-tokens"
-            data-tutorial="token-menu"
             onMouseEnter={(e) => handleMouseEnter('tokens', e)}
             onMouseLeave={handleMouseLeave}
             onClick={(e) => handleGroupClick('tokens', e)}
@@ -754,7 +750,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
         <div className="relative group shrink-0">
           <button
             id="group-btn-combat"
-            data-tutorial="combat-tracker"
             onMouseEnter={(e) => handleMouseEnter('combat', e)}
             onMouseLeave={handleMouseLeave}
             onClick={(e) => handleGroupClick('combat', e)}
@@ -776,7 +771,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
         <div className="relative group shrink-0">
           <button
             id="group-btn-lighting"
-            data-tutorial="tactical-layers"
             onMouseEnter={(e) => handleMouseEnter('lighting', e)}
             onMouseLeave={handleMouseLeave}
             onClick={(e) => handleGroupClick('lighting', e)}
@@ -806,7 +800,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
         <div className="relative group shrink-0">
           <button
             id="group-btn-fx"
-            data-tutorial="fx-spells"
             onMouseEnter={(e) => handleMouseEnter('fx', e)}
             onMouseLeave={handleMouseLeave}
             onClick={(e) => handleGroupClick('fx', e)}
@@ -833,7 +826,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
         <div className="relative group shrink-0">
           <button
             id="group-btn-ai"
-            data-tutorial="ai-suite"
             onMouseEnter={(e) => handleMouseEnter('ai', e)}
             onMouseLeave={handleMouseLeave}
             onClick={(e) => handleGroupClick('ai', e)}
@@ -857,7 +849,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
         <div className="relative group shrink-0">
           <button
             id="group-btn-help"
-            data-tutorial="help-section"
             onMouseEnter={(e) => handleMouseEnter('help', e)}
             onMouseLeave={handleMouseLeave}
             onClick={(e) => handleGroupClick('help', e)}
@@ -880,7 +871,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
           <div className="relative group shrink-0">
             <button
               id="btn-report-bug-sidebar"
-              data-tutorial="report-bug"
               onClick={onOpenBugReport}
               className="w-11 h-11 rounded-xl flex items-center justify-center transition-all text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 hover:border-rose-400/50 shadow-sm cursor-pointer active:scale-95"
               title="Report a Bug & Issue Notes"
@@ -909,7 +899,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
           <div className="relative group shrink-0">
             <button
               id="btn-sidebar-settings"
-              data-tutorial="settings-vault"
               onClick={() => onOpenSettings()}
               className="w-11 h-11 rounded-xl flex items-center justify-center transition-all text-zinc-400 hover:text-amber-400 bg-zinc-900/60 hover:bg-zinc-850 border border-zinc-800 hover:border-amber-500/40 shadow-sm cursor-pointer active:scale-95"
               title="Settings & Secrets Vault (D&D Beyond Cobalt, AI Keys & Credentials)"
@@ -921,7 +910,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
 
         {/* Direct Tools (Pan & Select) - Visible when map is loaded */}
         {currentMapImage && (
-          <div data-tutorial="pan-select" className="flex flex-col gap-2 shrink-0 p-1 rounded-xl bg-zinc-900/40 border border-zinc-800/60 animate-in fade-in duration-200">
+          <div className="flex flex-col gap-2 shrink-0 p-1 rounded-xl bg-zinc-900/40 border border-zinc-800/60 animate-in fade-in duration-200">
             {/* Quick Pan Tool (Direct 1-Click Toggle) */}
             <div className="relative group shrink-0">
               <button
@@ -964,7 +953,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
 
       {/* Bottom Zoom Controls - Only shown when active map exists */}
       {currentMapImage && (
-        <div data-tutorial="zoom-controls" className="flex flex-col items-center py-2.5 border-t border-zinc-800/80 gap-1.5 shrink-0 w-full animate-in fade-in duration-200">
+        <div className="flex flex-col items-center py-2.5 border-t border-zinc-800/80 gap-1.5 shrink-0 w-full animate-in fade-in duration-200">
           <button
             id="btn-zoom-in"
             onClick={zoomIn}
@@ -1724,7 +1713,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                 </button>
                 <button
                   id="subtab-room-zones"
-                  data-tutorial="room-zones"
                   onClick={() => {
                     setLightingSubTab('zones');
                     if (setCampaignMode && campaignMode !== 'creator') {
@@ -4825,7 +4813,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
               pinnedGroup={pinnedGroup}
               handleDragStart={handleDragStart}
               onClose={closeFlyout}
-              onStartTutorial={onStartTutorial}
               onOpenBugReport={onOpenBugReport}
             />
           )}
