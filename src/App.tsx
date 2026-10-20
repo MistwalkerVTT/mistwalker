@@ -36,6 +36,7 @@ import { generateDescription, chatWithLore, generateTTS, chatWithAutoDM, checkAc
 import { audioNarration, NARRATION_VOICES, getNarrationVoice } from './services/audioNarrationService';
 import MapGenerator from './components/MapGenerator';
 import { ApiKeyModal } from './components/ApiKeyModal';
+import { SettingsModal } from './components/SettingsModal';
 import { CombatTracker } from './components/CombatTracker';
 import { LeftSidebar } from './components/LeftSidebar';
 import { AnimatedMapOverlay, AnimatedFeaturesKonvaImage } from './components/AnimatedMapOverlay';
@@ -1246,6 +1247,8 @@ export default function App() {
   const relinkMapFileInputRef = useRef<HTMLInputElement>(null);
   const [showCinematicMapGenerator, setShowCinematicMapGenerator] = useState(false);
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<'cobalt' | 'ai' | 'danger'>('cobalt');
   const [hasApiKey, setHasApiKey] = useState(false);
 
   useEffect(() => {
@@ -6375,7 +6378,14 @@ export default function App() {
           rollDicePool={rollDicePool}
           diceHistory={diceHistory}
           setShowCinematicMapGenerator={setShowCinematicMapGenerator}
-          onOpenApiKeyModal={() => setShowApiKeyModal(true)}
+          onOpenApiKeyModal={() => {
+            setSettingsInitialTab('ai');
+            setShowSettingsModal(true);
+          }}
+          onOpenSettings={(tab) => {
+            if (tab) setSettingsInitialTab(tab);
+            setShowSettingsModal(true);
+          }}
           hasApiKey={hasApiKey}
           showDndChatbot={showDndChatbot}
           setShowDndChatbot={setShowDndChatbot}
@@ -7892,6 +7902,18 @@ export default function App() {
         isOpen={showApiKeyModal}
         onClose={() => setShowApiKeyModal(false)}
         onKeySaved={() => setHasApiKey(true)}
+      />
+
+      {/* Settings & Secrets Vault Modal */}
+      <SettingsModal
+        isOpen={showSettingsModal}
+        onClose={() => {
+          setShowSettingsModal(false);
+          checkApiKeyStatus().then(status => {
+            setHasApiKey(status.hasKey);
+          });
+        }}
+        initialTab={settingsInitialTab}
       />
 
       {showCombatTracker && (

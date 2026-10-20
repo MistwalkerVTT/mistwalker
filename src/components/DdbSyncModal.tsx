@@ -24,7 +24,9 @@ import {
   Radio,
   Activity,
   Skull,
-  User
+  User,
+  HelpCircle,
+  Trash2
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { Monster } from '../types/monster';
@@ -32,6 +34,7 @@ import { Character } from '../types/character';
 import { saveMonster, saveCharacter } from '../lib/firebase';
 import { getCharacterTokenUrl } from '../data/defaultCharacters';
 import { toast } from 'sonner';
+import { CobaltInstructionsModal } from './CobaltInstructionsModal';
 
 interface DdbBookStatus {
   id: string;
@@ -85,6 +88,7 @@ export const DdbSyncModal: React.FC<DdbSyncModalProps> = ({
   const [dmTokenInput, setDmTokenInput] = useState('');
   const [playerTokenInput, setPlayerTokenInput] = useState('');
   const [isSavingToken, setIsSavingToken] = useState(false);
+  const [showInstructions, setShowInstructions] = useState(false);
 
   // Sync state
   const [syncingBookId, setSyncingBookId] = useState<string | null>(null);
@@ -1394,21 +1398,32 @@ export const DdbSyncModal: React.FC<DdbSyncModalProps> = ({
             <div className="max-w-3xl mx-auto space-y-6">
               
               {/* Informational Hero Card */}
-              <div className="p-5 rounded-2xl bg-gradient-to-br from-slate-800/80 via-slate-800/40 to-slate-900 border border-slate-700/80 shadow-xl flex items-start gap-4">
-                <div className="p-3 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0 mt-0.5">
-                  <Shield className="w-6 h-6" />
+              <div className="p-5 rounded-2xl bg-gradient-to-br from-slate-800/80 via-slate-800/40 to-slate-900 border border-slate-700/80 shadow-xl flex items-start justify-between gap-4">
+                <div className="flex items-start gap-4">
+                  <div className="p-3 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0 mt-0.5">
+                    <Shield className="w-6 h-6" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <h3 className="text-base font-bold text-white font-mono flex items-center gap-2">
+                      D&D Beyond Session & DM Permission Settings
+                    </h3>
+                    <p className="text-xs text-slate-300 leading-relaxed font-sans">
+                      MistWalker connects directly to D&D Beyond via your secure <code>CobaltSession</code> cookie to stream character stats, live HP, and spell slot levels.
+                    </p>
+                    <p className="text-xs text-slate-400 leading-relaxed font-sans">
+                      <strong>Player Permission Model:</strong> If your DM enters their <strong>DM CobaltSession</strong> token below, spells and heals cast on party members in MistWalker will update their D&D Beyond sheets automatically! Without a DM token, players are safely prompted with a 1-tap approval prompt.
+                    </p>
+                  </div>
                 </div>
-                <div className="space-y-1.5">
-                  <h3 className="text-base font-bold text-white font-mono flex items-center gap-2">
-                    D&D Beyond Session & DM Permission Settings
-                  </h3>
-                  <p className="text-xs text-slate-300 leading-relaxed font-sans">
-                    MistWalker connects directly to D&D Beyond via your secure <code>CobaltSession</code> cookie to stream character stats, live HP, and spell slot levels.
-                  </p>
-                  <p className="text-xs text-slate-400 leading-relaxed font-sans">
-                    <strong>Player Permission Model:</strong> If your DM enters their <strong>DM CobaltSession</strong> token below, spells and heals cast on party members in MistWalker will update their D&D Beyond sheets automatically! Without a DM token, players are safely prompted with a 1-tap approval prompt.
-                  </p>
-                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowInstructions(true)}
+                  className="px-3.5 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-mono font-bold flex items-center gap-1.5 shrink-0 transition-colors cursor-pointer"
+                >
+                  <HelpCircle className="w-3.5 h-3.5" />
+                  <span>How to find this?</span>
+                </button>
               </div>
 
               {/* DM Cobalt Session Configuration Card */}
@@ -1704,6 +1719,12 @@ export const DdbSyncModal: React.FC<DdbSyncModalProps> = ({
             </div>
           </div>
         )}
+
+        {/* Cobalt Instructions Modal */}
+        <CobaltInstructionsModal
+          isOpen={showInstructions}
+          onClose={() => setShowInstructions(false)}
+        />
 
       </div>
     </div>

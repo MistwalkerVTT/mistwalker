@@ -83,7 +83,8 @@ import {
   Copy,
   Download,
   FileCode2,
-  Tv
+  Tv,
+  Settings
 } from 'lucide-react';
 import { isUniversalVttFile } from '../services/universalVttService';
 import {
@@ -256,6 +257,7 @@ interface LeftSidebarProps {
   onStartTutorial?: () => void;
   onOpenBugReport?: () => void;
   onOpenBugManager?: () => void;
+  onOpenSettings?: (tab?: 'cobalt' | 'ai' | 'danger') => void;
   activeEquippedAsset?: Jb2aAssetDefinition | null;
   onEquipAsset?: (asset: Jb2aAssetDefinition) => void;
   onQuickPlaceAsset?: (asset: Jb2aAssetDefinition) => void;
@@ -407,7 +409,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   onImportUniversalVtt,
   onStartTutorial,
   onOpenBugReport,
-  onOpenBugManager
+  onOpenBugManager,
+  onOpenSettings
 }) => {
   const mapFileInputRef = useRef<HTMLInputElement>(null);
   const uvttFileInputRef = useRef<HTMLInputElement>(null);
@@ -897,6 +900,21 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
               title="Bug Log & DM Developer Notes"
             >
               <FileText className="w-5 h-5" />
+            </button>
+          </div>
+        )}
+
+        {/* Settings & Secrets Vault Trigger Button */}
+        {onOpenSettings && (
+          <div className="relative group shrink-0">
+            <button
+              id="btn-sidebar-settings"
+              data-tutorial="settings-vault"
+              onClick={() => onOpenSettings()}
+              className="w-11 h-11 rounded-xl flex items-center justify-center transition-all text-zinc-400 hover:text-amber-400 bg-zinc-900/60 hover:bg-zinc-850 border border-zinc-800 hover:border-amber-500/40 shadow-sm cursor-pointer active:scale-95"
+              title="Settings & Secrets Vault (D&D Beyond Cobalt, AI Keys & Credentials)"
+            >
+              <Settings className="w-5 h-5" />
             </button>
           </div>
         )}

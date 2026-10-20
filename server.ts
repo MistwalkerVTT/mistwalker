@@ -8,6 +8,7 @@ import fs from "fs";
 import multer from "multer";
 import { aiRouter } from "./server/aiRoutes";
 import { ddbRouter } from "./server/ddbRoutes";
+import { settingsRouter } from "./server/settingsRoutes";
 import cors from "cors";
 import { DdbHpSyncDaemon } from "./server/ddbCampaignService";
 import { DdbGameLogDaemon } from "./server/ddbGameLogDaemon";
@@ -195,6 +196,7 @@ async function startServer() {
   // AI service routes
   apiRouter.use("/ai", aiRouter);
   apiRouter.use("/ddb", ddbRouter);
+  apiRouter.use("/settings", settingsRouter);
 
   // Local JB2A asset cache directory
   const jb2aCacheDir = path.resolve(process.cwd(), 'uploads', 'jb2a_cache');
