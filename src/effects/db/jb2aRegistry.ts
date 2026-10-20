@@ -25,12 +25,10 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "blendMode": "screen",
     "soundKey": "fire_explosion",
     "tags": [
-      "fire",
-      "blast",
-      "aoe",
-      "sphere",
-      "evocation",
-      "explosion"
+      "fireball",
+      "fire ball",
+      "fire burst",
+      "delayed blast fireball"
     ]
   },
   {
@@ -96,11 +94,9 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "blendMode": "screen",
     "soundKey": "cold_freeze",
     "tags": [
-      "cold",
-      "cone",
-      "evocation",
-      "frost",
-      "ice"
+      "cone of cold",
+      "frost cone",
+      "freezing breath"
     ]
   },
   {
@@ -166,10 +162,9 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "blendMode": "screen",
     "soundKey": "lightning_strike",
     "tags": [
-      "lightning",
-      "storm",
-      "conjuration",
-      "strike"
+      "call lightning",
+      "storm strike",
+      "lightning storm"
     ]
   },
   {
@@ -212,9 +207,8 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "blendMode": "screen",
     "soundKey": "lightning_strike",
     "tags": [
-      "lightning",
-      "evocation",
-      "beam"
+      "witch bolt",
+      "continuous lightning"
     ]
   },
   {
@@ -235,11 +229,9 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "blendMode": "screen",
     "soundKey": "eldritch_blast",
     "tags": [
-      "force",
-      "cantrip",
-      "warlock",
-      "eldritch",
-      "evocation"
+      "eldritch blast",
+      "agonizing blast",
+      "eldritch bolt"
     ]
   },
   {
@@ -283,10 +275,9 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "blendMode": "screen",
     "soundKey": "shield_barrier",
     "tags": [
-      "abjuration",
       "shield",
-      "defense",
-      "barrier"
+      "arcane shield",
+      "shield spell"
     ]
   },
   {
@@ -328,10 +319,9 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "blendMode": "screen",
     "soundKey": "radiant_heal",
     "tags": [
-      "buff",
       "bless",
-      "enchantment",
-      "divine"
+      "divine bless",
+      "sacred bless"
     ]
   },
   {
@@ -686,10 +676,9 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "blendMode": "screen",
     "soundKey": "teleport_whoosh",
     "tags": [
-      "wind",
       "whirlwind",
-      "vortex",
-      "evocation"
+      "cyclone",
+      "tornado"
     ]
   },
   {
@@ -961,7 +950,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "isPersistent": false,
     "blendMode": "screen",
     "soundKey": "fire_whoosh",
-    "tags": ["martial", "monster", "melee", "slashing", "claw"]
+    "tags": ["claw", "claws", "claw swipe", "slashing"]
   },
   {
     "id": "attack_bite",
@@ -1063,7 +1052,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "isPersistent": false,
     "blendMode": "screen",
     "soundKey": "thunder_boom",
-    "tags": ["monk", "stun", "stunning strike", "ki", "concussive"]
+    "tags": ["stunning strike", "stun strike", "ki stun"]
   },
   {
     "id": "bardic_inspiration",
@@ -1150,7 +1139,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "isPersistent": true,
     "blendMode": "screen",
     "soundKey": "fire_whoosh",
-    "tags": ["wizard", "druid", "fire", "sphere", "flaming sphere", "persistent"]
+    "tags": ["flaming sphere", "flame sphere", "fire sphere"]
   },
   {
     "id": "mage_hand",
@@ -1204,7 +1193,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "isPersistent": true,
     "blendMode": "screen",
     "soundKey": "magic_chime",
-    "tags": ["dancing lights", "light", "orbs", "cantrip", "illumination"]
+    "tags": ["dancing lights", "dancing wisps", "floating orbs"]
   },
   {
     "id": "healing_word",
@@ -1221,7 +1210,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "isPersistent": false,
     "blendMode": "screen",
     "soundKey": "radiant_burst",
-    "tags": ["heal", "healing word", "restoration", "aid", "cure", "life", "cure wounds"]
+    "tags": ["healing word", "mass healing word", "word of healing"]
   },
   {
     "id": "aid",
@@ -1256,7 +1245,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "isPersistent": true,
     "blendMode": "screen",
     "soundKey": "shield_clash",
-    "tags": ["sanctuary", "antilife shell", "ward", "protection", "aegis"]
+    "tags": ["sanctuary", "antilife shell", "sanctuary aura", "aegis"]
   },
   {
     "id": "grease",
@@ -1431,7 +1420,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "isPersistent": false,
     "blendMode": "screen",
     "soundKey": "lightning_strike",
-    "tags": ["chromatic orb", "energy beam", "sorcerer", "wizard", "elemental"]
+    "tags": ["chromatic orb", "chromatic blast", "elemental orb", "energy beam"]
   },
   {
     "id": "attack_greataxe",
@@ -1499,7 +1488,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "isPersistent": false,
     "blendMode": "screen",
     "soundKey": "fire_whoosh",
-    "tags": ["quarterstaff", "staff", "bludgeoning", "monk", "druid", "martial"]
+    "tags": ["quarterstaff", "staff", "bludgeoning", "staff strike"]
   },
   {
     "id": "attack_glaive",
@@ -1516,7 +1505,143 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "isPersistent": false,
     "blendMode": "screen",
     "soundKey": "fire_whoosh",
-    "tags": ["glaive", "halberd", "reach", "polearm", "martial", "heavy"]
+    "tags": ["glaive", "halberd", "reach", "polearm", "heavy"]
+  },
+  {
+    "id": "druidcraft",
+    "name": "Druidcraft",
+    "label": "Botanical Blossom & Foliage Circle",
+    "level": 0,
+    "school": "transmutation",
+    "paradigm": "point",
+    "shape": "circle",
+    "defaultSizeFt": 10,
+    "color": "#22c55e",
+    "webm": "/jb2a/Library/Generic/Nature/PlantGrowthRing02_01_Regular_GreenRed_500x500.webm",
+    "thumb": "/jb2a/Library/Generic/Nature/PlantGrowthRing02_01_Regular_GreenRed_Thumb.webp",
+    "isPersistent": false,
+    "blendMode": "screen",
+    "soundKey": "magic_whisper",
+    "tags": ["druidcraft", "plant growth", "nature bloom", "botany"]
+  },
+  {
+    "id": "elementalism",
+    "name": "Elementalism",
+    "label": "Elemental Water, Earth & Flame Spark",
+    "level": 0,
+    "school": "transmutation",
+    "paradigm": "point",
+    "shape": "circle",
+    "defaultSizeFt": 5,
+    "color": "#06b6d4",
+    "webm": "/jb2a/Library/Generic/Cast/CastWater02_01_Regular_Blue_400x400.webm",
+    "thumb": "/jb2a/Library/Generic/Cast/CastWater02_01_Regular_Blue_Thumb.webp",
+    "isPersistent": false,
+    "blendMode": "screen",
+    "soundKey": "magic_whisper",
+    "tags": ["elementalism", "elemental spark", "elemental cantrip"]
+  },
+  {
+    "id": "faerie_fire",
+    "name": "Faerie Fire",
+    "label": "Glittering Butterfly Swarm Area",
+    "level": 1,
+    "school": "evocation",
+    "paradigm": "point",
+    "shape": "circle",
+    "defaultSizeFt": 20,
+    "color": "#c084fc",
+    "webm": "/jb2a/Library/Generic/Butterflies/ButterfliesComplete01_01_Regular_BluePurple_600x600.webm",
+    "thumb": "/jb2a/Library/Generic/Butterflies/ButterfliesComplete01_01_Regular_BluePurple_Thumb.webp",
+    "isPersistent": true,
+    "blendMode": "screen",
+    "soundKey": "magic_whisper",
+    "tags": ["faerie fire", "faerie", "butterflies", "glitter outline"]
+  },
+  {
+    "id": "light",
+    "name": "Light / Daylight",
+    "label": "Luminescent Radiant Aura & Flare",
+    "level": 0,
+    "school": "evocation",
+    "paradigm": "aura",
+    "shape": "aura",
+    "defaultSizeFt": 20,
+    "color": "#fbbf24",
+    "webm": "/jb2a/Library/Generic/Cast/GenericCast01_01_Regular_Yellow_400x400.webm",
+    "thumb": "/jb2a/Library/Generic/Cast/GenericCast01_01_Regular_Yellow_Thumb.webp",
+    "isPersistent": true,
+    "blendMode": "screen",
+    "soundKey": "magic_whisper",
+    "tags": ["light", "daylight", "guidance", "illumination", "radiance"]
+  },
+  {
+    "id": "sunbeam",
+    "name": "Sunbeam",
+    "label": "60ft Brilliant Solar Energy Beam",
+    "level": 6,
+    "school": "evocation",
+    "paradigm": "line",
+    "shape": "line",
+    "defaultSizeFt": 60,
+    "color": "#fde047",
+    "webm": "/jb2a/Library/Generic/Energy/EnergyBeam_01_Regular_Blue_60ft_2800x400.webm",
+    "thumb": "/jb2a/Library/Generic/Energy/EnergyBeam_01_Regular_Blue_Thumb.webp",
+    "isPersistent": false,
+    "blendMode": "screen",
+    "soundKey": "lightning_blast",
+    "tags": ["sunbeam", "solar ray", "sunlight beam", "radiant ray"]
+  },
+  {
+    "id": "bonfire",
+    "name": "Create Bonfire",
+    "label": "Roaring Ground Bonfire Pyre",
+    "level": 0,
+    "school": "conjuration",
+    "paradigm": "point",
+    "shape": "circle",
+    "defaultSizeFt": 5,
+    "color": "#f97316",
+    "webm": "/jb2a/Library/Generic/Fire/Campfire/Bonfire_01_Regular_Orange_400x400.webm",
+    "thumb": "/jb2a/Library/Generic/Fire/Campfire/Bonfire_01_Regular_Orange_Thumb.webp",
+    "isPersistent": true,
+    "blendMode": "screen",
+    "soundKey": "fire_explosion",
+    "tags": ["create bonfire", "bonfire", "campfire", "pyre"]
+  },
+  {
+    "id": "teleport",
+    "name": "Teleportation Circle",
+    "label": "Rune Inscribed Arcane Gate Portal",
+    "level": 5,
+    "school": "conjuration",
+    "paradigm": "point",
+    "shape": "circle",
+    "defaultSizeFt": 10,
+    "color": "#3b82f6",
+    "webm": "/jb2a/Library/Generic/Energy/Teleport/Teleport01_01_Regular_Blue_500x300.webm",
+    "thumb": "/jb2a/Library/Generic/Energy/Teleport/Teleport01_01_Regular_Blue_Thumb.webp",
+    "isPersistent": false,
+    "blendMode": "screen",
+    "soundKey": "magic_whisper",
+    "tags": ["teleportation circle", "teleport", "teleportation", "vortex warp"]
+  },
+  {
+    "id": "barkskin",
+    "name": "Barkskin / Swirling Foliage",
+    "label": "Protective Verdant Leaves & Bark Shield",
+    "level": 2,
+    "school": "transmutation",
+    "paradigm": "aura",
+    "shape": "aura",
+    "defaultSizeFt": 5,
+    "color": "#15803d",
+    "webm": "/jb2a/Library/Generic/Nature/SwirlingLeavesComplete01_01_Regular_Green_400x400.webm",
+    "thumb": "/jb2a/Library/Generic/Nature/SwirlingLeavesComplete01_01_Regular_Green_Thumb.webp",
+    "isPersistent": true,
+    "blendMode": "screen",
+    "soundKey": "magic_whisper",
+    "tags": ["barkskin", "swirling leaves", "foliage", "nature armor"]
   }
 ];
 
@@ -1527,11 +1652,11 @@ export const JB2A_SPELLS_MAP: Record<string, Jb2aAssetDefinition> = Object.fromE
 export const findJb2aAsset = (idOrName: string): Jb2aAssetDefinition | undefined => {
   if (!idOrName) return undefined;
   if (JB2A_SPELLS_MAP[idOrName]) return JB2A_SPELLS_MAP[idOrName];
-  const clean = idOrName.toLowerCase().replace(/[\s_-]+/g, '');
+  const clean = idOrName.toLowerCase().replace(/[^a-z0-9]/g, '');
   return JB2A_REGISTRY.find(a => 
-    a.id.toLowerCase().replace(/[\s_-]+/g, '') === clean ||
-    a.name.toLowerCase().replace(/[\s_-]+/g, '') === clean ||
-    a.tags.some(t => t.toLowerCase().replace(/[\s_-]+/g, '') === clean)
+    a.id.toLowerCase().replace(/[^a-z0-9]/g, '') === clean ||
+    a.name.toLowerCase().replace(/[^a-z0-9]/g, '') === clean ||
+    a.tags.some(t => t.toLowerCase().replace(/[^a-z0-9]/g, '') === clean)
   );
 };
 

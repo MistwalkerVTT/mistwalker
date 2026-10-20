@@ -94,6 +94,34 @@ export const CONDITION_FX_MAP: Record<string, TokenConditionFx> = {
     sizeMultiplier: 1.3,
     yOffset: 0,
     opacity: 0.85
+  },
+  faerie_fire: {
+    condition: 'faerie_fire',
+    videoUrl: '/jb2a/Library/Generic/Butterflies/ButterfliesComplete01_01_Regular_BluePurple_600x600.webm',
+    sizeMultiplier: 1.35,
+    yOffset: 0,
+    opacity: 0.9
+  },
+  faeriefire: {
+    condition: 'faeriefire',
+    videoUrl: '/jb2a/Library/Generic/Butterflies/ButterfliesComplete01_01_Regular_BluePurple_600x600.webm',
+    sizeMultiplier: 1.35,
+    yOffset: 0,
+    opacity: 0.9
+  },
+  barkskin: {
+    condition: 'barkskin',
+    videoUrl: '/jb2a/Library/Generic/Nature/SwirlingLeavesComplete01_01_Regular_Green_400x400.webm',
+    sizeMultiplier: 1.3,
+    yOffset: 0,
+    opacity: 0.9
+  },
+  light: {
+    condition: 'light',
+    videoUrl: '/jb2a/Library/Generic/Cast/GenericCast01_01_Regular_Yellow_400x400.webm',
+    sizeMultiplier: 1.4,
+    yOffset: 0,
+    opacity: 0.95
   }
 };
 

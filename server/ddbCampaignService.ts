@@ -2,6 +2,7 @@ import { Server } from 'socket.io';
 import { getDdbHeaders, getDdbAuthHeaders } from './ddbService';
 import { Character } from '../src/types/character';
 import { DdbGameLogDaemon } from './ddbGameLogDaemon';
+import { findJb2aAsset } from '../src/effects/db/jb2aRegistry';
 
 export interface DdbCampaignSummary {
   id: string;
@@ -450,12 +451,25 @@ export async function fetchDdbCampaignCharacters(campaignId: string): Promise<{ 
   }
 }
 
-// Map spell names or common weapon attacks to JB2A asset IDs (verified against JB2A_REGISTRY)
+// Map spell names or common weapon attacks to authentic JB2A asset IDs (verified against JB2A_REGISTRY)
 function matchJb2aAssetId(name: string): string | undefined {
   if (!name) return undefined;
   const n = name.toLowerCase().trim();
 
-  // Spell mapping (exact JB2A_REGISTRY IDs)
+  // 1. Direct registry lookup by exact name, normalized id, or dedicated tag
+  const direct = findJb2aAsset(name);
+  if (direct) return direct.id;
+
+  // 2. Specific spell phrases and cantrips (direct 1:1 authentic animations)
+  if (n.includes('druidcraft')) return 'druidcraft';
+  if (n.includes('elementalism')) return 'elementalism';
+  if (n.includes('faerie fire')) return 'faerie_fire';
+  if (n === 'light' || n.includes('daylight') || n.includes('guidance')) return 'light';
+  if (n.includes('sunbeam')) return 'sunbeam';
+  if (n.includes('create bonfire') || n === 'bonfire') return 'bonfire';
+  if (n.includes('teleportation circle') || n === 'teleport') return 'teleport';
+  if (n.includes('barkskin')) return 'barkskin';
+
   if (n.includes('fireball')) return 'fireball';
   if (n.includes('fire bolt') || n.includes('firebolt')) return 'fire_bolt';
   if (n.includes('burning hands')) return 'burning_hands';
@@ -463,39 +477,100 @@ function matchJb2aAssetId(name: string): string | undefined {
   if (n.includes('ray of frost') || n.includes('frostbite') || n.includes('ice knife')) return 'ray_of_frost';
   if (n.includes('eldritch blast')) return 'eldritch_blast';
   if (n.includes('magic missile')) return 'magic_missile';
-  if (n.includes('cure wounds') || n.includes('healing word') || n.includes('preserve life') || n.includes('wholeness of body') || n.includes('quickened healing') || n.includes('second wind') || n.includes('heal')) return 'cure_wounds';
+  if (n.includes('healing word') || n.includes('mass healing word')) return 'healing_word';
+  if (n.includes('cure wounds') || n.includes('mass cure wounds') || n.includes('preserve life') || n.includes('wholeness of body') || n.includes('quickened healing') || n.includes('second wind') || n === 'heal') return 'cure_wounds';
+  if (n.includes('aid')) return 'aid';
+  if (n.includes('sanctuary')) return 'sanctuary';
   if (n.includes('shield')) return 'shield';
   if (n.includes('sacred flame')) return 'sacred_flame';
-  if (n.includes('guiding bolt') || n.includes('chromatic orb') || n.includes('chaos bolt') || n.includes('starry wisp')) return 'guiding_bolt';
-  if (n.includes('scorching ray') || n.includes('hellish rebuke')) return 'scorching_ray';
+  if (n.includes('guiding bolt')) return 'guiding_bolt';
+  if (n.includes('chromatic orb')) return 'chromatic_orb';
+  if (n.includes('scorching ray')) return 'scorching_ray';
+  if (n.includes('hellish rebuke')) return 'hellish_rebuke';
   if (n.includes('spiritual weapon')) return 'spiritual_weapon';
   if (n.includes('spirit guardians')) return 'spirit_guardians';
-  if (n.includes('misty step') || n.includes("cloud's jaunt") || n.includes('clouds jaunt') || n.includes('teleport')) return 'misty_step';
+  if (n.includes('misty step') || n.includes("cloud's jaunt") || n.includes('clouds jaunt')) return 'misty_step';
   if (n.includes('thunderwave') || n.includes('thunderclap')) return 'thunderwave';
   if (n.includes('lightning bolt')) return 'lightning_bolt';
   if (n.includes('call lightning')) return 'call_lightning';
   if (n.includes('chain lightning')) return 'chain_lightning';
   if (n.includes('witch bolt') || n.includes('shocking grasp') || n.includes('lightning launcher')) return 'witch_bolt';
-  if (n.includes('bless') || n.includes('bardic inspiration') || n.includes('mantle of inspiration')) return 'bless';
-  if (n.includes('arms of hadar') || n.includes('hunger of hadar') || n.includes('toll the dead') || n.includes('hex') || n.includes('bane')) return 'arms_of_hadar';
-  if (n.includes('shatter') || n.includes('dissonant whispers') || n.includes('vicious mockery')) return 'shatter';
-  if (n.includes('moonbeam') || n.includes('faerie fire')) return 'moonbeam';
-  if (n.includes('disintegrate') || n.includes('poison spray') || n.includes('acid splash')) return 'disintegrate';
+  if (n.includes('bless')) return 'bless';
+  if (n.includes('bardic inspiration') || n.includes('mantle of inspiration')) return 'bardic_inspiration';
+  if (n.includes('cutting words') || n.includes('vicious mockery') || n.includes('dissonant whispers')) return 'cutting_words';
+  if (n.includes("hunter's mark") || n.includes('hunters mark') || n.includes('hex')) return 'hunters_mark';
+  if (n.includes('toll the dead')) return 'toll_the_dead';
+  if (n.includes('arms of hadar') || n.includes('hunger of hadar')) return 'arms_of_hadar';
+  if (n.includes('shatter')) return 'shatter';
+  if (n.includes('moonbeam')) return 'moonbeam';
+  if (n.includes('disintegrate')) return 'disintegrate';
   if (n.includes('cloud of daggers')) return 'cloud_of_daggers';
   if (n.includes('darkness')) return 'darkness';
   if (n.includes('fog cloud')) return 'fog_cloud';
-  if (n.includes('web') || n.includes('entangle')) return 'web';
+  if (n.includes('grease')) return 'grease';
+  if (n.includes('sleep')) return 'sleep';
+  if (n.includes('entangle')) return 'entangle';
+  if (n.includes('web')) return 'web';
+  if (n.includes('ice storm') || n.includes('sleet storm')) return 'ice_storm';
+  if (n.includes('black tentacles')) return 'black_tentacles';
+  if (n.includes('gust of wind') || n.includes('zephyr strike')) return 'gust_of_wind';
+  if (n.includes('caustic brew') || n.includes('acid stream')) return 'caustic_brew';
+  if (n.includes('dimension door') || n.includes('vortex warp')) return 'dimension_door';
+  if (n.includes('flaming sphere')) return 'flaming_sphere';
+  if (n.includes('mage hand') || n.includes('arcane hand')) return 'mage_hand';
+  if (n.includes('wall of force') || n.includes('forcecage')) return 'wall_of_force';
+  if (n.includes('dancing lights')) return 'dancing_lights';
   if (n.includes('wall of fire')) return 'wall_of_fire';
-  if (n.includes('whirlwind') || n.includes('gust')) return 'whirlwind';
+  if (n.includes('whirlwind')) return 'whirlwind';
 
-  // Weapon & Martial mapping (exact JB2A_REGISTRY IDs)
-  if (n.includes('greatsword') || n.includes('greataxe') || n.includes('halberd') || n.includes('glaive') || n.includes('maul') || n.includes('cleave')) return 'attack_greatsword';
-  if (n.includes('sword') || n.includes('scimitar') || n.includes('rapier') || n.includes('battleaxe') || n.includes('handaxe') || n.includes('axe') || n.includes('slash')) return 'attack_slash';
-  if (n.includes('hammer') || n.includes('mace') || n.includes('flail') || n.includes('club') || n.includes('quarterstaff') || n.includes('staff') || n.includes('topple')) return 'attack_hammer';
-  if (n.includes('bow') || n.includes('arrow')) return 'attack_bow';
+  // Explicitly ignore spells that have no authentic JB2A animation yet to prevent false substitutions
+  if (
+    n.includes('blade ward') ||
+    n.includes('blade barrier') ||
+    n.includes('glyph of warding') ||
+    n.includes('warding bond') ||
+    n.includes('hold monster') ||
+    n.includes('mansion') ||
+    n.includes('false life') ||
+    n.includes('restoration') ||
+    n.includes('holy weapon') ||
+    n.includes('divine word') ||
+    n.includes('fire storm') ||
+    n.includes('holy aura') ||
+    n.includes('magic circle') ||
+    n.includes('blight') ||
+    n.includes('flame strike') ||
+    n.includes('power word') ||
+    n.includes('wall of thorns') ||
+    n.includes('true strike') ||
+    n.includes('phantasmal') ||
+    n.includes('protection from') ||
+    n.includes('banishment')
+  ) {
+    return undefined;
+  }
+
+  // 3. Class Features & Weapon Attacks (Strict order prevents cross-substring collisions)
+  if (n.includes('divine smite') || (n.includes('smite') && !n.includes('smith'))) return 'divine_smite';
+  if (n.includes('sneak attack')) return 'sneak_attack';
+  if (n.includes('flurry of blows')) return 'flurry_of_blows';
+  if (n.includes('stunning strike')) return 'stunning_strike';
+
+  // Crossbows MUST precede bows!
   if (n.includes('crossbow') || n.includes('bolt')) return 'attack_crossbow';
-  if (n.includes('dagger') || n.includes('spear') || n.includes('javelin') || n.includes('trident') || n.includes('dart') || n.includes('rapier') || n.includes('sneak attack')) return 'attack_dagger';
-  if (n.includes('unarmed') || n.includes('flurry of blows') || n.includes('punch') || n.includes('fist') || n.includes('martial arts')) return 'attack_unarmed';
+  if (n.includes('bow') || n.includes('arrow')) return 'attack_bow';
+
+  // Polearms & Reach
+  if (n.includes('glaive') || n.includes('halberd')) return 'attack_glaive';
+  if (n.includes('greatsword') || n.includes('maul')) return 'attack_greatsword';
+  if (n.includes('greataxe')) return 'attack_greataxe';
+  if (n.includes('battleaxe') || n.includes('handaxe') || (n.includes('axe') && !n.includes('great'))) return 'attack_battleaxe';
+  if (n.includes('quarterstaff') || n.includes('staff')) return 'attack_quarterstaff';
+  if (n.includes('spear') || n.includes('javelin') || n.includes('trident')) return 'attack_spear';
+  if (n.includes('hammer') || n.includes('mace') || n.includes('flail') || n.includes('club') || n.includes('topple')) return 'attack_hammer';
+  if (n.includes('dagger') || n.includes('dart')) return 'attack_dagger';
+  if (n.includes('sword') || n.includes('scimitar') || n.includes('rapier') || n.includes('slash') || n.includes('cleave')) return 'attack_slash';
+  if (n.includes('unarmed') || n.includes('punch') || n.includes('fist') || n.includes('martial arts')) return 'attack_unarmed';
   if (n.includes('bite')) return 'attack_bite';
   if (n.includes('claw')) return 'attack_claw';
 

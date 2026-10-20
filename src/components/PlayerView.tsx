@@ -98,7 +98,8 @@ import {
   EffectsDrawer,
   videoCacheManager,
   soundCatalog,
-  JB2A_REGISTRY
+  JB2A_REGISTRY,
+  findJb2aAsset
 } from '../effects';
 import { PlayerStationModal, PlayerStationMode } from './PlayerStationModal';
 import { PlayerHeroDock } from './PlayerHeroDock';
@@ -2929,12 +2930,7 @@ export default function PlayerView() {
       matchedAsset = JB2A_REGISTRY.find(a => a.id === action.jb2aAssetId);
     }
     if (!matchedAsset) {
-      const cleanName = action.name.toLowerCase().trim();
-      matchedAsset = JB2A_REGISTRY.find(a =>
-        a.id.toLowerCase() === cleanName ||
-        a.name.toLowerCase() === cleanName ||
-        a.tags?.some(t => cleanName.includes(t))
-      );
+      matchedAsset = findJb2aAsset(action.name);
     }
 
     // Immediate execution for Self-Targeted Actions / Bonus Actions (e.g., Rage, Large Form, Second Wind, Dash, Dodge, Disengage)
