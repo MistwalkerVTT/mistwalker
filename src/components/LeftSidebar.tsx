@@ -82,7 +82,8 @@ import {
   Key,
   Copy,
   Download,
-  FileCode2
+  FileCode2,
+  Tv
 } from 'lucide-react';
 import { isUniversalVttFile } from '../services/universalVttService';
 import {
@@ -429,11 +430,12 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   const [editingFeatureId, setEditingFeatureId] = useState<string | null>(null);
   const [showPresetMapsGallery, setShowPresetMapsGallery] = useState<boolean>(false);
   const [confirmDeleteMapId, setConfirmDeleteMapId] = useState<string | null>(null);
+  const [mapsTab, setMapsTab] = useState<'session' | 'library'>('session');
   const [openMapsSections, setOpenMapsSections] = useState<Record<string, boolean>>({
     campaign: false,
     slots: false,
     presets: false,
-    firebase: false,
+    firebase: true,
     actions: false,
   });
 
@@ -967,15 +969,25 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
           {pinnedGroup && (
             <div
               onMouseDown={handleDragStart}
-              className="sticky top-0 z-30 flex items-center justify-between px-3 py-1.5 bg-gradient-to-r from-zinc-950 via-zinc-900 to-zinc-950 border-b border-amber-500/30 text-amber-300 select-none cursor-grab active:cursor-grabbing shadow-sm"
+              className="sticky top-0 z-30 flex items-center justify-between px-3 py-2 bg-gradient-to-r from-zinc-950 via-zinc-900 to-zinc-950 border-b border-amber-500/30 text-amber-300 select-none cursor-grab active:cursor-grabbing shadow-sm"
               title="Click and drag anywhere on this bar to move the menu around your screen"
             >
-              <div className="flex items-center gap-1.5 min-w-0">
+              <div className="flex items-center gap-2 min-w-0">
                 <GripHorizontal className="w-4 h-4 text-amber-400 shrink-0" />
-                <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-amber-300/90 truncate flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                  Pinned • Drag to Move
-                </span>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  {activeGroup === 'maps' && <MapIcon className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
+                  {activeGroup === 'lighting' && <Layers className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
+                  {activeGroup === 'tokens' && <Users className="w-3.5 h-3.5 text-blue-400 shrink-0" />}
+                  {activeGroup === 'combat' && <Swords className="w-3.5 h-3.5 text-rose-400 shrink-0" />}
+                  {activeGroup === 'fx' && <Sparkles className="w-3.5 h-3.5 text-cyan-400 shrink-0" />}
+                  {activeGroup === 'dice' && <Dices className="w-3.5 h-3.5 text-purple-400 shrink-0" />}
+                  <span className="text-xs font-mono font-bold uppercase tracking-wider text-zinc-200 truncate">
+                    {activeGroup === 'maps' ? 'Campaign & Maps' : activeGroup.toUpperCase()}
+                  </span>
+                  <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0">
+                    PINNED
+                  </span>
+                </div>
               </div>
               <div className="flex items-center gap-1 shrink-0">
                 <button
@@ -987,7 +999,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                   className="p-1 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded transition-colors cursor-pointer"
                   title="Reset to default sidebar position"
                 >
-                  <RotateCcw className="w-3 h-3" />
+                  <RotateCcw className="w-3.5 h-3.5" />
                 </button>
                 <button
                   type="button"
@@ -995,7 +1007,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                   className="p-1 text-amber-400 hover:text-white hover:bg-amber-500/20 rounded transition-colors cursor-pointer"
                   title="Unpin menu"
                 >
-                  <Pin className="w-3 h-3 fill-amber-400" />
+                  <Pin className="w-3.5 h-3.5 fill-amber-400" />
                 </button>
                 <button
                   type="button"
@@ -1006,7 +1018,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                   className="p-1 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded transition-colors cursor-pointer"
                   title="Close menu"
                 >
-                  <X className="w-3 h-3" />
+                  <X className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
@@ -1015,554 +1027,595 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
           {/* FLYOUT CONTENT BY CATEGORY */}
           {activeGroup === 'maps' && (
             <div className="p-3.5 flex flex-col gap-3 w-full">
-              {/* Header */}
-              <div
-                onMouseDown={pinnedGroup ? handleDragStart : undefined}
-                className={`flex items-center justify-between border-b border-zinc-800 pb-2.5 ${pinnedGroup ? 'cursor-grab active:cursor-grabbing select-none' : ''}`}
-              >
-                <div className="flex items-center gap-2">
-                  <MapIcon className="w-4 h-4 text-emerald-400" />
-                  <span className="text-xs font-bold font-mono text-zinc-200 uppercase tracking-wider">Campaign & Maps</span>
+              {/* Header (Only shown when NOT pinned, avoiding duplicate headers) */}
+              {!pinnedGroup && (
+                <div className="flex items-center justify-between border-b border-zinc-800 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <MapIcon className="w-4 h-4 text-emerald-400" />
+                    <span className="text-xs font-bold font-mono text-zinc-200 uppercase tracking-wider">Campaign & Maps</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={(e) => togglePinGroup('maps', e)}
+                      className="p-1 rounded-md text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer"
+                      title="Pin Menu Open (Allows moving)"
+                    >
+                      <Pin className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={closeFlyout}
+                      className="p-1 rounded-md text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer"
+                      title="Close"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={(e) => togglePinGroup('maps', e)}
-                    className={`p-1 rounded-md transition-colors ${pinnedGroup === 'maps' ? 'text-emerald-400 bg-emerald-500/20' : 'text-zinc-500 hover:text-zinc-300'}`}
-                    title={pinnedGroup === 'maps' ? 'Unpin Menu' : 'Pin Menu Open (Allows moving)'}
-                  >
-                    <Pin className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={closeFlyout}
-                    className="p-1 rounded-md text-zinc-500 hover:text-zinc-300 transition-colors"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+              )}
+
+              {/* Subtabs Switcher: Live Session vs Map Library */}
+              <div className="grid grid-cols-2 bg-zinc-950/80 p-1 rounded-xl border border-zinc-850 gap-1 shrink-0">
+                <button
+                  type="button"
+                  id="tab-maps-session"
+                  onClick={() => setMapsTab('session')}
+                  className={`py-1.5 px-2 rounded-lg text-xs font-mono font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    mapsTab === 'session'
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm'
+                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60'
+                  }`}
+                >
+                  <Radio className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Live Session</span>
+                  {activeSceneInfo && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
+                </button>
+                <button
+                  type="button"
+                  id="tab-maps-library"
+                  onClick={() => setMapsTab('library')}
+                  className={`py-1.5 px-2 rounded-lg text-xs font-mono font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    mapsTab === 'library'
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm'
+                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60'
+                  }`}
+                >
+                  <Layers className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Map Library</span>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-zinc-800 text-zinc-300 font-mono">
+                    {uploadedMaps.length + PRESET_BATTLEMAPS.length}
+                  </span>
+                </button>
               </div>
 
-              {/* Sections List */}
-              <div className="flex flex-col gap-3 w-full">
+              {/* TAB 1: LIVE SESSION (Scene control & screen broadcast) */}
+              {mapsTab === 'session' && (
+                <div className="flex flex-col gap-3 w-full animate-in fade-in duration-150">
+                  {/* 1. Consolidated Active Campaign Scene Card */}
+                  <div className="border border-zinc-800 rounded-xl bg-zinc-950/70 overflow-hidden shadow-sm">
+                    {/* Top: Scene Title & Live Status */}
+                    <div className="p-3 bg-zinc-900/80 border-b border-zinc-800/80 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="p-1.5 rounded-lg bg-amber-500/15 text-amber-400 border border-amber-500/30 shrink-0">
+                          <BookOpen className="w-4 h-4" />
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[9px] font-mono uppercase font-bold text-amber-400 tracking-wider">
+                              Active Scene
+                            </span>
+                            {activeSceneInfo && (
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                            )}
+                          </div>
+                          <span className="text-xs font-bold text-white truncate" title={activeSceneInfo?.sceneTitle || 'Sandbox Scene'}>
+                            {activeSceneInfo?.sceneTitle || 'Sandbox Scene'}
+                          </span>
+                        </div>
+                      </div>
 
-                {/* 1. Campaign Manager Section (Always Open) */}
-                <div className="border border-zinc-800 rounded-xl bg-zinc-950/60 overflow-hidden">
-                  <div className="py-2 px-3 bg-zinc-900/90 flex items-center justify-between border-b border-zinc-800/80">
-                    <div className="flex items-center gap-2">
-                      <BookOpen className="w-4 h-4 text-amber-400" />
-                      <span className="text-xs font-bold font-mono text-zinc-200 uppercase tracking-wider">
-                        Campaign Manager
-                      </span>
+                      {/* Quick Save Action */}
+                      {activeSceneInfo && onQuickSave && (
+                        <button
+                          id="btn-quick-save-campaign-flyout"
+                          onClick={() => onQuickSave()}
+                          disabled={isQuickSaving}
+                          className="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 rounded-lg text-xs font-bold font-mono shrink-0 transition-all flex items-center gap-1 shadow-sm disabled:opacity-50 active:scale-95 cursor-pointer"
+                          title="Quick Save changes to current scene"
+                        >
+                          <Save className="w-3.5 h-3.5" />
+                          <span>{isQuickSaving ? 'Saving...' : 'Save'}</span>
+                        </button>
+                      )}
                     </div>
-                    {activeSceneInfo && (
-                      <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" title={`Active: ${activeSceneInfo.sceneTitle}`} />
-                    )}
+
+                    {/* Middle: Clean 3-Button Action Grid */}
+                    <div className="p-2.5 space-y-2 bg-zinc-950/80">
+                      <div className="grid grid-cols-3 gap-1.5">
+                        <button
+                          id="btn-load-campaign-flyout"
+                          onClick={() => {
+                            closeFlyout();
+                            onOpenLoadCampaign?.();
+                          }}
+                          className="py-2 px-1.5 rounded-xl bg-blue-600/15 hover:bg-blue-600/25 text-blue-200 border border-blue-500/30 hover:border-blue-400 font-semibold text-xs flex flex-col items-center justify-center gap-1 transition-all cursor-pointer group"
+                          title="Load another scene from campaign"
+                        >
+                          <FolderOpen className="w-3.5 h-3.5 text-blue-400 group-hover:scale-110 transition-transform" />
+                          <span className="text-[10px] font-mono">Load</span>
+                        </button>
+
+                        <button
+                          id="btn-open-campaign-manager-flyout"
+                          onClick={() => {
+                            closeFlyout();
+                            onOpenCampaignBuilder?.();
+                          }}
+                          className="py-2 px-1.5 rounded-xl bg-amber-600/15 hover:bg-amber-600/25 text-amber-200 border border-amber-500/30 hover:border-amber-400 font-semibold text-xs flex flex-col items-center justify-center gap-1 transition-all cursor-pointer group"
+                          title="Open full Campaign & Scene Manager"
+                        >
+                          <BookOpen className="w-3.5 h-3.5 text-amber-400 group-hover:scale-110 transition-transform" />
+                          <span className="text-[10px] font-mono">Manager</span>
+                        </button>
+
+                        <button
+                          id="btn-save-canvas-flyout"
+                          onClick={() => {
+                            closeFlyout();
+                            onOpenSaveCampaign?.();
+                          }}
+                          className="py-2 px-1.5 rounded-xl bg-emerald-600/15 hover:bg-emerald-600/25 text-emerald-200 border border-emerald-500/30 hover:border-emerald-400 font-semibold text-xs flex flex-col items-center justify-center gap-1 transition-all cursor-pointer group"
+                          title="Save as a new scene"
+                        >
+                          <Save className="w-3.5 h-3.5 text-emerald-400 group-hover:scale-110 transition-transform" />
+                          <span className="text-[10px] font-mono">Save As</span>
+                        </button>
+                      </div>
+
+                      {/* Bottom: Share Player View Link */}
+                      <div className="pt-2 border-t border-zinc-800/80 flex items-center gap-1.5">
+                        <button
+                          id="btn-share-player-view-flyout"
+                          onClick={() => {
+                            const playerUrl = `${window.location.origin}${window.location.pathname}?view=player`;
+                            navigator.clipboard.writeText(playerUrl);
+                            window.open(playerUrl, '_blank');
+                            toast.success('Player View link copied to clipboard and opened in new window!', {
+                              description: playerUrl
+                            });
+                          }}
+                          className="flex-1 py-2 px-3 rounded-xl bg-emerald-600/15 hover:bg-emerald-600/25 text-emerald-300 hover:text-emerald-200 border border-emerald-500/30 hover:border-emerald-400 font-semibold text-xs flex items-center justify-center gap-2 transition-all shadow-sm active:scale-95 cursor-pointer"
+                          title="Copy Player View link to clipboard and open in a new window"
+                        >
+                          <Share2 className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Share Player View</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const playerUrl = `${window.location.origin}${window.location.pathname}?view=player`;
+                            window.open(playerUrl, '_blank');
+                          }}
+                          className="py-2 px-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-850 text-zinc-300 hover:text-white border border-zinc-700/80 text-xs flex items-center justify-center transition-all cursor-pointer"
+                          title="Open Player View in a new tab"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5 text-emerald-400" />
+                        </button>
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="p-2.5 space-y-2 bg-zinc-950/80">
-                    {/* Active Scene Indicator if loaded */}
-                    {activeSceneInfo && (
-                      <div className="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center justify-between gap-2">
-                        <div className="flex flex-col min-w-0">
-                          <span className="text-[9px] font-mono uppercase text-amber-400 font-bold tracking-wider">Active Scene</span>
-                          <span className="text-xs font-bold text-white truncate">{activeSceneInfo.sceneTitle}</span>
-                        </div>
-                        {onQuickSave && (
+                  {/* 2. Screen Broadcast Slots Section */}
+                  <div className="border border-zinc-800 rounded-xl bg-zinc-950/70 overflow-hidden shadow-sm">
+                    <div className="py-2.5 px-3 bg-zinc-900/80 flex items-center justify-between border-b border-zinc-800/80">
+                      <div className="flex items-center gap-2">
+                        <Tv className="w-4 h-4 text-emerald-400" />
+                        <span className="text-xs font-bold font-mono text-zinc-200 uppercase tracking-wider">
+                          Broadcast Slots
+                        </span>
+                      </div>
+                      {activeMapId === liveMapId ? (
+                        <span className="text-[9px] font-mono text-emerald-400 font-bold px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                          LIVE ON PLAYERS
+                        </span>
+                      ) : (
+                        <span className="text-[9px] font-mono text-amber-400 font-bold px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/30">
+                          PREVIEWING {activeMapId}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="p-2.5 space-y-2.5 bg-zinc-950/80">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] uppercase font-bold font-mono text-zinc-400">Select Slot</span>
+                        {onClearMapSlot && (
                           <button
-                            id="btn-quick-save-campaign-flyout"
-                            onClick={() => onQuickSave()}
-                            disabled={isQuickSaving}
-                            className="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 rounded-lg text-xs font-bold font-mono shrink-0 transition-all flex items-center gap-1 shadow-sm disabled:opacity-50 active:scale-95 cursor-pointer"
-                            title="Quick Save changes to current scene"
+                            type="button"
+                            id="btn-clear-current-slot"
+                            onClick={() => onClearMapSlot(activeMapId)}
+                            className="text-[9px] font-mono text-zinc-500 hover:text-rose-400 transition-colors flex items-center gap-1 cursor-pointer"
+                            title={`Clear all walls, rooms, tokens, and image from ${activeMapId} to make it blank`}
                           >
-                            <Save className="w-3.5 h-3.5" />
-                            {isQuickSaving ? 'Saving...' : 'Save'}
+                            <Trash2 className="w-2.5 h-2.5" />
+                            Clear {activeMapId}
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {(['DM1', 'DM2', 'DM3'] as const).map((id) => {
+                          const isActive = activeMapId === id;
+                          const isLive = (liveMapId || 'DM1') === id;
+                          return (
+                            <button
+                              key={id}
+                              id={`btn-map-slot-${id}`}
+                              onClick={() => handleMapSwitch(id)}
+                              className={`py-2 px-2 rounded-xl text-xs font-bold font-mono transition-all relative flex flex-col items-center gap-0.5 border cursor-pointer ${
+                                isActive
+                                  ? 'bg-emerald-500/20 border-emerald-500/60 text-emerald-300 shadow-sm'
+                                  : 'bg-zinc-850/60 border-zinc-700/50 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
+                              }`}
+                              title={`Map Slot ${id}: ${isActive ? 'Editing' : 'Standby'}, ${isLive ? 'Live on Player View' : 'Private'}`}
+                            >
+                              <div className="flex items-center gap-1">
+                                <span>{id}</span>
+                                {isLive && (
+                                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shadow-[0_0_6px_rgba(96,165,250,0.8)] animate-pulse" />
+                                )}
+                              </div>
+                              <span className={`text-[8px] font-sans ${isLive ? 'text-blue-400 font-semibold' : 'text-zinc-500'}`}>
+                                {isLive ? 'Live on Players' : (isActive ? 'Editing' : 'Standby')}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Broadcast Action / Live Confirmation */}
+                      {activeMapId !== liveMapId && onForceSync ? (
+                        <button
+                          type="button"
+                          id="btn-sidebar-force-sync"
+                          onClick={onForceSync}
+                          className="w-full mt-1 py-2 px-3 rounded-xl text-xs font-bold font-mono transition-all flex items-center justify-center gap-2 border shadow-lg bg-blue-600 hover:bg-blue-500 text-white border-blue-400 ring-2 ring-blue-500/50 animate-pulse cursor-pointer"
+                          title={`Broadcast slot ${activeMapId} to Player View.`}
+                        >
+                          <Radio className="w-4 h-4 text-white animate-spin" style={{ animationDuration: '3s' }} />
+                          <span>Broadcast Slot {activeMapId} → Players</span>
+                        </button>
+                      ) : (
+                        <div className="flex items-center justify-between py-1.5 px-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-[11px] font-mono text-zinc-400">
+                          <span className="flex items-center gap-1.5 text-emerald-400">
+                            <Check className="w-3.5 h-3.5" />
+                            <span>{activeMapId} is broadcasting Live</span>
+                          </span>
+                          {onForceSync && (
+                            <button
+                              type="button"
+                              onClick={onForceSync}
+                              className="text-[10px] text-zinc-400 hover:text-white underline cursor-pointer"
+                              title="Force Re-sync"
+                            >
+                              Re-sync
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: MAP LIBRARY (Imports, uploads, cloud and preset collections) */}
+              {mapsTab === 'library' && (
+                <div className="flex flex-col gap-3 w-full animate-in fade-in duration-150">
+                  {/* Quick Upload & Import Toolbar */}
+                  <div className="border border-zinc-800 rounded-xl bg-zinc-950/70 p-2.5 space-y-2">
+                    <span className="text-[10px] uppercase font-bold font-mono text-zinc-400 tracking-wider">
+                      Import New Battlemap
+                    </span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        id="btn-upload-map-flyout"
+                        onClick={() => mapFileInputRef.current?.click()}
+                        disabled={isReadingFile}
+                        className="py-2.5 px-3 rounded-xl bg-zinc-850 hover:bg-emerald-500/20 border border-zinc-700 hover:border-emerald-500/40 text-zinc-200 hover:text-emerald-300 font-medium text-xs flex flex-col items-center justify-center gap-1 transition-all cursor-pointer group"
+                      >
+                        {isReadingFile ? (
+                          <RefreshCw className="w-4 h-4 text-emerald-400 animate-spin" />
+                        ) : (
+                          <CloudUpload className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform" />
+                        )}
+                        <span className="font-bold text-[11px]">Upload Map</span>
+                        <span className="text-[9px] text-zinc-500 font-mono">IMG / VIDEO</span>
+                      </button>
+
+                      <button
+                        id="btn-import-uvtt-sidebar"
+                        onClick={() => uvttFileInputRef.current?.click()}
+                        disabled={isReadingFile}
+                        className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-purple-950/60 to-indigo-950/60 hover:from-purple-900/80 hover:to-indigo-900/80 border border-purple-500/40 hover:border-purple-400 text-purple-200 font-medium text-xs flex flex-col items-center justify-center gap-1 transition-all cursor-pointer shadow-sm group"
+                        title="Import Dungeondraft / Dungeon Alchemist (.dd2vtt / .uvtt)"
+                      >
+                        <FileCode2 className="w-4 h-4 text-purple-400 group-hover:scale-110 transition-transform" />
+                        <span className="font-bold text-[11px]">Import UVTT</span>
+                        <span className="text-[9px] text-purple-400/80 font-mono">.DD2VTT</span>
+                      </button>
+                    </div>
+
+                    {/* Secondary Export & Relink Bar */}
+                    {(onExportUniversalVtt || onRelinkMap) && (
+                      <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-zinc-850">
+                        {onExportUniversalVtt && currentMapImage && (
+                          <button
+                            id="btn-export-uvtt-sidebar"
+                            onClick={onExportUniversalVtt}
+                            className="py-1.5 px-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-purple-300 text-[10px] font-mono flex items-center justify-center gap-1 transition-colors cursor-pointer border border-zinc-800"
+                          >
+                            <Download className="w-3 h-3 text-purple-400" />
+                            <span>Export .dd2vtt</span>
+                          </button>
+                        )}
+                        {onRelinkMap && (
+                          <button
+                            id="btn-relink-map-sidebar"
+                            onClick={onRelinkMap}
+                            className="py-1.5 px-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-emerald-300 text-[10px] font-mono flex items-center justify-center gap-1 transition-colors cursor-pointer border border-zinc-800"
+                          >
+                            <Sparkles className="w-3 h-3 text-emerald-400" />
+                            <span>Re-link File</span>
                           </button>
                         )}
                       </div>
                     )}
+                  </div>
 
-                    {/* Launch Full Campaign Manager Modal */}
+                  {/* Hidden File Inputs */}
+                  <input
+                    ref={mapFileInputRef}
+                    type="file"
+                    className="hidden"
+                    accept="image/*,video/*,.m4v,.dd2vtt,.uvtt,application/json"
+                    onChange={handleFileUpload}
+                  />
+                  <input
+                    ref={uvttFileInputRef}
+                    type="file"
+                    className="hidden"
+                    accept=".dd2vtt,.uvtt,application/json"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        if (onImportUniversalVtt) onImportUniversalVtt(file);
+                        else handleFileUpload(e);
+                      }
+                      e.target.value = '';
+                    }}
+                  />
+
+                  {/* Firebase Cloud Maps Section Dropdown (Collapsible) */}
+                  <div className="border border-zinc-800 rounded-xl bg-zinc-950/60 overflow-hidden">
                     <button
-                      id="btn-open-campaign-manager-flyout"
-                      onClick={() => {
-                        closeFlyout();
-                        onOpenCampaignBuilder?.();
-                      }}
-                      className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-amber-600/20 via-amber-500/15 to-orange-500/10 hover:from-amber-600/30 hover:to-orange-500/20 text-zinc-100 border border-amber-500/40 hover:border-amber-400/70 font-semibold text-xs flex items-center justify-between transition-all shadow-md group active:scale-95 text-left cursor-pointer"
+                      type="button"
+                      onClick={() => toggleMapsSection('firebase')}
+                      className="w-full py-2 px-3 bg-zinc-900/90 hover:bg-zinc-850 text-left flex items-center justify-between transition-colors cursor-pointer group"
                     >
-                      <div className="flex items-center gap-2.5">
-                        <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400 group-hover:bg-amber-500/30 transition-colors">
-                          <BookOpen className="w-4 h-4" />
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="font-bold text-amber-200 group-hover:text-white">Open Campaign Manager</span>
-                          <span className="text-[10px] text-zinc-400 font-normal">Adventures, chapters & scenes</span>
-                        </div>
+                      <div className="flex items-center gap-2">
+                        <Cloud className="w-4 h-4 text-emerald-400" />
+                        <span className="text-xs font-bold font-mono text-zinc-200 uppercase tracking-wider group-hover:text-emerald-300">
+                          Firebase Cloud Maps
+                        </span>
                       </div>
-                      <ChevronRight className="w-4 h-4 text-amber-400/80 group-hover:translate-x-0.5 transition-transform" />
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[9px] font-mono text-emerald-400 font-bold px-1.5 py-0.5 rounded bg-emerald-500/10">
+                          {uploadedMaps.length}
+                        </span>
+                        {openMapsSections.firebase ? (
+                          <ChevronUp className="w-4 h-4 text-zinc-400 group-hover:text-white" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 text-zinc-400 group-hover:text-white" />
+                        )}
+                      </div>
                     </button>
 
-                    <div className="grid grid-cols-2 gap-1.5">
-                      <button
-                        id="btn-load-campaign-flyout"
-                        onClick={() => {
-                          closeFlyout();
-                          onOpenLoadCampaign?.();
-                        }}
-                        className="py-2 px-2.5 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-200 border border-blue-500/30 hover:border-blue-400 font-semibold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                      >
-                        <FolderOpen className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                        <span className="truncate">Load Scene</span>
-                      </button>
-
-                      <button
-                        id="btn-save-canvas-flyout"
-                        onClick={() => {
-                          closeFlyout();
-                          onOpenSaveCampaign?.();
-                        }}
-                        className="py-2 px-2.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-200 border border-emerald-500/30 hover:border-emerald-400 font-semibold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                      >
-                        <Save className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                        <span className="truncate">Save Scene</span>
-                      </button>
-                    </div>
-
-                    {/* Share Player View Link Button */}
-                    <div className="pt-2 border-t border-zinc-800/80 flex items-center gap-1.5">
-                      <button
-                        id="btn-share-player-view-flyout"
-                        onClick={() => {
-                          const playerUrl = `${window.location.origin}${window.location.pathname}?view=player`;
-                          navigator.clipboard.writeText(playerUrl);
-                          window.open(playerUrl, '_blank');
-                          toast.success('Player View link copied to clipboard and opened in new window!', {
-                            description: playerUrl
-                          });
-                        }}
-                        className="flex-1 py-2 px-3 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 hover:text-emerald-200 border border-emerald-500/30 hover:border-emerald-400 font-semibold text-xs flex items-center justify-center gap-2 transition-all shadow-sm active:scale-95 cursor-pointer"
-                        title="Copy Player View link to clipboard and open in a new window"
-                      >
-                        <Share2 className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>Share Player View</span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          const playerUrl = `${window.location.origin}${window.location.pathname}?view=player`;
-                          window.open(playerUrl, '_blank');
-                        }}
-                        className="py-2 px-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700/80 text-xs flex items-center justify-center transition-all cursor-pointer"
-                        title="Open Player View in a new tab"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5 text-emerald-400" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 2. Active Map Slots Section (Always Open) */}
-                <div className="border border-zinc-800 rounded-xl bg-zinc-950/60 overflow-hidden">
-                  <div className="py-2 px-3 bg-zinc-900/90 flex items-center justify-between border-b border-zinc-800/80">
-                    <div className="flex items-center gap-2">
-                      <MapIcon className="w-4 h-4 text-emerald-400" />
-                      <span className="text-xs font-bold font-mono text-zinc-200 uppercase tracking-wider">
-                        Map Slots ({activeMapId})
-                      </span>
-                    </div>
-                    <span className="text-[9px] font-mono text-emerald-400 font-bold px-1.5 py-0.5 rounded bg-emerald-500/10">
-                      STANDBY
-                    </span>
-                  </div>
-
-                  <div className="p-2.5 space-y-2 bg-zinc-950/80">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] uppercase font-bold font-mono text-zinc-400">Select Slot</span>
-                      {onClearMapSlot && (
-                        <button
-                          type="button"
-                          id="btn-clear-current-slot"
-                          onClick={() => onClearMapSlot(activeMapId)}
-                          className="text-[9px] font-mono text-zinc-500 hover:text-rose-400 transition-colors flex items-center gap-1 cursor-pointer"
-                          title={`Clear all walls, rooms, tokens, and image from ${activeMapId} to make it blank`}
-                        >
-                          <Trash2 className="w-2.5 h-2.5" />
-                          Clear {activeMapId}
-                        </button>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {(['DM1', 'DM2', 'DM3'] as const).map((id) => {
-                        const isActive = activeMapId === id;
-                        const isLive = (liveMapId || 'DM1') === id;
-                        return (
-                          <button
-                            key={id}
-                            id={`btn-map-slot-${id}`}
-                            onClick={() => handleMapSwitch(id)}
-                            className={`py-2 px-2 rounded-xl text-xs font-bold font-mono transition-all relative flex flex-col items-center gap-0.5 border cursor-pointer ${
-                              isActive
-                                ? 'bg-emerald-500/20 border-emerald-500/60 text-emerald-300 shadow-sm'
-                                : 'bg-zinc-800/60 border-zinc-700/50 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
-                            }`}
-                            title={`Map Slot ${id}: ${isActive ? 'Editing' : 'Standby'}, ${isLive ? 'Live on Player View' : 'Private'}`}
-                          >
-                            <div className="flex items-center gap-1">
-                              <span>{id}</span>
-                              {isLive && (
-                                <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shadow-[0_0_6px_rgba(96,165,250,0.8)] animate-pulse" />
-                              )}
-                            </div>
-                            <span className={`text-[8px] font-sans ${isLive ? 'text-blue-400 font-semibold' : 'text-zinc-500'}`}>
-                              {isLive ? 'Live on Players' : (isActive ? 'Editing' : 'Standby')}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {onForceSync && (
-                      <button
-                        type="button"
-                        id="btn-sidebar-force-sync"
-                        onClick={onForceSync}
-                        className={`w-full mt-2 py-1.5 px-2 rounded-xl text-xs font-bold font-mono transition-all flex items-center justify-center gap-1.5 border shadow-sm cursor-pointer ${
-                          activeMapId !== liveMapId
-                            ? 'bg-blue-600 hover:bg-blue-500 text-white border-blue-400 ring-2 ring-blue-500/50 animate-pulse'
-                            : 'bg-zinc-850 hover:bg-zinc-800 text-zinc-300 border-zinc-700'
-                        }`}
-                        title={`Force Sync: Broadcast slot ${activeMapId} to Player View. Currently, players are seeing ${liveMapId || 'DM1'}.`}
-                      >
-                        <Radio className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
-                        <span>
-                          {activeMapId !== liveMapId
-                            ? `Force Sync (${activeMapId} → Players)`
-                            : `Force Sync (${activeMapId} is Live)`}
-                        </span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* 3. Preset Battlemaps Section Dropdown (Collapsible) */}
-                <div className="border border-zinc-800 rounded-xl bg-zinc-950/60 overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => toggleMapsSection('presets')}
-                    className="w-full py-2 px-3 bg-zinc-900/90 hover:bg-zinc-850 text-left flex items-center justify-between transition-colors cursor-pointer group"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-amber-400" />
-                      <span className="text-xs font-bold font-mono text-zinc-200 uppercase tracking-wider group-hover:text-amber-300">
-                        Preset Battlemaps
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[9px] font-mono text-zinc-400 font-bold px-1.5 py-0.5 rounded bg-zinc-800">
-                        {PRESET_BATTLEMAPS.length}
-                      </span>
-                      {openMapsSections.presets ? (
-                        <ChevronUp className="w-4 h-4 text-zinc-400 group-hover:text-white" />
-                      ) : (
-                        <ChevronDown className="w-4 h-4 text-zinc-400 group-hover:text-white" />
-                      )}
-                    </div>
-                  </button>
-
-                  {openMapsSections.presets && (
-                    <div className="p-2.5 space-y-2 border-t border-zinc-800/80 bg-zinc-950/80 animate-in fade-in duration-150">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] uppercase font-bold font-mono text-zinc-400">Featured Maps</span>
-                        <button
-                          type="button"
-                          onClick={() => setShowPresetMapsGallery(true)}
-                          className="text-[10px] font-mono text-amber-400 hover:text-amber-300 transition-colors flex items-center gap-0.5 cursor-pointer"
-                        >
-                          View All ({PRESET_BATTLEMAPS.length})
-                        </button>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-1.5">
-                        {PRESET_BATTLEMAPS.slice(0, 4).map((preset) => (
-                          <button
-                            key={preset.id}
-                            type="button"
-                            onClick={() => onSelectPresetMap?.(preset)}
-                            className="group relative flex flex-col p-1.5 rounded-xl bg-zinc-900/80 hover:bg-zinc-800/90 border border-zinc-800 hover:border-amber-500/50 transition-all text-left overflow-hidden cursor-pointer"
-                            title={`Load "${preset.name}" (${preset.type})`}
-                          >
-                            <div className="aspect-video w-full rounded-lg overflow-hidden bg-zinc-950 border border-zinc-800 relative">
-                              <img
-                                src={preset.thumbnailUrl || preset.url}
-                                alt={preset.name}
-                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-                                referrerPolicy="no-referrer"
-                              />
-                              <span className="absolute bottom-1 right-1 px-1 py-0.2 bg-black/80 rounded text-[8px] font-mono text-amber-300 font-bold border border-amber-500/30">
-                                LOAD
-                              </span>
-                            </div>
-                            <div className="pt-1 px-0.5 flex flex-col min-w-0">
-                              <span className="text-[10px] font-semibold text-zinc-200 truncate group-hover:text-amber-300">
-                                {preset.name}
-                              </span>
-                              <span className="text-[8px] text-zinc-500 truncate font-mono">
-                                {preset.type}
-                              </span>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* 4. Firebase Cloud Maps Section Dropdown (Collapsible) */}
-                <div className="border border-zinc-800 rounded-xl bg-zinc-950/60 overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => toggleMapsSection('firebase')}
-                    className="w-full py-2 px-3 bg-zinc-900/90 hover:bg-zinc-850 text-left flex items-center justify-between transition-colors cursor-pointer group"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Cloud className="w-4 h-4 text-emerald-400" />
-                      <span className="text-xs font-bold font-mono text-zinc-200 uppercase tracking-wider group-hover:text-emerald-300">
-                        Firebase Cloud Maps
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[9px] font-mono text-emerald-400 font-bold px-1.5 py-0.5 rounded bg-emerald-500/10">
-                        {uploadedMaps.length}
-                      </span>
-                      {openMapsSections.firebase ? (
-                        <ChevronUp className="w-4 h-4 text-zinc-400 group-hover:text-white" />
-                      ) : (
-                        <ChevronDown className="w-4 h-4 text-zinc-400 group-hover:text-white" />
-                      )}
-                    </div>
-                  </button>
-
-                  {openMapsSections.firebase && (
-                    <div className="p-2.5 space-y-2 border-t border-zinc-800/80 bg-zinc-950/80 animate-in fade-in duration-150">
-                      {uploadedMaps.length === 0 ? (
-                        <div className="p-2.5 bg-zinc-950/40 rounded-xl border border-dashed border-zinc-800 text-center">
-                          <p className="text-[11px] text-zinc-400">No maps saved in Firebase</p>
-                          <p className="text-[9px] text-zinc-500 mt-0.5">Upload a map below to access it anytime</p>
-                        </div>
-                      ) : (
-                        <div className="max-h-[160px] overflow-y-auto space-y-1 pr-1 sidebar-scrollbar">
-                          {uploadedMaps.map((mapItem) => (
-                            <div
-                              key={mapItem.assetId}
-                              className="group flex items-center justify-between p-1.5 rounded-xl bg-zinc-900/80 hover:bg-zinc-800/90 border border-zinc-800 hover:border-emerald-500/40 transition-all"
-                            >
-                              <button
-                                type="button"
-                                onClick={() => onSelectUploadedMap?.(mapItem)}
-                                className="flex items-center gap-2 flex-1 min-w-0 text-left cursor-pointer"
-                                title={`Load "${mapItem.name}" onto canvas`}
+                    {openMapsSections.firebase && (
+                      <div className="p-2.5 space-y-2 border-t border-zinc-800/80 bg-zinc-950/80 animate-in fade-in duration-150">
+                        {uploadedMaps.length === 0 ? (
+                          <div className="p-2.5 bg-zinc-950/40 rounded-xl border border-dashed border-zinc-800 text-center">
+                            <p className="text-[11px] text-zinc-400">No maps saved in Firebase</p>
+                            <p className="text-[9px] text-zinc-500 mt-0.5">Upload a map above to access it anytime</p>
+                          </div>
+                        ) : (
+                          <div className="max-h-[180px] overflow-y-auto space-y-1 pr-1 sidebar-scrollbar">
+                            {uploadedMaps.map((mapItem) => (
+                              <div
+                                key={mapItem.assetId}
+                                className="group flex items-center justify-between p-1.5 rounded-xl bg-zinc-900/80 hover:bg-zinc-800/90 border border-zinc-800 hover:border-emerald-500/40 transition-all"
                               >
-                                <div className="w-7 h-7 rounded-lg overflow-hidden bg-zinc-950 border border-zinc-700/60 flex items-center justify-center shrink-0">
-                                  {mapItem.fileType === 'video' ? (
-                                    mapItem.thumbnailUrl ? (
-                                      <div className="relative w-full h-full">
-                                        <img
-                                          src={mapItem.thumbnailUrl}
-                                          alt={mapItem.name}
-                                          className="w-full h-full object-cover"
-                                          referrerPolicy="no-referrer"
-                                        />
-                                        <span className="absolute bottom-0 right-0 px-0.5 bg-black/85 text-emerald-400 font-mono text-[6px] font-bold rounded">
-                                          VID
-                                        </span>
-                                      </div>
+                                <button
+                                  type="button"
+                                  onClick={() => onSelectUploadedMap?.(mapItem)}
+                                  className="flex items-center gap-2 flex-1 min-w-0 text-left cursor-pointer"
+                                  title={`Load "${mapItem.name}" onto canvas`}
+                                >
+                                  <div className="w-7 h-7 rounded-lg overflow-hidden bg-zinc-950 border border-zinc-700/60 flex items-center justify-center shrink-0">
+                                    {mapItem.fileType === 'video' ? (
+                                      mapItem.thumbnailUrl ? (
+                                        <div className="relative w-full h-full">
+                                          <img
+                                            src={mapItem.thumbnailUrl}
+                                            alt={mapItem.name}
+                                            className="w-full h-full object-cover"
+                                            referrerPolicy="no-referrer"
+                                          />
+                                          <span className="absolute bottom-0 right-0 px-0.5 bg-black/85 text-emerald-400 font-mono text-[6px] font-bold rounded">
+                                            VID
+                                          </span>
+                                        </div>
+                                      ) : (
+                                        <Video className="w-3.5 h-3.5 text-emerald-400" />
+                                      )
                                     ) : (
-                                      <Video className="w-3.5 h-3.5 text-emerald-400" />
-                                    )
-                                  ) : (
-                                    <img
-                                      src={mapItem.thumbnailUrl || mapItem.url}
-                                      alt={mapItem.name}
-                                      className="w-full h-full object-cover"
-                                      referrerPolicy="no-referrer"
-                                    />
-                                  )}
-                                </div>
-                                <div className="flex flex-col min-w-0">
-                                  <span className="text-[11px] font-semibold text-zinc-200 truncate group-hover:text-emerald-300">
-                                    {mapItem.name}
-                                  </span>
-                                  <span className="text-[9px] text-zinc-500 font-mono">
-                                    {mapItem.fileType.toUpperCase()}
-                                    {mapItem.fileSizeBytes ? ` • ${(mapItem.fileSizeBytes / (1024 * 1024)).toFixed(1)}MB` : ''}
-                                  </span>
-                                </div>
-                              </button>
-                              <div className="flex items-center gap-1 shrink-0 ml-1">
-                                {confirmDeleteMapId === mapItem.assetId ? (
-                                  <div
-                                    className="flex items-center gap-1 bg-red-950/95 border border-red-500/60 rounded-lg px-1.5 py-0.5 shadow-md animate-in fade-in"
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    <span className="text-[9px] font-mono text-red-300 font-bold">Delete?</span>
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setConfirmDeleteMapId(null);
-                                        onDeleteUploadedAsset?.(mapItem.assetId);
-                                      }}
-                                      className="px-1.5 py-0.5 bg-red-600 hover:bg-red-500 text-white text-[9px] font-bold rounded shadow transition-all cursor-pointer"
-                                      title="Confirm permanent delete"
-                                    >
-                                      Yes
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setConfirmDeleteMapId(null);
-                                      }}
-                                      className="p-0.5 text-zinc-400 hover:text-zinc-200 rounded cursor-pointer"
-                                      title="Cancel"
-                                    >
-                                      <X className="w-3 h-3" />
-                                    </button>
+                                      <img
+                                        src={mapItem.thumbnailUrl || mapItem.url}
+                                        alt={mapItem.name}
+                                        className="w-full h-full object-cover"
+                                        referrerPolicy="no-referrer"
+                                      />
+                                    )}
                                   </div>
-                                ) : (
-                                  <>
-                                    <button
-                                      type="button"
-                                      onClick={() => onSelectUploadedMap?.(mapItem)}
-                                      className="px-2 py-0.5 bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-300 text-[9px] font-bold font-mono rounded border border-emerald-500/40 transition-all cursor-pointer"
+                                  <div className="flex flex-col min-w-0">
+                                    <span className="text-[11px] font-semibold text-zinc-200 truncate group-hover:text-emerald-300">
+                                      {mapItem.name}
+                                    </span>
+                                    <span className="text-[9px] text-zinc-500 font-mono">
+                                      {mapItem.fileType.toUpperCase()}
+                                      {mapItem.fileSizeBytes ? ` • ${(mapItem.fileSizeBytes / (1024 * 1024)).toFixed(1)}MB` : ''}
+                                    </span>
+                                  </div>
+                                </button>
+                                <div className="flex items-center gap-1 shrink-0 ml-1">
+                                  {confirmDeleteMapId === mapItem.assetId ? (
+                                    <div
+                                      className="flex items-center gap-1 bg-red-950/95 border border-red-500/60 rounded-lg px-1.5 py-0.5 shadow-md animate-in fade-in"
+                                      onClick={(e) => e.stopPropagation()}
                                     >
-                                      Load
-                                    </button>
-                                    {onDeleteUploadedAsset && (
+                                      <span className="text-[9px] font-mono text-red-300 font-bold">Delete?</span>
                                       <button
                                         type="button"
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          setConfirmDeleteMapId(mapItem.assetId);
-                                          setTimeout(() => {
-                                            setConfirmDeleteMapId(curr => (curr === mapItem.assetId ? null : curr));
-                                          }, 4000);
+                                          setConfirmDeleteMapId(null);
+                                          onDeleteUploadedAsset?.(mapItem.assetId);
                                         }}
-                                        className="p-1 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors cursor-pointer"
-                                        title="Delete from Firebase"
+                                        className="px-1.5 py-0.5 bg-red-600 hover:bg-red-500 text-white text-[9px] font-bold rounded shadow transition-all cursor-pointer"
+                                        title="Confirm permanent delete"
                                       >
-                                        <Trash2 className="w-3 h-3" />
+                                        Yes
                                       </button>
-                                    )}
-                                  </>
-                                )}
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setConfirmDeleteMapId(null);
+                                        }}
+                                        className="p-0.5 text-zinc-400 hover:text-zinc-200 rounded cursor-pointer"
+                                        title="Cancel"
+                                      >
+                                        <X className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => onSelectUploadedMap?.(mapItem)}
+                                        className="px-2 py-0.5 bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-300 text-[9px] font-bold font-mono rounded border border-emerald-500/40 transition-all cursor-pointer"
+                                      >
+                                        Load
+                                      </button>
+                                      {onDeleteUploadedAsset && (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setConfirmDeleteMapId(mapItem.assetId);
+                                            setTimeout(() => {
+                                              setConfirmDeleteMapId(curr => (curr === mapItem.assetId ? null : curr));
+                                            }, 4000);
+                                          }}
+                                          className="p-1 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors cursor-pointer"
+                                          title="Delete from Firebase"
+                                        >
+                                          <Trash2 className="w-3 h-3" />
+                                        </button>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
                               </div>
-                            </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Preset Battlemaps Section Dropdown (Collapsible) */}
+                  <div className="border border-zinc-800 rounded-xl bg-zinc-950/60 overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => toggleMapsSection('presets')}
+                      className="w-full py-2 px-3 bg-zinc-900/90 hover:bg-zinc-850 text-left flex items-center justify-between transition-colors cursor-pointer group"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-amber-400" />
+                        <span className="text-xs font-bold font-mono text-zinc-200 uppercase tracking-wider group-hover:text-amber-300">
+                          Preset Battlemaps
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[9px] font-mono text-zinc-400 font-bold px-1.5 py-0.5 rounded bg-zinc-800">
+                          {PRESET_BATTLEMAPS.length}
+                        </span>
+                        {openMapsSections.presets ? (
+                          <ChevronUp className="w-4 h-4 text-zinc-400 group-hover:text-white" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 text-zinc-400 group-hover:text-white" />
+                        )}
+                      </div>
+                    </button>
+
+                    {openMapsSections.presets && (
+                      <div className="p-2.5 space-y-2 border-t border-zinc-800/80 bg-zinc-950/80 animate-in fade-in duration-150">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] uppercase font-bold font-mono text-zinc-400">Featured Maps</span>
+                          <button
+                            type="button"
+                            onClick={() => setShowPresetMapsGallery(true)}
+                            className="text-[10px] font-mono text-amber-400 hover:text-amber-300 transition-colors flex items-center gap-0.5 cursor-pointer"
+                          >
+                            View All ({PRESET_BATTLEMAPS.length})
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {PRESET_BATTLEMAPS.slice(0, 4).map((preset) => (
+                            <button
+                              key={preset.id}
+                              type="button"
+                              onClick={() => onSelectPresetMap?.(preset)}
+                              className="group relative flex flex-col p-1.5 rounded-xl bg-zinc-900/80 hover:bg-zinc-800/90 border border-zinc-800 hover:border-amber-500/50 transition-all text-left overflow-hidden cursor-pointer"
+                              title={`Load "${preset.name}" (${preset.type})`}
+                            >
+                              <div className="aspect-video w-full rounded-lg overflow-hidden bg-zinc-950 border border-zinc-800 relative">
+                                <img
+                                  src={preset.thumbnailUrl || preset.url}
+                                  alt={preset.name}
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                                  referrerPolicy="no-referrer"
+                                />
+                                <span className="absolute bottom-1 right-1 px-1 py-0.2 bg-black/80 rounded text-[8px] font-mono text-amber-300 font-bold border border-amber-500/30">
+                                  LOAD
+                                </span>
+                              </div>
+                              <div className="pt-1 px-0.5 flex flex-col min-w-0">
+                                <span className="text-[10px] font-semibold text-zinc-200 truncate group-hover:text-amber-300">
+                                  {preset.name}
+                                </span>
+                                <span className="text-[8px] text-zinc-500 truncate font-mono">
+                                  {preset.type}
+                                </span>
+                              </div>
+                            </button>
                           ))}
                         </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* 5. Upload & Display Sync Section (Always Open) */}
-                <div className="border border-zinc-800 rounded-xl bg-zinc-950/60 overflow-hidden">
-                  <div className="py-2 px-3 bg-zinc-900/90 flex items-center justify-between border-b border-zinc-800/80">
-                    <div className="flex items-center gap-2">
-                      <Sliders className="w-4 h-4 text-blue-400" />
-                      <span className="text-xs font-bold font-mono text-zinc-200 uppercase tracking-wider">
-                        Upload & Sync Actions
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="p-2.5 space-y-2 bg-zinc-950/80">
-                    <button
-                      id="btn-upload-map-flyout"
-                      onClick={() => mapFileInputRef.current?.click()}
-                      disabled={isReadingFile}
-                      className="w-full py-2 px-3 rounded-xl bg-zinc-800 hover:bg-emerald-500/20 border border-zinc-700 hover:border-emerald-500/40 text-zinc-200 hover:text-emerald-300 font-medium text-xs flex items-center justify-between transition-all cursor-pointer"
-                    >
-                      <span className="flex items-center gap-2">
-                        {isReadingFile ? (
-                          <RefreshCw className="w-4 h-4 text-emerald-400 animate-spin" />
-                        ) : (
-                          <CloudUpload className="w-4 h-4 text-emerald-400" />
-                        )}
-                        {isReadingFile ? 'Saving to Firebase...' : 'Upload Map to Firebase'}
-                      </span>
-                      <span className="text-[10px] text-zinc-500 font-mono">CLOUD</span>
-                    </button>
-                    <input
-                      ref={mapFileInputRef}
-                      type="file"
-                      className="hidden"
-                      accept="image/*,video/*,.m4v,.dd2vtt,.uvtt,application/json"
-                      onChange={handleFileUpload}
-                    />
-
-                    {/* Universal VTT (.dd2vtt / .uvtt) Import Button */}
-                    <button
-                      id="btn-import-uvtt-sidebar"
-                      onClick={() => uvttFileInputRef.current?.click()}
-                      disabled={isReadingFile}
-                      className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-purple-950/60 to-indigo-950/60 hover:from-purple-900/80 hover:to-indigo-900/80 border border-purple-500/40 hover:border-purple-400 text-purple-200 font-medium text-xs flex items-center justify-between transition-all cursor-pointer shadow-sm group"
-                      title="Import Dungeondraft / Dungeon Alchemist (.dd2vtt / .uvtt) map with walls, doors, grid, and lights automatically mapped"
-                    >
-                      <span className="flex items-center gap-2">
-                        <FileCode2 className="w-4 h-4 text-purple-400 group-hover:scale-110 transition-transform" />
-                        <span>Import Universal VTT</span>
-                      </span>
-                      <span className="text-[10px] bg-purple-500/25 text-purple-300 px-1.5 py-0.5 rounded font-mono font-bold">.DD2VTT</span>
-                    </button>
-                    <input
-                      ref={uvttFileInputRef}
-                      type="file"
-                      className="hidden"
-                      accept=".dd2vtt,.uvtt,application/json"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          if (onImportUniversalVtt) onImportUniversalVtt(file);
-                          else handleFileUpload(e);
-                        }
-                        e.target.value = '';
-                      }}
-                    />
-
-                    {/* Universal VTT Export Button */}
-                    {onExportUniversalVtt && currentMapImage && (
-                      <button
-                        id="btn-export-uvtt-sidebar"
-                        onClick={onExportUniversalVtt}
-                        className="w-full py-2 px-3 rounded-xl bg-zinc-800 hover:bg-purple-950/40 border border-zinc-700 hover:border-purple-500/40 text-zinc-200 hover:text-purple-300 font-medium text-xs flex items-center justify-between transition-all cursor-pointer"
-                        title="Export current battlemap, grid size, walls, doors, and lights into a Universal VTT (.dd2vtt) file"
-                      >
-                        <span className="flex items-center gap-2">
-                          <Download className="w-4 h-4 text-purple-400" />
-                          <span>Export to .dd2vtt</span>
-                        </span>
-                        <span className="text-[10px] text-zinc-500 font-mono">EXPORT</span>
-                      </button>
+                      </div>
                     )}
-
-                    {onRelinkMap && (
-                      <button
-                        id="btn-relink-map-sidebar"
-                        onClick={onRelinkMap}
-                        className="w-full py-2 px-3 rounded-xl bg-zinc-800 hover:bg-emerald-500/20 border border-zinc-700 hover:border-emerald-500/40 text-zinc-200 hover:text-emerald-300 font-medium text-xs flex items-center justify-between transition-all cursor-pointer"
-                        title="Replace or re-link the battlemap image file while preserving all walls, doors, tokens, vision, and fog"
-                      >
-                        <span className="flex items-center gap-2">
-                          <Sparkles className="w-4 h-4 text-emerald-400" />
-                          Re-link / Replace Map
-                        </span>
-                        <span className="text-[10px] text-zinc-500 font-mono">RELINK</span>
-                      </button>
-                    )}
-
                   </div>
                 </div>
-
-              </div>
+              )}
             </div>
           )}
 

@@ -2842,6 +2842,7 @@ export default function PlayerView() {
       name: asset.name,
       description: asset.label,
       category: 'spells',
+      type: 'action',
       rangeFt: asset.defaultSizeFt,
       jb2aAssetId: asset.id
     });
