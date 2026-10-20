@@ -288,12 +288,22 @@ ddbRouter.get('/characters/:id', async (req: Request, res: Response) => {
 // GET /api/ddb/characters/:id/hud-data - Fetch normalized BG3-style action dock payload
 ddbRouter.get('/characters/:id/hud-data', async (req: Request, res: Response) => {
   try {
-    const charId = req.params.id;
-    const raw = await fetchRawDdbCharacter(charId);
+    const charId = String(req.params.id).replace(/^char_ddb_/, '').trim();
+    const forceRefresh = req.query.refresh === 'true' || req.query.refresh === '1';
+    const raw = await fetchRawDdbCharacter(charId, forceRefresh);
     if (!raw) {
       return res.status(404).json({ error: `Character ${charId} not found on D&D Beyond` });
     }
     const hudPayload = normalizeDdbCharacterToHud(raw, charId);
+    if (hudPayload && typeof hudPayload.currentHp === 'number' && typeof hudPayload.maxHp === 'number') {
+      DdbHpSyncDaemon.getInstance().registerCharacter(
+        charId,
+        hudPayload.name || `Character ${charId}`,
+        hudPayload.currentHp,
+        hudPayload.maxHp,
+        hudPayload.tempHp || 0
+      );
+    }
     res.json(hudPayload);
   } catch (err: any) {
     console.error(`[DdbRoutes] Error generating HUD data for ${req.params.id}:`, err);

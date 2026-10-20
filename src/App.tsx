@@ -45,11 +45,14 @@ import { EffectContextMenu, ContextMenuData } from './components/EffectContextMe
 import {
   VttEffectInstance,
   Jb2aAssetDefinition,
+  JB2A_REGISTRY,
   DomEffectOverlay,
   AimReticle,
   videoCacheManager,
   soundCatalog
 } from './effects';
+import { PlayerHeroDock } from './components/PlayerHeroDock';
+import { HudCharacterData, HudActionItem } from './types/hud';
 import { CampaignBuilderModal } from './components/CampaignBuilderModal';
 import { SaveToCampaignModal } from './components/SaveToCampaignModal';
 import { LoadCampaignModal } from './components/LoadCampaignModal';
@@ -3697,6 +3700,359 @@ export default function App() {
     };
   }, [socketRef.current]);
 
+  // ==========================================
+  // Selected Player Character Live D&D Beyond HUD State
+  // ==========================================
+  const [selectedHudData, setSelectedHudData] = useState<HudCharacterData | null>(null);
+  const [selectedHudAction, setSelectedHudAction] = useState<HudActionItem | null>(null);
+  const [isHudSyncing, setIsHudSyncing] = useState<boolean>(false);
+
+  const selectedPlayerToken = useMemo(() => {
+    if (selectedTokenIds.length !== 1) return null;
+    const tok = tokens.find(t => t.id === selectedTokenIds[0]);
+    if (!tok) return null;
+    const isCond = Boolean(tok.isCondition);
+    const isAlly = tok.category === 'ally' || Boolean((tok as any).allyId);
+    const isMons = !isCond && !isAlly && (tok.isMonster === true || tok.category === 'monster' || tok.isPlayer === false || isMonsterToken(tok));
+    if (isCond || isAlly || isMons) return null;
+    return tok;
+  }, [selectedTokenIds, tokens]);
+
+  const resolvedSelectedDdbId = useMemo(() => {
+    if (!selectedPlayerToken) return null;
+    if ((selectedPlayerToken as any).ddbCharacterId) {
+      return String((selectedPlayerToken as any).ddbCharacterId).trim();
+    }
+    const matchedComp = compendiumCharacters.find(c =>
+      c.ddbCharacterId && isDdbMatch(selectedPlayerToken.name, (selectedPlayerToken as any).characterId || selectedPlayerToken.id, (selectedPlayerToken as any).ddbCharacterId, String(c.ddbCharacterId), c.name)
+    );
+    if (matchedComp?.ddbCharacterId) return String(matchedComp.ddbCharacterId).trim();
+    const matchedDef = DEFAULT_CHARACTERS.find(c =>
+      c.ddbCharacterId && isDdbMatch(selectedPlayerToken.name, (selectedPlayerToken as any).characterId || selectedPlayerToken.id, (selectedPlayerToken as any).ddbCharacterId, String(c.ddbCharacterId), c.name)
+    );
+    if (matchedDef?.ddbCharacterId) return String(matchedDef.ddbCharacterId).trim();
+    return null;
+  }, [selectedPlayerToken, compendiumCharacters]);
+
+  const syncSelectedHudFromDdb = useCallback(async (forceRefresh = false) => {
+    if (!selectedPlayerToken) {
+      setSelectedHudData(null);
+      return;
+    }
+    const fallbackStats = resolveTokenCharacterStats(selectedPlayerToken, compendiumCharacters);
+    let targetDdbId = resolvedSelectedDdbId;
+
+    if (!targetDdbId) {
+      try {
+        const syncRes = await fetch('/api/ddb/campaigns/sync-status');
+        if (syncRes.ok) {
+          const syncJson = await syncRes.json();
+          const cachedChars = syncJson?.status?.cachedCharacters || [];
+          const matchedCached = cachedChars.find((d: any) =>
+            isDdbMatch(selectedPlayerToken.name, (selectedPlayerToken as any).characterId || selectedPlayerToken.id, undefined, String(d.id), (d.name || '').trim())
+          );
+          if (matchedCached?.id) {
+            targetDdbId = String(matchedCached.id).trim();
+          }
+        }
+      } catch {
+        // Ignore network fallback error
+      }
+    }
+
+    const buildDmFallbackHud = (): HudCharacterData => ({
+      id: selectedPlayerToken.id,
+      ddbCharacterId: targetDdbId || undefined,
+      isLiveSynced: false,
+      name: selectedPlayerToken.name,
+      avatarUrl: selectedPlayerToken.url || getCharacterTokenUrl(selectedPlayerToken.name),
+      race: fallbackStats.race || 'Adventurer',
+      classLevel: fallbackStats.classLevel || 'Hero',
+      totalLevel: 5,
+      ac: selectedPlayerToken.ac ?? fallbackStats.ac ?? 15,
+      currentHp: selectedPlayerToken.currentHp ?? selectedPlayerToken.hp ?? fallbackStats.currentHp ?? 35,
+      maxHp: selectedPlayerToken.maxHp ?? fallbackStats.maxHp ?? 35,
+      tempHp: selectedPlayerToken.tempHp || 0,
+      speed: fallbackStats.speed || '30 ft.',
+      walkSpeedFt: 30,
+      passivePerception: 12,
+      passiveInsight: 11,
+      passiveInvestigation: 10,
+      spellSlots: [],
+      attacks: [
+        {
+          id: 'std_unarmed',
+          name: 'Unarmed Strike',
+          category: 'attacks',
+          type: 'action',
+          subCategory: 'unarmed',
+          rangeFt: 5,
+          hitBonus: '+5',
+          damageFormula: '1d4 + 3',
+          damageType: 'bludgeoning',
+          description: 'Melee unarmed attack.',
+          jb2aAssetId: 'weapon_unarmed_strike',
+          isPrepared: true,
+          isAttack: true
+        }
+      ],
+      actions: [
+        {
+          id: 'std_dash',
+          name: 'Dash',
+          category: 'actions',
+          type: 'action',
+          subCategory: 'standard',
+          description: 'Gain extra movement for the current turn equal to your speed.',
+          jb2aAssetId: 'spell_misty_step',
+          isPrepared: true,
+          isSelfAction: true
+        },
+        {
+          id: 'std_dodge',
+          name: 'Dodge',
+          category: 'actions',
+          type: 'action',
+          subCategory: 'standard',
+          description: 'Focus entirely on avoiding attacks until the start of your next turn.',
+          jb2aAssetId: 'spell_shield',
+          isPrepared: true,
+          isSelfAction: true
+        }
+      ],
+      bonusActions: [],
+      spells: [],
+      reactions: [],
+      items: []
+    });
+
+    if (!targetDdbId) {
+      setSelectedHudData(buildDmFallbackHud());
+      return;
+    }
+
+    setIsHudSyncing(true);
+    try {
+      const url = `/api/ddb/characters/${encodeURIComponent(targetDdbId)}/hud-data${forceRefresh ? '?refresh=true' : ''}`;
+      const res = await fetch(url);
+      if (res.ok) {
+        const raw = await res.json();
+        const hudPayload = raw?.hudData || (raw?.name ? raw : null);
+        if (hudPayload && hudPayload.name) {
+          setSelectedHudData({
+            ...hudPayload,
+            avatarUrl: selectedPlayerToken.url || hudPayload.avatarUrl || getCharacterTokenUrl(hudPayload.name),
+            ddbCharacterId: targetDdbId,
+            isLiveSynced: true
+          });
+          if (forceRefresh) {
+            toast.success(`Synced ${hudPayload.name} from D&D Beyond!`, {
+              description: `${(hudPayload.attacks || []).length} Attacks • ${(hudPayload.bonusActions || []).length} Bonus • ${(hudPayload.spells || []).length} Spells`
+            });
+          }
+          return;
+        }
+      }
+      setSelectedHudData(prev => prev || buildDmFallbackHud());
+    } catch {
+      setSelectedHudData(prev => prev || buildDmFallbackHud());
+    } finally {
+      setIsHudSyncing(false);
+    }
+  }, [selectedPlayerToken?.id, selectedPlayerToken?.name, resolvedSelectedDdbId, compendiumCharacters]);
+
+  useEffect(() => {
+    if (!selectedPlayerToken) {
+      setSelectedHudData(null);
+      setSelectedHudAction(null);
+      return;
+    }
+    syncSelectedHudFromDdb(false);
+  }, [selectedPlayerToken?.id, resolvedSelectedDdbId, syncSelectedHudFromDdb]);
+
+  // Keep selectedHudData HP/AC synced when token HP changes
+  useEffect(() => {
+    if (!selectedPlayerToken) return;
+    setSelectedHudData(prev => {
+      if (!prev) return prev;
+      const curHp = selectedPlayerToken.currentHp ?? selectedPlayerToken.hp ?? prev.currentHp;
+      const maxHp = selectedPlayerToken.maxHp ?? prev.maxHp;
+      const tempHp = selectedPlayerToken.tempHp ?? prev.tempHp;
+      const ac = selectedPlayerToken.ac ?? prev.ac;
+      if (prev.currentHp === curHp && prev.maxHp === maxHp && prev.tempHp === tempHp && prev.ac === ac) {
+        return prev;
+      }
+      return {
+        ...prev,
+        currentHp: curHp,
+        maxHp,
+        tempHp,
+        ac
+      };
+    });
+  }, [selectedPlayerToken?.currentHp, selectedPlayerToken?.hp, selectedPlayerToken?.maxHp, selectedPlayerToken?.tempHp, selectedPlayerToken?.ac]);
+
+  const rollFormulaDice = useCallback((formula: string): { dice: { sides: number; result: number; type: string }[]; total: number; isCrit: boolean; isFumble: boolean } => {
+    const clean = formula.replace(/\s+/g, '');
+    const match = clean.match(/^(\d+)d(\d+)([+-]\d+)?$/i);
+    if (!match) {
+      const r = Math.floor(Math.random() * 20) + 1;
+      return {
+        dice: [{ sides: 20, result: r, type: 'd20' }],
+        total: r,
+        isCrit: r === 20,
+        isFumble: r === 1
+      };
+    }
+    const count = Math.min(20, Math.max(1, parseInt(match[1], 10)));
+    const sides = parseInt(match[2], 10);
+    const mod = match[3] ? parseInt(match[3], 10) : 0;
+    const dice: { sides: number; result: number; type: string }[] = [];
+    let sum = 0;
+    for (let i = 0; i < count; i++) {
+      const r = Math.floor(Math.random() * sides) + 1;
+      dice.push({ sides, result: r, type: `d${sides}` });
+      sum += r;
+    }
+    return {
+      dice,
+      total: sum + mod,
+      isCrit: sides === 20 && dice[0]?.result === 20,
+      isFumble: sides === 20 && dice[0]?.result === 1
+    };
+  }, []);
+
+  const triggerHudActionRolls = useCallback((action: HudActionItem, charName: string) => {
+    if (action.hitBonus !== undefined) {
+      const d20 = Math.floor(Math.random() * 20) + 1;
+      const mod = action.hitBonus;
+      const total = d20 + mod;
+      const modStr = mod >= 0 ? `+${mod}` : `${mod}`;
+      const atkEvent: DdbDiceRollEvent = {
+        id: `roll_atk_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        characterName: charName,
+        action: `${action.name} (Attack)`,
+        formula: `1d20${modStr}`,
+        diceNotation: '1d20',
+        dice: [{ sides: 20, result: d20, type: 'd20' }],
+        total,
+        isCritical: d20 === 20,
+        isFumble: d20 === 1,
+        theme: 'default',
+        themeColor: '#f59e0b',
+        timestamp: Date.now(),
+        source: 'local'
+      };
+      if (socketRef.current?.connected) socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', atkEvent);
+      if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+        (window as any).__mistwalkerRoll3d(atkEvent);
+      }
+    }
+
+    if (action.damageFormula) {
+      setTimeout(() => {
+        const dmgRoll = rollFormulaDice(action.damageFormula!);
+        const dmgEvent: DdbDiceRollEvent = {
+          id: `roll_dmg_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          characterName: charName,
+          action: `${action.name} (${action.damageType || 'Damage'})`,
+          formula: action.damageFormula!,
+          diceNotation: dmgRoll.dice.map(d => d.type).join('+'),
+          dice: dmgRoll.dice,
+          total: dmgRoll.total,
+          isCritical: false,
+          isFumble: false,
+          theme: 'default',
+          themeColor: '#ef4444',
+          timestamp: Date.now(),
+          source: 'local'
+        };
+        if (socketRef.current?.connected) socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', dmgEvent);
+        if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+          (window as any).__mistwalkerRoll3d(dmgEvent);
+        }
+      }, action.hitBonus !== undefined ? 650 : 50);
+    }
+  }, [rollFormulaDice]);
+
+  const handleSelectDmHudAction = useCallback((action: HudActionItem) => {
+    if (selectedHudAction?.id === action.id) {
+      setSelectedHudAction(null);
+      setActiveEquippedAsset(null);
+      setAimOrigin(null);
+      setAimCurrent(null);
+      setTool('select');
+      return;
+    }
+
+    const asset = (action.jb2aAssetId ? JB2A_REGISTRY.find(a => a.id === action.jb2aAssetId) : undefined)
+      || JB2A_REGISTRY.find(a => a.id === 'cantrip_eldritch_blast')
+      || JB2A_REGISTRY[0];
+
+    const charName = selectedHudData?.name || selectedPlayerToken?.name || 'Adventurer';
+
+    // Self-targeted actions execute immediately on the character token
+    if (action.isSelfAction && selectedPlayerToken) {
+      const tokenRadius = ((selectedPlayerToken.size || 1) * gridSize) / 2;
+      const centerPt = { x: selectedPlayerToken.x + tokenRadius, y: selectedPlayerToken.y + tokenRadius };
+      if (asset) {
+        const selfEffect: VttEffectInstance = {
+          id: `eff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          name: action.name,
+          label: action.name,
+          assetKey: asset.id,
+          videoUrl: asset.webm,
+          loopVideoUrl: asset.loopWebm,
+          thumbUrl: asset.thumb,
+          paradigm: 'token',
+          x: centerPt.x,
+          y: centerPt.y,
+          originX: centerPt.x,
+          originY: centerPt.y,
+          targetX: centerPt.x,
+          targetY: centerPt.y,
+          sizeFt: Math.max(10, asset.defaultSizeFt || 10),
+          rotation: 0,
+          opacity: 1.0,
+          blendMode: asset.blendMode,
+          isPersistent: false,
+          loop: false,
+          castTime: Date.now(),
+          durationMs: 3500,
+          soundKey: asset.soundKey,
+          color: asset.color
+        };
+        setEffects(prev => [...prev, selfEffect]);
+        if (asset.soundKey) soundCatalog.play(asset.soundKey);
+        if (socketRef.current?.connected) {
+          socketRef.current.emit('EFFECT_SPAWN', selfEffect);
+        }
+      }
+      triggerHudActionRolls(action, charName);
+      toast.success(`${charName}: ${action.name}!`, {
+        description: action.description ? action.description.slice(0, 120) : 'Activated!'
+      });
+      return;
+    }
+
+    setSelectedHudAction(action);
+    if (asset) {
+      setActiveEquippedAsset(asset);
+      setTool('spell_aim');
+      if (selectedPlayerToken) {
+        const tokenRadius = ((selectedPlayerToken.size || 1) * gridSize) / 2;
+        const centerPt = { x: selectedPlayerToken.x + tokenRadius, y: selectedPlayerToken.y + tokenRadius };
+        setAimOrigin(centerPt);
+        setAimCurrent(centerPt);
+      } else {
+        setAimOrigin(null);
+      }
+      toast.info(`Aiming ${action.name} (${charName})`, {
+        description: 'Click on a target on the battlemap to execute and roll 3D dice! (Right-click or Esc to cancel)'
+      });
+    }
+  }, [selectedHudAction, selectedPlayerToken, selectedHudData, gridSize, setTool, triggerHudActionRolls]);
+
   const castSpellAt = useCallback((origin: { x: number; y: number }, target: { x: number; y: number }) => {
     if (!activeEquippedAsset) return;
 
@@ -3710,8 +4066,8 @@ export default function App() {
 
     const newEffect: VttEffectInstance = {
       id: `eff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-      name: activeEquippedAsset.name,
-      label: activeEquippedAsset.label,
+      name: selectedHudAction?.name || activeEquippedAsset.name,
+      label: selectedHudAction?.name || activeEquippedAsset.label,
       assetKey: activeEquippedAsset.id,
       videoUrl: (isTrajectory && activeEquippedAsset.projectileWebm)
         ? activeEquippedAsset.projectileWebm
@@ -3752,13 +4108,21 @@ export default function App() {
     if (socketRef.current?.connected) {
       socketRef.current.emit('EFFECT_SPAWN', newEffect);
     }
-    toast.success(`Cast ${activeEquippedAsset.name}!`);
+
+    if (selectedHudAction) {
+      const charName = selectedHudData?.name || selectedPlayerToken?.name || 'Adventurer';
+      triggerHudActionRolls(selectedHudAction, charName);
+      toast.success(`${charName} used ${selectedHudAction.name}!`);
+    } else {
+      toast.success(`Cast ${activeEquippedAsset.name}!`);
+    }
 
     setAimOrigin(null);
     setAimCurrent(null);
     setActiveEquippedAsset(null);
+    setSelectedHudAction(null);
     setTool('pan');
-  }, [activeEquippedAsset]);
+  }, [activeEquippedAsset, selectedHudAction, selectedHudData, selectedPlayerToken, triggerHudActionRolls, setTool]);
 
   const handleEquipAsset = useCallback((asset: Jb2aAssetDefinition) => {
     setActiveEquippedAsset(asset);
@@ -7617,7 +7981,7 @@ export default function App() {
               return (
                 <div
                   id="selected-objects-floating-hud"
-                  className="absolute bottom-8 left-1/2 -translate-x-1/2 z-50 bg-zinc-950/95 backdrop-blur-md border border-amber-500/60 rounded-2xl px-4 py-2.5 flex items-center gap-3 shadow-[0_8px_32px_rgba(0,0,0,0.8)] text-xs font-mono animate-in fade-in slide-in-from-bottom-3 duration-200"
+                  className={`absolute ${selectedPlayerToken && selectedHudData ? 'top-16' : 'bottom-8'} left-1/2 -translate-x-1/2 z-50 bg-zinc-950/95 backdrop-blur-md border border-amber-500/60 rounded-2xl px-4 py-2.5 flex items-center gap-3 shadow-[0_8px_32px_rgba(0,0,0,0.8)] text-xs font-mono animate-in fade-in slide-in-from-bottom-3 duration-200`}
                 >
                   <div className="flex items-center gap-2 pr-3 border-r border-zinc-800">
                     <MousePointer className="w-4 h-4 text-amber-400 shrink-0" />
@@ -7806,6 +8170,32 @@ export default function App() {
                 </div>
               );
             })()}
+
+            {/* Selected Player Character Live D&D Beyond HUD */}
+            {selectedPlayerToken && selectedHudData && (
+              <PlayerHeroDock
+                characterData={selectedHudData}
+                selectedAction={selectedHudAction}
+                onSelectAction={handleSelectDmHudAction}
+                onEndTurn={() => {
+                  setSelectedHudAction(null);
+                  setActiveEquippedAsset(null);
+                  setAimOrigin(null);
+                  setAimCurrent(null);
+                  if (showCombatTracker && combatTrackerCombatants.length > 0) {
+                    const nextIdx = (combatTrackerTurnIndex + 1) % combatTrackerCombatants.length;
+                    setCombatTrackerTurnIndex(nextIdx);
+                    if (nextIdx === 0) {
+                      setCombatTrackerRound(r => r + 1);
+                    }
+                  }
+                  toast.info(`${selectedHudData.name} ended turn.`);
+                }}
+                onRefreshDdb={() => syncSelectedHudFromDdb(true)}
+                isSyncingDdb={isHudSyncing}
+                isMobile={false}
+              />
+            )}
 
             {/* Zoom Controls Overlay */}
             <div className="absolute bottom-8 right-8 flex flex-col gap-2 z-50 pointer-events-auto">

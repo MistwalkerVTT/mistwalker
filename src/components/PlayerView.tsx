@@ -1025,151 +1025,213 @@ const loadPlayerBackupState = () => {
   }
 };
 
-const buildFallbackHudData = (token: Token, stats: any): HudCharacterData => {
-  const hp = stats?.currentHp ?? token.currentHp ?? token.hp ?? 25;
-  const maxHp = stats?.maxHp ?? token.maxHp ?? token.hp ?? 25;
-  const ac = stats?.ac ?? token.ac ?? 14;
-  const name = token.name || 'Hero';
-  const avatarUrl = token.url || token.avatarUrl || getCharacterTokenUrl(name);
+const buildFallbackHudData = (token: Token, stats: any, customChars?: Character[]): HudCharacterData => {
+  const charPool = customChars && customChars.length > 0 ? [...customChars, ...DEFAULT_CHARACTERS] : DEFAULT_CHARACTERS;
+  const matchedChar = charPool.find(c =>
+    isDdbMatch(token.name, (token as any).characterId || token.id, (token as any).ddbCharacterId, (c as any).ddbCharacterId || c.id, c.name)
+  );
+
+  const hp = stats?.currentHp ?? token.currentHp ?? token.hp ?? matchedChar?.hp ?? 25;
+  const maxHp = stats?.maxHp ?? token.maxHp ?? token.hp ?? matchedChar?.maxHp ?? 25;
+  const ac = stats?.ac ?? token.ac ?? matchedChar?.ac ?? 14;
+  const name = matchedChar?.name || token.name || 'Hero';
+  const avatarUrl = token.url || token.avatarUrl || matchedChar?.avatarUrl || getCharacterTokenUrl(name);
+  const ddbId = (token as any).ddbCharacterId || (matchedChar as any)?.ddbCharacterId;
+
+  const attacks: HudActionItem[] = [];
+  const actions: HudActionItem[] = [];
+  const bonusActions: HudActionItem[] = [];
+  const spells: HudActionItem[] = [];
+  const reactions: HudActionItem[] = [];
+  const items: HudActionItem[] = [];
+
+  if (matchedChar && Array.isArray(matchedChar.actions) && matchedChar.actions.length > 0) {
+    matchedChar.actions.forEach((act, idx) => {
+      const dmgParts = (act.damage || '').split(' ');
+      const formula = dmgParts[0] || '1d8 + 3';
+      const dmgType = (dmgParts.slice(1).join(' ') || 'slashing').toLowerCase();
+      const item: HudActionItem = {
+        id: `char-atk-${idx}`,
+        name: act.name,
+        category: 'attacks',
+        type: 'action',
+        subCategory: 'weapon',
+        isAttack: true,
+        isEquipped: true,
+        sourceLabel: 'Equipped Weapon',
+        hitBonus: act.hitBonus || '+6',
+        damageFormula: formula,
+        damageType: dmgType,
+        notes: act.notes,
+        description: act.description || `Attack with ${act.name}.`,
+        rangeFt: act.type?.includes('ranged') ? 60 : 5,
+        jb2aAssetId: act.name.toLowerCase().includes('greataxe') || act.name.toLowerCase().includes('greatsword')
+          ? 'attack_greatsword'
+          : act.name.toLowerCase().includes('hammer') || act.name.toLowerCase().includes('mace')
+            ? 'attack_hammer'
+            : act.name.toLowerCase().includes('bow')
+              ? 'attack_bow'
+              : act.name.toLowerCase().includes('unarmed')
+                ? 'attack_unarmed'
+                : 'attack_slash'
+      };
+      attacks.push(item);
+      actions.push({ ...item, category: 'actions' });
+    });
+  } else {
+    const defaultAtk: HudActionItem = {
+      id: 'fallback-attack',
+      name: 'Main Weapon Attack',
+      category: 'attacks',
+      type: 'action',
+      subCategory: 'weapon',
+      isAttack: true,
+      hitBonus: '+6',
+      damageFormula: '1d8 + 3',
+      damageType: 'slashing',
+      description: 'Standard melee attack with equipped weapon.',
+      rangeFt: 5,
+      jb2aAssetId: 'attack_slash'
+    };
+    attacks.push(defaultAtk);
+    actions.push({ ...defaultAtk, category: 'actions' });
+  }
+
+  actions.push(
+    {
+      id: 'fallback-dash',
+      name: 'Dash',
+      category: 'actions',
+      type: 'action',
+      subCategory: 'standard',
+      isSelfAction: true,
+      description: 'Gain extra movement speed for the current turn.',
+      rangeFt: 0
+    },
+    {
+      id: 'fallback-disengage',
+      name: 'Disengage',
+      category: 'actions',
+      type: 'action',
+      subCategory: 'standard',
+      isSelfAction: true,
+      description: 'Your movement does not provoke opportunity attacks for the rest of the turn.',
+      rangeFt: 0
+    },
+    {
+      id: 'fallback-dodge',
+      name: 'Dodge',
+      category: 'actions',
+      type: 'action',
+      subCategory: 'standard',
+      isSelfAction: true,
+      description: 'Focus entirely on evading attacks until start of your next turn.',
+      rangeFt: 0
+    }
+  );
+
+  if (matchedChar && Array.isArray(matchedChar.bonusActions) && matchedChar.bonusActions.length > 0) {
+    matchedChar.bonusActions.forEach((ba, idx) => {
+      bonusActions.push({
+        id: `char-ba-${idx}`,
+        name: ba.name,
+        category: 'bonus_actions',
+        type: 'bonus_action',
+        subCategory: 'class',
+        sourceLabel: ba.source || 'Bonus Action',
+        castingTime: '1 Bonus Action',
+        isSelfAction: !ba.name.toLowerCase().includes('jaunt'),
+        rangeFt: ba.name.toLowerCase().includes('jaunt') ? 30 : 0,
+        description: ba.description,
+        jb2aAssetId: ba.name.toLowerCase().includes('jaunt') ? 'misty_step' : undefined
+      });
+    });
+  }
+
+  if (matchedChar && Array.isArray(matchedChar.spells) && matchedChar.spells.length > 0) {
+    matchedChar.spells.forEach((spName, idx) => {
+      const lower = spName.toLowerCase();
+      const isHeal = lower.includes('cure') || lower.includes('heal');
+      const isCantrip = lower.includes('blast') || lower.includes('bolt') || lower.includes('mockery') || lower.includes('flame');
+      spells.push({
+        id: `char-spell-${idx}`,
+        name: spName,
+        category: 'spells',
+        type: 'action',
+        subCategory: 'spell',
+        level: isCantrip ? 0 : 1,
+        school: 'evocation',
+        castingTime: lower.includes('healing word') || lower.includes('mark') || lower.includes('hex') || lower.includes('misty step') ? '1 Bonus Action' : '1 Action',
+        damageFormula: isHeal ? '1d8 + 3' : isCantrip ? '1d10' : undefined,
+        isHeal,
+        description: `Cast ${spName}.`,
+        rangeFt: isHeal ? 30 : 60,
+        jb2aAssetId: isHeal ? 'cure_wounds' : lower.includes('eldritch') ? 'eldritch_blast' : 'fire_bolt'
+      });
+    });
+  }
+
+  reactions.push({
+    id: 'fallback-opp-attack',
+    name: 'Opportunity Attack',
+    category: 'reactions',
+    type: 'reaction',
+    subCategory: 'standard',
+    castingTime: '1 Reaction',
+    isAttack: true,
+    hitBonus: attacks[0]?.hitBonus || '+6',
+    damageFormula: attacks[0]?.damageFormula || '1d8 + 3',
+    damageType: attacks[0]?.damageType || 'slashing',
+    description: 'Make one melee weapon attack when a hostile creature leaves your reach.',
+    rangeFt: 5,
+    jb2aAssetId: attacks[0]?.jb2aAssetId || 'attack_slash'
+  });
+
+  items.push({
+    id: 'fallback-potion-heal',
+    name: 'Potion of Healing',
+    category: 'items',
+    type: 'item',
+    subCategory: 'item',
+    quantity: 2,
+    isHeal: true,
+    damageFormula: '2d4 + 2',
+    description: 'Drink or administer to restore 2d4 + 2 hit points.',
+    rangeFt: 5,
+    jb2aAssetId: 'cure_wounds'
+  });
 
   return {
     id: token.id,
+    ddbCharacterId: ddbId ? String(ddbId) : undefined,
+    isLiveSynced: false,
     name,
     avatarUrl,
-    race: 'Adventurer',
-    classLevel: 'Level 3 Hero',
-    totalLevel: 3,
+    race: matchedChar?.race || 'Adventurer',
+    classLevel: matchedChar?.classLevel || 'Level 5 Hero',
+    totalLevel: 5,
     ac,
     currentHp: hp,
     maxHp,
     tempHp: stats?.tempHp || 0,
-    speed: '30 ft.',
+    speed: matchedChar?.speed || '30 ft.',
     walkSpeedFt: 30,
-    passivePerception: 12,
-    passiveInsight: 12,
-    passiveInvestigation: 11,
+    passivePerception: matchedChar?.passivePerception || 12,
+    passiveInsight: matchedChar?.passiveInsight || 12,
+    passiveInvestigation: matchedChar?.passiveInvestigation || 11,
     deathSaves: { successes: 0, failures: 0 },
-    actions: [
-      {
-        id: 'fallback-attack',
-        name: 'Main Weapon Attack',
-        category: 'actions',
-        type: 'action',
-        hitBonus: '+5',
-        damageFormula: '1d8 + 3',
-        damageType: 'slashing',
-        description: 'Standard melee attack with equipped weapon.',
-        rangeFt: 5,
-        jb2aAssetId: 'attack_sword_slash'
-      },
-      {
-        id: 'fallback-ranged-attack',
-        name: 'Ranged Strike',
-        category: 'actions',
-        type: 'action',
-        hitBonus: '+5',
-        damageFormula: '1d6 + 3',
-        damageType: 'piercing',
-        description: 'Ranged shot with bow or thrown weapon.',
-        rangeFt: 60,
-        jb2aAssetId: 'attack_arrow'
-      },
-      {
-        id: 'fallback-dash',
-        name: 'Dash',
-        category: 'actions',
-        type: 'action',
-        description: 'Gain extra movement speed for the current turn.',
-        rangeFt: 0
-      },
-      {
-        id: 'fallback-disengage',
-        name: 'Disengage',
-        category: 'actions',
-        type: 'action',
-        description: 'Your movement does not provoke opportunity attacks for the rest of the turn.',
-        rangeFt: 0
-      },
-      {
-        id: 'fallback-dodge',
-        name: 'Dodge',
-        category: 'actions',
-        type: 'action',
-        description: 'Focus entirely on evading attacks until start of your next turn.',
-        rangeFt: 0
-      }
-    ],
-    bonusActions: [
-      {
-        id: 'fallback-offhand',
-        name: 'Offhand Attack',
-        category: 'bonus_actions',
-        type: 'bonus_action',
-        damageFormula: '1d6',
-        description: 'Light weapon secondary attack.',
-        rangeFt: 5
-      },
-      {
-        id: 'fallback-second-wind',
-        name: 'Second Wind',
-        category: 'bonus_actions',
-        type: 'bonus_action',
-        damageFormula: '1d10 + 3',
-        isHeal: true,
-        description: 'Regain 1d10 + 3 hit points.',
-        rangeFt: 0,
-        jb2aAssetId: 'cure_wounds'
-      }
-    ],
-    spells: [
-      {
-        id: 'fallback-fire-bolt',
-        name: 'Fire Bolt',
-        category: 'spells',
-        type: 'action',
-        level: 0,
-        school: 'evocation',
-        hitBonus: '+5',
-        damageFormula: '1d10',
-        damageType: 'fire',
-        description: 'Hurl a mote of fire at a creature or object within range.',
-        rangeFt: 120,
-        jb2aAssetId: 'fire_bolt'
-      },
-      {
-        id: 'fallback-cure-wounds',
-        name: 'Cure Wounds',
-        category: 'spells',
-        type: 'action',
-        level: 1,
-        school: 'evocation',
-        damageFormula: '1d8 + 3',
-        isHeal: true,
-        description: 'A creature you touch regains 1d8 + 3 hit points.',
-        rangeFt: 5,
-        jb2aAssetId: 'cure_wounds'
-      }
-    ],
-    items: [
-      {
-        id: 'fallback-potion-heal',
-        name: 'Potion of Healing',
-        category: 'items',
-        type: 'action',
-        quantity: 2,
-        isHeal: true,
-        damageFormula: '2d4 + 2',
-        description: 'Drink or administer to restore 2d4 + 2 hit points.',
-        rangeFt: 5,
-        jb2aAssetId: 'cure_wounds'
-      }
-    ],
-    spellSlots: {
-      1: { level: 1, total: 4, used: 1, available: 3 },
-      2: { level: 2, total: 2, used: 0, available: 2 }
-    },
+    attacks,
+    actions,
+    bonusActions,
+    spells,
+    reactions,
+    items,
+    spellSlots: spells.length > 0 ? {
+      1: { level: 1, total: 4, used: 0, available: 4 },
+      2: { level: 2, total: 3, used: 0, available: 3 }
+    } : {},
     resources: [],
-    readonlyUrl: '',
+    readonlyUrl: ddbId ? `https://www.dndbeyond.com/characters/${ddbId}` : '',
     lastUpdated: Date.now()
   };
 };
@@ -1267,6 +1329,7 @@ export default function PlayerView() {
   // Baldur's Gate 3 Inspired Bottom Hero Dock State
   const [hudCharacterData, setHudCharacterData] = useState<HudCharacterData | null>(null);
   const [activeTargetingAction, setActiveTargetingAction] = useState<HudActionItem | null>(null);
+  const [isSyncingHudDdb, setIsSyncingHudDdb] = useState<boolean>(false);
 
   // Incoming Token Mutation Prompt (Targeted Healing or Damage from another player)
   const [incomingMutationPrompt, setIncomingMutationPrompt] = useState<{
@@ -1337,37 +1400,106 @@ export default function PlayerView() {
     return resolveTokenCharacterStats(claimedToken, compendiumCharacters);
   }, [claimedToken, compendiumCharacters]);
 
+  // Resolve D&D Beyond Character ID for the currently claimed/selected token
+  const resolvedClaimedDdbId = useMemo<string | null>(() => {
+    if (!claimedToken) return null;
+    if ((claimedToken as any).ddbCharacterId) {
+      return String((claimedToken as any).ddbCharacterId).replace(/^char_ddb_/, '').trim();
+    }
+    const allChars = [...compendiumCharacters, ...DEFAULT_CHARACTERS];
+    const match = allChars.find(c =>
+      isDdbMatch(
+        claimedToken.name,
+        (claimedToken as any).characterId || claimedToken.id,
+        (claimedToken as any).ddbCharacterId,
+        (c as any).ddbCharacterId || c.id,
+        c.name
+      ) && Boolean((c as any).ddbCharacterId || String(c.id).startsWith('char_ddb_'))
+    );
+    if (match) {
+      const rawId = (match as any).ddbCharacterId || String(match.id).replace(/^char_ddb_/, '');
+      if (rawId && !isNaN(Number(rawId))) {
+        return String(rawId);
+      }
+    }
+    return null;
+  }, [claimedToken, compendiumCharacters]);
+
+  const syncHudFromDdb = useCallback(async (forceRefresh = false) => {
+    if (!claimedToken) {
+      setHudCharacterData(null);
+      return;
+    }
+
+    setIsSyncingHudDdb(true);
+    try {
+      let targetDdbId = resolvedClaimedDdbId;
+
+      // If not found in local character list yet, check live campaign sync cache on server
+      if (!targetDdbId) {
+        try {
+          const syncRes = await fetch('/api/ddb/campaigns/sync-status');
+          if (syncRes.ok) {
+            const syncJson = await syncRes.json();
+            const cachedList = syncJson?.status?.cachedCharacters;
+            if (Array.isArray(cachedList)) {
+              const found = cachedList.find((d: any) =>
+                isDdbMatch(claimedToken.name, (claimedToken as any).characterId || claimedToken.id, (claimedToken as any).ddbCharacterId, String(d.id), d.name)
+              );
+              if (found && found.id) {
+                targetDdbId = String(found.id);
+              }
+            }
+          }
+        } catch {
+          // Ignore sync-status lookup error
+        }
+      }
+
+      if (targetDdbId) {
+        const url = `/api/ddb/characters/${targetDdbId}/hud-data${forceRefresh ? '?refresh=true' : ''}`;
+        const res = await fetch(url);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.name) {
+            setHudCharacterData({
+              ...data,
+              avatarUrl: claimedToken.url || claimedToken.avatarUrl || data.avatarUrl || getCharacterTokenUrl(data.name)
+            });
+            if (forceRefresh) {
+              toast.success(`Synced ${data.name} from D&D Beyond!`, {
+                description: `${(data.attacks || []).length} Attacks • ${(data.bonusActions || []).length} Bonus • ${(data.spells || []).length} Spells`
+              });
+            }
+            return;
+          }
+        }
+      }
+
+      setHudCharacterData(buildFallbackHudData(claimedToken, claimedStats, compendiumCharacters));
+    } catch (err) {
+      console.warn('[PlayerView] Failed fetching DDB HUD data:', err);
+      setHudCharacterData(buildFallbackHudData(claimedToken, claimedStats, compendiumCharacters));
+    } finally {
+      setIsSyncingHudDdb(false);
+    }
+  }, [claimedToken, resolvedClaimedDdbId, claimedStats, compendiumCharacters]);
+
   // Fetch or synthesize Baldur's Gate 3 HUD Character Data when claimedToken changes
   useEffect(() => {
     if (!claimedToken) {
       setHudCharacterData(null);
       return;
     }
-
-    const ddbId = (claimedToken as any).ddbCharacterId ||
-      compendiumCharacters.find(c =>
-        c.id === claimedToken.id ||
-        (c.name && claimedToken.name && c.name.toLowerCase().trim() === claimedToken.name.toLowerCase().trim())
-      )?.ddbCharacterId;
-
-    if (ddbId) {
-      fetch(`/api/ddb/characters/${ddbId}/hud-data`)
-        .then(res => res.ok ? res.json() : null)
-        .then(data => {
-          if (data && data.name) {
-            setHudCharacterData(data);
-          } else {
-            setHudCharacterData(buildFallbackHudData(claimedToken, claimedStats));
-          }
-        })
-        .catch(err => {
-          console.warn('[PlayerView] Failed fetching DDB HUD data:', err);
-          setHudCharacterData(buildFallbackHudData(claimedToken, claimedStats));
-        });
-    } else {
-      setHudCharacterData(buildFallbackHudData(claimedToken, claimedStats));
-    }
-  }, [claimedToken?.id, claimedToken?.name, compendiumCharacters]);
+    // Set immediate fallback first so there is zero blank flash, then overwrite with live DDB sheet
+    setHudCharacterData(prev => {
+      if (prev && resolvedClaimedDdbId && String(prev.ddbCharacterId) === String(resolvedClaimedDdbId)) {
+        return prev;
+      }
+      return buildFallbackHudData(claimedToken, claimedStats, compendiumCharacters);
+    });
+    syncHudFromDdb(false);
+  }, [claimedToken?.id, claimedToken?.name, resolvedClaimedDdbId]);
 
   // 3D Dice Customization State (persisted in localStorage)
   const [dicePresetId, setDicePresetId] = useState<string>(() => {
@@ -2791,8 +2923,6 @@ export default function PlayerView() {
       return;
     }
 
-    setActiveTargetingAction(action);
-
     // Find matching JB2A visual asset definition
     let matchedAsset: Jb2aAssetDefinition | undefined;
     if (action.jb2aAssetId) {
@@ -2807,6 +2937,111 @@ export default function PlayerView() {
       );
     }
 
+    // Immediate execution for Self-Targeted Actions / Bonus Actions (e.g., Rage, Large Form, Second Wind, Dash, Dodge, Disengage)
+    if (action.isSelfAction && claimedToken) {
+      const tokenRadius = ((claimedToken.size || 1) * gridSize) / 2;
+      const casterCenter = { x: claimedToken.x + tokenRadius, y: claimedToken.y + tokenRadius };
+
+      if (matchedAsset) {
+        const newEffect: VttEffectInstance = {
+          id: `eff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          name: matchedAsset.name,
+          label: matchedAsset.label,
+          assetKey: matchedAsset.id,
+          videoUrl: matchedAsset.webm,
+          loopVideoUrl: matchedAsset.loopWebm,
+          thumbUrl: matchedAsset.thumb,
+          paradigm: matchedAsset.paradigm,
+          x: casterCenter.x,
+          y: casterCenter.y,
+          sizeFt: matchedAsset.defaultSizeFt,
+          rotation: 0,
+          opacity: 1.0,
+          blendMode: matchedAsset.blendMode,
+          isPersistent: matchedAsset.isPersistent,
+          loop: matchedAsset.isPersistent,
+          castTime: Date.now(),
+          durationMs: 4000,
+          soundKey: matchedAsset.soundKey,
+          color: matchedAsset.color
+        };
+        setEffects(prev => [...prev, newEffect]);
+        if (matchedAsset.soundKey) soundCatalog.play(matchedAsset.soundKey);
+        if (socketRef.current?.connected) {
+          socketRef.current.emit('EFFECT_SPAWN', newEffect);
+        }
+      }
+
+      if (action.damageFormula) {
+        const rollParts = action.damageFormula.match(/(\d+)d(\d+)(?:\s*([+-])\s*(\d+))?/i);
+        let rolledTotal = 0;
+        const diceResults: Array<{ sides: number; result: number; type: string }> = [];
+        if (rollParts) {
+          const numDice = parseInt(rollParts[1], 10) || 1;
+          const sides = parseInt(rollParts[2], 10) || 6;
+          const sign = rollParts[3] === '-' ? -1 : 1;
+          const mod = parseInt(rollParts[4], 10) || 0;
+          let diceSum = 0;
+          for (let i = 0; i < numDice; i++) {
+            const r = Math.floor(Math.random() * sides) + 1;
+            diceSum += r;
+            diceResults.push({ sides, result: r, type: `d${sides}` });
+          }
+          rolledTotal = Math.max(1, diceSum + sign * mod);
+        } else {
+          rolledTotal = parseInt(action.damageFormula, 10) || 0;
+        }
+
+        if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d && diceResults.length > 0) {
+          (window as any).__mistwalkerRoll3d({
+            id: `roll-${Date.now()}`,
+            characterName: claimedToken.name || 'Hero',
+            action: `${action.name}${action.isHeal ? ' (Self Heal)' : ''}`,
+            rollType: action.isHeal ? 'heal' : 'roll',
+            formula: action.damageFormula,
+            diceNotation: action.damageFormula,
+            dice: diceResults,
+            total: rolledTotal,
+            isCritical: false,
+            isFumble: false,
+            theme: selectedDicePreset.id,
+            themeColor: selectedDicePreset.theme.primaryColor,
+            timestamp: Date.now(),
+            source: 'player'
+          });
+        }
+
+        if (action.isHeal && rolledTotal > 0 && socketRef.current?.connected) {
+          socketRef.current.emit('REQUEST_TOKEN_MUTATION', {
+            sourceTokenId: claimedToken.id,
+            sourceName: claimedToken.name || 'Hero',
+            targetTokenId: claimedToken.id,
+            targetName: claimedToken.name || 'Hero',
+            actionName: action.name,
+            deltaHp: rolledTotal,
+            requiresApproval: false,
+            requestId: `req_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
+          });
+        }
+
+        toast.success(`${claimedToken.name}: ${action.name}!`, {
+          description: action.isHeal ? `Restored +${rolledTotal} HP (${action.damageFormula})` : `Rolled ${rolledTotal} (${action.damageFormula})`
+        });
+      } else {
+        toast.success(`${claimedToken.name} used ${action.name}!`, {
+          description: action.description
+        });
+      }
+
+      setActiveTargetingAction(null);
+      setActiveEquippedAsset(null);
+      setAimOrigin(null);
+      setAimCurrent(null);
+      return;
+    }
+
+    setActiveTargetingAction(action);
+
     if (matchedAsset) {
       setActiveEquippedAsset(matchedAsset);
     }
@@ -2819,7 +3054,7 @@ export default function PlayerView() {
     toast.info(`Targeting: ${action.name}`, {
       description: 'Click target token to execute action, or press Esc to cancel.'
     });
-  }, [activeTargetingAction, claimedToken, gridSize]);
+  }, [activeTargetingAction, claimedToken, gridSize, selectedDicePreset]);
 
   const handleTargetToken = useCallback((targetToken: Token) => {
     if (!activeTargetingAction) return;
@@ -5183,9 +5418,9 @@ export default function PlayerView() {
       />
 
       {/* ========================================================= */}
-      {/* Baldur's Gate 3-Inspired Hero Bottom HUD (Remote Player)  */}
+      {/* Baldur's Gate 3-Inspired Hero Bottom HUD (Synced to DDB)  */}
       {/* ========================================================= */}
-      {stationMode === 'remote_player' && !isUiMinimized && (
+      {(stationMode === 'remote_player' || Boolean(claimedToken)) && !isUiMinimized && (
         <PlayerHeroDock
           characterData={hudCharacterData}
           claimedToken={claimedToken}
@@ -5208,6 +5443,8 @@ export default function PlayerView() {
             toast.info('Turn passed.');
           }}
           onSwitchStationMode={() => setShowStationModal(true)}
+          onRefreshDdb={() => syncHudFromDdb(true)}
+          isSyncingDdb={isSyncingHudDdb}
         />
       )}
 

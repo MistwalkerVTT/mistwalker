@@ -80,6 +80,62 @@ export function getDdbHeaders(token?: string): Record<string, string> {
   };
 }
 
+let cachedBearerToken: string | null = null;
+let cachedBearerExpiry = 0;
+let cachedCobaltSource = '';
+
+// Exchange CobaltSession cookie for a D&D Beyond Bearer JWT token (required by character-service v5)
+export async function getDdbBearerToken(forceRefresh = false): Promise<string | null> {
+  const cobalt = getDmCobaltToken() || getCobaltToken();
+  if (!cobalt) return null;
+
+  if (!forceRefresh && cachedBearerToken && cachedCobaltSource === cobalt && Date.now() < cachedBearerExpiry) {
+    return cachedBearerToken;
+  }
+
+  const candidateTokens = Array.from(new Set([getDmCobaltToken(), getCobaltToken()].filter(Boolean)));
+  for (const tokenCandidate of candidateTokens) {
+    try {
+      const res = await fetch('https://auth-service.dndbeyond.com/v1/cobalt-token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Cookie': `CobaltSession=${tokenCandidate}`,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.token) {
+          cachedBearerToken = data.token;
+          cachedCobaltSource = cobalt;
+          const ttlSeconds = typeof data.ttl === 'number' ? data.ttl : 300;
+          cachedBearerExpiry = Date.now() + Math.max(60, ttlSeconds - 30) * 1000;
+          return cachedBearerToken;
+        }
+      }
+    } catch (err) {
+      // Try next candidate token if available
+    }
+  }
+
+  return null;
+}
+
+export async function getDdbAuthHeaders(forceRefresh = false): Promise<Record<string, string>> {
+  const baseHeaders = getDdbHeaders();
+  const bearer = await getDdbBearerToken(forceRefresh);
+  if (bearer) {
+    return {
+      ...baseHeaders,
+      'Authorization': `Bearer ${bearer}`,
+      'Accept': 'application/json'
+    };
+  }
+  return baseHeaders;
+}
+
 // Load cached catalog from JSON file
 export function loadCachedCompendium(): Monster[] {
   try {

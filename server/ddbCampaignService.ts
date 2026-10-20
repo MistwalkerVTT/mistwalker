@@ -1,5 +1,5 @@
 import { Server } from 'socket.io';
-import { getDdbHeaders } from './ddbService';
+import { getDdbHeaders, getDdbAuthHeaders } from './ddbService';
 import { Character } from '../src/types/character';
 import { DdbGameLogDaemon } from './ddbGameLogDaemon';
 
@@ -244,13 +244,38 @@ function computeDdbCharacterSheet(c: any): {
   };
 }
 
-// Fetch raw character payload from D&D Beyond (supports both character-service v5 and characters/json fallback)
-export async function fetchRawDdbCharacter(charId: string): Promise<any | null> {
-  const headers = getDdbHeaders();
+const rawDdbCharacterCache = new Map<string, { data: any; timestamp: number }>();
+const RAW_DDB_CACHE_TTL_MS = 12000;
+
+// Fetch raw character payload from D&D Beyond (uses Bearer JWT for character-service v5 + characters/json fallback)
+export async function fetchRawDdbCharacter(charId: string, forceRefresh = false): Promise<any | null> {
+  const cleanId = String(charId).replace(/^char_ddb_/, '').trim();
+  if (!cleanId) return null;
+
+  if (!forceRefresh) {
+    const cached = rawDdbCharacterCache.get(cleanId);
+    if (cached && Date.now() - cached.timestamp < RAW_DDB_CACHE_TTL_MS) {
+      return cached.data;
+    }
+  }
+
   try {
     let c: any = null;
+    let authHeaders = await getDdbAuthHeaders(forceRefresh);
+
     try {
-      const res = await fetch(`https://character-service.dndbeyond.com/character/v5/character/${charId}`, { headers });
+      let res = await fetch(`https://character-service.dndbeyond.com/character/v5/character/${cleanId}`, {
+        headers: authHeaders
+      });
+
+      // If 401/403, refresh Bearer JWT once and retry
+      if ((res.status === 401 || res.status === 403) && !forceRefresh) {
+        authHeaders = await getDdbAuthHeaders(true);
+        res = await fetch(`https://character-service.dndbeyond.com/character/v5/character/${cleanId}`, {
+          headers: authHeaders
+        });
+      }
+
       if (res.ok) {
         const json = await res.json();
         c = json.data;
@@ -261,7 +286,9 @@ export async function fetchRawDdbCharacter(charId: string): Promise<any | null> 
 
     if (!c) {
       try {
-        const fallbackRes = await fetch(`https://www.dndbeyond.com/characters/${charId}/json`, { headers });
+        const fallbackRes = await fetch(`https://www.dndbeyond.com/characters/${cleanId}/json`, {
+          headers: authHeaders
+        });
         if (fallbackRes.ok) {
           const json = await fallbackRes.json();
           c = json.data || json;
@@ -270,9 +297,13 @@ export async function fetchRawDdbCharacter(charId: string): Promise<any | null> 
         // Fallback fetch failed
       }
     }
+
+    if (c) {
+      rawDdbCharacterCache.set(cleanId, { data: c, timestamp: Date.now() });
+    }
     return c;
   } catch (err) {
-    console.warn(`[DdbCampaign] Error fetching raw character ${charId}:`, err);
+    console.warn(`[DdbCampaign] Error fetching raw character ${cleanId}:`, err);
     return null;
   }
 }
@@ -419,48 +450,195 @@ export async function fetchDdbCampaignCharacters(campaignId: string): Promise<{ 
   }
 }
 
-// Map spell names or common weapon attacks to JB2A asset IDs
+// Map spell names or common weapon attacks to JB2A asset IDs (verified against JB2A_REGISTRY)
 function matchJb2aAssetId(name: string): string | undefined {
   if (!name) return undefined;
   const n = name.toLowerCase().trim();
 
-  // Spell mapping
+  // Spell mapping (exact JB2A_REGISTRY IDs)
   if (n.includes('fireball')) return 'fireball';
   if (n.includes('fire bolt') || n.includes('firebolt')) return 'fire_bolt';
+  if (n.includes('burning hands')) return 'burning_hands';
+  if (n.includes('cone of cold')) return 'cone_of_cold';
+  if (n.includes('ray of frost') || n.includes('frostbite') || n.includes('ice knife')) return 'ray_of_frost';
   if (n.includes('eldritch blast')) return 'eldritch_blast';
   if (n.includes('magic missile')) return 'magic_missile';
-  if (n.includes('cure wounds')) return 'cure_wounds';
-  if (n.includes('healing word')) return 'healing_word';
-  if (n.includes('shield of faith')) return 'shield_of_faith';
+  if (n.includes('cure wounds') || n.includes('healing word') || n.includes('preserve life') || n.includes('wholeness of body') || n.includes('quickened healing') || n.includes('second wind') || n.includes('heal')) return 'cure_wounds';
   if (n.includes('shield')) return 'shield';
   if (n.includes('sacred flame')) return 'sacred_flame';
-  if (n.includes('guiding bolt')) return 'guiding_bolt';
+  if (n.includes('guiding bolt') || n.includes('chromatic orb') || n.includes('chaos bolt') || n.includes('starry wisp')) return 'guiding_bolt';
+  if (n.includes('scorching ray') || n.includes('hellish rebuke')) return 'scorching_ray';
   if (n.includes('spiritual weapon')) return 'spiritual_weapon';
   if (n.includes('spirit guardians')) return 'spirit_guardians';
-  if (n.includes('misty step')) return 'misty_step';
-  if (n.includes('thunderwave')) return 'thunderwave';
+  if (n.includes('misty step') || n.includes("cloud's jaunt") || n.includes('clouds jaunt') || n.includes('teleport')) return 'misty_step';
+  if (n.includes('thunderwave') || n.includes('thunderclap')) return 'thunderwave';
   if (n.includes('lightning bolt')) return 'lightning_bolt';
-  if (n.includes('hold person')) return 'hold_person';
-  if (n.includes('bless')) return 'bless';
-  if (n.includes('bane')) return 'bane';
-  if (n.includes('toll the dead')) return 'toll_the_dead';
-  if (n.includes('shatter')) return 'shatter';
-  if (n.includes('moonbeam')) return 'moonbeam';
   if (n.includes('call lightning')) return 'call_lightning';
-  if (n.includes('disintegrate')) return 'disintegrate';
+  if (n.includes('chain lightning')) return 'chain_lightning';
+  if (n.includes('witch bolt') || n.includes('shocking grasp') || n.includes('lightning launcher')) return 'witch_bolt';
+  if (n.includes('bless') || n.includes('bardic inspiration') || n.includes('mantle of inspiration')) return 'bless';
+  if (n.includes('arms of hadar') || n.includes('hunger of hadar') || n.includes('toll the dead') || n.includes('hex') || n.includes('bane')) return 'arms_of_hadar';
+  if (n.includes('shatter') || n.includes('dissonant whispers') || n.includes('vicious mockery')) return 'shatter';
+  if (n.includes('moonbeam') || n.includes('faerie fire')) return 'moonbeam';
+  if (n.includes('disintegrate') || n.includes('poison spray') || n.includes('acid splash')) return 'disintegrate';
+  if (n.includes('cloud of daggers')) return 'cloud_of_daggers';
+  if (n.includes('darkness')) return 'darkness';
+  if (n.includes('fog cloud')) return 'fog_cloud';
+  if (n.includes('web') || n.includes('entangle')) return 'web';
+  if (n.includes('wall of fire')) return 'wall_of_fire';
+  if (n.includes('whirlwind') || n.includes('gust')) return 'whirlwind';
 
-  // Weapon & Martial mapping
-  if (n.includes('sword') || n.includes('scimitar') || n.includes('rapier') || n.includes('slash')) return 'attack_sword_slash';
-  if (n.includes('axe') || n.includes('halberd') || n.includes('glaive')) return 'attack_greataxe_cleave';
-  if (n.includes('hammer') || n.includes('mace') || n.includes('flail') || n.includes('club')) return 'attack_warhammer_smash';
-  if (n.includes('bow') || n.includes('arrow')) return 'attack_arrow_shot';
-  if (n.includes('crossbow') || n.includes('bolt')) return 'attack_crossbow_bolt';
-  if (n.includes('dagger') || n.includes('spear') || n.includes('javelin') || n.includes('pierce')) return 'attack_dagger_stab';
-  if (n.includes('unarmed') || n.includes('punch') || n.includes('fist') || n.includes('martial arts')) return 'attack_unarmed';
+  // Weapon & Martial mapping (exact JB2A_REGISTRY IDs)
+  if (n.includes('greatsword') || n.includes('greataxe') || n.includes('halberd') || n.includes('glaive') || n.includes('maul') || n.includes('cleave')) return 'attack_greatsword';
+  if (n.includes('sword') || n.includes('scimitar') || n.includes('rapier') || n.includes('battleaxe') || n.includes('handaxe') || n.includes('axe') || n.includes('slash')) return 'attack_slash';
+  if (n.includes('hammer') || n.includes('mace') || n.includes('flail') || n.includes('club') || n.includes('quarterstaff') || n.includes('staff') || n.includes('topple')) return 'attack_hammer';
+  if (n.includes('bow') || n.includes('arrow')) return 'attack_bow';
+  if (n.includes('crossbow') || n.includes('bolt')) return 'attack_crossbow';
+  if (n.includes('dagger') || n.includes('spear') || n.includes('javelin') || n.includes('trident') || n.includes('dart') || n.includes('rapier') || n.includes('sneak attack')) return 'attack_dagger';
+  if (n.includes('unarmed') || n.includes('flurry of blows') || n.includes('punch') || n.includes('fist') || n.includes('martial arts')) return 'attack_unarmed';
   if (n.includes('bite')) return 'attack_bite';
   if (n.includes('claw')) return 'attack_claw';
 
   return undefined;
+}
+
+const ABILITY_ID_TO_KEY: Record<number, 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha'> = {
+  1: 'str',
+  2: 'dex',
+  3: 'con',
+  4: 'int',
+  5: 'wis',
+  6: 'cha'
+};
+
+const ABILITY_ID_TO_LABEL: Record<number, string> = {
+  1: 'STR',
+  2: 'DEX',
+  3: 'CON',
+  4: 'INT',
+  5: 'WIS',
+  6: 'CHA'
+};
+
+const RESET_TYPE_LABELS: Record<number, string> = {
+  1: 'Short Rest',
+  2: 'Long Rest',
+  3: 'Dawn',
+  4: 'Consumable'
+};
+
+// Clean HTML tags and resolve D&D Beyond snippet expressions ({{proficiency}}, {{classlevel}}, {{savedc:wis}}, etc.)
+function cleanDdbText(
+  rawText: string | undefined | null,
+  context: {
+    totalLevel: number;
+    profBonus: number;
+    mods: Record<'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha', number>;
+    scaleValue?: string | number;
+    limitedUseMax?: number;
+    classLevelNum?: number;
+  }
+): string {
+  if (!rawText) return '';
+  let text = String(rawText)
+    .replace(/<\/p>/gi, ' ')
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&rsquo;|&#39;/gi, "'")
+    .replace(/&ldquo;|&rdquo;|&quot;/gi, '"')
+    .replace(/&mdash;|&ndash;/gi, '—')
+    .replace(/&amp;/gi, '&')
+    .replace(/&times;/gi, 'x');
+
+  // Resolve {{...}} D&D Beyond snippet expressions
+  text = text.replace(/\{\{([^}]+)\}\}/g, (_match, exprRaw: string) => {
+    const expr = exprRaw.toLowerCase().trim();
+    const isSigned = expr.includes('#signed');
+
+    if (expr.startsWith('proficiency')) {
+      return isSigned ? `+${context.profBonus}` : String(context.profBonus);
+    }
+    if (expr.startsWith('characterlevel')) {
+      return String(context.totalLevel);
+    }
+    if (expr.startsWith('classlevel')) {
+      return String(context.classLevelNum || context.totalLevel);
+    }
+    if (expr.startsWith('scalevalue')) {
+      return context.scaleValue !== undefined ? String(context.scaleValue) : '';
+    }
+    if (expr.startsWith('limiteduse')) {
+      return context.limitedUseMax !== undefined ? String(context.limitedUseMax) : '1';
+    }
+    if (expr.startsWith('savedc:')) {
+      const statPart = expr.split(':')[1]?.split('#')[0]?.trim() || '';
+      let maxMod = -10;
+      for (const k of ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const) {
+        if (statPart.includes(k)) {
+          maxMod = Math.max(maxMod, context.mods[k]);
+        }
+      }
+      if (maxMod > -10) {
+        return String(8 + context.profBonus + maxMod);
+      }
+      return String(8 + context.profBonus);
+    }
+    if (expr.startsWith('modifier:')) {
+      const statPart = expr.split(':')[1]?.split('#')[0]?.trim() || '';
+      let maxMod = -10;
+      for (const k of ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const) {
+        if (statPart.includes(k)) {
+          maxMod = Math.max(maxMod, context.mods[k]);
+        }
+      }
+      if (maxMod > -10) {
+        if (expr.includes('@min:1')) maxMod = Math.max(1, maxMod);
+        return isSigned && maxMod >= 0 ? `+${maxMod}` : String(maxMod);
+      }
+    }
+    if (expr.includes('classlevel') && expr.includes('modifier:')) {
+      // e.g. (classlevel*5) or modifier+classlevel
+      if (expr.includes('*5')) {
+        return String((context.classLevelNum || context.totalLevel) * 5);
+      }
+    }
+    return '';
+  });
+
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+// Scale cantrip dice by character level (levels 5, 11, 17) and normalize "d6" -> "1d6"
+function normalizeDiceString(diceString: string | undefined): string | undefined {
+  if (!diceString) return undefined;
+  const trimmed = diceString.trim();
+  if (/^d\d+/i.test(trimmed)) {
+    return `1${trimmed}`;
+  }
+  return trimmed;
+}
+
+function scaleCantripDiceString(diceString: string | undefined, totalLevel: number, canScale: boolean): string | undefined {
+  const norm = normalizeDiceString(diceString);
+  if (!norm) return undefined;
+  if (!canScale) return norm;
+  const m = norm.match(/^(\d+)d(\d+)(.*)$/i);
+  if (!m) return norm;
+  const baseCount = parseInt(m[1], 10) || 1;
+  const dieFaces = m[2];
+  const rest = m[3] || '';
+  if (baseCount !== 1) return norm;
+  const multiplier = totalLevel >= 17 ? 4 : totalLevel >= 11 ? 3 : totalLevel >= 5 ? 2 : 1;
+  return `${multiplier}d${dieFaces}${rest}`;
+}
+
+function canonicalActionKey(name: string): string {
+  return (name || '')
+    .toLowerCase()
+    .replace(/[\u2018\u2019`]/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 // Full D&D Beyond Character normalizer for BG3-Inspired Hero Bottom HUD
@@ -479,174 +657,744 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
 
   const walkSpeed = c.speed?.walk || 30;
 
-  // Passives
-  const wisMod = Math.floor((computed.stats.wis - 10) / 2);
-  const intMod = Math.floor((computed.stats.int - 10) / 2);
-  const profBonus = Math.ceil(computed.totalLevel / 4) + 1;
-  const passivePerception = 10 + wisMod + (c.characterValues?.some((v: any) => v.typeId === 2 && v.valueId === 14) ? profBonus : 0);
-  const passiveInsight = 10 + wisMod;
-  const passiveInvestigation = 10 + intMod;
+  // Ability Modifiers
+  const mods = {
+    str: Math.floor((computed.stats.str - 10) / 2),
+    dex: Math.floor((computed.stats.dex - 10) / 2),
+    con: Math.floor((computed.stats.con - 10) / 2),
+    int: Math.floor((computed.stats.int - 10) / 2),
+    wis: Math.floor((computed.stats.wis - 10) / 2),
+    cha: Math.floor((computed.stats.cha - 10) / 2)
+  };
 
-  // Spellcasting metrics
-  let spellSaveDc = 10 + profBonus;
-  let spellAttackBonus = profBonus;
+  const profBonus = Math.ceil(computed.totalLevel / 4) + 1;
+
+  // Check skill proficiencies from c.modifiers for accurate Passive Perception / Insight / Investigation
+  const allModifiers: any[] = [];
+  if (c.modifiers && typeof c.modifiers === 'object') {
+    for (const cat of Object.keys(c.modifiers)) {
+      if (Array.isArray(c.modifiers[cat])) {
+        allModifiers.push(...c.modifiers[cat]);
+      }
+    }
+  }
+  const hasProf = (subType: string) => allModifiers.some(m => m.type === 'proficiency' && m.subType === subType);
+  const hasExp = (subType: string) => allModifiers.some(m => m.type === 'expertise' && m.subType === subType);
+
+  const passivePerception = 10 + mods.wis + (hasExp('perception') ? profBonus * 2 : hasProf('perception') ? profBonus : 0);
+  const passiveInsight = 10 + mods.wis + (hasExp('insight') ? profBonus * 2 : hasProf('insight') ? profBonus : 0);
+  const passiveInvestigation = 10 + mods.int + (hasExp('investigation') ? profBonus * 2 : hasProf('investigation') ? profBonus : 0);
+
+  // Class inspection for Monk Martial Arts, Rogue Sneak Attack, Artificer Int weapons, Warlock Pact weapons, and Spellcasting
+  let monkLevel = 0;
+  let rogueLevel = 0;
+  let barbarianLevel = 0;
+  let isArtificer = false;
+  let isPactBlade = false;
+
+  let spellSaveDc = 8 + profBonus + Math.max(mods.int, mods.wis, mods.cha);
+  let spellAttackBonus = profBonus + Math.max(mods.int, mods.wis, mods.cha);
+  let primarySpellMod = Math.max(mods.int, mods.wis, mods.cha);
+  const classSpellAbilityMap = new Map<number, 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha'>();
+
   if (Array.isArray(c.classes)) {
     for (const cl of c.classes) {
-      const abilityId = cl.definition?.spellCastingAbilityId;
-      if (abilityId) {
-        const abilityMap: Record<number, keyof typeof computed.stats> = { 1: 'str', 2: 'dex', 3: 'con', 4: 'int', 5: 'wis', 6: 'cha' };
-        const key = abilityMap[abilityId];
-        if (key) {
-          const mod = Math.floor((computed.stats[key] - 10) / 2);
-          spellSaveDc = 8 + profBonus + mod;
-          spellAttackBonus = profBonus + mod;
-          break;
-        }
+      const cName = (cl.definition?.name || '').toLowerCase();
+      const lvl = cl.level || 1;
+      if (cName.includes('monk')) monkLevel += lvl;
+      if (cName.includes('rogue')) rogueLevel += lvl;
+      if (cName.includes('barbarian')) barbarianLevel += lvl;
+      if (cName.includes('artificer')) isArtificer = true;
+
+      const abilityId = cl.definition?.spellCastingAbilityId || cl.subclassDefinition?.spellCastingAbilityId;
+      if (abilityId && ABILITY_ID_TO_KEY[abilityId]) {
+        const key = ABILITY_ID_TO_KEY[abilityId];
+        const mod = mods[key];
+        classSpellAbilityMap.set(cl.id, key);
+        spellSaveDc = 8 + profBonus + mod;
+        spellAttackBonus = profBonus + mod;
+        primarySpellMod = mod;
       }
     }
   }
 
+  // Check if character has Pact of the Blade
+  if (Array.isArray(c.actions?.class)) {
+    if (c.actions.class.some((a: any) => (a.name || '').toLowerCase().includes('pact of the blade'))) {
+      isPactBlade = true;
+    }
+  }
+
+  const attacks: any[] = [];
   const actions: any[] = [];
   const bonusActions: any[] = [];
   const spells: any[] = [];
+  const reactions: any[] = [];
   const items: any[] = [];
+  const resources: Array<{ name: string; total: number; available: number; resetType?: string }> = [];
+  const seenResourceNames = new Set<string>();
 
-  // Standard 5e Actions
-  actions.push({
-    id: 'action-dash',
-    name: 'Dash',
-    category: 'actions',
-    type: 'action',
-    description: 'Gain extra movement equal to your speed for the current turn.',
-    rangeFt: 0
-  });
-  actions.push({
-    id: 'action-disengage',
-    name: 'Disengage',
-    category: 'actions',
-    type: 'action',
-    description: 'Your movement does not provoke opportunity attacks for the rest of the turn.',
-    rangeFt: 0
-  });
-  actions.push({
-    id: 'action-dodge',
-    name: 'Dodge',
-    category: 'actions',
-    type: 'action',
-    description: 'Attack rolls against you have disadvantage until the start of your next turn.',
-    rangeFt: 0
-  });
-  actions.push({
-    id: 'action-help',
-    name: 'Help',
-    category: 'actions',
-    type: 'action',
-    description: 'Lend aid to an ally, giving them advantage on their next ability check or attack roll.',
-    rangeFt: 5
-  });
+  const snippetCtx = {
+    totalLevel: computed.totalLevel,
+    profBonus,
+    mods,
+    classLevelNum: computed.totalLevel
+  };
 
-  // Inventory / Weapons & Items
+  // =========================================================================
+  // 1. WEAPON ATTACKS & CONSUMABLE ITEMS FROM INVENTORY
+  // =========================================================================
   if (Array.isArray(c.inventory)) {
-    c.inventory.forEach((item: any, idx: number) => {
+    // Sort equipped weapons first so equipped versions win deduplication
+    const sortedInventory = [...c.inventory].sort((a, b) => (b.equipped ? 1 : 0) - (a.equipped ? 1 : 0));
+    const seenWeaponNames = new Map<string, any>();
+
+    sortedInventory.forEach((item: any, idx: number) => {
       const def = item.definition;
       if (!def) return;
-      const itemName = def.name || 'Item';
+      const itemName: string = (def.name || 'Item').trim();
+      const lowerName = itemName.toLowerCase();
       const isEquipped = !!item.equipped;
       const jb2aAssetId = matchJb2aAssetId(itemName);
 
       if (def.filterType === 'Weapon') {
+        // Skip ammunition (Crossbow Bolts, Arrows, Bullets, Blowgun Needles)
+        if (
+          def.subType === 'Ammunition' ||
+          (!def.damage?.diceString && (lowerName.includes('bolt') || lowerName.includes('arrow') || lowerName.includes('bullet') || lowerName.includes('needle')))
+        ) {
+          return;
+        }
+
+        // Deduplicate identical weapons (aggregate quantity for thrown weapons like Handaxe x3)
+        if (seenWeaponNames.has(lowerName)) {
+          const existing = seenWeaponNames.get(lowerName);
+          if (existing && typeof item.quantity === 'number' && item.quantity > 0) {
+            existing.quantity = (existing.quantity || 1) + item.quantity;
+          }
+          return;
+        }
+
         const dmgDice = def.damage?.diceString || '1d6';
-        const dmgType = def.damageType?.toLowerCase() || 'physical';
+        const dmgType = (def.damageType || 'physical').toLowerCase();
         const isRanged = def.attackType === 2;
         const rangeFt = def.range || (isRanged ? 80 : 5);
-        const strMod = Math.floor((computed.stats.str - 10) / 2);
-        const dexMod = Math.floor((computed.stats.dex - 10) / 2);
-        const weaponMod = isRanged ? dexMod : Math.max(strMod, def.properties?.some((p: any) => p.name === 'Finesse') ? dexMod : strMod);
-        const hitBonus = profBonus + weaponMod;
+        const isFinesse = Array.isArray(def.properties) && def.properties.some((p: any) => p.name === 'Finesse');
+        const isMonkWeapon = monkLevel > 0 && !def.properties?.some((p: any) => p.name === 'Heavy' || p.name === 'Two-Handed');
 
-        actions.push({
+        // Determine best ability modifier for this weapon
+        let weaponMod = isRanged ? mods.dex : mods.str;
+        if (isFinesse || isMonkWeapon) {
+          weaponMod = Math.max(mods.str, mods.dex);
+        }
+        if (isArtificer && (def.magic || lowerName.includes('+') || isEquipped)) {
+          weaponMod = Math.max(weaponMod, mods.int);
+        }
+        if (isPactBlade && isEquipped && !isRanged) {
+          weaponMod = Math.max(weaponMod, mods.cha);
+        }
+
+        // Detect Magic Bonus (+1, +2, +3) from grantedModifiers or weapon name
+        let magicBonus = 0;
+        if (Array.isArray(def.grantedModifiers)) {
+          for (const gm of def.grantedModifiers) {
+            if (gm.type === 'bonus' && gm.subType === 'magic') {
+              magicBonus = Math.max(magicBonus, gm.fixedValue ?? gm.value ?? 0);
+            }
+          }
+        }
+        if (magicBonus === 0) {
+          const nameBonusMatch = itemName.match(/\+\s*([123])\b/);
+          if (nameBonusMatch) {
+            magicBonus = parseInt(nameBonusMatch[1], 10);
+          }
+        }
+
+        // Archery fighting style (+2 to ranged weapon attacks)
+        const hasArchery = isRanged && allModifiers.some(m => m.type === 'bonus' && m.subType === 'ranged-weapon-attacks');
+        const archeryBonus = hasArchery ? 2 : 0;
+
+        const hitBonusVal = profBonus + weaponMod + magicBonus + archeryBonus;
+        const dmgModVal = weaponMod + magicBonus;
+        const dmgModStr = dmgModVal > 0 ? ` + ${dmgModVal}` : dmgModVal < 0 ? ` - ${Math.abs(dmgModVal)}` : '';
+
+        // Properties & Mastery notes
+        const propNames = Array.isArray(def.properties)
+          ? def.properties.map((p: any) => p.name).filter(Boolean).join(', ')
+          : '';
+
+        const cleanDesc = cleanDdbText(def.description, snippetCtx);
+
+        const weaponAction: any = {
           id: `wpn-${idx}-${def.id || idx}`,
           name: itemName,
-          category: 'actions',
+          category: 'attacks',
           type: 'action',
+          subCategory: 'weapon',
+          isAttack: true,
+          isEquipped,
+          sourceLabel: isEquipped ? 'Equipped Weapon' : 'Weapon',
           rangeFt,
           castingTime: '1 Action',
-          hitBonus: `+${hitBonus}`,
-          damageFormula: `${dmgDice} + ${weaponMod}`,
+          hitBonus: hitBonusVal >= 0 ? `+${hitBonusVal}` : `${hitBonusVal}`,
+          damageFormula: `${dmgDice}${dmgModStr}`,
           damageType: dmgType,
-          description: def.description || `Attack with ${itemName}`,
-          jb2aAssetId: jb2aAssetId || (isRanged ? 'attack_arrow_shot' : 'attack_sword_slash'),
+          notes: propNames || undefined,
+          quantity: item.quantity && item.quantity > 1 ? item.quantity : undefined,
+          description: propNames
+            ? `${isRanged ? 'Ranged' : 'Melee'} Weapon Attack (${propNames}). ${cleanDesc}`.trim()
+            : cleanDesc || `Attack with ${itemName}.`,
+          jb2aAssetId: jb2aAssetId || (isRanged ? 'attack_bow' : 'attack_slash'),
           iconUrl: def.avatarUrl
-        });
-      } else if (def.filterType === 'Potion' || def.filterType === 'Scroll' || def.canUse || itemName.toLowerCase().includes('potion')) {
-        const isHealingPotion = itemName.toLowerCase().includes('healing');
+        };
+
+        seenWeaponNames.set(lowerName, weaponAction);
+        attacks.push(weaponAction);
+        actions.push({ ...weaponAction, category: 'actions' });
+      } else if (
+        def.filterType === 'Potion' ||
+        def.filterType === 'Scroll' ||
+        def.filterType === 'Wondrous item' && (def.canUse || lowerName.includes('potion') || lowerName.includes('gem of brightness') || lowerName.includes('necklace of fireballs')) ||
+        lowerName.includes('potion') ||
+        lowerName.includes('elixir') ||
+        lowerName.includes('scroll') ||
+        lowerName.includes('healer')
+      ) {
+        const isHealingPotion = lowerName.includes('healing');
+        let potionFormula: string | undefined;
+        if (isHealingPotion) {
+          if (lowerName.includes('supreme')) potionFormula = '10d4 + 20';
+          else if (lowerName.includes('superior')) potionFormula = '8d4 + 8';
+          else if (lowerName.includes('greater')) potionFormula = '4d4 + 4';
+          else potionFormula = '2d4 + 2';
+        }
         items.push({
           id: `item-${idx}-${def.id || idx}`,
           name: itemName,
           category: 'items',
           type: 'item',
+          subCategory: 'item',
+          sourceLabel: def.filterType || 'Item',
           quantity: item.quantity || 1,
-          description: def.description || 'Consumable item',
-          jb2aAssetId: isHealingPotion ? 'cure_wounds' : undefined,
+          rangeFt: 5,
+          description: cleanDdbText(def.description, snippetCtx) || 'Consumable or usable magic item.',
+          jb2aAssetId: isHealingPotion ? 'cure_wounds' : jb2aAssetId,
           isHeal: isHealingPotion,
-          damageFormula: isHealingPotion ? (itemName.toLowerCase().includes('greater') ? '4d4 + 4' : '2d4 + 2') : undefined,
+          damageFormula: potionFormula,
           iconUrl: def.avatarUrl
         });
       }
     });
   }
 
-  // Spells extraction
-  const rawSpellsList: any[] = [];
+  // Always include Unarmed Strike in Attacks & Actions
+  const unarmedMod = monkLevel > 0 ? Math.max(mods.str, mods.dex) : mods.str;
+  const unarmedHit = profBonus + unarmedMod;
+  const monkDie = monkLevel >= 17 ? '1d12' : monkLevel >= 11 ? '1d10' : monkLevel >= 5 ? '1d8' : monkLevel >= 1 ? '1d6' : '';
+  const unarmedDmgFormula = monkDie
+    ? `${monkDie}${unarmedMod >= 0 ? ` + ${unarmedMod}` : ` - ${Math.abs(unarmedMod)}`}`
+    : `${Math.max(1, 1 + unarmedMod)}`;
+
+  const unarmedAction: any = {
+    id: 'attack-unarmed-strike',
+    name: monkLevel > 0 ? 'Unarmed Strike (Martial Arts)' : 'Unarmed Strike',
+    category: 'attacks',
+    type: 'action',
+    subCategory: 'unarmed',
+    isAttack: true,
+    isEquipped: true,
+    sourceLabel: monkLevel > 0 ? 'Monk Martial Arts' : 'Unarmed',
+    rangeFt: 5,
+    castingTime: '1 Action',
+    hitBonus: `+${unarmedHit}`,
+    damageFormula: unarmedDmgFormula,
+    damageType: 'bludgeoning',
+    description: monkLevel > 0
+      ? 'Melee Martial Arts Strike: Deal bludgeoning damage using your Martial Arts die, grapple, or shove.'
+      : 'Melee Unarmed Strike: Deal bludgeoning damage equal to 1 + STR modifier, grapple, or shove.',
+    jb2aAssetId: 'attack_unarmed'
+  };
+  attacks.push(unarmedAction);
+  actions.push({ ...unarmedAction, category: 'actions' });
+
+  // =========================================================================
+  // 2. CLASS, SPECIES, FEAT, ITEM & CUSTOM ACTIONS (c.actions & c.customActions)
+  // =========================================================================
+  const actionBuckets: Array<{ sourceCat: string; sourceLabel: string; subCategory: string; list: any[] }> = [
+    { sourceCat: 'class', sourceLabel: 'Class Feature', subCategory: 'class', list: Array.isArray(c.actions?.class) ? c.actions.class : [] },
+    { sourceCat: 'race', sourceLabel: c.race?.fullName || 'Species Trait', subCategory: 'species', list: Array.isArray(c.actions?.race) ? c.actions.race : [] },
+    { sourceCat: 'feat', sourceLabel: 'Feat / Mastery', subCategory: 'feat', list: Array.isArray(c.actions?.feat) ? c.actions.feat : [] },
+    { sourceCat: 'item', sourceLabel: 'Magic Item', subCategory: 'item', list: Array.isArray(c.actions?.item) ? c.actions.item : [] },
+    { sourceCat: 'background', sourceLabel: 'Background', subCategory: 'feat', list: Array.isArray(c.actions?.background) ? c.actions.background : [] },
+    { sourceCat: 'custom', sourceLabel: 'Custom Action', subCategory: 'class', list: Array.isArray(c.customActions) ? c.customActions : [] }
+  ];
+
+  const seenFeatureActionNames = new Set<string>();
+  // Avoid duplicating basic Unarmed Strike if already added as an action, unless it's the Monk Bonus Action Unarmed Strike
+  seenFeatureActionNames.add('action:unarmed strike');
+
+  actionBuckets.forEach(({ sourceCat, sourceLabel, subCategory, list }) => {
+    list.forEach((act: any, idx: number) => {
+      if (!act || !act.name) return;
+      const rawName = String(act.name).trim();
+      const lowerName = rawName.toLowerCase();
+
+      // Skip internal D&D Beyond character-sheet bookkeeping toggles
+      if (
+        lowerName.includes('charge/drain magic item') ||
+        lowerName === 'charge magic item' ||
+        lowerName === 'drain magic item' ||
+        lowerName === 'pact weapon' ||
+        lowerName === 'unarmed strike (dex.)' ||
+        lowerName.startsWith('infused item')
+      ) {
+        return;
+      }
+
+      const actTypeNum = act.activation?.activationType; // 1=Action, 2=No Action, 3=Bonus Action, 4=Reaction, 8=Special
+      const canonName = canonicalActionKey(rawName);
+      if (canonName === 'unarmed strike' && actTypeNum === 1) return;
+      const dedupeKey = `${actTypeNum || 0}:${canonName}`;
+      if (seenFeatureActionNames.has(dedupeKey)) return;
+      seenFeatureActionNames.add(dedupeKey);
+
+      // Extract Limited Uses if present
+      let usesObj: { available: number; total: number; resetType?: string } | undefined;
+      if (act.limitedUse && (act.limitedUse.maxUses > 0 || act.limitedUse.statModifierUsesId)) {
+        const statId = act.limitedUse.statModifierUsesId;
+        const statBonus = statId && ABILITY_ID_TO_KEY[statId] ? Math.max(1, mods[ABILITY_ID_TO_KEY[statId]]) : 0;
+        const maxUses = (act.limitedUse.maxUses || 0) + (act.limitedUse.operator === 1 ? statBonus : (!act.limitedUse.maxUses ? statBonus : 0));
+        if (maxUses > 0) {
+          const used = act.limitedUse.numberUsed || 0;
+          const available = Math.max(0, maxUses - used);
+          const resetType = RESET_TYPE_LABELS[act.limitedUse.resetType] || undefined;
+          usesObj = { available, total: maxUses, resetType };
+
+          if (!seenResourceNames.has(lowerName)) {
+            seenResourceNames.add(lowerName);
+            resources.push({
+              name: rawName,
+              total: maxUses,
+              available,
+              resetType
+            });
+          }
+        }
+      }
+
+      // Extract Damage / Healing Dice from act.dice or known class scaling
+      let damageFormula: string | undefined = act.dice?.diceString || undefined;
+      let damageType: string | undefined = act.damageTypeId
+        ? ({ 1: 'bludgeoning', 2: 'piercing', 3: 'slashing', 4: 'lightning', 5: 'thunder', 6: 'poison', 7: 'cold', 8: 'radiant', 9: 'acid', 10: 'necrotic', 11: 'fire', 12: 'force', 13: 'psychic' }[act.damageTypeId as number])
+        : undefined;
+
+      // Special class damage formulas when DDB stores them in scaleValue
+      if (!damageFormula) {
+        if (lowerName.includes('sneak attack')) {
+          const saDice = Math.max(1, Math.ceil((rogueLevel || 1) / 2));
+          damageFormula = `${saDice}d6`;
+          damageType = 'piercing';
+        } else if (lowerName.includes('dreadful strike')) {
+          damageFormula = '2d6';
+          damageType = 'psychic';
+        } else if (lowerName.includes('flurry of blows') || (lowerName === 'unarmed strike' && actTypeNum === 3)) {
+          damageFormula = unarmedDmgFormula;
+          damageType = 'bludgeoning';
+        } else if (lowerName.includes('bardic inspiration')) {
+          damageFormula = computed.totalLevel >= 15 ? '1d12' : computed.totalLevel >= 10 ? '1d10' : computed.totalLevel >= 5 ? '1d8' : '1d6';
+        } else if (lowerName.includes('crimson rite')) {
+          damageFormula = computed.totalLevel >= 11 ? '1d8' : computed.totalLevel >= 5 ? '1d6' : '1d4';
+        } else if (lowerName.includes('wholeness of body')) {
+          damageFormula = `${monkDie || '1d8'} + ${mods.wis}`;
+        } else if (lowerName.includes('quickened healing')) {
+          damageFormula = `${monkDie || '1d8'} + ${profBonus}`;
+        } else if (lowerName.includes('preserve life')) {
+          damageFormula = `${computed.totalLevel * 5}`;
+        } else if (lowerName.includes('second wind')) {
+          damageFormula = `1d10 + ${computed.totalLevel}`;
+        }
+      }
+
+      // Check if this action is an attack roll (e.g. Lightning Launcher, Breath Weapon, Starry Form Archer)
+      const isAttackAction = Boolean(
+        act.isAttack ||
+        act.attackTypeRange ||
+        lowerName.includes('launcher') ||
+        lowerName.includes('cleave') ||
+        lowerName.includes('topple') ||
+        lowerName.includes('sneak attack') ||
+        lowerName.includes('dreadful strike') ||
+        lowerName.includes('flurry of blows') ||
+        (lowerName === 'unarmed strike' && actTypeNum === 3)
+      );
+
+      let hitBonus: string | undefined;
+      if (act.isAttack || lowerName.includes('launcher')) {
+        const statId = act.abilityModifierStatId;
+        const atkMod = statId && ABILITY_ID_TO_KEY[statId]
+          ? mods[ABILITY_ID_TO_KEY[statId]]
+          : Math.max(mods.str, mods.dex, mods.int);
+        const totalHit = (act.isProficient !== false ? profBonus : 0) + atkMod;
+        hitBonus = `+${totalHit}`;
+        if (damageFormula && !damageFormula.includes('+') && !damageFormula.includes('-')) {
+          damageFormula = `${damageFormula}${atkMod >= 0 ? ` + ${atkMod}` : ` - ${Math.abs(atkMod)}`}`;
+        }
+      } else if (lowerName.includes('flurry of blows') || (lowerName === 'unarmed strike' && actTypeNum === 3)) {
+        hitBonus = `+${unarmedHit}`;
+      }
+
+      // Save DC on feature action
+      let saveDc: number | undefined;
+      let saveAbility: string | undefined;
+      if (act.saveStatId && ABILITY_ID_TO_LABEL[act.saveStatId]) {
+        saveAbility = ABILITY_ID_TO_LABEL[act.saveStatId];
+        const dcStatId = act.abilityModifierStatId;
+        const dcMod = dcStatId && ABILITY_ID_TO_KEY[dcStatId]
+          ? mods[ABILITY_ID_TO_KEY[dcStatId]]
+          : Math.max(mods.str, mods.dex, mods.con, mods.int, mods.wis, mods.cha);
+        saveDc = 8 + profBonus + dcMod;
+      }
+
+      const rangeFt = act.range?.range || act.range?.rangeValue || (lowerName.includes("cloud's jaunt") || lowerName.includes('jaunt') ? 30 : lowerName.includes('launcher') ? 90 : isAttackAction ? 5 : 0);
+
+      const isHeal = Boolean(
+        lowerName.includes('heal') ||
+        lowerName.includes('preserve life') ||
+        lowerName.includes('wholeness of body') ||
+        lowerName.includes('second wind') ||
+        lowerName.includes('mantle of inspiration') ||
+        lowerName.includes('lay on hands')
+      );
+
+      const isSelfAction = Boolean(
+        rangeFt === 0 &&
+        !isAttackAction &&
+        (lowerName.includes('rage') ||
+          lowerName.includes('large form') ||
+          lowerName.includes('patient defense') ||
+          lowerName.includes('step of the wind') ||
+          lowerName.includes('cunning action') ||
+          lowerName.includes('crimson rite') ||
+          lowerName.includes('harness divine power') ||
+          lowerName.includes('second wind') ||
+          lowerName.includes('wholeness of body') ||
+          lowerName.includes('quickened healing'))
+      );
+
+      const descText = cleanDdbText(act.snippet || act.description, {
+        ...snippetCtx,
+        scaleValue: damageFormula,
+        limitedUseMax: usesObj?.total
+      }) || `${sourceLabel}: ${rawName}`;
+
+      const castingTimeLabel =
+        actTypeNum === 3 ? '1 Bonus Action' :
+        actTypeNum === 4 ? '1 Reaction' :
+        actTypeNum === 1 ? '1 Action' :
+        'Special';
+
+      const category: 'actions' | 'bonus_actions' | 'reactions' =
+        actTypeNum === 3 ? 'bonus_actions' :
+        actTypeNum === 4 ? 'reactions' :
+        'actions';
+
+      const hudAction: any = {
+        id: `feat-${sourceCat}-${idx}-${act.id || idx}`,
+        name: rawName,
+        category,
+        type: actTypeNum === 3 ? 'bonus_action' : actTypeNum === 4 ? 'reaction' : 'action',
+        subCategory: lowerName.includes('cleave') || lowerName.includes('topple') || lowerName.includes('mastery') ? 'mastery' : subCategory,
+        sourceLabel,
+        rangeFt,
+        castingTime: castingTimeLabel,
+        hitBonus,
+        saveDc,
+        saveAbility,
+        damageFormula,
+        damageType,
+        uses: usesObj,
+        isHeal,
+        isAttack: isAttackAction,
+        isSelfAction,
+        description: descText,
+        jb2aAssetId: matchJb2aAssetId(rawName)
+      };
+
+      if (actTypeNum === 3) {
+        bonusActions.push(hudAction);
+        if (isAttackAction) {
+          attacks.push({ ...hudAction, category: 'attacks' });
+        }
+      } else if (actTypeNum === 4) {
+        reactions.push(hudAction);
+      } else {
+        // Action (1) or Special Combat Action (0 / 2 / 8)
+        actions.push(hudAction);
+        if (isAttackAction) {
+          attacks.push({ ...hudAction, category: 'attacks' });
+        }
+      }
+    });
+  });
+
+  // =========================================================================
+  // 3. STANDARD 5E COMBAT ACTIONS & REACTIONS
+  // =========================================================================
+  actions.push(
+    {
+      id: 'action-dash',
+      name: 'Dash',
+      category: 'actions',
+      type: 'action',
+      subCategory: 'standard',
+      sourceLabel: 'Standard Action',
+      castingTime: '1 Action',
+      isSelfAction: true,
+      description: 'Gain extra movement equal to your speed for the current turn.',
+      rangeFt: 0
+    },
+    {
+      id: 'action-disengage',
+      name: 'Disengage',
+      category: 'actions',
+      type: 'action',
+      subCategory: 'standard',
+      sourceLabel: 'Standard Action',
+      castingTime: '1 Action',
+      isSelfAction: true,
+      description: 'Your movement does not provoke opportunity attacks for the rest of the turn.',
+      rangeFt: 0
+    },
+    {
+      id: 'action-dodge',
+      name: 'Dodge',
+      category: 'actions',
+      type: 'action',
+      subCategory: 'standard',
+      sourceLabel: 'Standard Action',
+      castingTime: '1 Action',
+      isSelfAction: true,
+      description: 'Attack rolls against you have disadvantage until the start of your next turn, and you make DEX saves with advantage.',
+      rangeFt: 0
+    },
+    {
+      id: 'action-help',
+      name: 'Help',
+      category: 'actions',
+      type: 'action',
+      subCategory: 'standard',
+      sourceLabel: 'Standard Action',
+      castingTime: '1 Action',
+      description: 'Lend aid to an ally, giving them advantage on their next ability check or attack roll.',
+      rangeFt: 5
+    },
+    {
+      id: 'action-hide',
+      name: 'Hide',
+      category: 'actions',
+      type: 'action',
+      subCategory: 'standard',
+      sourceLabel: 'Standard Action',
+      castingTime: '1 Action',
+      isSelfAction: true,
+      description: 'Make a Dexterity (Stealth) check to become Hidden.',
+      rangeFt: 0
+    }
+  );
+
+  // Add Opportunity Attack to Reactions if not already present
+  if (!reactions.some(r => r.name.toLowerCase().includes('opportunity'))) {
+    const primaryWeapon = attacks[0];
+    reactions.unshift({
+      id: 'reaction-opportunity-attack',
+      name: 'Opportunity Attack',
+      category: 'reactions',
+      type: 'reaction',
+      subCategory: 'standard',
+      sourceLabel: 'Standard Reaction',
+      castingTime: '1 Reaction',
+      isAttack: true,
+      rangeFt: 5,
+      hitBonus: primaryWeapon?.hitBonus || `+${unarmedHit}`,
+      damageFormula: primaryWeapon?.damageFormula || unarmedDmgFormula,
+      damageType: primaryWeapon?.damageType || 'slashing',
+      description: 'Make one melee attack against a hostile creature that moves out of your reach.',
+      jb2aAssetId: primaryWeapon?.jb2aAssetId || 'attack_slash'
+    });
+  }
+
+  // =========================================================================
+  // 4. SPELLS EXTRACTION (Cantrips + Leveled Spells + Damage/Save DC + Bonus/Reaction Routing)
+  // =========================================================================
+  const rawSpellsList: Array<{ sp: any; classAbilityKey?: 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha'; sourceTag: string }> = [];
   if (Array.isArray(c.classSpells)) {
     c.classSpells.forEach((cs: any) => {
+      const abilityKey = classSpellAbilityMap.get(cs.characterClassId);
       if (Array.isArray(cs.spells)) {
-        cs.spells.forEach((sp: any) => rawSpellsList.push(sp));
+        cs.spells.forEach((sp: any) => rawSpellsList.push({ sp, classAbilityKey: abilityKey, sourceTag: 'Class Spell' }));
       }
     });
   }
-  if (Array.isArray(c.spells?.race)) rawSpellsList.push(...c.spells.race);
-  if (Array.isArray(c.spells?.class)) rawSpellsList.push(...c.spells.class);
-  if (Array.isArray(c.spells?.feat)) rawSpellsList.push(...c.spells.feat);
-  if (Array.isArray(c.spells?.item)) rawSpellsList.push(...c.spells.item);
+  if (Array.isArray(c.spells?.race)) {
+    c.spells.race.forEach((sp: any) => rawSpellsList.push({ sp, sourceTag: c.race?.fullName || 'Species Spell' }));
+  }
+  if (Array.isArray(c.spells?.class)) {
+    c.spells.class.forEach((sp: any) => rawSpellsList.push({ sp, sourceTag: 'Class Feature Spell' }));
+  }
+  if (Array.isArray(c.spells?.feat)) {
+    c.spells.feat.forEach((sp: any) => rawSpellsList.push({ sp, sourceTag: 'Feat Spell' }));
+  }
+  if (Array.isArray(c.spells?.item)) {
+    c.spells.item.forEach((sp: any) => rawSpellsList.push({ sp, sourceTag: 'Magic Item Spell' }));
+  }
 
   const seenSpellNames = new Set<string>();
-  rawSpellsList.forEach((sp: any, idx: number) => {
-    const def = sp.definition;
-    if (!def) return;
-    const name = def.name;
-    if (seenSpellNames.has(name.toLowerCase())) return;
-    seenSpellNames.add(name.toLowerCase());
+  rawSpellsList.forEach(({ sp, classAbilityKey, sourceTag }, idx: number) => {
+    const def = sp?.definition;
+    if (!def || !def.name) return;
+    const name = String(def.name).trim();
+    const lowerName = canonicalActionKey(name);
+    if (seenSpellNames.has(lowerName)) return;
+    seenSpellNames.add(lowerName);
 
-    const level = def.level || 0;
-    const school = def.school?.toLowerCase() || 'evocation';
-    const rangeFt = def.range?.rangeValue || (def.range?.origin === 'Self' ? 0 : 30);
-    const castingTime = def.activation?.activationType === 3 ? '1 Bonus Action' : def.activation?.activationType === 4 ? '1 Reaction' : '1 Action';
-    const isBonusAction = def.activation?.activationType === 3;
+    const level = typeof def.level === 'number' ? def.level : 0;
+    const school = (def.school || 'evocation').toLowerCase();
+    const rangeFt = def.range?.rangeValue || (def.range?.origin === 'Touch' ? 5 : def.range?.origin === 'Self' ? 0 : 30);
+    const actType = def.activation?.activationType;
+    const isBonusAction = actType === 3;
+    const isReaction = actType === 4;
+    const castingTime = isBonusAction ? '1 Bonus Action' : isReaction ? '1 Reaction' : '1 Action';
     const jb2aAssetId = matchJb2aAssetId(name);
-    const isHeal = name.toLowerCase().includes('cure') || name.toLowerCase().includes('heal') || name.toLowerCase().includes('restoration');
 
-    const hudSpell = {
+    // Determine spellcasting ability modifier for this specific spell
+    const spellStatId = sp.spellCastingAbilityId || def.spellCastingAbilityId;
+    const spellAbilityKey = (spellStatId && ABILITY_ID_TO_KEY[spellStatId]) || classAbilityKey;
+    const thisSpellMod = spellAbilityKey ? mods[spellAbilityKey] : primarySpellMod;
+    const thisSpellAttack = profBonus + thisSpellMod;
+    const thisSpellSaveDc = 8 + profBonus + thisSpellMod;
+
+    // Extract Damage or Healing from def.modifiers
+    let damageFormula: string | undefined;
+    let damageType: string | undefined;
+    let isHeal = lowerName.includes('cure') || lowerName.includes('heal') || lowerName.includes('restoration') || lowerName.includes('revivify') || lowerName.includes('aid');
+
+    if (Array.isArray(def.modifiers)) {
+      for (const m of def.modifiers) {
+        if (m.type === 'damage') {
+          const rawDice = normalizeDiceString(m.die?.diceString || (m.fixedValue ? String(m.fixedValue) : undefined));
+          if (rawDice && !damageFormula) {
+            damageFormula = level === 0
+              ? scaleCantripDiceString(rawDice, computed.totalLevel, Boolean(def.canCastAtHigherLevel))
+              : rawDice;
+            damageType = m.subType ? String(m.subType).toLowerCase() : undefined;
+            if (m.usePrimaryStat) {
+              damageFormula = `${damageFormula}${thisSpellMod >= 0 ? ` + ${thisSpellMod}` : ` - ${Math.abs(thisSpellMod)}`}`;
+            }
+          }
+        } else if (
+          m.type === 'bonus' &&
+          (m.subType === 'hit-points' || m.subType === 'regain-hit-points' || m.subType === 'temporary-hit-points')
+        ) {
+          isHeal = true;
+          const rawDice = normalizeDiceString(m.die?.diceString || (m.fixedValue ? String(m.fixedValue) : undefined));
+          if (rawDice && !damageFormula) {
+            const addSpellMod = m.usePrimaryStat || lowerName.includes('cure wounds') || lowerName.includes('healing word');
+            damageFormula = addSpellMod
+              ? `${rawDice}${thisSpellMod >= 0 ? ` + ${thisSpellMod}` : ` - ${Math.abs(thisSpellMod)}`}`
+              : rawDice;
+            damageType = m.subType === 'temporary-hit-points' ? 'temp hp' : 'healing';
+          }
+        }
+      }
+    }
+
+    // Fallback healing formula if not found in modifiers
+    if (isHeal && !damageFormula) {
+      if (lowerName.includes('healing word')) damageFormula = `1d4 + ${thisSpellMod}`;
+      else if (lowerName.includes('cure wounds')) damageFormula = `1d8 + ${thisSpellMod}`;
+    }
+
+    const hitBonus = def.requiresAttackRoll ? `+${thisSpellAttack}` : undefined;
+    const saveDc = def.requiresSavingThrow ? thisSpellSaveDc : undefined;
+    const saveAbility = def.requiresSavingThrow && def.saveDcAbilityId ? ABILITY_ID_TO_LABEL[def.saveDcAbilityId] : undefined;
+
+    // Limited uses on innate / item / feat spells
+    let usesObj: { available: number; total: number; resetType?: string } | undefined;
+    if (sp.limitedUse && sp.limitedUse.maxUses > 0) {
+      const maxU = sp.limitedUse.maxUses;
+      const usedU = sp.limitedUse.numberUsed || 0;
+      usesObj = {
+        available: Math.max(0, maxU - usedU),
+        total: maxU,
+        resetType: RESET_TYPE_LABELS[sp.limitedUse.resetType]
+      };
+    }
+
+    const cleanDesc = cleanDdbText(def.description, snippetCtx);
+
+    const hudSpell: any = {
       id: `spell-${idx}-${def.id || idx}`,
       name,
-      category: isBonusAction ? 'bonus_actions' : 'spells',
-      type: isBonusAction ? 'bonus_action' : 'action',
+      category: 'spells',
+      type: isBonusAction ? 'bonus_action' : isReaction ? 'reaction' : 'action',
+      subCategory: 'spell',
+      sourceLabel: level === 0 ? 'Cantrip' : `Level ${level} Spell (${sourceTag})`,
       level,
       school,
       rangeFt,
       castingTime,
-      spellSlotRequired: level > 0 ? level : undefined,
-      description: def.description || '',
+      hitBonus,
+      saveDc,
+      saveAbility,
+      damageFormula,
+      damageType,
+      uses: usesObj,
+      spellSlotRequired: level > 0 && !sp.usesSpellSlot === false ? level : (level > 0 ? level : undefined),
+      description: cleanDesc,
       jb2aAssetId,
       isHeal,
-      isPrepared: sp.prepared || level === 0,
-      damageFormula: isHeal ? (level === 1 ? '1d8 + 3' : '2d8 + 3') : undefined
+      isAttack: Boolean(def.requiresAttackRoll),
+      isSelfAction: rangeFt === 0 && !def.requiresAttackRoll && !def.requiresSavingThrow,
+      isPrepared: Boolean(sp.prepared || sp.alwaysPrepared || level === 0 || sourceTag !== 'Class Spell')
     };
 
     spells.push(hudSpell);
-    if (isBonusAction) {
-      bonusActions.push(hudSpell);
+
+    // Cross-list Bonus Action Spells into Bonus Actions tab so they are immediately available there too!
+    if (isBonusAction && !bonusActions.some(b => canonicalActionKey(b.name) === lowerName)) {
+      bonusActions.push({
+        ...hudSpell,
+        id: `ba-spell-${idx}-${def.id || idx}`,
+        category: 'bonus_actions'
+      });
     }
+
+    // Cross-list Reaction Spells into Reactions tab!
+    if (isReaction && !reactions.some(r => canonicalActionKey(r.name) === lowerName)) {
+      reactions.push({
+        ...hudSpell,
+        id: `rx-spell-${idx}-${def.id || idx}`,
+        category: 'reactions'
+      });
+    }
+
+    // Cross-list Attack Roll Cantrips/Spells into Attacks tab as Spell Attacks
+    if (def.requiresAttackRoll && !attacks.some(a => canonicalActionKey(a.name) === lowerName)) {
+      attacks.push({
+        ...hudSpell,
+        id: `atk-spell-${idx}-${def.id || idx}`,
+        category: 'attacks',
+        sourceLabel: level === 0 ? 'Spell Attack (Cantrip)' : `Spell Attack (L${level})`
+      });
+    }
+  });
+
+  // Sort spells by level ascending (Cantrips 0 first, then 1..9), then alphabetically
+  spells.sort((a, b) => {
+    const lvlA = a.level ?? 0;
+    const lvlB = b.level ?? 0;
+    if (lvlA !== lvlB) return lvlA - lvlB;
+    return a.name.localeCompare(b.name);
   });
 
   // Spell Slots calculation
@@ -684,8 +1432,36 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
     });
   }
 
+  // Ensure spell slot levels exist if character has prepared/known leveled spells (e.g. DDB v5 sometimes stores default slots in class definition)
+  if (Object.keys(spellSlots).length === 0 && spells.some(s => (s.level || 0) > 0) && Array.isArray(c.classes)) {
+    for (const cl of c.classes) {
+      const canCast = cl.definition?.canCastSpells || cl.subclassDefinition?.canCastSpells;
+      const spellRules = cl.definition?.spellRules;
+      if (canCast && spellRules && Array.isArray(spellRules.levelSpellSlots)) {
+        const slotsForLevel = spellRules.levelSpellSlots[cl.level || 1];
+        if (Array.isArray(slotsForLevel)) {
+          const usedByLevel = Array.isArray(c.spellSlots) ? c.spellSlots : [];
+          slotsForLevel.forEach((maxSlots: number, idx: number) => {
+            if (maxSlots > 0) {
+              const lvl = idx + 1;
+              const used = usedByLevel[idx]?.used || 0;
+              spellSlots[lvl] = {
+                level: lvl,
+                total: maxSlots,
+                used,
+                available: Math.max(0, maxSlots - used)
+              };
+            }
+          });
+        }
+      }
+    }
+  }
+
   return {
     id: charId,
+    ddbCharacterId: String(charId),
+    isLiveSynced: true,
     name: c.name || 'Character',
     avatarUrl,
     race: c.race?.fullName || 'Humanoid',
@@ -706,12 +1482,14 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
       successes: c.deathSaveInfo?.successCount || 0,
       failures: c.deathSaveInfo?.failCount || 0
     },
+    attacks,
     actions,
     bonusActions,
     spells,
+    reactions,
     items,
     spellSlots,
-    resources: [],
+    resources,
     readonlyUrl: c.readonlyUrl || `https://www.dndbeyond.com/characters/${charId}`,
     lastUpdated: Date.now()
   };
