@@ -18,7 +18,7 @@ export const PlayerStationModal: React.FC<PlayerStationModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 backdrop-blur-xl p-4 animate-in fade-in duration-200">
-      <div className="relative w-full max-w-xl bg-zinc-950/95 border border-zinc-800 rounded-3xl p-6 sm:p-8 shadow-[0_25px_60px_rgba(0,0,0,0.95)] flex flex-col items-center text-center ring-1 ring-white/10">
+      <div className="relative w-full max-w-xl max-h-[90dvh] overflow-y-auto bg-zinc-950/95 border border-zinc-800 rounded-3xl p-5 sm:p-8 shadow-[0_25px_60px_rgba(0,0,0,0.95)] flex flex-col items-center text-center ring-1 ring-white/10">
         {/* Subtle top amber glow */}
         <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-transparent via-amber-500/70 to-transparent" />
 
