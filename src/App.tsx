@@ -6400,6 +6400,7 @@ export default function App() {
           onOpenMonsterCompendium={handleOpenMonsterCompendium}
           onOpenCharacterCompendium={handleOpenCharacterCompendium}
           onOpenAlliesCompendium={handleOpenAlliesCompendium}
+          onOpenDdbSync={() => setShowDdbModal(true)}
           compendiumMonsters={compendiumMonsters}
           compendiumCharacters={compendiumCharacters}
           compendiumAllies={compendiumAllies}

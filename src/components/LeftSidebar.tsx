@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Character } from '../types/character';
 import { DEFAULT_CHARACTERS, getCharacterTokenUrl } from '../data/defaultCharacters';
 import {
@@ -197,6 +197,7 @@ interface LeftSidebarProps {
   onOpenMonsterCompendium?: (initialSearch?: string) => void;
   onOpenCharacterCompendium?: (initialSearch?: string) => void;
   onOpenAlliesCompendium?: (initialSearch?: string) => void;
+  onOpenDdbSync?: () => void;
   compendiumMonsters?: Monster[];
   compendiumCharacters?: Character[];
   compendiumAllies?: Ally[];
@@ -343,6 +344,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   onOpenMonsterCompendium,
   onOpenCharacterCompendium,
   onOpenAlliesCompendium,
+  onOpenDdbSync,
   compendiumMonsters = [],
   compendiumCharacters = [],
   compendiumAllies = [],
@@ -417,9 +419,28 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   const [menuTop, setMenuTop] = useState<number>(100);
   const [confirmClearWalls, setConfirmClearWalls] = useState(false);
   const [showWallSectionsList, setShowWallSectionsList] = useState(false);
-  const [tokenTab, setTokenTab] = useState<'creatures' | 'auras' | 'conditions'>('creatures');
   const [tokenCategoryFilter, setTokenCategoryFilter] = useState<'all' | 'characters' | 'monsters' | 'allies' | 'custom'>('all');
   const [tokenSearchQuery, setTokenSearchQuery] = useState<string>('');
+  const [ddbPartyCharacters, setDdbPartyCharacters] = useState<any[]>([]);
+  const [isLoadingDdbParty, setIsLoadingDdbParty] = useState(false);
+
+  const fetchDdbSyncStatus = useCallback(async () => {
+    try {
+      setIsLoadingDdbParty(true);
+      const res = await fetch('/api/ddb/campaigns/sync-status');
+      const data = await res.json();
+      const cached = data?.status?.cachedCharacters;
+      if (Array.isArray(cached)) {
+        // Filter out obsolete static placeholder mock IDs so ONLY real DDB campaign heroes show
+        const filtered = cached.filter((c: any) => !['146614740', '147334187', '158502126', '146533824'].includes(String(c.id)));
+        setDdbPartyCharacters(filtered);
+      }
+    } catch (err) {
+      console.warn('[LeftSidebar] Could not fetch DDB party status:', err);
+    } finally {
+      setIsLoadingDdbParty(false);
+    }
+  }, []);
   const [lightingSubTab, setLightingSubTab] = useState<'lighting' | 'fog' | 'zones'>('fog');
   const [fxCategory, setFxCategory] = useState<'spells' | 'tactical'>('spells');
   const [fxSubTab, setFxSubTab] = useState<'features' | 'weather' | 'scale'>('features');
@@ -446,12 +467,17 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   const [isEditingGridSize, setIsEditingGridSize] = useState(false);
   const [customGridSizeInput, setCustomGridSizeInput] = useState(String(gridSize));
   const [collapseCustomTokens, setCollapseCustomTokens] = useState(true);
-  const [collapseCharacters, setCollapseCharacters] = useState(true);
+  const [collapseCharacters, setCollapseCharacters] = useState(false);
   const [collapseMonsters, setCollapseMonsters] = useState(true);
   const [collapseAllies, setCollapseAllies] = useState(true);
-  const [collapseAuras, setCollapseAuras] = useState(true);
-  const [collapseConditions, setCollapseConditions] = useState(true);
   const closeTimeoutRef = useRef<any>(null);
+
+  // Sync D&D Beyond party characters when tokens tray is opened
+  useEffect(() => {
+    if (activeGroup === 'tokens') {
+      fetchDdbSyncStatus();
+    }
+  }, [activeGroup, fetchDdbSyncStatus]);
 
   // Dragging event listener for pinned flyout window
   useEffect(() => {
@@ -687,7 +713,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                 ? 'bg-blue-500/25 text-blue-400 border border-blue-500/60 shadow-[0_0_14px_rgba(59,130,246,0.35)]'
                 : 'text-zinc-400 hover:text-blue-300 hover:bg-zinc-850 hover:border hover:border-zinc-700/60'
             }`}
-            title="Creature Tokens, Auras & Status Markers"
+            title="Tokens, D&D Beyond Heroes & Monsters"
           >
             <Users className="w-5.5 h-5.5" />
             {tokens.length > 0 && (
@@ -982,7 +1008,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                   {activeGroup === 'fx' && <Sparkles className="w-3.5 h-3.5 text-cyan-400 shrink-0" />}
                   {activeGroup === 'dice' && <Dices className="w-3.5 h-3.5 text-purple-400 shrink-0" />}
                   <span className="text-xs font-mono font-bold uppercase tracking-wider text-zinc-200 truncate">
-                    {activeGroup === 'maps' ? 'Campaign & Maps' : activeGroup.toUpperCase()}
+                    {activeGroup === 'maps' ? 'Campaign & Maps' : activeGroup === 'tokens' ? 'Creatures & Tokens' : activeGroup.toUpperCase()}
                   </span>
                   <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0">
                     PINNED
@@ -3681,76 +3707,92 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
 
           {activeGroup === 'tokens' && (
             <div className="p-3.5 flex flex-col gap-3 min-w-[280px]">
-              {/* Header */}
-              <div
-                onMouseDown={pinnedGroup ? handleDragStart : undefined}
-                className={`flex items-center justify-between border-b border-zinc-800 pb-2.5 ${pinnedGroup ? 'cursor-grab active:cursor-grabbing select-none' : ''}`}
-              >
-                <div className="flex items-center gap-2">
-                  <Users className="w-4 h-4 text-blue-400" />
-                  <span className="text-xs font-bold font-mono text-zinc-200 uppercase tracking-wider">Tokens & Status</span>
+              {/* Header (Only shown when NOT pinned, avoiding duplicate headers) */}
+              {!pinnedGroup && (
+                <div className="flex items-center justify-between border-b border-zinc-800 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <Users className="w-4 h-4 text-blue-400" />
+                    <span className="text-xs font-bold font-mono text-zinc-200 uppercase tracking-wider">Creatures & Tokens</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setPinnedGroup(pinnedGroup === 'tokens' ? null : 'tokens')}
+                      className={`p-1 rounded-md transition-colors ${pinnedGroup === 'tokens' ? 'text-blue-400 bg-blue-500/20' : 'text-zinc-500 hover:text-zinc-300'}`}
+                      title={pinnedGroup === 'tokens' ? 'Unpin Menu' : 'Pin Menu Open (Allows moving)'}
+                    >
+                      <Pin className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={closeFlyout}
+                      className="p-1 rounded-md text-zinc-500 hover:text-zinc-300 transition-colors"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => setPinnedGroup(pinnedGroup === 'tokens' ? null : 'tokens')}
-                    className={`p-1 rounded-md transition-colors ${pinnedGroup === 'tokens' ? 'text-blue-400 bg-blue-500/20' : 'text-zinc-500 hover:text-zinc-300'}`}
-                    title={pinnedGroup === 'tokens' ? 'Unpin Menu' : 'Pin Menu Open (Allows moving)'}
-                  >
-                    <Pin className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={closeFlyout}
-                    className="p-1 rounded-md text-zinc-500 hover:text-zinc-300 transition-colors"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
+              )}
 
-              {/* Sub-Tabs: Creatures vs Auras vs Conditions */}
-              <div className="flex bg-zinc-950 p-1 rounded-xl border border-zinc-800">
-                <button
-                  onClick={() => setTokenTab('creatures')}
-                  className={`flex-1 py-1 text-[11px] font-bold rounded-lg transition-all ${
-                    tokenTab === 'creatures' ? 'bg-blue-500 text-zinc-950' : 'text-zinc-400 hover:text-zinc-200'
-                  }`}
-                >
-                  Creatures
-                </button>
-                <button
-                  onClick={() => setTokenTab('auras')}
-                  className={`flex-1 py-1 text-[11px] font-bold rounded-lg transition-all ${
-                    tokenTab === 'auras' ? 'bg-indigo-500 text-white' : 'text-zinc-400 hover:text-zinc-200'
-                  }`}
-                >
-                  Auras
-                </button>
-                <button
-                  onClick={() => setTokenTab('conditions')}
-                  className={`flex-1 py-1 text-[11px] font-bold rounded-lg transition-all ${
-                    tokenTab === 'conditions' ? 'bg-red-500 text-white' : 'text-zinc-400 hover:text-zinc-200'
-                  }`}
-                >
-                  Status
-                </button>
-              </div>
-
-              {tokenTab === 'creatures' && (() => {
+              {(() => {
                 const searchLower = tokenSearchQuery.trim().toLowerCase();
 
-                const characterList: Character[] = (compendiumCharacters && compendiumCharacters.length > 0)
-                  ? compendiumCharacters
-                  : DEFAULT_CHARACTERS;
+                // Extract ONLY genuine D&D Beyond synced characters (No default mock fallbacks)
+                const heroMap = new Map<string, any>();
 
-                const heroTokens = characterList.map(c => ({
-                  name: c.name,
-                  url: getCharacterTokenUrl(c.name, c.avatarUrl),
-                  size: (c as any).size || 1,
-                  hp: c.hp || c.maxHp || 10,
-                  ac: c.ac || 10,
-                  category: 'character' as const
-                })).filter(t => 
-                  !searchLower || t.name.toLowerCase().includes(searchLower)
+                // 1. Incorporate live DDB daemon cached characters (from active campaign)
+                ddbPartyCharacters.forEach((c: any) => {
+                  const ddbId = String(c.id);
+                  heroMap.set(ddbId, {
+                    id: `char_ddb_${ddbId}`,
+                    ddbCharacterId: ddbId,
+                    name: c.name,
+                    url: c.avatarUrl || getCharacterTokenUrl(c.name),
+                    size: 1,
+                    hp: c.currentHp !== undefined ? c.currentHp : (c.maxHp || 10),
+                    maxHp: c.maxHp || 10,
+                    tempHp: c.tempHp || 0,
+                    ac: c.ac || 10,
+                    race: c.race || 'Hero',
+                    classLevel: c.classLevel || 'D&D Beyond',
+                    readonlyUrl: c.readonlyUrl,
+                    category: 'character' as const
+                  });
+                });
+
+                // 2. Incorporate compendium characters that are linked to D&D Beyond
+                (compendiumCharacters || []).forEach((c: any) => {
+                  const isMock = ['char_varrak', 'char_brannoc', 'char_noctua', 'char_aggie', 'char_rowan', 'char_sylas'].includes(c.id);
+                  const hasDdbLink = !isMock && (
+                    (c.id && c.id.startsWith('char_ddb_')) ||
+                    (c.ddbCharacterId && !['146614740', '147334187', '158502126', '146533824'].includes(String(c.ddbCharacterId))) ||
+                    (typeof c.notes === 'string' && c.notes.includes('D&D Beyond'))
+                  );
+
+                  if (hasDdbLink) {
+                    const ddbId = String(c.ddbCharacterId || c.id.replace('char_ddb_', '') || c.name);
+                    const existing = heroMap.get(ddbId);
+                    heroMap.set(ddbId, {
+                      id: c.id,
+                      ddbCharacterId: c.ddbCharacterId || existing?.ddbCharacterId || ddbId,
+                      name: c.name,
+                      url: c.avatarUrl || existing?.url || getCharacterTokenUrl(c.name),
+                      size: (c as any).size || existing?.size || 1,
+                      hp: c.hp !== undefined ? c.hp : (existing?.hp ?? c.maxHp ?? 10),
+                      maxHp: c.maxHp || existing?.maxHp || 10,
+                      tempHp: c.tempHp || existing?.tempHp || 0,
+                      ac: c.ac || existing?.ac || 10,
+                      race: c.race || existing?.race || 'Hero',
+                      classLevel: c.classLevel || existing?.classLevel || 'D&D Beyond',
+                      readonlyUrl: existing?.readonlyUrl || (c.notes?.match(/https:\/\/dndbeyond\.com\/characters\/\d+/)?.[0]),
+                      category: 'character' as const
+                    });
+                  }
+                });
+
+                const heroTokens = Array.from(heroMap.values()).filter(t => 
+                  !searchLower ||
+                  t.name.toLowerCase().includes(searchLower) ||
+                  t.classLevel.toLowerCase().includes(searchLower) ||
+                  t.race.toLowerCase().includes(searchLower)
                 );
 
                 const monsterList: Monster[] = (compendiumMonsters && compendiumMonsters.length > 0)
@@ -3815,7 +3857,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                     visionEnabled: !isMonster,
                     visionRadius: isMonster ? 0 : 60,
                     ...(isMonster ? { monsterId: sourceId } : {}),
-                    ...(isAlly ? { allyId: sourceId } : {})
+                    ...(isAlly ? { allyId: sourceId } : {}),
+                    ...(category === 'character' && sourceId ? { ddbCharacterId: sourceId } : {})
                   };
                   setTokens(prev => [...prev, newToken]);
                   toast.success(`Spawned ${name} (${size}x${size})`);
@@ -3870,7 +3913,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                           }`}
                         >
                           <User className="w-3 h-3 text-emerald-400" />
-                          Characters ({heroTokens.length})
+                          Heroes ({heroTokens.length})
                         </button>
                         <button
                           type="button"
@@ -4095,104 +4138,135 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                             </div>
                           )}
 
-                          {/* Section: Characters & Heroes */}
-                          {(tokenCategoryFilter === 'all' || tokenCategoryFilter === 'characters') && heroTokens.length > 0 && (
-                            <div className="flex flex-col gap-1.5 bg-emerald-950/15 p-2 rounded-xl border border-emerald-900/30">
+                          {/* Section: Characters & Heroes (D&D Beyond Sync Only) */}
+                          {(tokenCategoryFilter === 'all' || tokenCategoryFilter === 'characters') && (
+                            <div className="flex flex-col gap-1.5 bg-emerald-950/20 p-2.5 rounded-xl border border-emerald-900/40 shadow-sm">
                               <div
                                 onClick={() => setCollapseCharacters(!collapseCharacters)}
                                 className="flex items-center justify-between px-0.5 cursor-pointer select-none"
                               >
-                                <span className="text-[10px] uppercase font-bold font-mono text-emerald-400 flex items-center gap-1.5">
-                                  <User className="w-3 h-3 text-emerald-400" />
-                                  Characters & Heroes ({heroTokens.length})
-                                </span>
-                                <div className="flex items-center gap-2">
-                                  {onOpenCharacterCompendium && (
+                                <div className="flex items-center gap-1.5">
+                                  <span className="relative flex h-2 w-2">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                                  </span>
+                                  <span className="text-[10px] uppercase font-bold font-mono text-emerald-400 flex items-center gap-1">
+                                    D&D Beyond Heroes ({heroTokens.length})
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  {onOpenDdbSync && (
                                     <button
                                       type="button"
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        onOpenCharacterCompendium();
-                                        closeFlyout();
+                                        onOpenDdbSync();
                                       }}
-                                      className="text-[9px] text-emerald-400 hover:text-emerald-200 font-mono font-semibold flex items-center gap-1 hover:underline cursor-pointer"
-                                      title="Open Character Compendium"
+                                      className="text-[9px] text-emerald-400 hover:text-emerald-200 font-mono font-semibold flex items-center gap-1 hover:underline cursor-pointer bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/30"
+                                      title="Open D&D Beyond Sync & Campaign Manager"
                                     >
-                                      <BookOpen className="w-2.5 h-2.5" />
-                                      Compendium
+                                      <Sparkles className="w-2.5 h-2.5" />
+                                      DDB Sync
                                     </button>
                                   )}
                                   {collapseCharacters ? <ChevronRight className="w-3.5 h-3.5 text-emerald-400" /> : <ChevronDown className="w-3.5 h-3.5 text-emerald-400" />}
                                 </div>
                               </div>
-                              <div className={`grid grid-cols-4 gap-2 ${collapseCharacters ? 'hidden' : ''}`}>
-                                {heroTokens.map((tok, idx) => (
-                                  <div
-                                    key={idx}
-                                    draggable={true}
-                                    onDragStart={(e) => {
-                                      const tokenData = {
-                                        name: tok.name,
-                                        url: tok.url,
-                                        size: tok.size || 1,
-                                        isPlayer: true,
-                                        isMonster: false,
-                                        category: 'character'
-                                      };
-                                      e.dataTransfer.setData('application/json', JSON.stringify(tokenData));
-                                      e.dataTransfer.setData('text/plain', tok.name);
-                                      e.dataTransfer.effectAllowed = 'copy';
-                                    }}
-                                    className="group relative flex flex-col items-center gap-1 p-1.5 bg-zinc-850/60 hover:bg-emerald-500/15 border border-zinc-750 hover:border-emerald-500/40 rounded-xl transition-all active:scale-95 cursor-grab active:cursor-grabbing select-none"
-                                    title={`Drag onto map or click to spawn ${tok.name} (Hero / PC)`}
-                                  >
-                                    {/* Quick Open in Compendium Button */}
-                                    {onOpenCharacterCompendium && (
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          onOpenCharacterCompendium(tok.name);
-                                          closeFlyout();
-                                        }}
-                                        className="absolute top-0.5 left-0.5 p-0.5 bg-zinc-900/90 text-emerald-400 hover:text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity border border-emerald-900/50 z-10 cursor-pointer shadow"
-                                        title={`View ${tok.name} in Character Compendium`}
-                                      >
-                                        <BookOpen className="w-2.5 h-2.5" />
-                                      </button>
-                                    )}
 
-                                    <button
-                                      type="button"
-                                      onClick={() => spawnToken(tok.name, tok.url, tok.size || 1, 'character')}
-                                      className="w-full flex flex-col items-center gap-1 cursor-pointer"
-                                    >
-                                      <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-emerald-500/40 group-hover:border-emerald-400 transition-all shadow-sm relative group-hover:scale-105 pointer-events-none">
-                                        <img src={tok.url} alt={tok.name} className="w-full h-full object-cover" />
-                                        {tok.size && tok.size > 1 && (
-                                          <span className="absolute bottom-0 right-0 bg-emerald-700 text-white text-[7px] font-bold px-1 rounded-tl">
-                                            {tok.size}x
-                                          </span>
-                                        )}
-                                        <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-emerald-400 ring-1 ring-zinc-900" />
+                              {!collapseCharacters && (
+                                <>
+                                  {heroTokens.length === 0 ? (
+                                    <div className="p-3 text-center flex flex-col items-center gap-2 bg-zinc-900/50 rounded-lg border border-emerald-900/20 my-1">
+                                      <Users className="w-6 h-6 text-emerald-500/60" />
+                                      <div className="flex flex-col">
+                                        <span className="text-[11px] font-bold text-zinc-300">
+                                          {tokenSearchQuery ? `No D&D Beyond heroes match "${tokenSearchQuery}"` : 'No D&D Beyond Heroes Linked'}
+                                        </span>
+                                        <span className="text-[9.5px] text-zinc-400 mt-0.5">
+                                          Connect your D&D Beyond campaign to import your party with live HP & AC.
+                                        </span>
                                       </div>
-                                      <span className="text-[9px] font-mono text-zinc-300 group-hover:text-emerald-200 truncate max-w-[50px] text-center font-medium">{tok.name}</span>
-                                    </button>
-                                  </div>
-                                ))}
-                              </div>
-                              {tokenCategoryFilter === 'characters' && onOpenCharacterCompendium && !collapseCharacters && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    onOpenCharacterCompendium();
-                                    closeFlyout();
-                                  }}
-                                  className="mt-1 py-1.5 px-2 bg-emerald-900/30 hover:bg-emerald-900/50 border border-emerald-500/30 rounded-lg text-[10px] font-bold text-emerald-300 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                                >
-                                  <BookOpen className="w-3 h-3 text-emerald-400" />
-                                  Browse More in Character Compendium
-                                </button>
+                                      {onOpenDdbSync && !tokenSearchQuery && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            onOpenDdbSync();
+                                            closeFlyout();
+                                          }}
+                                          className="mt-1 px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[10px] font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                                        >
+                                          <Sparkles className="w-3 h-3" />
+                                          Connect D&D Beyond Party
+                                        </button>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <div className="grid grid-cols-2 gap-2 mt-1">
+                                      {heroTokens.map((tok) => {
+                                        const hpPercent = tok.maxHp > 0 ? Math.round((tok.hp / tok.maxHp) * 100) : 100;
+                                        const hpColor = hpPercent > 50 ? 'text-emerald-400' : hpPercent > 25 ? 'text-amber-400' : 'text-rose-400';
+
+                                        return (
+                                          <div
+                                            key={tok.id || tok.ddbCharacterId}
+                                            draggable={true}
+                                            onDragStart={(e) => {
+                                              const tokenData = {
+                                                name: tok.name,
+                                                url: tok.url,
+                                                size: tok.size || 1,
+                                                hp: tok.hp,
+                                                maxHp: tok.maxHp,
+                                                currentHp: tok.hp,
+                                                tempHp: tok.tempHp,
+                                                ac: tok.ac,
+                                                isPlayer: true,
+                                                isMonster: false,
+                                                category: 'character',
+                                                ddbCharacterId: tok.ddbCharacterId,
+                                                characterId: tok.id
+                                              };
+                                              e.dataTransfer.setData('application/json', JSON.stringify(tokenData));
+                                              e.dataTransfer.setData('text/plain', tok.name);
+                                              e.dataTransfer.effectAllowed = 'copy';
+                                            }}
+                                            onClick={() => spawnToken(tok.name, tok.url, tok.size || 1, 'character', tok.hp, tok.ac, tok.ddbCharacterId)}
+                                            className="group relative flex items-center gap-2 p-1.5 bg-zinc-900/90 hover:bg-emerald-950/50 border border-emerald-900/30 hover:border-emerald-500/60 rounded-xl transition-all cursor-grab active:cursor-grabbing select-none"
+                                            title={`Drag onto map or click to spawn ${tok.name} (${tok.classLevel || 'Hero'})`}
+                                          >
+                                            {/* Token Avatar with Live Dot */}
+                                            <div className="relative w-9 h-9 rounded-full overflow-hidden border-2 border-emerald-500/50 group-hover:border-emerald-400 shrink-0 shadow-sm pointer-events-none">
+                                              <img src={tok.url} alt={tok.name} className="w-full h-full object-cover" />
+                                              <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-emerald-400 ring-1 ring-zinc-900" />
+                                            </div>
+
+                                            {/* Character Meta */}
+                                            <div className="flex flex-col min-w-0 flex-1 pointer-events-none">
+                                              <span className="text-[11px] font-bold text-zinc-200 group-hover:text-emerald-300 truncate leading-tight">
+                                                {tok.name}
+                                              </span>
+                                              <span className="text-[9px] text-zinc-400 truncate leading-tight mt-0.5">
+                                                {tok.classLevel || tok.race}
+                                              </span>
+                                              
+                                              {/* Live Stats Row */}
+                                              <div className="flex items-center gap-2 mt-1 text-[9px] font-mono">
+                                                <span className={`font-bold ${hpColor} flex items-center gap-0.5`}>
+                                                  <Heart className="w-2.5 h-2.5 fill-current" />
+                                                  {tok.hp}/{tok.maxHp}
+                                                </span>
+                                                <span className="text-zinc-400 flex items-center gap-0.5">
+                                                  <Shield className="w-2.5 h-2.5 text-blue-400" />
+                                                  {tok.ac}
+                                                </span>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </>
                               )}
                             </div>
                           )}
@@ -4439,81 +4513,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                   </div>
                 );
               })()}
-
-              {tokenTab === 'auras' && (
-                <div className="flex flex-col gap-1.5 bg-indigo-950/20 p-2 rounded-xl border border-indigo-900/30">
-                  <div
-                    onClick={() => setCollapseAuras(!collapseAuras)}
-                    className="flex items-center justify-between px-0.5 cursor-pointer select-none"
-                  >
-                    <span className="text-[10px] uppercase font-bold font-mono text-indigo-400 flex items-center gap-1.5">
-                      <Sparkles className="w-3 h-3 text-indigo-400" />
-                      Magical Auras
-                    </span>
-                    {collapseAuras ? <ChevronRight className="w-3.5 h-3.5 text-indigo-400" /> : <ChevronDown className="w-3.5 h-3.5 text-indigo-400" />}
-                  </div>
-                  <div className={`grid grid-cols-2 gap-2 max-h-[220px] overflow-y-auto p-1 ${collapseAuras ? 'hidden' : ''}`}>
-                    {[
-                      { name: 'Paladin', color: 'rgba(234, 179, 8, 0.4)' },
-                      { name: 'Healing', color: 'rgba(34, 197, 94, 0.4)' },
-                      { name: 'Magic', color: 'rgba(168, 85, 247, 0.4)' },
-                      { name: 'Curse', color: 'rgba(239, 68, 68, 0.4)' },
-                      { name: 'Frost', color: 'rgba(6, 182, 212, 0.4)' },
-                      { name: 'Spirit', color: 'rgba(59, 130, 246, 0.4)' }
-                    ].map((a, i) => (
-                      <button
-                        key={i}
-                        onClick={() => {
-                          setAuraColor(a.color);
-                          setTool('aura');
-                        }}
-                        className="flex items-center gap-2 p-2 rounded-xl bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/60 hover:border-indigo-400 transition-all text-left"
-                      >
-                        <div className="w-4 h-4 rounded-full border border-white/30 shrink-0" style={{ backgroundColor: a.color }} />
-                        <span className="text-xs font-medium text-zinc-300">{a.name}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {tokenTab === 'conditions' && (
-                <div className="flex flex-col gap-1.5 bg-red-950/20 p-2 rounded-xl border border-red-900/30">
-                  <div
-                    onClick={() => setCollapseConditions(!collapseConditions)}
-                    className="flex items-center justify-between px-0.5 cursor-pointer select-none"
-                  >
-                    <span className="text-[10px] uppercase font-bold font-mono text-red-400 flex items-center gap-1.5">
-                      <Flame className="w-3 h-3 text-red-400" />
-                      Status Conditions ({conditions.length})
-                    </span>
-                    {collapseConditions ? <ChevronRight className="w-3.5 h-3.5 text-red-400" /> : <ChevronDown className="w-3.5 h-3.5 text-red-400" />}
-                  </div>
-                  <div className={`grid grid-cols-2 gap-1.5 max-h-[240px] overflow-y-auto p-1 sidebar-scrollbar ${collapseConditions ? 'hidden' : ''}`}>
-                    {conditions.map((cond, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => {
-                          const newCondition = {
-                            id: Math.random().toString(36).substring(7),
-                            name: cond.name,
-                            url: cond.url,
-                            x: -stagePos.x / stageScale + 120,
-                            y: -stagePos.y / stageScale + 120,
-                            size: 0.5,
-                            isCondition: true
-                          };
-                          setTokens(prev => [...prev, newCondition]);
-                        }}
-                        className="flex items-center gap-2 p-1.5 rounded-xl bg-zinc-800/40 hover:bg-red-500/10 border border-zinc-700/50 hover:border-red-500/30 transition-all text-left"
-                      >
-                        <img src={cond.url} alt={cond.name} className="w-4 h-4 object-contain" />
-                        <span className="text-[11px] font-medium text-zinc-300 truncate">{cond.name}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           )}
 

@@ -1755,13 +1755,7 @@ export class DdbHpSyncDaemon {
   }
 
   private async startBackgroundMonitoring() {
-    // 1. Always monitor default hero characters (Varrak, Noctua, Aggie, Rowan)
-    const defaultHeroIds = ['146614740', '147334187', '158502126', '146533824'];
-    for (const id of defaultHeroIds) {
-      await this.addMonitoredCharacter(id);
-    }
-
-    // 2. Auto-discover user campaigns
+    // 1. Auto-discover user campaigns
     const campaignIds = new Set<string>(['3290944', '6738033']);
     if (process.env.DND_BEYOND_CAMPAIGN_ID) {
       process.env.DND_BEYOND_CAMPAIGN_ID.split(',').map(s => s.trim()).filter(Boolean).forEach(id => campaignIds.add(id));
