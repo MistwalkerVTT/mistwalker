@@ -60,7 +60,7 @@ export const PlayerStationModal: React.FC<PlayerStationModalProps> = ({
             </div>
           </button>
 
-          {/* Station 2: Remote Player View with BG3 HUD */}
+          {/* Station 2: Remote Player View with D&D Beyond Tactical HUD */}
           <button
             type="button"
             onClick={() => onSelectStation('remote_player')}
@@ -74,7 +74,7 @@ export const PlayerStationModal: React.FC<PlayerStationModalProps> = ({
                 <h3 className="text-sm font-bold text-white font-mono group-hover:text-amber-300 flex items-center gap-1.5">
                   <span>Remote Player</span>
                   <span className="px-1.5 py-0.2 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded text-[9px]">
-                    BG3 HUD
+                    DDB HUD
                   </span>
                 </h3>
                 <p className="text-[11px] text-zinc-400 font-sans mt-1 leading-relaxed">

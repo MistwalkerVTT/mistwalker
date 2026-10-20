@@ -1,5 +1,5 @@
 // src/types/hud.ts
-// Strict TypeScript types for the Baldur's Gate 3-Inspired Hero Bottom HUD
+// Strict TypeScript types for the MistWalker D&D Beyond Tactical Character HUD
 
 export type HudActionCategory = 'attacks' | 'actions' | 'bonus_actions' | 'spells' | 'reactions' | 'items';
 

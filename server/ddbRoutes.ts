@@ -285,7 +285,7 @@ ddbRouter.get('/characters/:id', async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/ddb/characters/:id/hud-data - Fetch normalized BG3-style action dock payload
+// GET /api/ddb/characters/:id/hud-data - Fetch normalized D&D Beyond tactical HUD payload
 ddbRouter.get('/characters/:id/hud-data', async (req: Request, res: Response) => {
   try {
     const charId = String(req.params.id).replace(/^char_ddb_/, '').trim();

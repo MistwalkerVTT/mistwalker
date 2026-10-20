@@ -8,29 +8,34 @@ import {
   Package,
   ExternalLink,
   ChevronUp,
+  ChevronDown,
   RotateCcw,
-  Target,
   Crosshair,
   X,
   Tv,
   RefreshCw,
   Flame,
-  Wand2
+  Wand2,
+  Search,
+  Eye,
+  Footprints
 } from 'lucide-react';
 import { HudCharacterData, HudActionItem, HudActionCategory } from '../types/hud';
 
 interface PlayerHeroDockProps {
   characterData: HudCharacterData | null;
-  claimedToken: any | null;
+  claimedToken?: any | null;
   onSelectAction: (action: HudActionItem) => void;
-  activeTargetingAction: HudActionItem | null;
-  onCancelTargeting: () => void;
+  activeTargetingAction?: HudActionItem | null;
+  selectedAction?: HudActionItem | null;
+  onCancelTargeting?: () => void;
   onEndTurn?: () => void;
   isMyTurn?: boolean;
   onSwitchStationMode?: () => void;
   onOpenRestModal?: () => void;
   onRefreshDdb?: () => void;
   isSyncingDdb?: boolean;
+  isMobile?: boolean;
 }
 
 export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
@@ -38,6 +43,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
   claimedToken,
   onSelectAction,
   activeTargetingAction,
+  selectedAction,
   onCancelTargeting,
   onEndTurn,
   isMyTurn = false,
@@ -46,18 +52,23 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
   onRefreshDdb,
   isSyncingDdb = false
 }) => {
+  const currentTargetingAction = activeTargetingAction ?? selectedAction ?? null;
+
   const [activeCategory, setActiveCategory] = useState<HudActionCategory>('attacks');
   const [selectedSpellLevel, setSelectedSpellLevel] = useState<number | 'all'>('all');
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [hoveredAction, setHoveredAction] = useState<HudActionItem | null>(null);
-  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
+  const [isTrayCollapsed, setIsTrayCollapsed] = useState<boolean>(false);
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState<boolean>(false);
 
-  // Reset spell level filter when switching characters
+  // Reset filters when switching characters
   useEffect(() => {
     setSelectedSpellLevel('all');
+    setSearchQuery('');
   }, [characterData?.id, claimedToken?.id]);
 
-  // Fallback defaults if DDB character not yet loaded
-  const name = characterData?.name || claimedToken?.name || 'Hero';
+  // Character vitals & metadata
+  const name = characterData?.name || claimedToken?.name || 'Adventurer';
   const classLevel = characterData?.classLevel || '';
   const race = characterData?.race || '';
   const avatarUrl = characterData?.avatarUrl || claimedToken?.avatarUrl || claimedToken?.url || '';
@@ -65,20 +76,22 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
   const rawMaxHp = Number(characterData?.maxHp ?? claimedToken?.maxHp ?? claimedToken?.hp ?? 25);
   const currentHp = Number.isFinite(rawCurrentHp) ? Math.max(0, rawCurrentHp) : 25;
   const maxHp = Number.isFinite(rawMaxHp) && rawMaxHp > 0 ? rawMaxHp : Math.max(1, currentHp);
-  const tempHp = Number.isFinite(Number(characterData?.tempHp ?? claimedToken?.tempHp)) ? Number(characterData?.tempHp ?? claimedToken?.tempHp) : 0;
+  const tempHp = Number.isFinite(Number(characterData?.tempHp ?? claimedToken?.tempHp))
+    ? Number(characterData?.tempHp ?? claimedToken?.tempHp)
+    : 0;
   const rawAc = Number(characterData?.ac ?? claimedToken?.ac ?? 14);
   const ac = Number.isFinite(rawAc) ? rawAc : 14;
   const speed = characterData?.speed || '30 ft.';
-  const passivePerception = Number.isFinite(Number(characterData?.passivePerception)) ? Number(characterData?.passivePerception) : 12;
+  const passivePerception = Number.isFinite(Number(characterData?.passivePerception))
+    ? Number(characterData?.passivePerception)
+    : 12;
   const spellSaveDc = characterData?.spellSaveDc;
   const spellAttackBonus = characterData?.spellAttackBonus;
   const isLiveSynced = Boolean(characterData?.isLiveSynced || characterData?.ddbCharacterId);
 
-  // Radial HP percentage calculation (guaranteed finite between 0 and 100)
   const hpPercent = Math.max(0, Math.min(100, (currentHp / maxHp) * 100));
-  const strokeDashoffset = 283 - (283 * hpPercent) / 100;
 
-  // Actions grouped by category with strict Array checks
+  // Categorized lists from D&D Beyond character data
   const actionsList = useMemo<HudActionItem[]>(() => {
     if (Array.isArray(characterData?.actions) && characterData.actions.length > 0) {
       return characterData.actions;
@@ -86,15 +99,15 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
     return [
       {
         id: 'default-attack',
-        name: 'Main Attack',
+        name: 'Unarmed Strike',
         category: 'actions',
         type: 'action',
-        subCategory: 'weapon',
+        subCategory: 'unarmed',
         isAttack: true,
         hitBonus: '+5',
-        damageFormula: '1d8 + 3',
-        damageType: 'slashing',
-        description: 'Standard melee attack with equipped weapon.',
+        damageFormula: '1d4 + 3',
+        damageType: 'bludgeoning',
+        description: 'Standard melee unarmed strike.',
         jb2aAssetId: 'attack_slash',
         rangeFt: 5
       },
@@ -105,7 +118,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
         type: 'action',
         subCategory: 'standard',
         isSelfAction: true,
-        description: 'Double movement speed for the turn.',
+        description: 'Gain extra movement for the current turn equal to your speed.',
         rangeFt: 0
       }
     ];
@@ -115,8 +128,9 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
     if (Array.isArray(characterData?.attacks) && characterData.attacks.length > 0) {
       return characterData.attacks;
     }
-    // Derive from actionsList if attacks array wasn't explicitly provided
-    const derived = actionsList.filter(a => a.isAttack || a.hitBonus !== undefined || a.damageFormula !== undefined);
+    const derived = actionsList.filter(
+      a => a.isAttack || a.hitBonus !== undefined || a.damageFormula !== undefined
+    );
     return derived.length > 0 ? derived : actionsList;
   }, [characterData?.attacks, actionsList]);
 
@@ -164,23 +178,50 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
   }, [spellsList, selectedSpellLevel]);
 
   const currentCategoryList = useMemo<HudActionItem[]>(() => {
+    let base: HudActionItem[];
     switch (activeCategory) {
       case 'attacks':
-        return attacksList;
+        base = attacksList;
+        break;
       case 'actions':
-        return actionsList;
+        base = actionsList;
+        break;
       case 'bonus_actions':
-        return bonusActionsList;
+        base = bonusActionsList;
+        break;
       case 'spells':
-        return filteredSpellsList;
+        base = filteredSpellsList;
+        break;
       case 'reactions':
-        return reactionsList;
+        base = reactionsList;
+        break;
       case 'items':
-        return itemsList;
+        base = itemsList;
+        break;
       default:
-        return actionsList;
+        base = actionsList;
     }
-  }, [activeCategory, attacksList, actionsList, bonusActionsList, filteredSpellsList, reactionsList, itemsList]);
+
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return base;
+    return base.filter(
+      item =>
+        item.name.toLowerCase().includes(q) ||
+        (item.damageType && item.damageType.toLowerCase().includes(q)) ||
+        (item.sourceLabel && item.sourceLabel.toLowerCase().includes(q)) ||
+        (item.notes && item.notes.toLowerCase().includes(q)) ||
+        (item.description && item.description.toLowerCase().includes(q))
+    );
+  }, [
+    activeCategory,
+    attacksList,
+    actionsList,
+    bonusActionsList,
+    filteredSpellsList,
+    reactionsList,
+    itemsList,
+    searchQuery
+  ]);
 
   const formatSpellLevelLabel = (lvl: number) => {
     if (lvl === 0) return 'Cantrip';
@@ -190,14 +231,16 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
     return `${lvl}th`;
   };
 
-  const renderActionGlyph = (action: HudActionItem, sizeClass = 'w-5 h-5') => {
+  const renderActionGlyph = (action: HudActionItem, sizeClass = 'w-4 h-4') => {
     if (action.isHeal) {
       return <Heart className={`${sizeClass} text-emerald-400`} />;
     }
     if (action.category === 'spells' || action.subCategory === 'spell') {
-      return (action.level ?? 0) === 0
-        ? <Wand2 className={`${sizeClass} text-cyan-400`} />
-        : <Sparkles className={`${sizeClass} text-blue-400`} />;
+      return (action.level ?? 0) === 0 ? (
+        <Wand2 className={`${sizeClass} text-cyan-400`} />
+      ) : (
+        <Sparkles className={`${sizeClass} text-blue-400`} />
+      );
     }
     if (action.category === 'bonus_actions' || action.type === 'bonus_action') {
       return <Flame className={`${sizeClass} text-amber-400`} />;
@@ -216,58 +259,66 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
     label: string;
     shortLabel: string;
     count: number;
-    color: string;
-    activeBg: string;
+    accentText: string;
+    activeClass: string;
   }> = [
     {
       id: 'attacks',
       label: 'Attacks',
       shortLabel: 'Attacks',
       count: attacksList.length,
-      color: 'text-rose-400',
-      activeBg: 'bg-rose-500/20 border-rose-500/60'
+      accentText: 'text-rose-400',
+      activeClass: 'bg-rose-500/15 border-rose-500/70 text-rose-200'
     },
     {
       id: 'actions',
       label: 'Actions',
       shortLabel: 'Actions',
       count: actionsList.length,
-      color: 'text-emerald-400',
-      activeBg: 'bg-emerald-500/20 border-emerald-500/60'
+      accentText: 'text-emerald-400',
+      activeClass: 'bg-emerald-500/15 border-emerald-500/70 text-emerald-200'
     },
     {
       id: 'bonus_actions',
       label: 'Bonus Actions',
       shortLabel: 'Bonus',
       count: bonusActionsList.length,
-      color: 'text-amber-400',
-      activeBg: 'bg-amber-500/20 border-amber-500/60'
+      accentText: 'text-amber-400',
+      activeClass: 'bg-amber-500/15 border-amber-500/70 text-amber-200'
     },
     {
       id: 'spells',
       label: 'Spells',
       shortLabel: 'Spells',
       count: spellsList.length,
-      color: 'text-blue-400',
-      activeBg: 'bg-blue-500/20 border-blue-500/60'
+      accentText: 'text-blue-400',
+      activeClass: 'bg-blue-500/15 border-blue-500/70 text-blue-200'
     },
     {
       id: 'reactions',
       label: 'Reactions',
       shortLabel: 'React',
       count: reactionsList.length,
-      color: 'text-violet-400',
-      activeBg: 'bg-violet-500/20 border-violet-500/60'
+      accentText: 'text-violet-400',
+      activeClass: 'bg-violet-500/15 border-violet-500/70 text-violet-200'
     },
     {
       id: 'items',
-      label: 'Items',
+      label: 'Inventory',
       shortLabel: 'Items',
       count: itemsList.length,
-      color: 'text-purple-400',
-      activeBg: 'bg-purple-500/20 border-purple-500/60'
+      accentText: 'text-purple-400',
+      activeClass: 'bg-purple-500/15 border-purple-500/70 text-purple-200'
     }
   ];
+
+  const handleCancelActiveTargeting = () => {
+    if (onCancelTargeting) {
+      onCancelTargeting();
+    } else if (currentTargetingAction) {
+      onSelectAction(currentTargetingAction);
+    }
+  };
 
   return (
     <div
@@ -275,35 +326,38 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
       className="fixed bottom-0 inset-x-0 z-[60] flex flex-col items-center pointer-events-none select-none pb-2 sm:pb-3 px-2 sm:px-4"
     >
       {/* ========================================================================= */}
-      {/* TARGETING STATUS BAR (Responsive: pinned top on mobile, above dock on desktop) */}
+      {/* ACTIVE TARGETING BANNER                                                   */}
       {/* ========================================================================= */}
-      {activeTargetingAction && (
-        <div className="pointer-events-auto mb-2 fixed top-3 inset-x-3 sm:static sm:inset-x-auto sm:top-auto z-[140] flex items-center justify-between sm:justify-center gap-3 px-4 sm:px-5 py-2.5 rounded-2xl sm:rounded-full bg-zinc-950/98 border border-amber-500/80 shadow-[0_0_30px_rgba(245,158,11,0.5)] text-amber-300 font-mono text-xs animate-in slide-in-from-top-2 sm:slide-in-from-bottom-2 duration-150 ring-1 ring-amber-500/40 max-w-lg sm:max-w-none mx-auto">
+      {currentTargetingAction && (
+        <div className="pointer-events-auto mb-2 fixed top-3 inset-x-3 sm:static sm:inset-x-auto sm:top-auto z-[140] flex items-center justify-between sm:justify-center gap-3 px-4 py-2 rounded-xl bg-zinc-950/95 border border-amber-500/80 shadow-[0_8px_30px_rgba(0,0,0,0.85)] text-amber-200 font-mono text-xs animate-in fade-in duration-150 max-w-xl mx-auto">
           <div className="flex items-center gap-2 truncate">
-            <Crosshair className="w-4 h-4 text-amber-400 animate-spin shrink-0" style={{ animationDuration: '6s' }} />
+            <Crosshair className="w-4 h-4 text-amber-400 animate-pulse shrink-0" />
             <span className="truncate">
-              Target: <strong className="text-white">{activeTargetingAction.name}</strong>{' '}
-              <span className="hidden sm:inline">(Click target token on map)</span>
+              Aiming <strong className="text-white">{currentTargetingAction.name}</strong>
+              <span className="hidden sm:inline text-zinc-400"> — Click target on battlemap</span>
             </span>
-            {activeTargetingAction.hitBonus && (
-              <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] border border-emerald-500/40 shrink-0 font-bold">
-                {activeTargetingAction.hitBonus}
+            {currentTargetingAction.hitBonus !== undefined && (
+              <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 text-[10px] border border-emerald-500/40 shrink-0 font-bold">
+                {String(currentTargetingAction.hitBonus).startsWith('+') || String(currentTargetingAction.hitBonus).startsWith('-')
+                  ? currentTargetingAction.hitBonus
+                  : `+${currentTargetingAction.hitBonus}`}
               </span>
             )}
-            {activeTargetingAction.damageFormula && (
-              <span className="px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 text-[10px] border border-rose-500/40 shrink-0 font-bold">
-                {activeTargetingAction.damageFormula}
+            {currentTargetingAction.damageFormula && (
+              <span className="px-2 py-0.5 rounded bg-rose-950 text-rose-300 text-[10px] border border-rose-500/40 shrink-0 font-bold">
+                {currentTargetingAction.damageFormula}
               </span>
             )}
-            {activeTargetingAction.rangeFt !== undefined && activeTargetingAction.rangeFt > 0 && (
-              <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-[10px] border border-amber-500/40 shrink-0">
-                {activeTargetingAction.rangeFt} ft
+            {currentTargetingAction.rangeFt !== undefined && currentTargetingAction.rangeFt > 0 && (
+              <span className="px-2 py-0.5 rounded bg-zinc-900 text-zinc-300 text-[10px] border border-zinc-700 shrink-0">
+                {currentTargetingAction.rangeFt} ft.
               </span>
             )}
           </div>
           <button
-            onClick={onCancelTargeting}
-            className="px-2.5 py-1 rounded-xl bg-zinc-900 border border-zinc-750 hover:bg-zinc-800 text-zinc-300 hover:text-white transition-colors cursor-pointer text-[11px] font-bold flex items-center gap-1 shrink-0"
+            type="button"
+            onClick={handleCancelActiveTargeting}
+            className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-700 hover:bg-zinc-800 text-zinc-300 hover:text-white transition-colors cursor-pointer text-[11px] font-bold flex items-center gap-1 shrink-0"
             title="Cancel Targeting (Esc)"
           >
             <X className="w-3.5 h-3.5" />
@@ -312,48 +366,56 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
         </div>
       )}
 
-      {/* Action Hover Tooltip Preview (Desktop hover only) */}
-      {hoveredAction && !activeTargetingAction && (
-        <div className="hidden sm:block pointer-events-none mb-2 px-4 py-2.5 rounded-2xl bg-zinc-950/98 border border-zinc-700/90 shadow-2xl text-left max-w-lg animate-in fade-in duration-100 ring-1 ring-white/10">
+      {/* ========================================================================= */}
+      {/* DESKTOP HOVER DETAIL POPOVER                                              */}
+      {/* ========================================================================= */}
+      {hoveredAction && !currentTargetingAction && (
+        <div className="hidden md:block pointer-events-none mb-2 px-4 py-3 rounded-xl bg-zinc-950/98 border border-zinc-700/90 shadow-2xl text-left w-full max-w-2xl animate-in fade-in duration-100">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-2">
-              <span className="font-bold text-amber-300 font-mono text-xs">
-                {hoveredAction.name}
-              </span>
+              {renderActionGlyph(hoveredAction, 'w-4 h-4')}
+              <span className="font-bold text-white font-mono text-xs">{hoveredAction.name}</span>
               {hoveredAction.sourceLabel && (
-                <span className="px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-[9px] font-mono text-zinc-300">
+                <span className="px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-[10px] font-mono text-zinc-300">
                   {hoveredAction.sourceLabel}
+                </span>
+              )}
+              {hoveredAction.level !== undefined && (
+                <span className="px-1.5 py-0.5 rounded bg-blue-950 border border-blue-500/40 text-[10px] font-mono text-blue-300 font-bold">
+                  {hoveredAction.level === 0 ? 'Cantrip' : `${formatSpellLevelLabel(hoveredAction.level)} Level`}
                 </span>
               )}
             </div>
             <div className="flex items-center gap-2 text-[10px] font-mono text-zinc-300">
               {hoveredAction.castingTime && (
-                <span className="text-amber-200/90">{hoveredAction.castingTime}</span>
+                <span className="text-amber-300 font-semibold">{hoveredAction.castingTime}</span>
               )}
               {hoveredAction.rangeFt !== undefined && (
-                <span>{hoveredAction.rangeFt > 0 ? `${hoveredAction.rangeFt} ft.` : 'Self'}</span>
+                <span>• {hoveredAction.rangeFt > 0 ? `${hoveredAction.rangeFt} ft.` : 'Self'}</span>
               )}
-              {hoveredAction.hitBonus && (
-                <span className="px-1.5 py-0.2 rounded bg-emerald-950 border border-emerald-500/50 text-emerald-300 font-bold">
-                  To Hit {hoveredAction.hitBonus}
+              {hoveredAction.hitBonus !== undefined && (
+                <span className="px-1.5 py-0.5 rounded bg-emerald-950 border border-emerald-500/50 text-emerald-300 font-bold">
+                  To Hit: {String(hoveredAction.hitBonus).startsWith('+') || String(hoveredAction.hitBonus).startsWith('-') ? hoveredAction.hitBonus : `+${hoveredAction.hitBonus}`}
                 </span>
               )}
               {hoveredAction.saveDc && (
-                <span className="px-1.5 py-0.2 rounded bg-amber-950 border border-amber-500/50 text-amber-300 font-bold">
-                  DC {hoveredAction.saveDc} {hoveredAction.saveAbility || ''}
+                <span className="px-1.5 py-0.5 rounded bg-amber-950 border border-amber-500/50 text-amber-300 font-bold">
+                  Save: DC {hoveredAction.saveDc} {hoveredAction.saveAbility || ''}
                 </span>
               )}
               {hoveredAction.damageFormula && (
-                <span className={`px-1.5 py-0.2 rounded font-bold border ${
-                  hoveredAction.isHeal
-                    ? 'bg-emerald-950 border-emerald-500/50 text-emerald-300'
-                    : 'bg-rose-950 border-rose-500/50 text-rose-300'
-                }`}>
+                <span
+                  className={`px-1.5 py-0.5 rounded font-bold border ${
+                    hoveredAction.isHeal
+                      ? 'bg-emerald-950 border-emerald-500/50 text-emerald-300'
+                      : 'bg-rose-950 border-rose-500/50 text-rose-300'
+                  }`}
+                >
                   {hoveredAction.damageFormula} {hoveredAction.damageType || ''}
                 </span>
               )}
               {hoveredAction.uses && (
-                <span className="px-1.5 py-0.2 rounded bg-indigo-950 border border-indigo-500/50 text-indigo-300 font-bold">
+                <span className="px-1.5 py-0.5 rounded bg-indigo-950 border border-indigo-500/50 text-indigo-300 font-bold">
                   {hoveredAction.uses.available}/{hoveredAction.uses.total} Uses
                 </span>
               )}
@@ -361,123 +423,106 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
           </div>
           {hoveredAction.notes && (
             <div className="text-[10px] font-mono text-amber-400/90 mt-1">
-              Properties: {hoveredAction.notes}
+              Properties & Mastery: {hoveredAction.notes}
             </div>
           )}
-          <p className="text-[11px] text-zinc-300 mt-1 line-clamp-3 font-sans leading-relaxed">
+          <p className="text-[11px] text-zinc-300 mt-1.5 line-clamp-3 font-sans leading-relaxed">
             {hoveredAction.description}
           </p>
         </div>
       )}
 
       {/* ========================================================================= */}
-      {/* MOBILE COMPACT HERO PILL (Rendered on mobile screens < 768px)            */}
+      {/* MOBILE COMPACT BAR (< 768px)                                              */}
       {/* ========================================================================= */}
-      <div className="flex md:hidden pointer-events-auto items-center justify-between gap-2.5 w-full max-w-md mx-auto p-2 rounded-2xl bg-zinc-950/95 backdrop-blur-xl border border-zinc-800 shadow-[0_10px_30px_rgba(0,0,0,0.9)] ring-1 ring-white/10">
-        {/* Mini Radial HP Orb */}
-        <div className="relative w-12 h-12 flex items-center justify-center shrink-0">
-          <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-            <circle cx="50" cy="50" r="42" className="stroke-zinc-850" strokeWidth="9" fill="transparent" />
-            <circle
-              cx="50"
-              cy="50"
-              r="42"
-              className={`transition-all duration-500 ${
-                hpPercent > 50 ? 'stroke-emerald-500' : hpPercent > 25 ? 'stroke-amber-500' : 'stroke-rose-600'
-              }`}
-              strokeWidth="9"
-              strokeDasharray="264"
-              strokeDashoffset={264 - (264 * hpPercent) / 100}
-              strokeLinecap="round"
-              fill="transparent"
-            />
-          </svg>
-          <div className="absolute inset-1.5 rounded-full overflow-hidden border border-zinc-700 bg-zinc-900 flex items-center justify-center">
-            {avatarUrl ? (
-              <img src={avatarUrl} alt={name} className="w-full h-full object-cover" />
-            ) : (
-              <span className="text-[10px] font-bold text-zinc-400 font-mono">{name.slice(0, 2).toUpperCase()}</span>
-            )}
-          </div>
-          {/* AC Badge */}
-          <div className="absolute -bottom-1 -right-1 px-1 rounded bg-zinc-900 border border-zinc-700 text-amber-300 font-mono font-bold text-[9px] flex items-center">
+      <div className="flex md:hidden pointer-events-auto items-center justify-between gap-2.5 w-full max-w-md mx-auto p-2.5 rounded-xl bg-zinc-950/95 backdrop-blur-xl border border-zinc-800 shadow-[0_10px_30px_rgba(0,0,0,0.9)]">
+        {/* Square Character Portrait */}
+        <div className="relative w-11 h-11 rounded-lg overflow-hidden border border-zinc-700 bg-zinc-900 shrink-0">
+          {avatarUrl ? (
+            <img src={avatarUrl} alt={name} className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-xs font-bold text-zinc-400 font-mono">
+              {name.slice(0, 2).toUpperCase()}
+            </div>
+          )}
+          <div className="absolute bottom-0 right-0 px-1 bg-zinc-950/90 border-t border-l border-zinc-700 text-amber-300 font-mono font-bold text-[9px] flex items-center">
             <Shield className="w-2.5 h-2.5 text-amber-400 mr-0.5" />
             {ac}
           </div>
         </div>
 
-        {/* Vitals Summary & Actions Drawer Trigger */}
+        {/* Character Summary & Open Sheet Trigger */}
         <button
           type="button"
           onClick={() => setIsMobileDrawerOpen(prev => !prev)}
-          className="flex-1 flex flex-col items-start px-2 py-1 rounded-xl hover:bg-zinc-900/80 active:bg-zinc-850 transition-colors text-left min-w-0 cursor-pointer"
+          className="flex-1 flex flex-col items-start px-2 py-1 rounded-lg hover:bg-zinc-900/80 transition-colors text-left min-w-0 cursor-pointer"
         >
           <div className="flex items-center gap-1.5 w-full">
             <span className="text-xs font-bold text-white font-mono truncate">{name}</span>
             <span className="text-[10px] font-mono font-bold text-emerald-400 shrink-0">
-              {currentHp}/{maxHp} HP
+              HP {currentHp}/{maxHp}
             </span>
+            {isLiveSynced && (
+              <span className="px-1 py-0.2 rounded bg-red-500/20 border border-red-500/40 text-red-300 text-[8px] font-mono font-bold shrink-0">
+                DDB
+              </span>
+            )}
           </div>
-          <div className="flex items-center gap-1 text-[11px] font-mono text-amber-400 mt-0.5">
-            <Swords className="w-3 h-3 text-amber-400" />
-            <span className="font-bold underline decoration-amber-500/40 underline-offset-2">
-              Attacks ({attacksList.length}) • Bonus ({bonusActionsList.length}) • Spells ({spellsList.length})
+          <div className="flex items-center gap-1 text-[10px] font-mono text-zinc-300 mt-0.5">
+            <Swords className="w-3 h-3 text-rose-400" />
+            <span className="font-semibold">
+              {attacksList.length} Atk • {bonusActionsList.length} Bonus • {spellsList.length} Spells
             </span>
-            <ChevronUp className={`w-3.5 h-3.5 transition-transform ${isMobileDrawerOpen ? 'rotate-180' : ''}`} />
+            <ChevronUp className={`w-3.5 h-3.5 text-amber-400 transition-transform ${isMobileDrawerOpen ? 'rotate-180' : ''}`} />
           </div>
         </button>
 
-        {/* Quick End Turn / Pass Turn or Station Mode on Mobile */}
+        {/* Sync & Turn Controls */}
         <div className="flex items-center gap-1 shrink-0">
           {onRefreshDdb && (
             <button
               type="button"
               onClick={onRefreshDdb}
-              className="p-2 rounded-xl bg-zinc-900 text-emerald-400 hover:text-emerald-300 border border-zinc-800 cursor-pointer"
+              className="p-2 rounded-lg bg-zinc-900 text-emerald-400 hover:text-emerald-300 border border-zinc-800 cursor-pointer"
               title="Sync Live from D&D Beyond"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isSyncingDdb ? 'animate-spin' : ''}`} />
             </button>
           )}
 
-          {onEndTurn && isMyTurn ? (
+          {onEndTurn && (
             <button
               type="button"
               onClick={onEndTurn}
-              className="px-3 py-2 rounded-xl font-mono text-[11px] font-bold bg-gradient-to-r from-amber-500 to-amber-400 text-zinc-950 shadow-md shadow-amber-500/30 animate-pulse cursor-pointer flex items-center gap-1"
+              className={`px-3 py-2 rounded-lg font-mono text-[11px] font-bold cursor-pointer ${
+                isMyTurn
+                  ? 'bg-amber-500 text-zinc-950 shadow-md'
+                  : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800'
+              }`}
             >
-              <span>End Turn</span>
+              {isMyTurn ? 'End Turn' : 'Pass'}
             </button>
-          ) : onEndTurn ? (
-            <button
-              type="button"
-              onClick={onEndTurn}
-              className="px-2.5 py-2 rounded-xl font-mono text-[10px] font-medium bg-zinc-900 hover:bg-zinc-800 text-zinc-400 border border-zinc-800 cursor-pointer"
-            >
-              Pass
-            </button>
-          ) : null}
+          )}
         </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* MOBILE SLIDE-UP HERO ACTION SHEET (Bottom Sheet Modal)                    */}
+      {/* MOBILE SLIDE-UP D&D BEYOND ACTION SHEET                                   */}
       {/* ========================================================================= */}
       {isMobileDrawerOpen && (
-        <div className="fixed inset-x-0 bottom-0 z-[120] max-h-[86dvh] flex flex-col bg-zinc-950/98 backdrop-blur-2xl border-t border-amber-500/40 rounded-t-3xl shadow-[0_-20px_50px_rgba(0,0,0,0.95)] p-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pointer-events-auto animate-in slide-in-from-bottom duration-200">
-          {/* Drag Handle & Header */}
+        <div className="fixed inset-x-0 bottom-0 z-[120] max-h-[86dvh] flex flex-col bg-zinc-950/98 backdrop-blur-2xl border-t border-zinc-800 rounded-t-2xl shadow-[0_-20px_50px_rgba(0,0,0,0.95)] p-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pointer-events-auto animate-in slide-in-from-bottom duration-200 md:hidden">
           <div className="w-12 h-1.5 bg-zinc-700/80 rounded-full mx-auto mb-2 shrink-0" />
-          <div className="flex items-center justify-between pb-3 border-b border-zinc-850 shrink-0">
+          <div className="flex items-center justify-between pb-3 border-b border-zinc-800 shrink-0">
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-9 h-9 rounded-full overflow-hidden border border-zinc-700 bg-zinc-900 shrink-0">
+              <div className="w-10 h-10 rounded-lg overflow-hidden border border-zinc-700 bg-zinc-900 shrink-0">
                 {avatarUrl ? <img src={avatarUrl} alt={name} className="w-full h-full object-cover" /> : null}
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
                   <span className="text-sm font-bold text-white font-mono truncate">{name}</span>
                   {isLiveSynced && (
-                    <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[9px] font-mono font-bold shrink-0">
-                      DDB LIVE
+                    <span className="px-1.5 py-0.2 rounded bg-red-500/20 border border-red-500/40 text-red-300 text-[9px] font-mono font-bold shrink-0">
+                      D&D BEYOND LIVE
                     </span>
                   )}
                 </div>
@@ -497,8 +542,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                 <button
                   type="button"
                   onClick={onRefreshDdb}
-                  className="px-2 py-1.5 rounded-xl bg-zinc-900 text-emerald-400 hover:text-white border border-zinc-800 transition-colors cursor-pointer flex items-center gap-1 text-[10px] font-mono font-bold"
-                  title="Sync Live from D&D Beyond"
+                  className="px-2.5 py-1.5 rounded-lg bg-zinc-900 text-emerald-400 hover:text-white border border-zinc-800 transition-colors cursor-pointer flex items-center gap-1 text-[10px] font-mono font-bold"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isSyncingDdb ? 'animate-spin' : ''}`} />
                   <span>Sync</span>
@@ -507,49 +551,24 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
               <button
                 type="button"
                 onClick={() => setIsMobileDrawerOpen(false)}
-                className="p-1.5 rounded-xl bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800 transition-colors cursor-pointer"
-                title="Close"
+                className="p-1.5 rounded-lg bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800 transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
           </div>
 
-          {/* Spell Slots Matrix (Synced via D&D Beyond) */}
-          {characterData?.spellSlots && Object.keys(characterData.spellSlots).length > 0 && (
-            <div className="flex items-center gap-1.5 py-2 overflow-x-auto border-b border-zinc-850 sidebar-scrollbar shrink-0">
-              <span className="text-[9px] font-mono uppercase text-zinc-500 font-bold mr-1">Spell Slots:</span>
-              {Object.values(characterData.spellSlots).map((slot: any) => (
-                <button
-                  key={slot.level}
-                  type="button"
-                  onClick={() => {
-                    setActiveCategory('spells');
-                    setSelectedSpellLevel(prev => prev === slot.level ? 'all' : slot.level);
-                  }}
-                  className={`flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[10px] font-mono shrink-0 cursor-pointer transition-colors ${
-                    activeCategory === 'spells' && selectedSpellLevel === slot.level
-                      ? 'bg-blue-500/30 border-blue-400 text-white'
-                      : 'bg-zinc-900 border-zinc-800 text-zinc-200'
-                  }`}
-                >
-                  <span className="text-blue-400 font-bold">{['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX'][slot.level - 1] || slot.level}</span>
-                  <span className="font-bold">{slot.available}/{slot.total}</span>
-                </button>
-              ))}
-            </div>
-          )}
-
           {/* Category Tabs */}
           <div className="grid grid-cols-6 gap-1 py-2 shrink-0">
             {categoryTabs.map(tab => (
               <button
                 key={tab.id}
+                type="button"
                 onClick={() => setActiveCategory(tab.id)}
-                className={`py-1.5 px-1 rounded-xl text-[10px] font-mono font-bold transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer border ${
+                className={`py-1.5 px-1 rounded-lg text-[10px] font-mono font-bold transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer border ${
                   activeCategory === tab.id
-                    ? `${tab.activeBg} text-white shadow-md`
-                    : 'border-zinc-850 text-zinc-400 bg-zinc-900/60'
+                    ? tab.activeClass
+                    : 'border-zinc-800 text-zinc-400 bg-zinc-900/60'
                 }`}
               >
                 <span className="truncate">{tab.shortLabel}</span>
@@ -567,7 +586,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                 className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold border transition-all cursor-pointer shrink-0 ${
                   selectedSpellLevel === 'all'
                     ? 'bg-blue-500/25 border-blue-400 text-blue-200'
-                    : 'bg-zinc-900/80 border-zinc-800 text-zinc-400 hover:text-zinc-200'
+                    : 'bg-zinc-900/80 border-zinc-800 text-zinc-400'
                 }`}
               >
                 All ({spellsList.length})
@@ -583,7 +602,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                     className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold border transition-all cursor-pointer shrink-0 flex items-center gap-1 ${
                       selectedSpellLevel === lvl
                         ? 'bg-blue-500/25 border-blue-400 text-blue-200'
-                        : 'bg-zinc-900/80 border-zinc-800 text-zinc-400 hover:text-zinc-200'
+                        : 'bg-zinc-900/80 border-zinc-800 text-zinc-400'
                     }`}
                   >
                     <span>{formatSpellLevelLabel(lvl)}</span>
@@ -599,10 +618,10 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
             </div>
           )}
 
-          {/* Action Cards Touch Grid */}
-          <div className="flex-1 overflow-y-auto space-y-2 pr-1 min-h-[140px] max-h-[44dvh] sidebar-scrollbar">
+          {/* Action Rows */}
+          <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 min-h-[140px] max-h-[46dvh] sidebar-scrollbar">
             {currentCategoryList.map((action, idx) => {
-              const isTargetingThis = activeTargetingAction?.id === action.id;
+              const isTargetingThis = currentTargetingAction?.id === action.id;
               return (
                 <button
                   key={action.id || idx}
@@ -611,97 +630,67 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                     onSelectAction(action);
                     setIsMobileDrawerOpen(false);
                   }}
-                  className={`w-full p-2.5 rounded-xl border text-left transition-all flex items-start gap-3 cursor-pointer ${
+                  className={`w-full p-2.5 rounded-xl border text-left transition-all flex items-center justify-between gap-2.5 cursor-pointer ${
                     isTargetingThis
-                      ? 'border-amber-400 bg-amber-500/20 shadow-md ring-1 ring-amber-400'
-                      : 'border-zinc-800 bg-zinc-900/70 hover:bg-zinc-850 active:scale-[0.99]'
+                      ? 'border-amber-400 bg-amber-500/20 ring-1 ring-amber-400'
+                      : 'border-zinc-800 bg-zinc-900/70 hover:bg-zinc-850'
                   }`}
                 >
-                  <div className="w-10 h-10 rounded-xl bg-zinc-850 border border-zinc-750 flex items-center justify-center shrink-0">
-                    {renderActionGlyph(action, 'w-5 h-5')}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-1.5">
-                      <span className="text-xs font-bold text-zinc-100 font-mono truncate">{action.name}</span>
-                      <div className="flex items-center gap-1 shrink-0">
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <div className="w-8 h-8 rounded-lg bg-zinc-950 border border-zinc-800 flex items-center justify-center shrink-0">
+                      {renderActionGlyph(action, 'w-4 h-4')}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-white font-mono truncate">{action.name}</span>
                         {action.level !== undefined && (
-                          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-blue-950/80 border border-blue-500/40 text-blue-300 font-bold">
-                            {action.level === 0 ? 'Cantrip' : `Lvl ${action.level}`}
-                          </span>
-                        )}
-                        {action.uses && (
-                          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-indigo-950/80 border border-indigo-500/40 text-indigo-300 font-bold">
-                            {action.uses.available}/{action.uses.total}
-                          </span>
-                        )}
-                        {action.quantity !== undefined && (
-                          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-amber-950/80 border border-amber-500/40 text-amber-300 font-bold">
-                            x{action.quantity}
+                          <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-blue-950 border border-blue-500/40 text-blue-300 font-bold shrink-0">
+                            {action.level === 0 ? 'Cantrip' : formatSpellLevelLabel(action.level)}
                           </span>
                         )}
                       </div>
+                      <div className="text-[10px] font-mono text-zinc-400 truncate">
+                        {action.sourceLabel || action.castingTime || 'Action'}
+                        {action.rangeFt !== undefined ? ` • ${action.rangeFt > 0 ? `${action.rangeFt} ft.` : 'Self'}` : ''}
+                      </div>
                     </div>
-                    <div className="flex items-center flex-wrap gap-2 text-[10px] font-mono text-zinc-400 mt-0.5">
-                      {action.hitBonus && <span className="text-emerald-400 font-bold">Hit: {action.hitBonus}</span>}
-                      {action.saveDc && <span className="text-amber-300 font-bold">DC {action.saveDc} {action.saveAbility || ''}</span>}
-                      {action.damageFormula && (
-                        <span className={action.isHeal ? 'text-emerald-300 font-bold' : 'text-rose-400 font-bold'}>
-                          {action.damageFormula} {action.damageType || ''}
-                        </span>
-                      )}
-                      {action.rangeFt !== undefined && (
-                        <span>{action.rangeFt > 0 ? `${action.rangeFt} ft` : 'Self'}</span>
-                      )}
-                      {action.sourceLabel && (
-                        <span className="text-zinc-500">• {action.sourceLabel}</span>
-                      )}
-                    </div>
-                    <p className="text-[10px] text-zinc-400 line-clamp-2 mt-1 font-sans">{action.description}</p>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0 font-mono text-[10px]">
+                    {action.hitBonus !== undefined && (
+                      <span className="px-2 py-1 rounded-lg bg-emerald-950 border border-emerald-500/50 text-emerald-300 font-bold">
+                        {String(action.hitBonus).startsWith('+') || String(action.hitBonus).startsWith('-') ? action.hitBonus : `+${action.hitBonus}`}
+                      </span>
+                    )}
+                    {action.saveDc && (
+                      <span className="px-2 py-1 rounded-lg bg-amber-950 border border-amber-500/50 text-amber-300 font-bold">
+                        DC {action.saveDc}
+                      </span>
+                    )}
+                    {action.damageFormula && (
+                      <span
+                        className={`px-2 py-1 rounded-lg font-bold border ${
+                          action.isHeal
+                            ? 'bg-emerald-950 border-emerald-500/50 text-emerald-300'
+                            : 'bg-rose-950 border-rose-500/50 text-rose-300'
+                        }`}
+                      >
+                        {action.damageFormula}
+                      </span>
+                    )}
+                    {action.uses && (
+                      <span className="px-1.5 py-1 rounded-lg bg-indigo-950 border border-indigo-500/40 text-indigo-300 font-bold">
+                        {action.uses.available}/{action.uses.total}
+                      </span>
+                    )}
                   </div>
                 </button>
               );
             })}
-
-            {currentCategoryList.length === 0 && (
-              <div className="text-center py-8 text-xs font-mono text-zinc-500">
-                No {activeCategory.replace('_', ' ')} found for this filter.
-              </div>
-            )}
-          </div>
-
-          {/* Bottom Utility Row inside drawer */}
-          <div className="pt-3 border-t border-zinc-850 flex items-center justify-between mt-2 shrink-0">
-            {characterData?.readonlyUrl ? (
-              <a
-                href={characterData.readonlyUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-1.5 text-[11px] font-mono text-zinc-400 hover:text-white"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span>D&D Beyond Sheet</span>
-              </a>
-            ) : <div />}
-
-            {onEndTurn && (
-              <button
-                type="button"
-                onClick={() => {
-                  onEndTurn();
-                  setIsMobileDrawerOpen(false);
-                }}
-                className={`px-4 py-1.5 rounded-xl font-mono text-xs font-bold transition-all cursor-pointer ${
-                  isMyTurn ? 'bg-amber-500 text-zinc-950 shadow-md animate-pulse' : 'bg-zinc-800 text-zinc-300'
-                }`}
-              >
-                {isMyTurn ? 'End Turn' : 'Pass Turn'}
-              </button>
-            )}
           </div>
         </div>
       )}
 
-      {/* Backdrop for mobile drawer */}
       {isMobileDrawerOpen && (
         <div
           className="fixed inset-0 z-[115] bg-black/60 backdrop-blur-xs pointer-events-auto md:hidden"
@@ -710,312 +699,163 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* DESKTOP 3-WING BG3 SLOTTED DOCK (Rendered on tablet landscape & desktop >= 768px) */}
+      {/* DESKTOP D&D BEYOND TACTICAL CHARACTER SHEET HUD (>= 768px)                */}
       {/* ========================================================================= */}
-      <div className="hidden md:flex pointer-events-auto items-end justify-center gap-3 w-full max-w-6xl">
-        
-        {/* LEFT WING: CHARACTER ORB & VITALS */}
-        <div className="flex items-center gap-3 p-3 rounded-3xl bg-zinc-950/95 border border-zinc-800/90 shadow-[0_15px_40px_rgba(0,0,0,0.85)] ring-1 ring-white/10 shrink-0">
-          {/* Radial HP Orb */}
-          <div className="relative w-20 h-20 flex items-center justify-center shrink-0">
-            <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-              <circle
-                cx="50"
-                cy="50"
-                r="45"
-                className="stroke-zinc-800"
-                strokeWidth="7"
-                fill="transparent"
-              />
-              <circle
-                cx="50"
-                cy="50"
-                r="45"
-                className={`transition-all duration-500 ${
-                  hpPercent > 50
-                    ? 'stroke-emerald-500'
-                    : hpPercent > 25
-                      ? 'stroke-amber-500'
-                      : 'stroke-rose-600'
-                }`}
-                strokeWidth="7"
-                strokeDasharray="283"
-                strokeDashoffset={strokeDashoffset}
-                strokeLinecap="round"
-                fill="transparent"
-              />
-            </svg>
+      <div className="hidden md:flex pointer-events-auto flex-col w-full max-w-5xl rounded-2xl bg-zinc-950/95 backdrop-blur-xl border border-zinc-800 shadow-[0_12px_40px_rgba(0,0,0,0.9)] overflow-hidden">
+        {/* Top Crimson/Amber D&D Beyond Accent Trim */}
+        <div className="h-0.5 w-full bg-gradient-to-r from-red-600 via-amber-500 to-red-600" />
 
-            {/* Token Avatar Image */}
-            <div className="absolute inset-2.5 rounded-full overflow-hidden border border-zinc-700 bg-zinc-900 shadow-inner">
+        {/* 1. HEADER BAR: CHARACTER IDENTITY, DDB STAT BLOCKS, SEARCH & CONTROLS */}
+        <div className="flex items-center justify-between gap-3 px-4 py-2.5 bg-zinc-900/70 border-b border-zinc-800/90 flex-wrap">
+          {/* Left: Portrait + Name + Class/Level */}
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="relative w-11 h-11 rounded-xl overflow-hidden border border-zinc-700 bg-zinc-900 shrink-0 shadow-md">
               {avatarUrl ? (
-                <img
-                  src={avatarUrl}
-                  alt={name}
-                  className="w-full h-full object-cover"
-                />
+                <img src={avatarUrl} alt={name} className="w-full h-full object-cover" />
               ) : (
-                <div className="w-full h-full flex items-center justify-center font-bold text-zinc-500 font-mono text-xs">
+                <div className="w-full h-full flex items-center justify-center font-bold text-zinc-400 font-mono text-xs">
                   {name.slice(0, 2).toUpperCase()}
                 </div>
               )}
             </div>
 
-            {/* Armor Class Shield Badge */}
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-white font-mono truncate" title={name}>
+                  {name}
+                </h3>
+                {isLiveSynced && (
+                  <span
+                    className="px-1.5 py-0.2 rounded bg-red-500/20 border border-red-500/40 text-red-300 text-[9px] font-mono font-bold tracking-wide shrink-0"
+                    title="Live Synced with D&D Beyond Character Sheet"
+                  >
+                    DDB LIVE
+                  </span>
+                )}
+              </div>
+              <div className="text-[11px] font-mono text-zinc-400 truncate">
+                {[race, classLevel].filter(Boolean).join(' • ') || 'Player Character'}
+              </div>
+            </div>
+          </div>
+
+          {/* Center: D&D Beyond Vitals Stat Boxes (HP Bar, AC, Speed, PP, Spell Save DC) */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Hit Points Stat Box */}
+            <div className="flex flex-col justify-center px-3 py-1 rounded-xl bg-zinc-950 border border-zinc-800 min-w-[135px]">
+              <div className="flex items-center justify-between gap-2 text-[10px] font-mono">
+                <span className="text-zinc-400 uppercase font-bold flex items-center gap-1">
+                  <Heart className="w-3 h-3 text-emerald-400" />
+                  HP
+                </span>
+                <div>
+                  <span className={`font-bold text-xs ${hpPercent <= 25 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                    {currentHp}
+                  </span>
+                  <span className="text-zinc-500"> / </span>
+                  <span className="text-zinc-200 font-bold text-xs">{maxHp}</span>
+                  {tempHp > 0 && (
+                    <span className="ml-1 text-cyan-300 font-bold text-[10px]">(+{tempHp})</span>
+                  )}
+                </div>
+              </div>
+              <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden mt-1">
+                <div
+                  className={`h-full transition-all duration-300 rounded-full ${
+                    hpPercent > 50 ? 'bg-emerald-500' : hpPercent > 25 ? 'bg-amber-500' : 'bg-rose-600'
+                  }`}
+                  style={{ width: `${hpPercent}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Armor Class Stat Box */}
             <div
-              className="absolute -bottom-1 -right-1 px-1.5 py-0.5 rounded-lg bg-zinc-900 border border-zinc-700 text-amber-300 font-mono font-bold text-[11px] shadow-md flex items-center gap-0.5"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-zinc-950 border border-zinc-800 font-mono"
               title={`Armor Class: ${ac}`}
             >
-              <Shield className="w-3 h-3 text-amber-400" />
-              <span>{ac}</span>
-            </div>
-          </div>
-
-          {/* Vitals Text */}
-          <div className="space-y-1 text-left min-w-[130px] max-w-[175px]">
-            <div className="flex items-center gap-1.5">
-              <h3 className="text-xs font-bold text-amber-200 truncate font-mono" title={name}>
-                {name}
-              </h3>
-              {isLiveSynced && (
-                <span
-                  className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 shadow-[0_0_6px_rgba(52,211,153,0.8)]"
-                  title="Live Synced with D&D Beyond"
-                />
-              )}
-            </div>
-
-            {(classLevel || race) && (
-              <div className="text-[10px] font-mono text-zinc-400 truncate" title={`${race} ${classLevel}`.trim()}>
-                {classLevel || race}
+              <Shield className="w-4 h-4 text-amber-400" />
+              <div className="flex flex-col leading-none">
+                <span className="text-[8px] text-zinc-500 uppercase font-bold">AC</span>
+                <span className="text-xs font-bold text-white">{ac}</span>
               </div>
-            )}
-            
-            {/* HP Numbers */}
-            <div className="flex items-center gap-1.5 font-mono text-xs">
-              <span className={`font-extrabold ${hpPercent <= 25 ? 'text-rose-400 animate-pulse' : 'text-emerald-400'}`}>
-                {currentHp}
-              </span>
-              <span className="text-zinc-500 text-[10px]">/</span>
-              <span className="text-zinc-300 text-[11px]">{maxHp} HP</span>
-              {tempHp > 0 && (
-                <span className="px-1 py-0.2 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-[9px] font-bold">
-                  +{tempHp}
-                </span>
-              )}
             </div>
 
-            {/* Tactical Badges: Speed, Passive Perception & Spell Save DC */}
-            <div className="flex items-center gap-1.5 pt-0.5 text-[10px] font-mono text-zinc-400 flex-wrap">
-              <span title="Movement Speed">{speed}</span>
-              <span>•</span>
-              <span title={`Passive Perception: ${passivePerception}`}>PP {passivePerception}</span>
-              {spellSaveDc && spellsList.length > 0 && (
-                <>
-                  <span>•</span>
-                  <span className="text-blue-300" title={`Spell Save DC: ${spellSaveDc}${spellAttackBonus ? ` | Spell Attack: +${spellAttackBonus}` : ''}`}>
-                    DC {spellSaveDc}
-                  </span>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* CENTER: BG3 HOTBAR GRID & CATEGORY TABS */}
-        <div className="flex-1 bg-zinc-950/95 border border-zinc-800/90 rounded-3xl p-3 shadow-[0_15px_40px_rgba(0,0,0,0.85)] ring-1 ring-white/10 flex flex-col gap-2 min-w-0">
-          
-          {/* Top Filter Tabs & Spell Slot Pips */}
-          <div className="flex items-center justify-between gap-2 border-b border-zinc-850 pb-2 flex-wrap">
-            
-            {/* Category Tabs */}
-            <div className="flex items-center gap-1 flex-wrap">
-              {categoryTabs.map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveCategory(tab.id)}
-                  className={`px-2.5 py-1 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
-                    activeCategory === tab.id
-                      ? `${tab.activeBg} text-white shadow-md`
-                      : 'border-transparent text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
-                  }`}
-                >
-                  <span className={tab.color}>●</span>
-                  <span>{tab.label}</span>
-                  <span className="text-[10px] opacity-65">({tab.count})</span>
-                </button>
-              ))}
-            </div>
-
-            {/* Spell Slot Matrix (Synced via DDB - clickable to filter by spell level!) */}
-            {characterData?.spellSlots && Object.keys(characterData.spellSlots).length > 0 && (
-              <div className="flex items-center gap-1.5 text-xs font-mono pr-1">
-                <span className="text-[10px] text-zinc-500 uppercase font-bold">Slots:</span>
-                {Object.values(characterData.spellSlots).map((slot: any) => (
-                  <button
-                    key={slot.level}
-                    type="button"
-                    onClick={() => {
-                      setActiveCategory('spells');
-                      setSelectedSpellLevel(prev => prev === slot.level ? 'all' : slot.level);
-                    }}
-                    className={`flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[11px] cursor-pointer transition-all ${
-                      activeCategory === 'spells' && selectedSpellLevel === slot.level
-                        ? 'bg-blue-500/30 border-blue-400 text-white shadow-sm'
-                        : 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:border-blue-500/50'
-                    }`}
-                    title={`Level ${slot.level} Spell Slots: ${slot.available}/${slot.total} available (Click to filter Level ${slot.level} spells)`}
-                  >
-                    <span className="text-blue-400 font-bold">{['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX'][slot.level - 1] || slot.level}</span>
-                    <span className="font-bold">{slot.available}/{slot.total}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Spell Level Sub-Filter Bar (Rendered when Spells tab is active) */}
-          {activeCategory === 'spells' && availableSpellLevels.length > 0 && (
-            <div className="flex items-center gap-1.5 pb-1 overflow-x-auto sidebar-scrollbar">
-              <span className="text-[10px] font-mono uppercase text-zinc-500 font-bold mr-1 shrink-0">
-                Spell Level:
-              </span>
-              <button
-                type="button"
-                onClick={() => setSelectedSpellLevel('all')}
-                className={`px-2.5 py-0.5 rounded-lg text-[11px] font-mono font-bold border transition-all cursor-pointer shrink-0 ${
-                  selectedSpellLevel === 'all'
-                    ? 'bg-blue-500/25 border-blue-400 text-blue-200 shadow-xs'
-                    : 'bg-zinc-900/70 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
-                }`}
-              >
-                All ({spellsList.length})
-              </button>
-              {availableSpellLevels.map(lvl => {
-                const countForLvl = spellsList.filter(s => (s.level ?? 0) === lvl).length;
-                const slotInfo = lvl > 0 ? characterData?.spellSlots?.[lvl] : undefined;
-                return (
-                  <button
-                    key={lvl}
-                    type="button"
-                    onClick={() => setSelectedSpellLevel(lvl)}
-                    className={`px-2.5 py-0.5 rounded-lg text-[11px] font-mono font-bold border transition-all cursor-pointer shrink-0 flex items-center gap-1 ${
-                      selectedSpellLevel === lvl
-                        ? 'bg-blue-500/25 border-blue-400 text-blue-200 shadow-xs'
-                        : 'bg-zinc-900/70 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
-                    }`}
-                  >
-                    <span>{formatSpellLevelLabel(lvl)}</span>
-                    <span className="text-[10px] opacity-65">({countForLvl})</span>
-                    {slotInfo && (
-                      <span className="ml-0.5 px-1 py-0.2 rounded bg-blue-950/90 text-blue-300 border border-blue-500/40 text-[9px]">
-                        {slotInfo.available}/{slotInfo.total}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Action Hotbar Slots (Rich Slotted Grid) */}
-          <div className="grid grid-cols-6 sm:grid-cols-8 lg:grid-cols-10 gap-2 min-h-[76px] max-h-[168px] overflow-y-auto py-1 pr-1 sidebar-scrollbar">
-            {currentCategoryList.map((action, idx) => {
-              const isTargetingThis = activeTargetingAction?.id === action.id;
-              return (
-                <button
-                  key={action.id || idx}
-                  onClick={() => onSelectAction(action)}
-                  onMouseEnter={() => setHoveredAction(action)}
-                  onMouseLeave={() => setHoveredAction(null)}
-                  className={`relative h-[74px] rounded-2xl border transition-all flex flex-col items-center justify-between p-1.5 cursor-pointer transform hover:scale-[1.04] active:scale-95 shadow-md ${
-                    isTargetingThis
-                      ? 'border-amber-400 bg-amber-500/30 shadow-[0_0_15px_rgba(245,158,11,0.5)] ring-2 ring-amber-400'
-                      : 'border-zinc-800 hover:border-amber-500/60 bg-gradient-to-b from-zinc-900 to-zinc-950'
-                  }`}
-                  title={`${action.name}${action.hitBonus ? ` (${action.hitBonus})` : ''}${action.damageFormula ? ` [${action.damageFormula}]` : ''}`}
-                >
-                  {/* Top Badge Row: Hit Bonus / Save DC / Spell Level + Uses/Quantity */}
-                  <div className="w-full flex items-center justify-between gap-0.5 text-[9px] font-mono leading-none">
-                    {action.hitBonus ? (
-                      <span className="px-1 py-0.5 rounded bg-emerald-950/90 border border-emerald-500/40 text-emerald-300 font-bold">
-                        {action.hitBonus}
-                      </span>
-                    ) : action.saveDc ? (
-                      <span className="px-1 py-0.5 rounded bg-amber-950/90 border border-amber-500/40 text-amber-300 font-bold">
-                        DC{action.saveDc}
-                      </span>
-                    ) : action.level !== undefined ? (
-                      <span className="px-1 py-0.5 rounded bg-blue-950/90 border border-blue-500/40 text-blue-300 font-bold">
-                        {action.level === 0 ? 'C' : `L${action.level}`}
-                      </span>
-                    ) : (
-                      <span className="text-zinc-500 pl-0.5">{idx + 1}</span>
-                    )}
-
-                    {action.uses ? (
-                      <span className="px-1 py-0.5 rounded bg-indigo-950/90 border border-indigo-500/40 text-indigo-300 font-bold">
-                        {action.uses.available}/{action.uses.total}
-                      </span>
-                    ) : action.quantity !== undefined ? (
-                      <span className="text-amber-300 font-bold pr-0.5">x{action.quantity}</span>
-                    ) : null}
-                  </div>
-
-                  {/* Icon / Glyph + Optional Damage Pill */}
-                  <div className="flex items-center justify-center gap-1 my-auto">
-                    {renderActionGlyph(action, 'w-4 h-4')}
-                    {action.damageFormula && (
-                      <span className={`text-[9px] font-mono font-bold truncate max-w-[46px] ${
-                        action.isHeal ? 'text-emerald-300' : 'text-rose-300'
-                      }`}>
-                        {action.damageFormula.replace(/\s+/g, '')}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Name Label */}
-                  <span className="text-[9px] font-mono font-semibold text-zinc-200 truncate w-full text-center leading-tight">
-                    {action.name}
-                  </span>
-                </button>
-              );
-            })}
-
-            {currentCategoryList.length === 0 && (
-              <div className="col-span-full py-4 text-center text-xs font-mono text-zinc-500">
-                No {activeCategory.replace('_', ' ')} available for this filter.
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* RIGHT WING: TURN FLOW & DDB SYNC UTILITIES */}
-        <div className="flex flex-col gap-2 p-3 rounded-3xl bg-zinc-950/95 border border-zinc-800/90 shadow-[0_15px_40px_rgba(0,0,0,0.85)] ring-1 ring-white/10 shrink-0">
-          
-          {/* End Turn / Active Turn Button */}
-          {onEndTurn && (
-            <button
-              onClick={onEndTurn}
-              className={`px-4 py-2 rounded-xl font-mono text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md ${
-                isMyTurn
-                  ? 'bg-gradient-to-r from-amber-500 to-amber-400 text-zinc-950 shadow-amber-500/30 animate-pulse'
-                  : 'bg-zinc-900 hover:bg-zinc-850 text-zinc-300 border border-zinc-800'
-              }`}
+            {/* Walking Speed Stat Box */}
+            <div
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-zinc-950 border border-zinc-800 font-mono"
+              title={`Walking Speed: ${speed}`}
             >
-              <span>{isMyTurn ? 'End Turn' : 'Pass Turn'}</span>
-            </button>
-          )}
+              <Footprints className="w-3.5 h-3.5 text-sky-400" />
+              <div className="flex flex-col leading-none">
+                <span className="text-[8px] text-zinc-500 uppercase font-bold">Speed</span>
+                <span className="text-xs font-bold text-zinc-200">{speed}</span>
+              </div>
+            </div>
 
-          {/* Utility Buttons: Live DDB Sync, DDB Sheet & Station Mode Switch */}
-          <div className="flex items-center justify-center gap-1.5">
+            {/* Passive Perception Stat Box */}
+            <div
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-zinc-950 border border-zinc-800 font-mono"
+              title={`Passive Perception: ${passivePerception}`}
+            >
+              <Eye className="w-3.5 h-3.5 text-violet-400" />
+              <div className="flex flex-col leading-none">
+                <span className="text-[8px] text-zinc-500 uppercase font-bold">Passive</span>
+                <span className="text-xs font-bold text-zinc-200">{passivePerception}</span>
+              </div>
+            </div>
+
+            {/* Spell Save DC / Spell Attack Box */}
+            {spellSaveDc && spellsList.length > 0 && (
+              <div
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-zinc-950 border border-blue-500/30 font-mono"
+                title={`Spell Save DC: ${spellSaveDc}${spellAttackBonus ? ` | Spell Attack: +${spellAttackBonus}` : ''}`}
+              >
+                <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+                <div className="flex flex-col leading-none">
+                  <span className="text-[8px] text-blue-400 uppercase font-bold">Spell DC</span>
+                  <span className="text-xs font-bold text-white">
+                    {spellSaveDc}
+                    {spellAttackBonus !== undefined ? ` (+${spellAttackBonus})` : ''}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Right: Search Filter + Sync DDB + Sheet Link + Turn & Collapse Controls */}
+          <div className="flex items-center gap-1.5">
+            {!isTrayCollapsed && (
+              <div className="relative w-40 lg:w-48">
+                <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Filter actions/spells..."
+                  className="w-full bg-zinc-950 border border-zinc-800 focus:border-amber-500/60 rounded-xl pl-8 pr-6 py-1.5 text-[11px] font-mono text-zinc-200 placeholder:text-zinc-600 focus:outline-none"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white cursor-pointer"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+            )}
+
             {onRefreshDdb && (
               <button
+                type="button"
                 onClick={onRefreshDdb}
-                className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-850 text-emerald-400 hover:text-emerald-300 border border-zinc-800 transition-colors cursor-pointer"
-                title="Sync Live Attacks, Spells & HP from D&D Beyond"
+                className="px-2.5 py-1.5 rounded-xl bg-zinc-950 hover:bg-zinc-800 text-emerald-400 hover:text-emerald-300 border border-zinc-800 transition-colors cursor-pointer flex items-center gap-1 text-[11px] font-mono font-bold"
+                title="Pull latest Attacks, Actions, Bonus Actions & Spells from D&D Beyond"
               >
-                <RefreshCw className={`w-4 h-4 ${isSyncingDdb ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncingDdb ? 'animate-spin' : ''}`} />
+                <span className="hidden lg:inline">Sync DDB</span>
               </button>
             )}
 
@@ -1024,7 +864,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                 href={characterData.readonlyUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-850 text-zinc-400 hover:text-white border border-zinc-800 transition-colors"
+                className="p-1.5 rounded-xl bg-zinc-950 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 transition-colors"
                 title="Open D&D Beyond Character Sheet"
               >
                 <ExternalLink className="w-4 h-4" />
@@ -1033,8 +873,9 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
 
             {onSwitchStationMode && (
               <button
+                type="button"
                 onClick={onSwitchStationMode}
-                className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-850 text-zinc-400 hover:text-amber-400 border border-zinc-800 transition-colors cursor-pointer"
+                className="p-1.5 rounded-xl bg-zinc-950 hover:bg-zinc-800 text-zinc-400 hover:text-amber-400 border border-zinc-800 transition-colors cursor-pointer"
                 title="Switch Station Mode (TV Table / Remote Player)"
               >
                 <Tv className="w-4 h-4" />
@@ -1043,16 +884,257 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
 
             {onOpenRestModal && (
               <button
+                type="button"
                 onClick={onOpenRestModal}
-                className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-850 text-zinc-400 hover:text-amber-400 border border-zinc-800 transition-colors cursor-pointer"
+                className="p-1.5 rounded-xl bg-zinc-950 hover:bg-zinc-800 text-zinc-400 hover:text-amber-400 border border-zinc-800 transition-colors cursor-pointer"
                 title="Short / Long Rest"
               >
                 <RotateCcw className="w-4 h-4" />
               </button>
             )}
+
+            {onEndTurn && (
+              <button
+                type="button"
+                onClick={onEndTurn}
+                className={`px-3 py-1.5 rounded-xl font-mono text-xs font-bold transition-all cursor-pointer ${
+                  isMyTurn
+                    ? 'bg-amber-500 hover:bg-amber-400 text-zinc-950 shadow-md shadow-amber-500/20'
+                    : 'bg-zinc-950 hover:bg-zinc-800 text-zinc-300 border border-zinc-800'
+                }`}
+              >
+                {isMyTurn ? 'End Turn' : 'Pass Turn'}
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setIsTrayCollapsed(prev => !prev)}
+              className="p-1.5 rounded-xl bg-zinc-950 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 transition-colors cursor-pointer"
+              title={isTrayCollapsed ? 'Expand Character Action Sheet' : 'Minimize Character Action Sheet'}
+            >
+              {isTrayCollapsed ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
           </div>
         </div>
 
+        {/* 2. COLLAPSIBLE BODY: CATEGORY TABS, SPELL LEVEL FILTER & D&D BEYOND ACTION CARDS */}
+        {!isTrayCollapsed && (
+          <div className="p-3 space-y-2.5">
+            {/* Category Tabs & Spell Slot Trackers */}
+            <div className="flex items-center justify-between gap-2 flex-wrap border-b border-zinc-800/80 pb-2">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {categoryTabs.map(tab => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveCategory(tab.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
+                      activeCategory === tab.id
+                        ? tab.activeClass
+                        : 'border-zinc-800/80 bg-zinc-900/50 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+                    }`}
+                  >
+                    <span className={tab.accentText}>●</span>
+                    <span>{tab.label}</span>
+                    <span className="text-[10px] opacity-70">({tab.count})</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* D&D Beyond Spell Slot Tracker Boxes */}
+              {characterData?.spellSlots && Object.keys(characterData.spellSlots).length > 0 && (
+                <div className="flex items-center gap-1.5 text-xs font-mono">
+                  <span className="text-[10px] text-zinc-500 uppercase font-bold">Spell Slots:</span>
+                  {Object.values(characterData.spellSlots).map((slot: any) => (
+                    <button
+                      key={slot.level}
+                      type="button"
+                      onClick={() => {
+                        setActiveCategory('spells');
+                        setSelectedSpellLevel(prev => (prev === slot.level ? 'all' : slot.level));
+                      }}
+                      className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[11px] cursor-pointer transition-all ${
+                        activeCategory === 'spells' && selectedSpellLevel === slot.level
+                          ? 'bg-blue-500/25 border-blue-400 text-white'
+                          : 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:border-blue-500/50'
+                      }`}
+                      title={`Level ${slot.level} Spell Slots: ${slot.available}/${slot.total} available (Click to filter Level ${slot.level} spells)`}
+                    >
+                      <span className="text-blue-400 font-bold">{formatSpellLevelLabel(slot.level)}:</span>
+                      <span className="font-bold">
+                        {slot.available}/{slot.total}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Spell Level Filter Bar (Visible when Spells tab is selected) */}
+            {activeCategory === 'spells' && availableSpellLevels.length > 0 && (
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 sidebar-scrollbar">
+                <span className="text-[10px] font-mono uppercase text-zinc-500 font-bold mr-1 shrink-0">
+                  Filter Level:
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedSpellLevel('all')}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold border transition-all cursor-pointer shrink-0 ${
+                    selectedSpellLevel === 'all'
+                      ? 'bg-blue-500/25 border-blue-400 text-blue-200'
+                      : 'bg-zinc-900/70 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+                  }`}
+                >
+                  All Spells ({spellsList.length})
+                </button>
+                {availableSpellLevels.map(lvl => {
+                  const countForLvl = spellsList.filter(s => (s.level ?? 0) === lvl).length;
+                  const slotInfo = lvl > 0 ? characterData?.spellSlots?.[lvl] : undefined;
+                  return (
+                    <button
+                      key={lvl}
+                      type="button"
+                      onClick={() => setSelectedSpellLevel(lvl)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold border transition-all cursor-pointer shrink-0 flex items-center gap-1 ${
+                        selectedSpellLevel === lvl
+                          ? 'bg-blue-500/25 border-blue-400 text-blue-200'
+                          : 'bg-zinc-900/70 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+                      }`}
+                    >
+                      <span>{formatSpellLevelLabel(lvl)}</span>
+                      <span className="text-[10px] opacity-70">({countForLvl})</span>
+                      {slotInfo && (
+                        <span className="ml-0.5 px-1 py-0.2 rounded bg-blue-950 text-blue-300 border border-blue-500/40 text-[9px]">
+                          {slotInfo.available}/{slotInfo.total}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* D&D Beyond Tactical Action Cards Grid */}
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 max-h-[185px] overflow-y-auto pr-1 sidebar-scrollbar">
+              {currentCategoryList.map((action, idx) => {
+                const isTargetingThis = currentTargetingAction?.id === action.id;
+                const formattedHit =
+                  action.hitBonus !== undefined
+                    ? String(action.hitBonus).startsWith('+') || String(action.hitBonus).startsWith('-')
+                      ? String(action.hitBonus)
+                      : `+${action.hitBonus}`
+                    : null;
+
+                return (
+                  <button
+                    key={action.id || idx}
+                    type="button"
+                    onClick={() => onSelectAction(action)}
+                    onMouseEnter={() => setHoveredAction(action)}
+                    onMouseLeave={() => setHoveredAction(null)}
+                    className={`group p-2.5 rounded-xl border text-left transition-all flex items-center justify-between gap-2.5 cursor-pointer ${
+                      isTargetingThis
+                        ? 'border-amber-400 bg-amber-500/20 shadow-[0_0_15px_rgba(245,158,11,0.35)] ring-1 ring-amber-400'
+                        : 'border-zinc-800/90 hover:border-amber-500/50 bg-zinc-900/75 hover:bg-zinc-900'
+                    }`}
+                  >
+                    {/* Left: Action Icon + Name + Range/Source Subtitle */}
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <div className="w-9 h-9 rounded-lg bg-zinc-950 border border-zinc-800 group-hover:border-zinc-700 flex items-center justify-center shrink-0">
+                        {renderActionGlyph(action, 'w-4 h-4')}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold text-zinc-100 group-hover:text-amber-200 font-mono truncate">
+                            {action.name}
+                          </span>
+                          {action.level !== undefined && (
+                            <span className="px-1.5 py-0.2 rounded bg-blue-950/90 border border-blue-500/40 text-blue-300 font-mono text-[9px] font-bold shrink-0">
+                              {action.level === 0 ? 'Cantrip' : formatSpellLevelLabel(action.level)}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[10px] font-mono text-zinc-400 truncate mt-0.5">
+                          <span>{action.sourceLabel || action.castingTime || '1 Action'}</span>
+                          {action.rangeFt !== undefined && (
+                            <>
+                              <span>•</span>
+                              <span>{action.rangeFt > 0 ? `${action.rangeFt} ft.` : 'Self'}</span>
+                            </>
+                          )}
+                          {action.notes && (
+                            <>
+                              <span>•</span>
+                              <span className="text-amber-400/80 truncate">{action.notes}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right: D&D Beyond Hit / Save / Damage / Uses Badges */}
+                    <div className="flex items-center gap-1.5 shrink-0 font-mono text-[10px]">
+                      {formattedHit && (
+                        <div className="flex flex-col items-center px-2 py-1 rounded-lg bg-emerald-950/90 border border-emerald-500/40 text-emerald-300">
+                          <span className="text-[8px] uppercase text-emerald-400/80 leading-none">Hit</span>
+                          <span className="font-bold text-xs leading-tight">{formattedHit}</span>
+                        </div>
+                      )}
+
+                      {action.saveDc && (
+                        <div className="flex flex-col items-center px-2 py-1 rounded-lg bg-amber-950/90 border border-amber-500/40 text-amber-300">
+                          <span className="text-[8px] uppercase text-amber-400/80 leading-none">
+                            {action.saveAbility || 'Save'}
+                          </span>
+                          <span className="font-bold text-xs leading-tight">DC {action.saveDc}</span>
+                        </div>
+                      )}
+
+                      {action.damageFormula && (
+                        <div
+                          className={`flex flex-col items-center px-2 py-1 rounded-lg border ${
+                            action.isHeal
+                              ? 'bg-emerald-950/90 border-emerald-500/40 text-emerald-300'
+                              : 'bg-rose-950/90 border-rose-500/40 text-rose-300'
+                          }`}
+                        >
+                          <span className="text-[8px] uppercase opacity-75 leading-none truncate max-w-[56px]">
+                            {action.damageType || (action.isHeal ? 'Heal' : 'Dmg')}
+                          </span>
+                          <span className="font-bold text-xs leading-tight">
+                            {action.damageFormula.replace(/\s+/g, '')}
+                          </span>
+                        </div>
+                      )}
+
+                      {action.uses && (
+                        <div className="flex flex-col items-center px-2 py-1 rounded-lg bg-indigo-950/90 border border-indigo-500/40 text-indigo-300">
+                          <span className="text-[8px] uppercase text-indigo-400/80 leading-none">Uses</span>
+                          <span className="font-bold text-xs leading-tight">
+                            {action.uses.available}/{action.uses.total}
+                          </span>
+                        </div>
+                      )}
+
+                      {!action.uses && action.quantity !== undefined && (
+                        <span className="px-2 py-1 rounded-lg bg-zinc-950 border border-zinc-700 text-amber-300 font-bold">
+                          x{action.quantity}
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+
+              {currentCategoryList.length === 0 && (
+                <div className="col-span-full py-6 text-center text-xs font-mono text-zinc-500">
+                  No {activeCategory.replace('_', ' ')} match the current filter.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

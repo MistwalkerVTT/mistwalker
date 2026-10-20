@@ -1326,7 +1326,7 @@ export default function PlayerView() {
     return !sessionStorage.getItem('mistwalker_player_station_mode');
   });
 
-  // Baldur's Gate 3 Inspired Bottom Hero Dock State
+  // D&D Beyond Tactical Character HUD State
   const [hudCharacterData, setHudCharacterData] = useState<HudCharacterData | null>(null);
   const [activeTargetingAction, setActiveTargetingAction] = useState<HudActionItem | null>(null);
   const [isSyncingHudDdb, setIsSyncingHudDdb] = useState<boolean>(false);
@@ -1485,7 +1485,7 @@ export default function PlayerView() {
     }
   }, [claimedToken, resolvedClaimedDdbId, claimedStats, compendiumCharacters]);
 
-  // Fetch or synthesize Baldur's Gate 3 HUD Character Data when claimedToken changes
+  // Fetch or synthesize D&D Beyond HUD Character Data when claimedToken changes
   useEffect(() => {
     if (!claimedToken) {
       setHudCharacterData(null);
@@ -2910,7 +2910,7 @@ export default function PlayerView() {
     toast.success(
       mode === 'tv_table'
         ? 'Digital TV Table Mode active: Clean battlemap presentation.'
-        : "Remote Player Mode active: Baldur's Gate 3 Hero HUD ready."
+        : 'Remote Player Mode active: D&D Beyond Tactical HUD ready.'
     );
   }, []);
 
@@ -5418,7 +5418,7 @@ export default function PlayerView() {
       />
 
       {/* ========================================================= */}
-      {/* Baldur's Gate 3-Inspired Hero Bottom HUD (Synced to DDB)  */}
+      {/* D&D Beyond Tactical Character HUD (Synced to DDB)         */}
       {/* ========================================================= */}
       {(stationMode === 'remote_player' || Boolean(claimedToken)) && !isUiMinimized && (
         <PlayerHeroDock

@@ -641,7 +641,7 @@ function canonicalActionKey(name: string): string {
     .trim();
 }
 
-// Full D&D Beyond Character normalizer for BG3-Inspired Hero Bottom HUD
+// Full D&D Beyond Character normalizer for the MistWalker Tactical Character HUD
 export function normalizeDdbCharacterToHud(c: any, charId: string): any {
   if (!c) return null;
   const computed = computeDdbCharacterSheet(c);
