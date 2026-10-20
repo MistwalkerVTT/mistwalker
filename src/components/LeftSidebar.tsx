@@ -472,13 +472,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   const [collapseAllies, setCollapseAllies] = useState(true);
   const closeTimeoutRef = useRef<any>(null);
 
-  // Sync D&D Beyond party characters when tokens tray is opened
-  useEffect(() => {
-    if (activeGroup === 'tokens') {
-      fetchDdbSyncStatus();
-    }
-  }, [activeGroup, fetchDdbSyncStatus]);
-
   // Dragging event listener for pinned flyout window
   useEffect(() => {
     if (!isDraggingFlyout) return;
@@ -562,6 +555,13 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   };
 
   const activeGroup = pinnedGroup || hoveredGroup;
+
+  // Sync D&D Beyond party characters when tokens tray is opened
+  useEffect(() => {
+    if (activeGroup === 'tokens') {
+      fetchDdbSyncStatus();
+    }
+  }, [activeGroup, fetchDdbSyncStatus]);
 
   const handleMouseEnter = (groupId: GroupMenuId, e: React.MouseEvent) => {
     if (closeTimeoutRef.current) {
