@@ -215,6 +215,7 @@ export interface SceneToken {
   auraName?: string;
   auraPulse?: boolean;
   auras?: any[];
+  speed?: number;
   monsterState?: TokenMonsterState;
 }
 

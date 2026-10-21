@@ -137,6 +137,7 @@ interface Token {
   auraName?: string;
   auraPulse?: boolean;
   auras?: TokenAura[];
+  speed?: number;
 }
 
 /**
@@ -1588,9 +1589,11 @@ export default function PlayerView() {
 
   // Audio Player State
   const [isAudioMuted, setIsAudioMuted] = useState(false);
+  const isAudioMutedRef = useRef(isAudioMuted);
   const activeNarrationAudioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
+    isAudioMutedRef.current = isAudioMuted;
     if (isAudioMuted && activeNarrationAudioRef.current) {
       activeNarrationAudioRef.current.pause();
       activeNarrationAudioRef.current = null;
@@ -1805,7 +1808,7 @@ export default function PlayerView() {
 
     // 4. SYNC_AUDIO
     socket.on('SYNC_AUDIO', (data: any) => {
-      if (isAudioMuted || !data) return;
+      if (isAudioMutedRef.current || !data) return;
       const soundUrl = data.soundUrl || data.url;
       if (soundUrl) {
         try {
@@ -1831,7 +1834,7 @@ export default function PlayerView() {
         });
 
         // Play the room narration audio exclusively through the player view
-        if (!isAudioMuted && data.audioBase64) {
+        if (!isAudioMutedRef.current && data.audioBase64) {
           try {
             if (activeNarrationAudioRef.current) {
               activeNarrationAudioRef.current.pause();
@@ -2259,8 +2262,11 @@ export default function PlayerView() {
       setEffects(prev => prev.map(e => e.id === updated.id ? updated : e));
     });
 
-    socket.on('EFFECT_REMOVE', (effectId: string) => {
-      setEffects(prev => prev.filter(e => e.id !== effectId));
+    socket.on('EFFECT_REMOVE', (data: { id: string } | string) => {
+      const targetId = typeof data === 'string' ? data : data?.id;
+      if (targetId) {
+        setEffects(prev => prev.filter(e => e.id !== targetId));
+      }
     });
 
     socket.on('EFFECT_CLEAR_ALL', () => {
@@ -2279,7 +2285,7 @@ export default function PlayerView() {
       }
       socket.disconnect();
     };
-  }, [isAudioMuted]);
+  }, []);
 
   // Real-time automatic D&D Beyond HP registration for Player View active tokens and characters
   useEffect(() => {
@@ -2925,6 +2931,13 @@ export default function PlayerView() {
     setEffects([]);
     if (socketRef.current?.connected) {
       socketRef.current.emit('EFFECT_CLEAR_ALL');
+    }
+  }, []);
+
+  const handleEffectComplete = useCallback((effectId: string) => {
+    setEffects(prev => prev.filter(e => e.id !== effectId));
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('EFFECT_REMOVE', { id: effectId });
     }
   }, []);
 
@@ -4137,7 +4150,11 @@ export default function PlayerView() {
 
                     {/* Audio Mute/Unmute */}
                     <button
-                      onClick={() => setIsAudioMuted(prev => !prev)}
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsAudioMuted(prev => !prev);
+                      }}
                       className={`w-full flex items-center rounded-xl transition-all cursor-pointer border ${
                         isAudioMuted
                           ? 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-zinc-300'
@@ -4805,6 +4822,7 @@ export default function PlayerView() {
         activeEquippedAsset={activeEquippedAsset}
         aimOrigin={aimOrigin}
         aimCurrent={aimCurrent}
+        onEffectComplete={handleEffectComplete}
       />
 
       {/* ========================================================= */}

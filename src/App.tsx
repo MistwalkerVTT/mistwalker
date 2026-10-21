@@ -188,6 +188,7 @@ interface Token {
   auraName?: string;
   auraPulse?: boolean;
   auras?: any[];
+  speed?: number;
   monsterState?: TokenMonsterState;
 }
 
@@ -2511,6 +2512,23 @@ export default function App() {
       }
     });
 
+    socket.on('PLAYER_MOVE_TOKEN', (data: { tokenId?: string; id?: string; x: number; y: number; distanceMovedFt?: number }) => {
+      const id = data?.tokenId || data?.id;
+      if (id) {
+        console.log('[DM Socket] Live PLAYER_MOVE_TOKEN from player:', id, data.x, data.y, data.distanceMovedFt);
+        const liveSlot = liveMapIdRef.current;
+        if (mapsDataRef.current[liveSlot]?.tokens) {
+          mapsDataRef.current[liveSlot].tokens = mapsDataRef.current[liveSlot].tokens.map((t: any) =>
+            t.id === id ? { ...t, x: data.x, y: data.y } : t
+          );
+        }
+        if (activeMapIdRef.current === liveSlot) {
+          isRemoteTokenUpdateRef.current = true;
+          setTokens(prev => prev.map(t => t.id === id ? { ...t, x: data.x, y: data.y } : t));
+        }
+      }
+    });
+
     socket.on('UPDATE_TOKEN', (data: { id: string; updates: Partial<Token> }) => {
       if (data?.id && data.updates) {
         const liveSlot = liveMapIdRef.current;
@@ -3622,8 +3640,11 @@ export default function App() {
     const onUpdate = (data: { id: string; updates: any }) => {
       setEffects(prev => prev.map(e => e.id === data.id ? { ...e, ...data.updates } : e));
     };
-    const onRemove = (data: { id: string }) => {
-      setEffects(prev => prev.filter(e => e.id !== data.id));
+    const onRemove = (data: { id: string } | string) => {
+      const targetId = typeof data === 'string' ? data : data?.id;
+      if (targetId) {
+        setEffects(prev => prev.filter(e => e.id !== targetId));
+      }
     };
     const onClearAll = () => {
       setEffects([]);
@@ -4212,6 +4233,13 @@ export default function App() {
       socketRef.current.emit('EFFECT_CLEAR_ALL');
     }
     toast.info('Cleared all visual effects from battlemap.');
+  }, []);
+
+  const handleEffectComplete = useCallback((effectId: string) => {
+    setEffects(prev => prev.filter(e => e.id !== effectId));
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('EFFECT_REMOVE', { id: effectId });
+    }
   }, []);
 
   const handleRestoreUnsavedScene = useCallback(() => {
@@ -7743,6 +7771,7 @@ export default function App() {
               activeEquippedAsset={activeEquippedAsset}
               aimOrigin={aimOrigin}
               aimCurrent={aimCurrent}
+              onEffectComplete={handleEffectComplete}
             />
 
             {/* Environmental & Animated Map FX Overlay (Uploaded & Generated Maps) */}

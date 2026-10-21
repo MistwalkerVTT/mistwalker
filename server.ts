@@ -650,6 +650,20 @@ async function startServer() {
       socket.broadcast.emit("MOVE_TOKEN", data);
     });
 
+    socket.on("PLAYER_MOVE_TOKEN", (data: any) => {
+      const id = data?.tokenId || data?.id;
+      const x = data?.x;
+      const y = data?.y;
+      console.log(`[Server Socket] PLAYER_MOVE_TOKEN: id=${id}, x=${x}, y=${y}, dist=${data?.distanceMovedFt}ft`);
+      if (id && Array.isArray(activeVttState.tokens)) {
+        activeVttState.tokens = activeVttState.tokens.map((t: any) =>
+          t.id === id ? { ...t, x, y } : t
+        );
+      }
+      socket.broadcast.emit("MOVE_TOKEN", { id, x, y, distanceMovedFt: data?.distanceMovedFt });
+      socket.broadcast.emit("PLAYER_MOVE_TOKEN", data);
+    });
+
     socket.on("SYNC_TOKENS", (tokens: any) => {
       console.log(`[Server Socket] SYNC_TOKENS: count=${Array.isArray(tokens) ? tokens.length : 0}`);
       if (Array.isArray(tokens)) {
@@ -691,7 +705,12 @@ async function startServer() {
     socket.on("EFFECT_SPAWN", (effect: any) => {
       if (effect && effect.id) {
         if (!Array.isArray(activeVttState.effects)) activeVttState.effects = [];
-        activeVttState.effects.push(effect);
+        // Only retain persistent or looping effects (e.g. auras, hazard zones, lingering spells)
+        // in room memory so that late-joining/reconnecting clients do not replay old one-shot bursts/projectiles!
+        if (effect.isPersistent || effect.loop) {
+          activeVttState.effects = activeVttState.effects.filter((e: any) => e.id !== effect.id);
+          activeVttState.effects.push(effect);
+        }
         socket.broadcast.emit("EFFECT_SPAWN", effect);
       }
     });
