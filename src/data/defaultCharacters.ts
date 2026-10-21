@@ -579,6 +579,7 @@ export interface ResolvedTokenStats {
   race?: string;
   classLevel?: string;
   speed?: string | number;
+  initiativeBonus?: number;
 }
 
 export function isDdbMatch(
@@ -695,7 +696,8 @@ export function resolveTokenCharacterStats(
       isFromCharacterSheet: true,
       race: char.race,
       classLevel: char.classLevel,
-      speed: char.speed
+      speed: char.speed,
+      initiativeBonus: char.initiativeBonus !== undefined ? char.initiativeBonus : (char.stats?.dex ? Math.floor((char.stats.dex - 10) / 2) : 0)
     };
   }
 
@@ -715,6 +717,7 @@ export function resolveTokenCharacterStats(
     tempHp,
     characterName: rawName || 'Token',
     isFromCharacterSheet: false,
-    speed: (token as any).speed
+    speed: (token as any).speed,
+    initiativeBonus: (token as any).initiativeBonus !== undefined ? Number((token as any).initiativeBonus) : 0
   };
 }

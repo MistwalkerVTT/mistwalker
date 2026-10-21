@@ -452,7 +452,7 @@ Focus strictly on module lore.`;
             <span className="text-[10px] text-zinc-500">{activeZone.id}</span>
           </div>
           <div>Vertices: {vertexCount} points</div>
-          <div>Bounds: ({Math.round(activeZone.bounds.x)}%, {Math.round(activeZone.bounds.y)}%) - {Math.round(activeZone.bounds.width)}% × {Math.round(activeZone.bounds.height)}%</div>
+          <div>Bounds: ({Math.round(activeZone.bounds?.x ?? 50)}%, {Math.round(activeZone.bounds?.y ?? 50)}%) - {Math.round(activeZone.bounds?.width ?? 6)}% × {Math.round(activeZone.bounds?.height ?? 3)}%</div>
           {activeZone.updatedAt && (
             <div className="text-[10px] text-zinc-500">
               Last saved: {new Date(activeZone.updatedAt).toLocaleTimeString()}

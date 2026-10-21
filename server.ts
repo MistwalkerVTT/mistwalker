@@ -701,6 +701,22 @@ async function startServer() {
       socket.broadcast.emit("SYNC_COMBAT_STATE", val);
     });
 
+    // Initiative rolling prompts & turn progression handlers
+    socket.on("PROMPT_ROLL_INITIATIVE", (data: any) => {
+      console.log(`[Server] PROMPT_ROLL_INITIATIVE broadcast: ${data?.tokens?.length || 0} tokens`);
+      socket.broadcast.emit("PROMPT_ROLL_INITIATIVE", data);
+    });
+
+    socket.on("SUBMIT_INITIATIVE", (data: { tokenId: string; characterName?: string; initiative: number }) => {
+      console.log(`[Server] SUBMIT_INITIATIVE: ${data?.characterName || data?.tokenId} rolled ${data?.initiative}`);
+      socket.broadcast.emit("SUBMIT_INITIATIVE", data);
+    });
+
+    socket.on("PLAYER_END_TURN", (data: { tokenId?: string; name?: string }) => {
+      console.log(`[Server] PLAYER_END_TURN received from ${data?.name || data?.tokenId}`);
+      socket.broadcast.emit("PLAYER_END_TURN", data);
+    });
+
     // ==========================================
     // MistWalker 4.0 Effects Engine Handlers
     // ==========================================

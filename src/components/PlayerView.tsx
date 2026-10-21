@@ -1523,6 +1523,13 @@ export default function PlayerView() {
   // Screen Shake & Critical Hit Feedback
   const [isShaking, setIsShaking] = useState(false);
 
+  // Initiative Prompt Modal for Player Tokens
+  const [initiativePromptData, setInitiativePromptData] = useState<{
+    token: { id: string; name: string; avatarUrl?: string; initiativeBonus?: number };
+    manualValue: string;
+    isRolling: boolean;
+  } | null>(null);
+
   // Player view turn order list visibility (with persistent user preference)
   const [autoApplyMonsterDamage, setAutoApplyMonsterDamage] = useState<boolean>(true);
   const [showPlayerCombatTracker, setShowPlayerCombatTracker] = useState(() => {
@@ -1769,6 +1776,29 @@ export default function PlayerView() {
         turnIndex: data.turnIndex || 0,
         showCombatTracker: data.showCombatTracker !== false
       });
+    });
+
+    // 3a. PROMPT_ROLL_INITIATIVE: DM initiated combat initiative roll
+    socket.on('PROMPT_ROLL_INITIATIVE', (data: { tokens?: Array<{ id: string; name: string; avatarUrl?: string; initiativeBonus?: number }> }) => {
+      console.log('[PlayerView] PROMPT_ROLL_INITIATIVE received:', data);
+      if (!data?.tokens || !Array.isArray(data.tokens)) return;
+
+      const currentClaimedId = claimedTokenIdRef.current;
+      // Find if our claimed token is included, or if we have no claimed token, any player token
+      const matchingToken = currentClaimedId
+        ? data.tokens.find(t => t.id === currentClaimedId)
+        : (data.tokens.length === 1 ? data.tokens[0] : null);
+
+      if (matchingToken) {
+        setInitiativePromptData({
+          token: matchingToken,
+          manualValue: '',
+          isRolling: false
+        });
+        toast.info(`⚔️ Roll Initiative for ${matchingToken.name}!`, {
+          duration: 6000
+        });
+      }
     });
 
     // 3b. SYNC_SHAKE (Critical Hit Camera Rumble)
@@ -5859,6 +5889,166 @@ export default function PlayerView() {
       )}
 
 
+
+      {/* ========================================================= */}
+      {/* Initiative Prompt Modal                                    */}
+      {/* ========================================================= */}
+      {initiativePromptData && (
+        <div className="fixed inset-0 z-[150] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-zinc-950 border border-amber-500/50 rounded-2xl p-6 max-w-sm w-full shadow-2xl flex flex-col items-center text-center space-y-4">
+            {/* Header / Avatar */}
+            <div className="relative">
+              <div className="w-20 h-20 rounded-full border-2 border-amber-400 overflow-hidden shadow-lg shadow-amber-500/20 bg-zinc-900 flex items-center justify-center">
+                {initiativePromptData.token.avatarUrl ? (
+                  <img
+                    src={initiativePromptData.token.avatarUrl}
+                    alt={initiativePromptData.token.name}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <Swords className="w-8 h-8 text-amber-400" />
+                )}
+              </div>
+              <div className="absolute -bottom-2 -right-2 w-8 h-8 rounded-full bg-amber-500 text-zinc-950 flex items-center justify-center font-mono font-bold text-xs shadow-md">
+                {typeof initiativePromptData.token.initiativeBonus === 'number' && initiativePromptData.token.initiativeBonus >= 0
+                  ? `+${initiativePromptData.token.initiativeBonus}`
+                  : (initiativePromptData.token.initiativeBonus ?? '+0')}
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-amber-400 font-bold">
+                Combat Commenced
+              </span>
+              <h2 className="text-xl font-bold text-white font-mono">
+                Roll for Initiative!
+              </h2>
+              <p className="text-xs text-zinc-400">
+                {initiativePromptData.token.name} (Modifier: {typeof initiativePromptData.token.initiativeBonus === 'number' && initiativePromptData.token.initiativeBonus >= 0 ? `+${initiativePromptData.token.initiativeBonus}` : initiativePromptData.token.initiativeBonus ?? '+0'})
+              </p>
+            </div>
+
+            {/* Option A: Roll 3D Dice */}
+            <div className="w-full space-y-2 pt-2">
+              <button
+                type="button"
+                disabled={initiativePromptData.isRolling}
+                onClick={() => {
+                  setInitiativePromptData(prev => prev ? { ...prev, isRolling: true } : null);
+                  const d20 = Math.floor(Math.random() * 20) + 1;
+                  const bonus = Number(initiativePromptData.token.initiativeBonus) || 0;
+                  const total = Math.max(1, d20 + bonus);
+
+                  const diceEvent = {
+                    id: `init-${Date.now()}`,
+                    characterName: initiativePromptData.token.name,
+                    action: 'Initiative Roll',
+                    rollType: 'roll',
+                    formula: `1d20 (${d20}) ${bonus >= 0 ? `+ ${bonus}` : `- ${Math.abs(bonus)}`} = ${total}`,
+                    diceNotation: '1d20',
+                    dice: [{ sides: 20, result: d20, type: 'd20' }],
+                    total: total,
+                    isCritical: d20 === 20,
+                    isFumble: d20 === 1,
+                    theme: selectedDicePreset.id,
+                    themeColor: selectedDicePreset.theme.primaryColor,
+                    timestamp: Date.now(),
+                    source: 'player'
+                  };
+
+                  if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+                    (window as any).__mistwalkerRoll3d(diceEvent);
+                  }
+                  if (socketRef.current?.connected) {
+                    socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', diceEvent);
+                    socketRef.current.emit('SUBMIT_INITIATIVE', {
+                      tokenId: initiativePromptData.token.id,
+                      characterName: initiativePromptData.token.name,
+                      initiative: total
+                    });
+                  }
+
+                  toast.success(`🎲 Initiative ${total} submitted!`);
+                  setTimeout(() => {
+                    setInitiativePromptData(null);
+                  }, 800);
+                }}
+                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 font-mono font-bold text-sm shadow-lg shadow-amber-500/25 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-98"
+              >
+                <Dices className="w-4 h-4" />
+                <span>Roll 1d20 {Number(initiativePromptData.token.initiativeBonus) >= 0 ? `(+${initiativePromptData.token.initiativeBonus || 0})` : initiativePromptData.token.initiativeBonus}</span>
+              </button>
+
+              <div className="flex items-center my-2 text-zinc-600 text-xs font-mono">
+                <div className="flex-1 border-t border-zinc-800" />
+                <span className="px-2">OR ENTER MANUALLY</span>
+                <div className="flex-1 border-t border-zinc-800" />
+              </div>
+
+              {/* Option B: Manual Input */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="1"
+                  max="45"
+                  value={initiativePromptData.manualValue}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setInitiativePromptData(prev => prev ? { ...prev, manualValue: val } : null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      const num = parseInt(initiativePromptData.manualValue, 10);
+                      if (!isNaN(num) && num > 0) {
+                        if (socketRef.current?.connected) {
+                          socketRef.current.emit('SUBMIT_INITIATIVE', {
+                            tokenId: initiativePromptData.token.id,
+                            characterName: initiativePromptData.token.name,
+                            initiative: num
+                          });
+                        }
+                        toast.success(`Initiative ${num} submitted!`);
+                        setInitiativePromptData(null);
+                      }
+                    }
+                  }}
+                  placeholder="Physical roll total"
+                  className="flex-1 bg-zinc-900 border border-zinc-800 focus:border-amber-500 rounded-xl px-3 py-2 text-sm font-mono text-center text-white placeholder:text-zinc-600 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  disabled={!initiativePromptData.manualValue || isNaN(parseInt(initiativePromptData.manualValue, 10))}
+                  onClick={() => {
+                    const num = parseInt(initiativePromptData.manualValue, 10);
+                    if (!isNaN(num) && num > 0) {
+                      if (socketRef.current?.connected) {
+                        socketRef.current.emit('SUBMIT_INITIATIVE', {
+                          tokenId: initiativePromptData.token.id,
+                          characterName: initiativePromptData.token.name,
+                          initiative: num
+                        });
+                      }
+                      toast.success(`Initiative ${num} submitted!`);
+                      setInitiativePromptData(null);
+                    }
+                  }}
+                  className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-200 hover:text-white font-mono text-xs font-bold border border-zinc-700 cursor-pointer transition-all"
+                >
+                  Submit
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setInitiativePromptData(null)}
+              className="text-[11px] font-mono text-zinc-500 hover:text-zinc-300 pt-1 cursor-pointer transition-colors"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ========================================================= */}
       {/* Mobile & Desktop Floating Canvas Quick Controls            */}

@@ -24,7 +24,7 @@ import {
   publishActiveSession
 } from '../lib/firebase';
 import { createThumbnailDataUrl, saveLocalAsset, isVideoAsset } from '../lib/storageCache';
-import { WallSegment, VisionConfig, RoomAnnotation, AnimatedFeature, WeatherEffectType, RevealPoint } from '../types';
+import { WallSegment, VisionConfig, RoomAnnotation, AnimatedFeature, WeatherEffectType, RevealPoint, normalizeRoomAnnotations } from '../types';
 
 interface SaveToCampaignModalProps {
   isOpen: boolean;
@@ -240,7 +240,11 @@ export const SaveToCampaignModal: React.FC<SaveToCampaignModalProps> = ({
         fogResetKey: currentFogResetKey || existingScene?.fogResetKey,
         walls: (currentWalls && currentWalls.length > 0) ? currentWalls : (existingScene?.walls || []),
         visionConfig: currentVisionConfig || existingScene?.visionConfig,
-        roomAnnotations: (currentRoomAnnotations && currentRoomAnnotations.length > 0) ? currentRoomAnnotations : (existingScene?.roomAnnotations || []),
+        roomAnnotations: normalizeRoomAnnotations(
+          (currentRoomAnnotations && currentRoomAnnotations.length > 0) ? currentRoomAnnotations : (existingScene?.roomAnnotations || []),
+          targetSceneId,
+          selectedCampaignId
+        ),
         boardAnimatedFeatures: currentBoardAnimatedFeatures || existingScene?.boardAnimatedFeatures || [],
         boardAnimatedEnabled: currentBoardAnimatedEnabled !== undefined ? currentBoardAnimatedEnabled : (existingScene?.boardAnimatedEnabled ?? true),
         boardWeatherEffect: currentBoardWeatherEffect || existingScene?.boardWeatherEffect || 'none',
@@ -450,6 +454,15 @@ export const SaveToCampaignModal: React.FC<SaveToCampaignModalProps> = ({
                     <span className="flex items-center gap-1 text-emerald-400">
                       <Shield className="w-3.5 h-3.5 text-emerald-400" />
                       <strong className="text-white">{currentWalls.length}</strong> Walls & Doors
+                    </span>
+                  </>
+                )}
+                {currentRoomAnnotations && currentRoomAnnotations.length > 0 && (
+                  <>
+                    <span>•</span>
+                    <span className="flex items-center gap-1 text-amber-400">
+                      <MapPin className="w-3.5 h-3.5 text-amber-400" />
+                      <strong className="text-white">{currentRoomAnnotations.length}</strong> Rooms & Labels
                     </span>
                   </>
                 )}

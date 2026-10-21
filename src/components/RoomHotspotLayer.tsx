@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Group, Rect, Line, Text, Circle } from 'react-konva';
-import { RoomAnnotation, CampaignMode } from '../types';
+import { RoomAnnotation, CampaignMode, normalizeRoomAnnotations } from '../types';
 
 export const LABEL_GLYPHS: Record<string, string> = {
   'stairs-up': '⤊',
@@ -56,12 +56,14 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
   const { width: mapW, height: mapH } = mapDimensions;
   if (!mapW || !mapH) return null;
 
+  const safeAnnotations = normalizeRoomAnnotations(annotations);
+
   // CRITICAL SECURITY & VISIBILITY:
   // In Player View, only display annotations explicitly marked as 'label' with visibleToPlayers === true.
   // Room polygons, secret rooms, and DM briefings are NEVER rendered to player clients.
   const visibleAnnotations = isPlayerView
-    ? annotations.filter((a) => a.type === 'label' && a.visibleToPlayers === true)
-    : annotations;
+    ? safeAnnotations.filter((a) => a.type === 'label' && a.visibleToPlayers === true)
+    : safeAnnotations;
 
   if (visibleAnnotations.length === 0) return null;
 
@@ -72,11 +74,16 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
         const baseColor = anno.color || '#f59e0b'; // Default amber
         const hasPolygon = anno.polygonPoints && anno.polygonPoints.length >= 6;
 
-        // Convert percentage bounds to actual pixel positions on the map
-        const pixelX = (anno.bounds.x / 100) * mapW;
-        const pixelY = (anno.bounds.y / 100) * mapH;
-        const pixelW = ((anno.bounds.width || 6) / 100) * mapW;
-        const pixelH = ((anno.bounds.height || 3) / 100) * mapH;
+        // Convert percentage bounds to actual pixel positions on the map (with safe fallback)
+        const boundsX = typeof anno.bounds?.x === 'number' && !isNaN(anno.bounds.x) ? anno.bounds.x : 50;
+        const boundsY = typeof anno.bounds?.y === 'number' && !isNaN(anno.bounds.y) ? anno.bounds.y : 50;
+        const boundsW = typeof anno.bounds?.width === 'number' && !isNaN(anno.bounds.width) ? anno.bounds.width : 6;
+        const boundsH = typeof anno.bounds?.height === 'number' && !isNaN(anno.bounds.height) ? anno.bounds.height : 3;
+
+        const pixelX = (boundsX / 100) * mapW;
+        const pixelY = (boundsY / 100) * mapH;
+        const pixelW = (boundsW / 100) * mapW;
+        const pixelH = (boundsH / 100) * mapH;
 
         // Convert percentage polygon points to pixel coords
         const pixelPolyPoints: number[] = hasPolygon

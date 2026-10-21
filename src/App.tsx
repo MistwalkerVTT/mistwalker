@@ -120,6 +120,8 @@ import {
   VisionConfig,
   CampaignMode,
   RoomAnnotation,
+  normalizeRoomAnnotation,
+  normalizeRoomAnnotations,
   isMonsterToken,
   AURA_PRESETS,
   AURA_COLOR_PALETTE,
@@ -1843,6 +1845,82 @@ export default function App() {
     });
   }, [sortedCombatTrackerCombatants, combatTrackerRound, combatTrackerTurnIndex, showCombatTracker]);
 
+  // Handler: Prompt all tokens on map to roll initiative
+  const handlePromptRollInitiative = useCallback(() => {
+    if (!tokens || tokens.length === 0) {
+      toast.info('No active tokens on the battlemap to roll initiative for.');
+      setShowCombatTracker(true);
+      return;
+    }
+
+    const playerPromptTokens: any[] = [];
+    const newCombatants: Combatant[] = [];
+
+    // Pre-calculate / import all map tokens into the tracker
+    tokens.forEach(t => {
+      const isMonster = t.isMonster || t.category === 'monster';
+      const isNpc = t.category === 'npc';
+      const type: 'player' | 'enemy' | 'npc' = isMonster ? 'enemy' : isNpc ? 'npc' : 'player';
+
+      // Resolve character stats to get true D&D Beyond initiative bonus
+      const charStats = resolveTokenCharacterStats(t, compendiumCharacters);
+      const defMonster = DEFAULT_MONSTERS.find(m => m.name.toLowerCase() === (t.name || '').toLowerCase());
+      const bonus = typeof (t as any).initiativeBonus === 'number'
+        ? (t as any).initiativeBonus
+        : (charStats.initiativeBonus !== undefined
+          ? charStats.initiativeBonus
+          : (defMonster?.initiativeBonus ?? 0));
+
+      let initiative = (t as any).initiative || 0;
+
+      if (isMonster || isNpc) {
+        // Auto-roll monsters and NPCs immediately on DM side
+        const d20 = Math.floor(Math.random() * 20) + 1;
+        initiative = Math.max(1, d20 + bonus);
+      } else {
+        // Collect player tokens to prompt via socket
+        playerPromptTokens.push({
+          id: t.id,
+          name: t.name,
+          avatarUrl: t.url || (t as any).avatarUrl,
+          initiativeBonus: bonus
+        });
+      }
+
+      newCombatants.push({
+        id: t.id,
+        tokenId: t.id,
+        name: t.name || (isMonster ? 'Monster' : 'Character'),
+        type,
+        initiative,
+        initiativeBonus: bonus,
+        maxHp: t.maxHp || t.hp || charStats.maxHp || 10,
+        currentHp: t.currentHp ?? t.hp ?? charStats.currentHp ?? 10,
+        ac: t.ac || charStats.ac || 10,
+        passivePerception: (t as any).passivePerception || 10,
+        conditions: t.conditions || [],
+        avatarUrl: t.url || (t as any).avatarUrl
+      });
+    });
+
+    setCombatTrackerCombatants(newCombatants);
+    setCombatTrackerTurnIndex(0);
+    setCombatTrackerRound(1);
+    setShowCombatTracker(true);
+
+    // Broadcast prompt to all connected players
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('PROMPT_ROLL_INITIATIVE', {
+        tokens: playerPromptTokens,
+        timestamp: Date.now()
+      });
+    }
+
+    toast.success(`⚔️ Rolled initiative for enemies! Prompting players to roll...`, {
+      description: `${playerPromptTokens.length} player character(s) prompted.`
+    });
+  }, [tokens, compendiumCharacters]);
+
   // Lore Ledger States
   const [showLoreLedger, setShowLoreLedger] = useState(false);
   const [loreSources, setLoreSources] = useState<{ id: string, name: string, type: 'text' | 'pdf', content: string }[]>([]);
@@ -2631,6 +2709,58 @@ export default function App() {
       setAutoApplyMonsterDamage(enabled);
     });
 
+    // Handle player submitting initiative from Player View dialog
+    socket.on('SUBMIT_INITIATIVE', (data: { tokenId: string; characterName?: string; initiative: number }) => {
+      if (!data?.tokenId || typeof data.initiative !== 'number') return;
+      console.log(`[DM Socket] SUBMIT_INITIATIVE from ${data.characterName || data.tokenId}: ${data.initiative}`);
+      
+      setCombatTrackerCombatants(prev => {
+        const existingIdx = prev.findIndex(c => c.tokenId === data.tokenId || c.id === data.tokenId);
+        if (existingIdx !== -1) {
+          const updated = [...prev];
+          updated[existingIdx] = {
+            ...updated[existingIdx],
+            initiative: data.initiative
+          };
+          return updated;
+        }
+        return prev;
+      });
+
+      // Also update token locally if present
+      setTokens(prev => prev.map(t => t.id === data.tokenId ? { ...t, initiative: data.initiative } : t));
+
+      toast.success(`🎲 ${data.characterName || 'Player'} rolled Initiative: ${data.initiative}!`);
+    });
+
+    // Advance turn when player clicks Pass Turn in Player View HUD
+    socket.on('PLAYER_END_TURN', (data: { tokenId?: string; name?: string }) => {
+      console.log(`[DM Socket] PLAYER_END_TURN from ${data?.name || data?.tokenId}`);
+      setCombatTrackerCombatants(currentCombatants => {
+        const sorted = [...currentCombatants].sort((a, b) => {
+          if (b.initiative !== a.initiative) {
+            return b.initiative - a.initiative;
+          }
+          return 0;
+        });
+
+        if (sorted.length === 0) return currentCombatants;
+
+        setCombatTrackerTurnIndex(prevIdx => {
+          if (prevIdx >= sorted.length - 1) {
+            setCombatTrackerRound(r => r + 1);
+            toast.info(`Round ${combatTrackerRound + 1}! Next turn: ${sorted[0]?.name || 'Combatant'}`);
+            return 0;
+          }
+          const nextIdx = prevIdx + 1;
+          toast.info(`Next turn: ${sorted[nextIdx]?.name || 'Combatant'}`);
+          return nextIdx;
+        });
+
+        return currentCombatants;
+      });
+    });
+
     // Receive applied token mutations (heals, monster damage from players, etc.)
     socket.on('APPLY_TOKEN_MUTATION', (data: {
       sourceTokenId?: string;
@@ -3345,17 +3475,13 @@ export default function App() {
       setVisionConfig(scene.visionConfig);
     }
 
-    // 5. Load Room Annotations & Polygon Zones (directly tied to the scene, just like walls and doors)
+    // 5. Load Room Annotations, Polygon Zones & Map Labels (directly tied to the scene bundle)
     let annotationSource = scene.roomAnnotations;
     if (scene.sceneId === DEMO_GV_SCENE.sceneId && (!annotationSource || annotationSource.length < DEMO_GV_ROOM_ZONES.length)) {
       annotationSource = DEMO_GV_ROOM_ZONES;
     }
     if (annotationSource && Array.isArray(annotationSource) && annotationSource.length > 0) {
-      const mapped = annotationSource.map(ra => ({
-        ...ra,
-        sceneId: scene.sceneId,
-        campaignId: campaignId
-      }));
+      const mapped = normalizeRoomAnnotations(annotationSource, scene.sceneId, campaignId);
       setRoomAnnotations(mapped);
       if (mapsDataRef.current[activeMapId]) {
         mapsDataRef.current[activeMapId].roomAnnotations = mapped;
@@ -3365,11 +3491,7 @@ export default function App() {
       fetchMapZones(campaignId, scene.sceneId)
         .then(zones => {
           if (zones && zones.length > 0) {
-            const mapped = zones.map(ra => ({
-              ...ra,
-              sceneId: scene.sceneId,
-              campaignId: campaignId
-            }));
+            const mapped = normalizeRoomAnnotations(zones, scene.sceneId, campaignId);
             setRoomAnnotations(mapped);
             if (mapsDataRef.current[activeMapId]) {
               mapsDataRef.current[activeMapId].roomAnnotations = mapped;
@@ -4461,7 +4583,7 @@ export default function App() {
     if (backup.gridOffsetX !== undefined) setGridOffsetX(backup.gridOffsetX);
     if (backup.gridOffsetY !== undefined) setGridOffsetY(backup.gridOffsetY);
 
-    if (Array.isArray(backup.roomAnnotations)) setRoomAnnotations(backup.roomAnnotations);
+    if (Array.isArray(backup.roomAnnotations)) setRoomAnnotations(normalizeRoomAnnotations(backup.roomAnnotations));
     if (backup.activeSceneInfo) setActiveSceneInfo(backup.activeSceneInfo);
     if (backup.activeDmNotes !== undefined) setActiveDmNotes(backup.activeDmNotes);
 
@@ -5030,17 +5152,26 @@ export default function App() {
     const campId = currentActiveScene?.campaignId || 'default';
     const scnId = currentActiveScene?.sceneId || 'default';
 
-    const zoneWithScene: RoomAnnotation = {
-      ...updatedZone,
-      campaignId: campId,
-      sceneId: scnId
-    };
+    const zoneWithScene: RoomAnnotation = normalizeRoomAnnotation(
+      {
+        ...updatedZone,
+        campaignId: campId,
+        sceneId: scnId
+      },
+      roomAnnotations.length,
+      scnId,
+      campId
+    );
 
     try {
       // 1. Update local state immediately
-      const nextAnnotations = roomAnnotations.some(z => z.id === zoneWithScene.id)
-        ? roomAnnotations.map(z => z.id === zoneWithScene.id ? zoneWithScene : z)
-        : [...roomAnnotations, zoneWithScene];
+      const nextAnnotations = normalizeRoomAnnotations(
+        roomAnnotations.some(z => z.id === zoneWithScene.id)
+          ? roomAnnotations.map(z => z.id === zoneWithScene.id ? zoneWithScene : z)
+          : [...roomAnnotations, zoneWithScene],
+        scnId,
+        campId
+      );
       setRoomAnnotations(nextAnnotations);
 
       if (mapsDataRef.current[activeMapId]) {
@@ -5163,6 +5294,11 @@ export default function App() {
               boardWeatherEffect: updatedScene.boardWeatherEffect,
               updatedAt: Date.now()
             });
+            if (socketRef.current?.connected) {
+              socketRef.current.emit('SYNC_STATE', {
+                roomAnnotations: nextAnnotations
+              });
+            }
           }
         } catch (campErr) {
           console.warn('[handleSaveZone] Campaign scene sync note:', campErr);
@@ -5172,9 +5308,15 @@ export default function App() {
       // Also persist to mapZones document
       saveMapZone(campId, scnId, zoneWithScene).catch(console.warn);
 
-      toast.success(`Room "${zoneWithScene.roomNumber || ''} ${zoneWithScene.roomName || ''}" tied to scene!`, {
-        icon: '📍'
-      });
+      if (zoneWithScene.type === 'label') {
+        toast.success(`Label "${zoneWithScene.label}" saved to scene bundle!`, {
+          icon: '🏷️'
+        });
+      } else {
+        toast.success(`Room "${zoneWithScene.roomNumber || ''} ${zoneWithScene.roomName || ''}" tied to scene!`, {
+          icon: '📍'
+        });
+      }
       setIsZoneEditorOpen(false);
       setEditingZone(null);
     } catch (error: any) {
@@ -5312,6 +5454,11 @@ export default function App() {
             boardWeatherEffect: updatedScene.boardWeatherEffect,
             updatedAt: Date.now()
           });
+          if (socketRef.current?.connected) {
+            socketRef.current.emit('SYNC_STATE', {
+              roomAnnotations: nextAnnotations
+            });
+          }
         }
       } catch (err) {
         console.warn('[handleDeleteZone] Scene update notice:', err);
@@ -5323,7 +5470,7 @@ export default function App() {
     } catch (e) {
       console.warn('[handleDeleteZone] Standalone zone delete notice:', e);
     }
-    toast.success('Room zone removed from scene');
+    toast.success('Removed from scene bundle');
   };
 
   const handleSendBriefingToChat = (text: string, title: string) => {
@@ -7065,6 +7212,7 @@ export default function App() {
           isPlayerView={false}
           onReturnHome={handleReturnHome}
           isAtHome={!imageFile}
+          onPromptRollInitiative={handlePromptRollInitiative}
           activeMapId={activeMapId}
           liveMapId={liveMapId}
           onForceSync={handleForceSyncToPlayers}
@@ -7218,6 +7366,7 @@ export default function App() {
             setSelectedZoneForSidePanel(anno);
             setIsZoneSidePanelOpen(true);
           }}
+          onDeleteZoneAnnotation={handleDeleteZone}
           onHoverZone={setHoveredZoneId}
           currentMapImage={imageFile}
           onExportUniversalVtt={handleExportUniversalVtt}
@@ -8758,6 +8907,7 @@ export default function App() {
           onClose={() => setShowCombatTracker(false)}
           autoApplyMonsterDamage={autoApplyMonsterDamage}
           onToggleAutoApplyMonsterDamage={handleToggleAutoApplyMonsterDamage} 
+          onPromptRollInitiative={handlePromptRollInitiative}
           combatants={combatTrackerCombatants}
           setCombatants={setCombatTrackerCombatants}
           round={combatTrackerRound}

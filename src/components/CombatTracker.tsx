@@ -39,6 +39,7 @@ interface Props {
   onOpenConditionReference?: (condition: string) => void;
   autoApplyMonsterDamage?: boolean;
   onToggleAutoApplyMonsterDamage?: (enabled: boolean) => void;
+  onPromptRollInitiative?: () => void;
 }
 
 export const CombatTracker = React.memo(function CombatTracker({
@@ -56,7 +57,8 @@ export const CombatTracker = React.memo(function CombatTracker({
   onPanToToken,
   onOpenConditionReference,
   autoApplyMonsterDamage = true,
-  onToggleAutoApplyMonsterDamage
+  onToggleAutoApplyMonsterDamage,
+  onPromptRollInitiative
 }: Props) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [isConfirmingClear, setIsConfirmingClear] = useState(false);
@@ -103,7 +105,8 @@ export const CombatTracker = React.memo(function CombatTracker({
           ac: t.ac || 10,
           passivePerception: (t as any).passivePerception || 10,
           conditions: t.conditions || [],
-          avatarUrl: t.url || t.avatarUrl
+          avatarUrl: t.url || t.avatarUrl,
+          initiativeBonus: (t as any).initiativeBonus !== undefined ? Number((t as any).initiativeBonus) : 0
         });
       }
 
@@ -128,15 +131,16 @@ export const CombatTracker = React.memo(function CombatTracker({
   const handleRollAllInitiatives = () => {
     setCombatants(prev => {
       return prev.map(c => {
+        const bonus = typeof c.initiativeBonus === 'number' ? c.initiativeBonus : 0;
         const roll = Math.floor(Math.random() * 20) + 1;
         return {
           ...c,
-          initiative: roll
+          initiative: Math.max(1, roll + bonus)
         };
       });
     });
     setTurnIndex(0);
-    toast.success('Rolled initiative for all combatants!');
+    toast.success('Rolled initiative for all combatants (with bonuses)!');
   };
 
   // Roll initiative for monsters only
@@ -144,13 +148,14 @@ export const CombatTracker = React.memo(function CombatTracker({
     setCombatants(prev => {
       return prev.map(c => {
         if (c.type === 'enemy') {
+          const bonus = typeof c.initiativeBonus === 'number' ? c.initiativeBonus : 0;
           const roll = Math.floor(Math.random() * 20) + 1;
-          return { ...c, initiative: roll };
+          return { ...c, initiative: Math.max(1, roll + bonus) };
         }
         return c;
       });
     });
-    toast.success('Rolled initiative for enemies!');
+    toast.success('Rolled initiative for enemies (with bonuses)!');
   };
 
   const handleNextTurn = () => {
@@ -343,6 +348,17 @@ export const CombatTracker = React.memo(function CombatTracker({
               >
                 <HeartCrack className={`w-3.5 h-3.5 ${autoApplyMonsterDamage ? 'text-rose-400' : 'text-zinc-500'}`} />
                 <span>Auto Damage: {autoApplyMonsterDamage ? 'ON' : 'OFF'}</span>
+              </button>
+            )}
+            {onPromptRollInitiative && (
+              <button
+                type="button"
+                onClick={onPromptRollInitiative}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-600/30 to-amber-500/20 border border-amber-500/50 hover:bg-amber-500/30 text-amber-300 hover:text-white rounded-xl text-xs font-mono font-bold transition-all cursor-pointer shadow-sm"
+                title="Prompt all connected players to roll initiative"
+              >
+                <Dices className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+                <span>Prompt Players</span>
               </button>
             )}
             <button

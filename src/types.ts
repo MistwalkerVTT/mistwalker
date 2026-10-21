@@ -16,6 +16,7 @@ export interface Combatant {
   conditions: string[];
   tokenId?: string;
   avatarUrl?: string;
+  initiativeBonus?: number;
 }
 
 export const CONDITIONS_LIST = [
@@ -193,6 +194,80 @@ export interface RoomAnnotation {
   hiddenMonsterNames?: string[];
   createdAt?: number;
   updatedAt?: number;
+}
+
+/**
+ * Safely normalizes any RoomAnnotation (either a polygon room zone or a point-of-interest map label),
+ * repairing any missing bounds, IDs, or type discriminators so the canvas and scene bundles never crash.
+ */
+export function normalizeRoomAnnotation(
+  raw: any,
+  idx: number = 0,
+  fallbackSceneId?: string,
+  fallbackCampaignId?: string
+): RoomAnnotation {
+  if (!raw || typeof raw !== 'object') {
+    return {
+      id: `room_${Date.now()}_${idx}`,
+      type: 'room',
+      label: `Room ${idx + 1}`,
+      bounds: { x: 50, y: 50, width: 6, height: 3 },
+      boxedText: '',
+      dmNotes: '',
+      sceneId: fallbackSceneId,
+      campaignId: fallbackCampaignId,
+    };
+  }
+  const isLabel =
+    raw.type === 'label' ||
+    Boolean(raw.icon) ||
+    typeof raw.visibleToPlayers === 'boolean';
+  const id =
+    typeof raw.id === 'string' && raw.id.trim().length > 0
+      ? raw.id
+      : `${isLabel ? 'label' : 'room'}_${raw.createdAt || Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`;
+  const rawBounds = raw.bounds && typeof raw.bounds === 'object' ? raw.bounds : {};
+  const bounds = {
+    x: typeof rawBounds.x === 'number' && !isNaN(rawBounds.x) ? rawBounds.x : 50,
+    y: typeof rawBounds.y === 'number' && !isNaN(rawBounds.y) ? rawBounds.y : 50,
+    width: typeof rawBounds.width === 'number' && !isNaN(rawBounds.width) ? rawBounds.width : (isLabel ? 8 : 6),
+    height: typeof rawBounds.height === 'number' && !isNaN(rawBounds.height) ? rawBounds.height : (isLabel ? 4 : 3),
+  };
+  const label =
+    (typeof raw.label === 'string' && raw.label.trim()) ||
+    (typeof raw.roomName === 'string' && raw.roomName.trim()) ||
+    (isLabel ? 'Map Label' : `Room ${raw.roomNumber || idx + 1}`);
+
+  return {
+    ...raw,
+    id,
+    type: isLabel ? 'label' : 'room',
+    label,
+    roomNumber: isLabel ? undefined : raw.roomNumber,
+    roomName: raw.roomName || label,
+    icon: isLabel ? (raw.icon || 'stairs-up') : raw.icon,
+    visibleToPlayers: isLabel ? (raw.visibleToPlayers !== false) : raw.visibleToPlayers,
+    bounds,
+    polygonPoints: Array.isArray(raw.polygonPoints)
+      ? raw.polygonPoints.map((n: any) => Number(n)).filter((n: number) => !isNaN(n))
+      : undefined,
+    boxedText: typeof raw.boxedText === 'string' ? raw.boxedText : '',
+    dmNotes: typeof raw.dmNotes === 'string' ? raw.dmNotes : '',
+    color: raw.color || '#f59e0b',
+    sceneId: raw.sceneId || fallbackSceneId,
+    campaignId: raw.campaignId || fallbackCampaignId,
+  };
+}
+
+export function normalizeRoomAnnotations(
+  list: any,
+  fallbackSceneId?: string,
+  fallbackCampaignId?: string
+): RoomAnnotation[] {
+  if (!Array.isArray(list)) return [];
+  return list
+    .filter(item => item && typeof item === 'object')
+    .map((item, idx) => normalizeRoomAnnotation(item, idx, fallbackSceneId, fallbackCampaignId));
 }
 
 export interface ChapterSceneAssociation {

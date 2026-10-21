@@ -49,7 +49,7 @@ import {
 import { toast } from 'sonner';
 import { isVideoAsset, saveLocalAsset } from '../lib/storageCache';
 import { SceneTokenPlacementCanvas } from './SceneTokenPlacementCanvas';
-import { UploadedAsset, WallSegment, VisionConfig, RoomAnnotation, ChapterPdfDigest, ChapterSceneAssociation } from '../types';
+import { UploadedAsset, WallSegment, VisionConfig, RoomAnnotation, ChapterPdfDigest, ChapterSceneAssociation, normalizeRoomAnnotation, normalizeRoomAnnotations } from '../types';
 import { PRESET_BATTLEMAPS, PresetBattlemap } from '../data/presetBattlemaps';
 import { digestChapterPdf } from '../services/aiService';
 import { CampaignPdfImporterModal } from './CampaignPdfImporterModal';
@@ -630,19 +630,22 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
       ? currentRoomAnnotations
       : (sceneToDuplicate.roomAnnotations || []);
 
-    const clonedRooms: RoomAnnotation[] = sourceRooms.map((r, idx) => ({
+    const clonedRooms: RoomAnnotation[] = normalizeRoomAnnotations(sourceRooms, newSceneId, cId).map((r, idx) => ({
       ...r,
-      id: `room-${Date.now().toString(36)}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
+      id: `${r.type === 'label' ? 'label' : 'room'}-${Date.now().toString(36)}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
       campaignId: cId,
       sceneId: newSceneId,
+      type: r.type || (r.icon ? 'label' : 'room'),
       label: r.label,
       roomNumber: r.roomNumber,
       roomName: r.roomName,
+      icon: r.icon,
+      visibleToPlayers: r.visibleToPlayers,
       bounds: {
-        x: Number(r.bounds.x),
-        y: Number(r.bounds.y),
-        width: Number(r.bounds.width),
-        height: Number(r.bounds.height)
+        x: Number(r.bounds?.x ?? 50),
+        y: Number(r.bounds?.y ?? 50),
+        width: Number(r.bounds?.width ?? 6),
+        height: Number(r.bounds?.height ?? 3)
       },
       polygonPoints: r.polygonPoints ? r.polygonPoints.map(p => Number(p)) : undefined,
       boxedText: r.boxedText || '',
@@ -869,10 +872,12 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
         return;
       }
 
+      const newSceneId = `scene_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
       const importedScene: Scene = {
         ...importedSceneRaw,
-        sceneId: `scene_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        sceneId: newSceneId,
         sceneTitle: importedSceneRaw.sceneTitle + ' (Imported)',
+        roomAnnotations: normalizeRoomAnnotations(importedSceneRaw.roomAnnotations, newSceneId, selectedCampaign.campaignId),
         updatedAt: Date.now()
       };
 

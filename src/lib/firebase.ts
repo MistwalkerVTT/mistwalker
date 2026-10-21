@@ -185,7 +185,7 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(JSON.stringify(errInfo));
 }
 
-import { WallSegment, VisionConfig, RoomAnnotation, ChapterPdfDigest, RevealPoint, TokenMonsterState } from '../types';
+import { WallSegment, VisionConfig, RoomAnnotation, ChapterPdfDigest, RevealPoint, TokenMonsterState, normalizeRoomAnnotation, normalizeRoomAnnotations } from '../types';
 
 // Data Interfaces as specified in User Requirements
 export interface SceneToken {
@@ -862,12 +862,9 @@ export function subscribeToCampaigns(
 async function sanitizeSceneForStorage(scene: Scene): Promise<Scene> {
   const updatedScene: Scene = { ...scene };
 
-  // Preserve room annotations and polygon rooms directly attached to the scene (just like walls and tokens)
+  // Preserve room annotations, polygon rooms, and tactical map labels directly attached to the scene (just like walls and tokens)
   if (scene.roomAnnotations && Array.isArray(scene.roomAnnotations)) {
-    updatedScene.roomAnnotations = scene.roomAnnotations.map(ra => ({
-      ...ra,
-      sceneId: ra.sceneId || scene.sceneId
-    }));
+    updatedScene.roomAnnotations = normalizeRoomAnnotations(scene.roomAnnotations, scene.sceneId);
   }
 
   // Preserve and compact Fog of War brush reveals if present to protect against 1MB Firestore limit
@@ -1014,10 +1011,10 @@ export async function saveSceneToCampaign(
               return {
                 ...s,
                 ...sanitizedScene,
-                // Critical safeguard: Never overwrite non-empty room annotations with an empty array
-                roomAnnotations: (sanitizedScene.roomAnnotations && sanitizedScene.roomAnnotations.length > 0)
+                // Preserve roomAnnotations & labels when explicitly provided on sanitizedScene
+                roomAnnotations: Array.isArray(sanitizedScene.roomAnnotations)
                   ? sanitizedScene.roomAnnotations
-                  : (s.roomAnnotations || []),
+                  : normalizeRoomAnnotations(s.roomAnnotations || [], sanitizedScene.sceneId, campaignId),
                 // Critical safeguard: Never overwrite non-empty walls with an empty array
                 walls: (sanitizedScene.walls && sanitizedScene.walls.length > 0)
                   ? sanitizedScene.walls
@@ -1424,21 +1421,26 @@ export async function saveMapZone(
   sceneId: string,
   zone: RoomAnnotation
 ): Promise<RoomAnnotation> {
-  const zoneId = zone.id || `zone_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const normalized = normalizeRoomAnnotation(zone, 0, sceneId || 'default', campaignId || 'default');
+  const zoneId = normalized.id || `zone_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   const now = Date.now();
-  const roomNumber = zone.roomNumber || (zone.label ? zone.label.split(/[\s\-:]/)[0] : '1');
-  const roomName = zone.roomName || (zone.label ? zone.label.replace(/^.*?[\-:]\s*/, '') : 'Zone');
-  const label = zone.label || `${roomNumber} - ${roomName}`;
+  const isLabel = normalized.type === 'label';
+  const roomNumber = isLabel
+    ? undefined
+    : (normalized.roomNumber || (normalized.label ? normalized.label.split(/[\s\-:]/)[0] : '1'));
+  const roomName = normalized.roomName || (normalized.label ? normalized.label.replace(/^.*?[\-:]\s*/, '') : (isLabel ? 'Map Label' : 'Zone'));
+  const label = normalized.label || (isLabel ? roomName : `${roomNumber} - ${roomName}`);
 
   const zoneData: RoomAnnotation = {
-    ...zone,
+    ...normalized,
     id: zoneId,
+    type: isLabel ? 'label' : 'room',
     roomNumber,
     roomName,
     label,
     campaignId: campaignId || 'default',
     sceneId: sceneId || 'default',
-    createdAt: zone.createdAt || now,
+    createdAt: normalized.createdAt || now,
     updatedAt: now
   };
 
@@ -1519,11 +1521,11 @@ export async function fetchMapZones(
     }
 
     // Filter strictly by sceneId if provided (directly tied to the scene, just like walls and doors)
-    if (sceneId && sceneId !== 'default') {
-      return results.filter(z => z.sceneId === sceneId);
-    }
+    const filtered = (sceneId && sceneId !== 'default')
+      ? results.filter(z => z.sceneId === sceneId)
+      : results;
 
-    return results;
+    return normalizeRoomAnnotations(filtered, sceneId, campaignId);
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, path);
     return [];

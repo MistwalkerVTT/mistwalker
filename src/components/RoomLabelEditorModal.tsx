@@ -21,14 +21,8 @@ export interface RoomLabelEditorModalProps {
   onClose: () => void;
   initialAnnotation?: RoomAnnotation | null;
   position?: { x: number; y: number } | null; // percentage on map
-  onSave: (labelData: {
-    id?: string;
-    label: string;
-    icon: string;
-    color: string;
-    visibleToPlayers: boolean;
-    dmNotes: string;
-  }) => void;
+  clickPosition?: { x: number; y: number } | null; // percentage on map
+  onSave: (annotation: RoomAnnotation) => void;
   onDelete?: (id: string) => void;
 }
 
@@ -75,6 +69,7 @@ export const RoomLabelEditorModal: React.FC<RoomLabelEditorModalProps> = ({
   onClose,
   initialAnnotation,
   position,
+  clickPosition,
   onSave,
   onDelete
 }) => {
@@ -114,14 +109,36 @@ export const RoomLabelEditorModal: React.FC<RoomLabelEditorModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!labelText.trim()) return;
-    onSave({
-      id: initialAnnotation?.id,
+    const now = Date.now();
+    const targetPos = clickPosition || position;
+    const pctX = typeof initialAnnotation?.bounds?.x === 'number' && !isNaN(initialAnnotation.bounds.x)
+      ? initialAnnotation.bounds.x
+      : (typeof targetPos?.x === 'number' && !isNaN(targetPos.x) ? targetPos.x : 50);
+    const pctY = typeof initialAnnotation?.bounds?.y === 'number' && !isNaN(initialAnnotation.bounds.y)
+      ? initialAnnotation.bounds.y
+      : (typeof targetPos?.y === 'number' && !isNaN(targetPos.y) ? targetPos.y : 50);
+
+    const completeAnnotation: RoomAnnotation = {
+      ...(initialAnnotation || {}),
+      id: initialAnnotation?.id || `label_${now}_${Math.random().toString(36).substring(2, 7)}`,
+      type: 'label',
       label: labelText.trim(),
+      roomName: labelText.trim(),
       icon: selectedIcon,
       color: selectedColor,
       visibleToPlayers,
-      dmNotes: dmNotes.trim()
-    });
+      bounds: {
+        x: pctX,
+        y: pctY,
+        width: initialAnnotation?.bounds?.width || 8,
+        height: initialAnnotation?.bounds?.height || 4
+      },
+      boxedText: initialAnnotation?.boxedText || '',
+      dmNotes: dmNotes.trim(),
+      createdAt: initialAnnotation?.createdAt || now,
+      updatedAt: now
+    };
+    onSave(completeAnnotation);
     onClose();
   };
 

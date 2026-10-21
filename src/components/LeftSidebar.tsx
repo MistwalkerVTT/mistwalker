@@ -255,6 +255,7 @@ interface LeftSidebarProps {
   roomAnnotations?: RoomAnnotation[];
   onAddHotspot?: () => void;
   onOpenZoneDetails?: (zone: RoomAnnotation) => void;
+  onDeleteZoneAnnotation?: (zoneId: string) => void;
   onHoverZone?: (zoneId: string | null) => void;
   currentMapImage?: string;
   onExportUniversalVtt?: () => void;
@@ -270,6 +271,7 @@ interface LeftSidebarProps {
   activeEffects?: any[];
   onReturnHome?: () => void;
   isAtHome?: boolean;
+  onPromptRollInitiative?: () => void;
 }
 
 type GroupMenuId = 'maps' | 'zones' | 'fog-grid' | 'lighting' | 'combat' | 'fx' | 'spells' | 'tokens' | 'dice' | 'ai' | 'help';
@@ -278,6 +280,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   isPlayerView,
   onReturnHome,
   isAtHome,
+  onPromptRollInitiative,
   activeMapId,
   liveMapId,
   onForceSync,
@@ -417,6 +420,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   roomAnnotations = [],
   onAddHotspot,
   onOpenZoneDetails,
+  onDeleteZoneAnnotation,
   onHoverZone,
   currentMapImage,
   onExportUniversalVtt,
@@ -676,7 +680,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
         <div
           id="mistwalker-brand-icon"
           onClick={() => {
-            setActiveMenu(null);
+            setPinnedGroup(null);
             setHoveredGroup(null);
             setPinnedPosition(null);
             onReturnHome?.();
@@ -2699,34 +2703,34 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                                   >
                                     {glyph}
                                   </span>
-                                ) : (
-                                  <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold font-mono flex items-center justify-center shrink-0">
-                                    {anno.badgeNumber || idx + 1}
-                                  </span>
-                                )}
-                                <div className="min-w-0">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="text-xs font-bold text-zinc-200 group-hover:text-amber-200 truncate block">
-                                      {anno.label || (anno.title || `Room ${anno.badgeNumber || idx + 1}`)}
+                                  ) : (
+                                    <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold font-mono flex items-center justify-center shrink-0">
+                                      {anno.roomNumber || idx + 1}
                                     </span>
-                                    {isLabel && (
-                                      <span
-                                        className={`text-[8px] px-1 py-0.5 rounded font-mono font-bold shrink-0 ${
-                                          anno.visibleToPlayers
-                                            ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/30'
-                                            : 'bg-zinc-850 text-zinc-400 border border-zinc-700/50'
-                                        }`}
-                                      >
-                                        {anno.visibleToPlayers ? 'Player Visible' : 'DM Only'}
+                                  )}
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-xs font-bold text-zinc-200 group-hover:text-amber-200 truncate block">
+                                        {anno.label || anno.roomName || `Room ${anno.roomNumber || idx + 1}`}
                                       </span>
+                                      {isLabel && (
+                                        <span
+                                          className={`text-[8px] px-1 py-0.5 rounded font-mono font-bold shrink-0 ${
+                                            anno.visibleToPlayers
+                                              ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/30'
+                                              : 'bg-zinc-850 text-zinc-400 border border-zinc-700/50'
+                                          }`}
+                                        >
+                                          {anno.visibleToPlayers ? 'Player Visible' : 'DM Only'}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {(anno.boxedText || anno.dmNotes) && (
+                                      <p className="text-[9.5px] text-zinc-500 truncate">
+                                        {anno.boxedText || anno.dmNotes}
+                                      </p>
                                     )}
                                   </div>
-                                  {anno.readAloudText && (
-                                    <p className="text-[9.5px] text-zinc-500 truncate">
-                                      {anno.readAloudText}
-                                    </p>
-                                  )}
-                                </div>
                               </div>
                               <button
                                 type="button"
@@ -2777,13 +2781,36 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                 </div>
               </div>
 
-              {/* Combat Tracker Toggle */}
+              {/* Initiative & Combat Tracking */}
               <div className="flex flex-col gap-2">
                 <span className="text-[10px] uppercase font-bold font-mono text-zinc-400">Initiative & Tracking</span>
+                
+                {/* Roll for Initiative Button */}
+                <button
+                  id="btn-roll-initiative-flyout"
+                  type="button"
+                  onClick={() => {
+                    if (onPromptRollInitiative) {
+                      onPromptRollInitiative();
+                    }
+                  }}
+                  className="w-full py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-between border transition-all bg-gradient-to-r from-amber-600/30 to-amber-500/20 hover:from-amber-500/40 hover:to-amber-500/30 border-amber-500/50 text-amber-200 hover:text-white shadow-md shadow-amber-950/30 cursor-pointer active:scale-[0.98]"
+                  title="Prompt all tokens on map to roll initiative"
+                >
+                  <span className="flex items-center gap-2">
+                    <Dices className="w-4 h-4 text-amber-400 animate-pulse" />
+                    <span>Roll for Initiative</span>
+                  </span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-mono font-bold bg-amber-500 text-black">
+                    PROMPT
+                  </span>
+                </button>
+
+                {/* Combat Tracker Toggle */}
                 <button
                   id="btn-toggle-combat-tracker-flyout"
                   onClick={() => setShowCombatTracker(!showCombatTracker)}
-                  className={`w-full py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-between border transition-all ${
+                  className={`w-full py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-between border transition-all ${
                     showCombatTracker
                       ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 shadow-md shadow-amber-950/40'
                       : 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700'

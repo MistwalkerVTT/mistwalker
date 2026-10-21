@@ -206,10 +206,10 @@ export const RoomBriefingModal: React.FC<RoomBriefingModalProps> = ({
           <div className="text-[11px] text-zinc-400 font-mono">
             <span>Coordinates: </span>
             <span className="text-zinc-300 font-bold">
-              {Math.round(annotation.bounds.x)}%, {Math.round(annotation.bounds.y)}%
+              {Math.round(annotation.bounds?.x ?? 50)}%, {Math.round(annotation.bounds?.y ?? 50)}%
             </span>
             <span className="text-zinc-500 ml-1">
-              ({Math.round(annotation.bounds.width)}% × {Math.round(annotation.bounds.height)}%)
+              ({Math.round(annotation.bounds?.width ?? 6)}% × {Math.round(annotation.bounds?.height ?? 3)}%)
             </span>
           </div>
 

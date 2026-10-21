@@ -518,6 +518,20 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
             )}
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
+            {onEndTurn && (
+              <button
+                type="button"
+                onClick={onEndTurn}
+                className={`px-2.5 py-1 rounded-lg font-mono text-[11px] font-bold transition-all cursor-pointer active:scale-95 flex items-center gap-1 shrink-0 ${
+                  isMyTurn
+                    ? 'bg-amber-500 hover:bg-amber-400 text-zinc-950 shadow-md shadow-amber-500/30 animate-pulse'
+                    : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700'
+                }`}
+                title={isMyTurn ? "Your Turn: Click to Pass Turn" : "Pass Turn"}
+              >
+                Pass Turn
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setIsDockMinimizedWhileAiming(prev => !prev)}
@@ -694,13 +708,14 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
               <button
                 type="button"
                 onClick={onEndTurn}
-                className={`px-3 py-2 rounded-lg font-mono text-[11px] font-bold cursor-pointer ${
+                className={`px-3 py-2 rounded-lg font-mono text-[11px] font-bold cursor-pointer transition-all active:scale-95 ${
                   isMyTurn
-                    ? 'bg-amber-500 text-zinc-950 shadow-md'
+                    ? 'bg-amber-500 hover:bg-amber-400 text-zinc-950 shadow-md shadow-amber-500/20 animate-pulse'
                     : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800'
                 }`}
+                title={isMyTurn ? "Your Turn: Click to Pass Turn" : "Pass Turn"}
               >
-                {isMyTurn ? 'End Turn' : 'Pass'}
+                Pass Turn
               </button>
             )}
           </div>
@@ -1144,13 +1159,14 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
               <button
                 type="button"
                 onClick={onEndTurn}
-                className={`px-3 py-1.5 rounded-xl font-mono text-xs font-bold transition-all cursor-pointer ${
+                className={`px-3 py-1.5 rounded-xl font-mono text-xs font-bold transition-all cursor-pointer active:scale-95 ${
                   isMyTurn
-                    ? 'bg-amber-500 hover:bg-amber-400 text-zinc-950 shadow-md shadow-amber-500/20'
+                    ? 'bg-amber-500 hover:bg-amber-400 text-zinc-950 shadow-md shadow-amber-500/30 animate-pulse'
                     : 'bg-zinc-950 hover:bg-zinc-800 text-zinc-300 border border-zinc-800'
                 }`}
+                title={isMyTurn ? "Your Turn: Click to Pass Turn" : "Pass Turn"}
               >
-                {isMyTurn ? 'End Turn' : 'Pass Turn'}
+                Pass Turn
               </button>
             )}
 
