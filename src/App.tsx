@@ -3975,6 +3975,54 @@ export default function App() {
     executeMonsterRoll(singleToken, action);
   }, [selectedTokenIds, tokens, executeMonsterRoll]);
 
+  const handleRollDmMonsterToHit = useCallback((action: MonsterActionItem) => {
+    const singleToken = selectedTokenIds.length === 1 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
+    if (!singleToken || action.hitBonus === undefined) return;
+
+    const rawHit = typeof action.hitBonus === 'number'
+      ? action.hitBonus
+      : (parseInt(String(action.hitBonus).replace('+', ''), 10) || 0);
+    const modStr = rawHit >= 0 ? `+${rawHit}` : `${rawHit}`;
+    const d20 = Math.floor(Math.random() * 20) + 1;
+    const total = d20 + rawHit;
+    const isCrit = d20 === 20;
+    const isFumble = d20 === 1;
+
+    const diceEvent: DdbDiceRollEvent = {
+      id: `roll-${Date.now()}`,
+      characterName: singleToken.name || 'Monster',
+      avatarUrl: singleToken.url,
+      action: `${action.name} (To Hit)`,
+      rollType: 'attack',
+      formula: `1d20 ${modStr}`,
+      diceNotation: '1d20',
+      dice: [{ sides: 20, result: d20, type: 'd20' }],
+      modifier: rawHit,
+      total,
+      isCritical: isCrit,
+      isFumble: isFumble,
+      theme: 'rust',
+      themeColor: isCrit ? '#10b981' : isFumble ? '#ef4444' : '#dc2626',
+      timestamp: Date.now(),
+      source: 'local'
+    };
+
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', diceEvent);
+    }
+    if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+      (window as any).__mistwalkerRoll3d(diceEvent);
+    }
+
+    toast.success(`${singleToken.name}: ${action.name} To Hit!`, {
+      description: isCrit
+        ? `CRITICAL HIT! Nat 20 ${modStr} = ${total}`
+        : isFumble
+        ? `NATURAL 1 FUMBLE! Nat 1 ${modStr} = ${total}`
+        : `Rolled ${d20} ${modStr} = ${total} to Hit!`
+    });
+  }, [selectedTokenIds, tokens]);
+
   const handleRollDmMonsterRecharge = useCallback((action: MonsterActionItem) => {
     const singleToken = selectedTokenIds.length === 1 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
     if (!singleToken) return;
@@ -8077,6 +8125,7 @@ export default function App() {
                       hudData={dmMonsterHudData}
                       onSelectAction={handleSelectDmMonsterAction}
                       onQuickRollAction={handleQuickRollDmMonsterAction}
+                      onRollToHit={handleRollDmMonsterToHit}
                       activeTargetingAction={activeDmMonsterAction}
                       onCancelTargeting={() => {
                         setActiveDmMonsterAction(null);
