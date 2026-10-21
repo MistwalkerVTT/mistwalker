@@ -104,6 +104,7 @@ import {
 import { PlayerStationModal, PlayerStationMode } from './PlayerStationModal';
 import { PlayerHeroDock } from './PlayerHeroDock';
 import { HudCharacterData, HudActionItem } from '../types/hud';
+import { TokenDragRuler, TokenDragState, parseSpeedFt } from './TokenDragRuler';
 
 interface Token {
   id: string;
@@ -370,6 +371,8 @@ const GifImage = ({ src, ...props }: any) => {
 const PlayerToken = React.memo(({
   token,
   gridSize,
+  gridOffsetX = 0,
+  gridOffsetY = 0,
   isClaimed,
   characters,
   combatants,
@@ -385,6 +388,8 @@ const PlayerToken = React.memo(({
 }: {
   token: Token;
   gridSize: number;
+  gridOffsetX?: number;
+  gridOffsetY?: number;
   isClaimed: boolean;
   characters?: Character[];
   combatants?: Combatant[];
@@ -392,9 +397,9 @@ const PlayerToken = React.memo(({
   canDrag?: boolean;
   isTargetingActive?: boolean;
   onTargetToken?: (token: Token) => void;
-  onMoveToken: (id: string, x: number, y: number) => void;
+  onMoveToken: (id: string, x: number, y: number, distanceMovedFt?: number) => void;
   onDragMoveToken?: (id: string, x: number, y: number) => void;
-  onDragStartToken?: (id: string) => void;
+  onDragStartToken?: (token: Token, originX: number, originY: number, baseSpeed: number) => void;
   onClaimToken?: (id: string) => void;
   onContextMenu?: (id: string, clientX: number, clientY: number) => void;
 }) => {
@@ -473,6 +478,11 @@ const PlayerToken = React.memo(({
 
   const handleDragStart = (e: any) => {
     e.cancelBubble = true;
+    if (!canDrag || isMonster || isCondition) {
+      e.target.stopDrag();
+      return;
+    }
+
     const now = Date.now();
     const elapsed = pointerDownTimeRef.current > 0 ? (now - pointerDownTimeRef.current) : 999;
     const clientX = e.evt?.clientX ?? (e.evt?.touches && e.evt.touches[0]?.clientX) ?? 0;
@@ -506,22 +516,24 @@ const PlayerToken = React.memo(({
     }
 
     isCurrentlyDraggingRef.current = true;
+    const container = e.target.getStage()?.container();
+    if (container) {
+      container.style.cursor = 'grabbing';
+    }
+
+    const baseSpeed = token.speed || parseSpeedFt(stats.speed || (matchedCombatant as any)?.speed, 30);
     if (!isMonster && !isCondition && onDragStartToken) {
-      onDragStartToken(token.id);
+      onDragStartToken(token, token.x, token.y, baseSpeed);
     }
   };
 
   const handleDragMove = (e: any) => {
     e.cancelBubble = true;
     if (!isCurrentlyDraggingRef.current) return;
-    const now = Date.now();
-    if (now - lastEmitTimeRef.current > 30) {
-      lastEmitTimeRef.current = now;
-      const rawX = e.target.x();
-      const rawY = e.target.y();
-      if (onDragMoveToken) {
-        onDragMoveToken(token.id, rawX, rawY);
-      }
+    const rawX = e.target.x();
+    const rawY = e.target.y();
+    if (onDragMoveToken) {
+      onDragMoveToken(token.id, rawX, rawY);
     }
   };
 
@@ -535,6 +547,11 @@ const PlayerToken = React.memo(({
     isHoldMetRef.current = false;
     pointerDownTimeRef.current = 0;
 
+    const container = e.target.getStage()?.container();
+    if (container) {
+      container.style.cursor = canDrag ? 'grab' : 'default';
+    }
+
     if (!wasDragging) {
       // Aborted drag from quick click - restore position to original token position
       e.target.position({ x: token.x, y: token.y });
@@ -543,11 +560,17 @@ const PlayerToken = React.memo(({
 
     const rawX = e.target.x();
     const rawY = e.target.y();
-    // Snap to grid
-    const snappedX = Math.round(rawX / gridSize) * gridSize;
-    const snappedY = Math.round(rawY / gridSize) * gridSize;
+    // Snap to grid with gridOffsetX and gridOffsetY
+    const snappedX = Math.round((rawX - gridOffsetX) / gridSize) * gridSize + gridOffsetX;
+    const snappedY = Math.round((rawY - gridOffsetY) / gridSize) * gridSize + gridOffsetY;
+
+    // Calculate distance moved in feet
+    const dx = snappedX - token.x;
+    const dy = snappedY - token.y;
+    const distanceFt = Math.round(Math.hypot(dx, dy) / gridSize) * 5;
+
     e.target.position({ x: snappedX, y: snappedY });
-    onMoveToken(token.id, snappedX, snappedY);
+    onMoveToken(token.id, snappedX, snappedY, distanceFt);
   };
 
   const displayCurrentHp = token.currentHp !== undefined
@@ -612,6 +635,18 @@ const PlayerToken = React.memo(({
       name="token"
       draggable={!isCondition && canDrag}
       dragDistance={10}
+      onMouseEnter={(e: any) => {
+        if (canDrag && !isCurrentlyDraggingRef.current) {
+          const container = e.target.getStage()?.container();
+          if (container) container.style.cursor = 'grab';
+        }
+      }}
+      onMouseLeave={(e: any) => {
+        if (!isCurrentlyDraggingRef.current) {
+          const container = e.target.getStage()?.container();
+          if (container) container.style.cursor = 'default';
+        }
+      }}
       onMouseDown={(e: any) => {
         if (!isCondition && e.evt?.button !== 2) {
           e.cancelBubble = true;
@@ -1007,6 +1042,8 @@ const PlayerToken = React.memo(({
   return (
     prevProps.token === nextProps.token &&
     prevProps.gridSize === nextProps.gridSize &&
+    prevProps.gridOffsetX === nextProps.gridOffsetX &&
+    prevProps.gridOffsetY === nextProps.gridOffsetY &&
     prevProps.isClaimed === nextProps.isClaimed &&
     prevProps.characters === nextProps.characters &&
     prevProps.combatants === nextProps.combatants &&
@@ -2427,44 +2464,84 @@ export default function PlayerView() {
     }
   }, []);
 
-  const handleDragStartToken = useCallback((id: string) => {
-    const target = tokensRef.current.find(t => t.id === id);
-    if (target) {
-      if (target.isCondition) return;
-      const isAlly = target.category === 'ally' || !!(target as any).allyId;
-      const isMonster = !isAlly && (isMonsterToken(target) || target.isMonster === true || target.category === 'monster' || target.isPlayer === false);
-      if (isMonster) return;
-      if (typeof window !== 'undefined' && target.name) {
-        localStorage.setItem('mistwalker_player_claimed_name', target.name);
-      }
-    }
-    activeDraggingTokenIdRef.current = id;
+  // Active dragging state including origin, speed budget, and real-time distance
+  const [tokenDragState, setTokenDragState] = useState<TokenDragState | null>(null);
+
+  const handleDragStartToken = useCallback((token: Token, originX: number, originY: number, baseSpeed: number) => {
+    activeDraggingTokenIdRef.current = token.id;
     setIsDraggingToken(true);
     setActiveTokenMenu(null);
-    if (claimedTokenIdRef.current !== id) {
-      claimedTokenIdRef.current = id;
-      setClaimedTokenId(id);
+    if (claimedTokenIdRef.current !== token.id) {
+      claimedTokenIdRef.current = token.id;
+      setClaimedTokenId(token.id);
     }
     if (typeof window !== 'undefined') {
-      localStorage.setItem('mistwalker_player_claimed_token', id);
+      localStorage.setItem('mistwalker_player_claimed_token', token.id);
+      if (token.name) {
+        localStorage.setItem('mistwalker_player_claimed_name', token.name);
+      }
     }
+
+    setTokenDragState({
+      tokenId: token.id,
+      tokenName: token.name,
+      tokenAvatarUrl: token.avatarUrl || token.url,
+      tokenSize: token.size || 1,
+      originX,
+      originY,
+      currentX: originX,
+      currentY: originY,
+      baseSpeed,
+      distancePx: 0,
+      distanceFt: 0,
+      remainingFt: baseSpeed
+    });
   }, []);
 
-  // Real-time dragged token movement handler (throttled emit during active drag)
+  // Real-time dragged token movement handler (updates ruler distance & throttles socket emit)
   const handleDragMoveToken = useCallback((id: string, rawX: number, rawY: number) => {
-    if (socketRef.current?.connected) {
-      socketRef.current.emit('MOVE_TOKEN', { id, x: rawX, y: rawY });
-    }
-  }, []);
+    setTokenDragState(prev => {
+      if (!prev || prev.tokenId !== id) return prev;
+      const dx = rawX - prev.originX;
+      const dy = rawY - prev.originY;
+      const distancePx = Math.hypot(dx, dy);
+      const distanceFt = Math.round(distancePx / gridSize) * 5;
+      const remainingFt = prev.baseSpeed - distanceFt;
+      return {
+        ...prev,
+        currentX: rawX,
+        currentY: rawY,
+        distancePx,
+        distanceFt,
+        remainingFt
+      };
+    });
 
-  // Snapped or keyboard token movement handler (emits MOVE_TOKEN only so it never overwrites DM tokens/conditions)
-  const handleMoveToken = useCallback((id: string, newX: number, newY: number) => {
+    const now = Date.now();
+    if (now - lastEmitTimeRef.current > 30) {
+      lastEmitTimeRef.current = now;
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('MOVE_TOKEN', { id, x: rawX, y: rawY });
+      }
+    }
+  }, [gridSize]);
+
+  // Snapped or keyboard token movement handler (emits PLAYER_MOVE_TOKEN and MOVE_TOKEN)
+  const handleMoveToken = useCallback((id: string, newX: number, newY: number, distanceMovedFt?: number) => {
     setIsDraggingToken(false);
+    setTokenDragState(null);
     const currentTokens = tokensRef.current;
     const nextTokens = currentTokens.map(t => t.id === id ? { ...t, x: newX, y: newY } : t);
     tokensRef.current = nextTokens;
     setTokens(nextTokens);
+
     if (socketRef.current?.connected) {
+      socketRef.current.emit('PLAYER_MOVE_TOKEN', {
+        tokenId: id,
+        x: newX,
+        y: newY,
+        distanceMovedFt: distanceMovedFt ?? 0
+      });
       socketRef.current.emit('MOVE_TOKEN', { id, x: newX, y: newY });
     }
     setTimeout(() => {
@@ -2494,6 +2571,7 @@ export default function PlayerView() {
 
       if (activeDraggingTokenIdRef.current || isDraggingToken) {
         setIsDraggingToken(false);
+        setTokenDragState(null);
         activeDraggingTokenIdRef.current = null;
       }
     };

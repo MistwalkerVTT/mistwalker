@@ -7631,7 +7631,8 @@ export default function App() {
                         handleStartRenameToken(token.id, token.name);
                       }
                     }}
-                    onDragStart={() => {
+                    onDragStart={(e: any) => {
+                      if (e) e.cancelBubble = true;
                       isDraggingTokenRef.current = true;
                       setIsDraggingToken(true);
                       setActiveMenu(null);
@@ -7652,6 +7653,7 @@ export default function App() {
                       dragStartPositionsRef.current = posMap;
                     }}
                     onDragMove={(e: any) => {
+                      if (e) e.cancelBubble = true;
                       const now = Date.now();
                       if (now - lastTokenMoveEmitTimeRef.current > 35) {
                         lastTokenMoveEmitTimeRef.current = now;
@@ -7663,6 +7665,7 @@ export default function App() {
                       }
                     }}
                     onDragEnd={(e: any) => {
+                      if (e) e.cancelBubble = true;
                       isDraggingTokenRef.current = false;
                       setIsDraggingToken(false);
                       if (stageRef.current) {
@@ -7670,8 +7673,8 @@ export default function App() {
                         const sy = stageRef.current.y();
                         setStagePos(prev => (prev.x === sx && prev.y === sy) ? prev : { x: sx, y: sy });
                       }
-                      const snappedX = Math.floor((e.target.x() - gridOffsetX) / gridSize) * gridSize + gridOffsetX;
-                      const snappedY = Math.floor((e.target.y() - gridOffsetY) / gridSize) * gridSize + gridOffsetY;
+                      const snappedX = Math.round((e.target.x() - gridOffsetX) / gridSize) * gridSize + gridOffsetX;
+                      const snappedY = Math.round((e.target.y() - gridOffsetY) / gridSize) * gridSize + gridOffsetY;
                       
                       const startPos = dragStartPositionsRef.current[token.id] || { x: token.x, y: token.y };
                       const deltaX = snappedX - startPos.x;
