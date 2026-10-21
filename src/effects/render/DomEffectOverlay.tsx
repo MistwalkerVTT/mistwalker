@@ -56,7 +56,7 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
 
     // Check if projectile has an impact explosion burst
     if (effect.paradigm === 'projectile' || effect.paradigm === 'ray') {
-      if (effect.trajectory?.burstOnImpact && effect.trajectory.burstVideoUrl && setEffects) {
+      if (effect.trajectory?.burstOnImpact && effect.trajectory.burstVideoUrl && effect.trajectory.burstVideoUrl !== effect.videoUrl && setEffects) {
         const burstEffect: VttEffectInstance = {
           id: `eff_burst_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
           name: `${effect.name} Impact`,

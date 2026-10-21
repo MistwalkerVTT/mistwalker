@@ -1106,6 +1106,7 @@ const buildFallbackHudData = (token: Token, stats: any, customChars?: Character[
       const lower = spName.toLowerCase();
       const isHeal = lower.includes('cure') || lower.includes('heal');
       const isCantrip = lower.includes('blast') || lower.includes('bolt') || lower.includes('mockery') || lower.includes('flame');
+      const matchedAsset = findJb2aAsset(spName);
       spells.push({
         id: `char-spell-${idx}`,
         name: spName,
@@ -1113,13 +1114,14 @@ const buildFallbackHudData = (token: Token, stats: any, customChars?: Character[
         type: 'action',
         subCategory: 'spell',
         level: isCantrip ? 0 : 1,
-        school: 'evocation',
+        school: (matchedAsset?.school as any) || 'evocation',
         castingTime: lower.includes('healing word') || lower.includes('mark') || lower.includes('hex') || lower.includes('misty step') ? '1 Bonus Action' : '1 Action',
         damageFormula: isHeal ? '1d8 + 3' : isCantrip ? '1d10' : undefined,
         isHeal,
         description: `Cast ${spName}.`,
-        rangeFt: isHeal ? 30 : 60,
-        jb2aAssetId: isHeal ? 'cure_wounds' : lower.includes('eldritch') ? 'eldritch_blast' : 'fire_bolt'
+        rangeFt: matchedAsset?.defaultSizeFt || (isHeal ? 30 : 60),
+        jb2aAssetId: matchedAsset?.id || (isHeal ? 'cure_wounds' : lower.includes('eldritch') ? 'eldritch_blast' : 'fire_bolt'),
+        iconUrl: matchedAsset?.thumb && !matchedAsset.thumb.endsWith('.webm') ? matchedAsset.thumb : undefined
       });
     });
   }
@@ -2809,8 +2811,15 @@ export default function PlayerView() {
   }, [applyTvScale]);
 
   // JB2A Visual Effects & Spell Engine Handlers
+  const lastCastTimeRef = useRef<number>(0);
+  const lastTargetTimeRef = useRef<number>(0);
+  const hasCastOnMouseDownRef = useRef<boolean>(false);
+
   const castSpellAt = useCallback((origin: { x: number; y: number }, target: { x: number; y: number }) => {
     if (!activeEquippedAsset) return;
+    const now = Date.now();
+    if (now - lastCastTimeRef.current < 400) return;
+    lastCastTimeRef.current = now;
 
     const dx = target.x - origin.x;
     const dy = target.y - origin.y;
@@ -3194,6 +3203,9 @@ export default function PlayerView() {
 
   const handleTargetToken = useCallback((targetToken: Token) => {
     if (!activeTargetingAction) return;
+    const now = Date.now();
+    if (now - lastTargetTimeRef.current < 400) return;
+    lastTargetTimeRef.current = now;
     const action = activeTargetingAction;
     const caster = claimedToken;
     if (!caster) {
@@ -3256,8 +3268,8 @@ export default function PlayerView() {
           endX: targetCenter.x,
           endY: targetCenter.y,
           speedPxSec: 1400,
-          burstOnImpact: true,
-          burstVideoUrl: asset.burstWebm || asset.webm,
+          burstOnImpact: Boolean(asset.burstWebm && asset.burstWebm !== (asset.projectileWebm || asset.webm)),
+          burstVideoUrl: (asset.burstWebm && asset.burstWebm !== (asset.projectileWebm || asset.webm)) ? asset.burstWebm : undefined,
           burstSoundKey: asset.soundKey
         } : undefined
       };
@@ -3427,6 +3439,7 @@ export default function PlayerView() {
 
     // Point AoE spells (Fireball, Fog Cloud, Web, Darkness, etc.) drop immediately on click!
     if (activeEquippedAsset.paradigm === 'point' || activeEquippedAsset.shape === 'circle' || activeEquippedAsset.paradigm === 'aura') {
+      hasCastOnMouseDownRef.current = true;
       castSpellAt(point, point);
       return;
     }
@@ -3436,6 +3449,7 @@ export default function PlayerView() {
       const dx = point.x - aimOrigin.x;
       const dy = point.y - aimOrigin.y;
       if (Math.hypot(dx, dy) > 20) {
+        hasCastOnMouseDownRef.current = true;
         castSpellAt(aimOrigin, point);
         return;
       }
@@ -3455,6 +3469,10 @@ export default function PlayerView() {
   };
 
   const handleStageMouseUp = () => {
+    if (hasCastOnMouseDownRef.current) {
+      hasCastOnMouseDownRef.current = false;
+      return;
+    }
     if (activeEquippedAsset && aimOrigin && aimCurrent) {
       const dx = aimCurrent.x - aimOrigin.x;
       const dy = aimCurrent.y - aimOrigin.y;
@@ -5720,6 +5738,8 @@ export default function PlayerView() {
           isCharacterPrivate={isCurrentCharacterPrivate}
           onRefreshDdb={() => syncHudFromDdb(true)}
           isSyncingDdb={isSyncingHudDdb}
+          activeEffects={effects}
+          onDispelEffect={handleDispelEffect}
         />
       )}
 
