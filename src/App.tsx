@@ -5601,6 +5601,21 @@ export default function App() {
       return;
     }
 
+    // Interactive Room / Navigation Label Tool ("stairs up to...", "ladder down", "portal", etc.)
+    if (tool === 'label') {
+      const { width: mapW, height: mapH } = getMapDimensions();
+      if (mapW > 0 && mapH > 0) {
+        const pctX = Math.max(0, Math.min(100, (point.x / mapW) * 100));
+        const pctY = Math.max(0, Math.min(100, (point.y / mapH) * 100));
+        setPendingLabelPosition({ x: pctX, y: pctY });
+        setEditingLabelAnnotation(null);
+        setIsLabelEditorOpen(true);
+      } else {
+        toast.info('Please load a map before placing labels');
+      }
+      return;
+    }
+
     // Interactive Polygon Drawing for Rooms & Zones
     if (tool === 'hotspot' || tool === 'zone' || tool === 'polygon_zone') {
       // 1. Check if connecting back to starting vertex to complete polygon (>= 3 vertices / 6 points)
@@ -7094,6 +7109,12 @@ export default function App() {
           setCampaignMode={handleModeChange}
           roomAnnotations={roomAnnotations}
           onOpenZoneDetails={(anno) => {
+            if (anno.type === 'label') {
+              setEditingLabelAnnotation(anno);
+              setPendingLabelPosition(null);
+              setIsLabelEditorOpen(true);
+              return;
+            }
             setSelectedZoneForSidePanel(anno);
             setIsZoneSidePanelOpen(true);
           }}
@@ -7680,17 +7701,30 @@ export default function App() {
                   hoveredAnnotationId={hoveredZoneId}
                   onHoverAnnotation={setHoveredZoneId}
                   onSelectAnnotation={(anno) => {
+                    if (anno.type === 'label') {
+                      setEditingLabelAnnotation(anno);
+                      setPendingLabelPosition(null);
+                      setIsLabelEditorOpen(true);
+                      return;
+                    }
                     setSelectedRoomAnnotation(anno);
                     setSelectedZoneForSidePanel(anno);
                     setIsZoneSidePanelOpen(false);
                     setIsRoomDrawerOpen(true);
                   }}
                   onOpenBriefing={(anno) => {
+                    if (anno.type === 'label') {
+                      setEditingLabelAnnotation(anno);
+                      setPendingLabelPosition(null);
+                      setIsLabelEditorOpen(true);
+                      return;
+                    }
                     setSelectedRoomAnnotation(anno);
                     setSelectedZoneForSidePanel(anno);
                     setIsZoneSidePanelOpen(false);
                     setIsRoomDrawerOpen(true);
                   }}
+                  onUpdateAnnotation={(updated) => handleSaveZone(updated)}
                 />
 
                 {/* Active Zone Polygon Drawing Preview */}
@@ -9583,6 +9617,30 @@ export default function App() {
           />
         );
       })()}
+
+      {/* Room Transition & Point-of-Interest Label Editor Modal */}
+      <RoomLabelEditorModal
+        isOpen={isLabelEditorOpen}
+        initialAnnotation={editingLabelAnnotation}
+        clickPosition={pendingLabelPosition}
+        onClose={() => {
+          setIsLabelEditorOpen(false);
+          setEditingLabelAnnotation(null);
+          setPendingLabelPosition(null);
+        }}
+        onSave={(labelAnnotation) => {
+          handleSaveZone(labelAnnotation);
+          setIsLabelEditorOpen(false);
+          setEditingLabelAnnotation(null);
+          setPendingLabelPosition(null);
+        }}
+        onDelete={(id) => {
+          handleDeleteZone(id);
+          setIsLabelEditorOpen(false);
+          setEditingLabelAnnotation(null);
+          setPendingLabelPosition(null);
+        }}
+      />
 
       {/* Assign Polygon Room Modal (Direct PDF Room Linking on Polygon Completion) */}
       {isAssignRoomModalOpen && pendingZonePolygonData && (() => {
