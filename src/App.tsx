@@ -1688,6 +1688,25 @@ export default function App() {
     });
   }, []);
   const [showCombatTracker, setShowCombatTracker] = useState<boolean>(false);
+  const [autoApplyMonsterDamage, setAutoApplyMonsterDamage] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('mistwalker_auto_apply_monster_damage');
+      return saved !== null ? saved === 'true' : true;
+    } catch {
+      return true;
+    }
+  });
+
+  const handleToggleAutoApplyMonsterDamage = useCallback((enabled: boolean) => {
+    setAutoApplyMonsterDamage(enabled);
+    try {
+      localStorage.setItem('mistwalker_auto_apply_monster_damage', String(enabled));
+    } catch {}
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('SET_AUTO_APPLY_MONSTER_DAMAGE', enabled);
+    }
+    toast.info(`Auto-Apply Monster Damage: ${enabled ? 'ENABLED' : 'DISABLED'}`);
+  }, []);
   const [isCombatTrackerMinimized, setIsCombatTrackerMinimized] = useState(false);
   const [tokenMenuTab, setTokenMenuTab] = useState<'stats' | 'conditions' | 'auras'>('stats');
   const [customAuraRadiusInput, setCustomAuraRadiusInput] = useState<number>(10);
@@ -2587,6 +2606,7 @@ export default function App() {
         if (state.polygonReveals) setPolygonReveals(state.polygonReveals);
         if (state.visionConfig) setVisionConfig(state.visionConfig);
         if (state.activeSceneInfo) setActiveSceneInfo(state.activeSceneInfo);
+        if (typeof state.autoApplyMonsterDamage === 'boolean') setAutoApplyMonsterDamage(state.autoApplyMonsterDamage);
         return;
       }
       if (state?.walls && Array.isArray(state.walls)) {
@@ -2605,6 +2625,84 @@ export default function App() {
 
     socket.on('SYNC_SHAKE', () => {
       triggerShake(false);
+    });
+
+    socket.on('SYNC_AUTO_APPLY_MONSTER_DAMAGE', (enabled: boolean) => {
+      setAutoApplyMonsterDamage(enabled);
+    });
+
+    // Receive applied token mutations (heals, monster damage from players, etc.)
+    socket.on('APPLY_TOKEN_MUTATION', (data: {
+      sourceTokenId?: string;
+      sourceName?: string;
+      targetTokenId: string;
+      targetName?: string;
+      actionName?: string;
+      deltaHp: number;
+    }) => {
+      console.log('[DM Socket] APPLY_TOKEN_MUTATION received:', data);
+      setTokens(prev => {
+        const next = prev.map(t => {
+          if (t.id === data.targetTokenId) {
+            const current = typeof t.currentHp === 'number' ? t.currentHp : (t.hp || 10);
+            const max = typeof t.maxHp === 'number' ? t.maxHp : (t.hp || 10);
+            const nextHp = Math.max(0, Math.min(max, current + data.deltaHp));
+            return { ...t, currentHp: nextHp, hp: nextHp };
+          }
+          return t;
+        });
+        const activeId = activeMapIdRef.current;
+        if (mapsDataRef.current[activeId]) {
+          mapsDataRef.current[activeId].tokens = next;
+        }
+        return next;
+      });
+
+      setCombatTrackerCombatants(prev => prev.map(c =>
+        c.id === data.targetTokenId || (c as any).tokenId === data.targetTokenId || c.name.toLowerCase() === (data.targetName || '').toLowerCase()
+          ? {
+              ...c,
+              currentHp: Math.max(0, Math.min(c.maxHp || 10, (c.currentHp ?? c.maxHp ?? 10) + data.deltaHp))
+            }
+          : c
+      ));
+
+      if (data.deltaHp < 0) {
+        toast.error(`💥 ${data.sourceName || 'Player'} hit ${data.targetName || 'Monster'} for ${Math.abs(data.deltaHp)} damage!`, {
+          description: `Action: ${data.actionName || 'Attack'}`
+        });
+      } else if (data.deltaHp > 0) {
+        toast.success(`💚 ${data.sourceName || 'Player'} healed ${data.targetName || 'Token'} for +${data.deltaHp} HP!`, {
+          description: `Action: ${data.actionName || 'Heal'}`
+        });
+      }
+    });
+
+    // Receive monster damage report when auto-damage is disabled
+    socket.on('MONSTER_DAMAGE_REPORT', (data: {
+      sourceTokenId?: string;
+      sourceName?: string;
+      targetTokenId: string;
+      targetName?: string;
+      actionName?: string;
+      deltaHp: number;
+    }) => {
+      console.log('[DM Socket] MONSTER_DAMAGE_REPORT received (Manual Mode):', data);
+      toast.warning(`🎯 ${data.sourceName || 'Player'} rolled ${Math.abs(data.deltaHp)} damage on ${data.targetName || 'Monster'}`, {
+        description: `Action: ${data.actionName || 'Attack'}. Auto-damage is OFF. Click below to apply.`,
+        action: {
+          label: `Apply -${Math.abs(data.deltaHp)} HP`,
+          onClick: () => {
+            if (socketRef.current?.connected) {
+              socketRef.current.emit('APPROVE_TOKEN_MUTATION', {
+                targetTokenId: data.targetTokenId,
+                deltaHp: data.deltaHp
+              });
+            }
+          }
+        },
+        duration: 10000
+      });
     });
 
     // Full party initial D&D Beyond synchronization on socket connection or campaign switch
@@ -6982,6 +7080,8 @@ export default function App() {
           onRelinkMap={() => relinkMapFileInputRef.current?.click()}
           showCombatTracker={showCombatTracker}
           setShowCombatTracker={setShowCombatTracker}
+          autoApplyMonsterDamage={autoApplyMonsterDamage}
+          onToggleAutoApplyMonsterDamage={handleToggleAutoApplyMonsterDamage}
           triggerShake={triggerShake}
           isFogVisible={isFogVisible}
           setIsFogVisible={setIsFogVisible}
@@ -8648,7 +8748,9 @@ export default function App() {
 
       {showCombatTracker && (
         <CombatTracker 
-          onClose={() => setShowCombatTracker(false)} 
+          onClose={() => setShowCombatTracker(false)}
+          autoApplyMonsterDamage={autoApplyMonsterDamage}
+          onToggleAutoApplyMonsterDamage={handleToggleAutoApplyMonsterDamage} 
           combatants={combatTrackerCombatants}
           setCombatants={setCombatTrackerCombatants}
           round={combatTrackerRound}

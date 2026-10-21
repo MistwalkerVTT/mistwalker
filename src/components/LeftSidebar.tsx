@@ -36,6 +36,7 @@ import {
   Flame,
   Snowflake,
   Heart,
+  HeartCrack,
   Sun,
   Moon,
   Shield,
@@ -127,6 +128,8 @@ interface LeftSidebarProps {
   onRelinkMap?: () => void;
   showCombatTracker: boolean;
   setShowCombatTracker: (show: boolean) => void;
+  autoApplyMonsterDamage?: boolean;
+  onToggleAutoApplyMonsterDamage?: (enabled: boolean) => void;
   triggerShake: () => void;
   isFogVisible: boolean;
   setIsFogVisible: (visible: boolean) => void;
@@ -290,6 +293,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   onRelinkMap,
   showCombatTracker,
   setShowCombatTracker,
+  autoApplyMonsterDamage = true,
+  onToggleAutoApplyMonsterDamage,
   triggerShake,
   isFogVisible,
   setIsFogVisible,
@@ -2792,6 +2797,40 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                     {showCombatTracker ? 'ACTIVE' : 'OFF'}
                   </span>
                 </button>
+              </div>
+
+              {/* Auto-Apply Monster Damage Toggle */}
+              <div className="flex flex-col gap-1.5 pt-2 border-t border-zinc-800/80">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] uppercase font-bold font-mono text-zinc-400">Target Damage Rule</span>
+                  <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-bold ${autoApplyMonsterDamage ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' : 'bg-zinc-800 text-zinc-400 border border-zinc-700'}`}>
+                    {autoApplyMonsterDamage ? 'AUTO DAMAGE' : 'MANUAL HP'}
+                  </span>
+                </div>
+                <button
+                  id="btn-toggle-auto-monster-damage"
+                  type="button"
+                  onClick={() => onToggleAutoApplyMonsterDamage?.(!autoApplyMonsterDamage)}
+                  className={`w-full py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-between border transition-all cursor-pointer ${
+                    autoApplyMonsterDamage
+                      ? 'bg-rose-500/15 border-rose-500/50 text-rose-200 shadow-sm'
+                      : 'bg-zinc-800/80 border-zinc-700 text-zinc-300 hover:bg-zinc-800'
+                  }`}
+                  title={autoApplyMonsterDamage ? "Monsters automatically take damage when targeted by players" : "DM manually manages monster HP"}
+                >
+                  <span className="flex items-center gap-2">
+                    <HeartCrack className={`w-4 h-4 ${autoApplyMonsterDamage ? 'text-rose-400' : 'text-zinc-500'}`} />
+                    <span>Auto Monster Damage</span>
+                  </span>
+                  <div className={`w-8 h-4 rounded-full transition-colors relative flex items-center px-0.5 ${autoApplyMonsterDamage ? 'bg-rose-500' : 'bg-zinc-700'}`}>
+                    <div className={`w-3 h-3 rounded-full bg-white transition-transform ${autoApplyMonsterDamage ? 'translate-x-4' : 'translate-x-0'}`} />
+                  </div>
+                </button>
+                <p className="text-[10px] text-zinc-400/90 leading-tight">
+                  {autoApplyMonsterDamage
+                    ? "Player spells & attacks automatically subtract damage from monster HP."
+                    : "Monsters will NOT take auto damage. Rolls are broadcast for the DM to apply manually."}
+                </p>
               </div>
 
               {/* Critical Screen Shake */}

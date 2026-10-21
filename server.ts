@@ -405,6 +405,7 @@ async function startServer() {
     combatRound?: number;
     combatTurnIndex?: number;
     showCombatTracker?: boolean;
+    autoApplyMonsterDamage?: boolean;
     updatedAt: number;
   } = {
     imageFile: null,
@@ -433,6 +434,7 @@ async function startServer() {
     activeSceneInfo: null,
     characters: [],
     effects: [],
+    autoApplyMonsterDamage: true,
     updatedAt: Date.now()
   };
 
@@ -737,6 +739,13 @@ async function startServer() {
       socket.broadcast.emit("EFFECT_CLEAR_ALL");
     });
 
+    // Auto-Apply Monster Damage toggle setting
+    socket.on("SET_AUTO_APPLY_MONSTER_DAMAGE", (enabled: boolean) => {
+      activeVttState.autoApplyMonsterDamage = Boolean(enabled);
+      console.log(`[Server] autoApplyMonsterDamage set to: ${activeVttState.autoApplyMonsterDamage}`);
+      io.emit("SYNC_AUTO_APPLY_MONSTER_DAMAGE", activeVttState.autoApplyMonsterDamage);
+    });
+
     // Targeted Healing / Damage Interaction Pipeline
     socket.on("REQUEST_TOKEN_MUTATION", (payload: {
       sourceTokenId: string;
@@ -747,8 +756,17 @@ async function startServer() {
       deltaHp: number;        // positive for heal, negative for damage
       requiresApproval: boolean;
       requestId?: string;
+      isMonster?: boolean;
     }) => {
-      console.log(`[Server] REQUEST_TOKEN_MUTATION: ${payload.sourceName} -> ${payload.targetName} (${payload.actionName}): ${payload.deltaHp > 0 ? '+' : ''}${payload.deltaHp} HP (requiresApproval: ${payload.requiresApproval})`);
+      console.log(`[Server] REQUEST_TOKEN_MUTATION: ${payload.sourceName} -> ${payload.targetName} (${payload.actionName}): ${payload.deltaHp > 0 ? '+' : ''}${payload.deltaHp} HP (requiresApproval: ${payload.requiresApproval}, isMonster: ${payload.isMonster})`);
+
+      // If targeting a monster and autoApplyMonsterDamage is disabled:
+      if (payload.isMonster && payload.deltaHp < 0 && activeVttState.autoApplyMonsterDamage === false) {
+        console.log(`[Server] autoApplyMonsterDamage is OFF. Emitting MONSTER_DAMAGE_REPORT to DM without mutating HP.`);
+        io.emit("MONSTER_DAMAGE_REPORT", payload);
+        return;
+      }
+
       if (!payload.requiresApproval) {
         // Auto-apply mutation without waiting for prompt approval
         if (payload.targetTokenId && Array.isArray(activeVttState.tokens)) {

@@ -17,6 +17,7 @@ import {
   RefreshCw,
   Shield,
   Heart,
+  HeartCrack,
   ChevronRight,
   ChevronLeft
 } from 'lucide-react';
@@ -36,6 +37,8 @@ interface Props {
   onUpdateToken?: (id: string, updates: any) => void;
   onPanToToken?: (id: string) => void;
   onOpenConditionReference?: (condition: string) => void;
+  autoApplyMonsterDamage?: boolean;
+  onToggleAutoApplyMonsterDamage?: (enabled: boolean) => void;
 }
 
 export const CombatTracker = React.memo(function CombatTracker({
@@ -51,7 +54,9 @@ export const CombatTracker = React.memo(function CombatTracker({
   tokens = [],
   onUpdateToken,
   onPanToToken,
-  onOpenConditionReference
+  onOpenConditionReference,
+  autoApplyMonsterDamage = true,
+  onToggleAutoApplyMonsterDamage
 }: Props) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [isConfirmingClear, setIsConfirmingClear] = useState(false);
@@ -325,6 +330,21 @@ export const CombatTracker = React.memo(function CombatTracker({
           </div>
 
           <div className="flex items-center gap-2">
+            {onToggleAutoApplyMonsterDamage && (
+              <button
+                type="button"
+                onClick={() => onToggleAutoApplyMonsterDamage(!autoApplyMonsterDamage)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-mono transition-all border cursor-pointer ${
+                  autoApplyMonsterDamage
+                    ? 'bg-rose-500/20 border-rose-500/50 text-rose-300 shadow-sm'
+                    : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200'
+                }`}
+                title={autoApplyMonsterDamage ? "Auto Monster Damage: ON (Players hit monster HP directly)" : "Auto Monster Damage: OFF (Manual DM HP control)"}
+              >
+                <HeartCrack className={`w-3.5 h-3.5 ${autoApplyMonsterDamage ? 'text-rose-400' : 'text-zinc-500'}`} />
+                <span>Auto Damage: {autoApplyMonsterDamage ? 'ON' : 'OFF'}</span>
+              </button>
+            )}
             <button
               onClick={handleSyncMapTokens}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 border border-zinc-800 hover:border-emerald-500/50 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-xl text-xs font-mono transition-all cursor-pointer"

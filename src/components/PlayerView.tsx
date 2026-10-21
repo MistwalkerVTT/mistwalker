@@ -1524,6 +1524,7 @@ export default function PlayerView() {
   const [isShaking, setIsShaking] = useState(false);
 
   // Player view turn order list visibility (with persistent user preference)
+  const [autoApplyMonsterDamage, setAutoApplyMonsterDamage] = useState<boolean>(true);
   const [showPlayerCombatTracker, setShowPlayerCombatTracker] = useState(() => {
     if (typeof window === 'undefined') return true;
     const saved = localStorage.getItem('mistwalker_player_turn_order_visible');
@@ -1745,6 +1746,9 @@ export default function PlayerView() {
       }
 
       // Combat state fallback in SYNC_STATE
+      if (typeof (state as any).autoApplyMonsterDamage === 'boolean') {
+        setAutoApplyMonsterDamage((state as any).autoApplyMonsterDamage);
+      }
       if (state.combatants) {
         setCombatState({
           combatants: state.combatants,
@@ -2099,6 +2103,10 @@ export default function PlayerView() {
         }
         return prev;
       });
+    });
+
+    socket.on('SYNC_AUTO_APPLY_MONSTER_DAMAGE', (enabled: boolean) => {
+      setAutoApplyMonsterDamage(enabled);
     });
 
     // Targeted Healing & Damage Mutation Pipeline
@@ -3503,7 +3511,11 @@ export default function PlayerView() {
     }
 
     // 4. Emit REQUEST_TOKEN_MUTATION
+    const isTargetAlly = targetToken.category === 'ally' || Boolean((targetToken as any).allyId);
+    const isTargetMonster = !isTargetAlly && (isMonsterToken(targetToken) || targetToken.isMonster === true || targetToken.category === 'monster' || targetToken.isPlayer === false);
     const isTargetOtherPlayer = targetToken.isPlayer && !isSelfTarget && !action.isHeal;
+    const requiresApproval = isTargetOtherPlayer || (isTargetMonster && !autoApplyMonsterDamage);
+
     const payload = {
       sourceTokenId: caster.id,
       sourceName: caster.name || 'Hero',
@@ -3511,7 +3523,8 @@ export default function PlayerView() {
       targetName: targetToken.name || 'Target',
       actionName: action.name,
       deltaHp: calculatedDeltaHp,
-      requiresApproval: isTargetOtherPlayer,
+      requiresApproval,
+      isMonster: isTargetMonster,
       requestId: `req_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
     };
 
@@ -3519,11 +3532,23 @@ export default function PlayerView() {
       socketRef.current.emit('REQUEST_TOKEN_MUTATION', payload);
     }
 
-    toast.success(`${action.name} executed on ${targetToken.name}!`, {
-      description: calculatedDeltaHp !== 0
-        ? `${calculatedDeltaHp > 0 ? `Restored +${calculatedDeltaHp} HP (${formula})` : `${calculatedDeltaHp} HP`}`
-        : (action.name.toLowerCase().includes('shield') ? 'Shield barrier active (+5 AC)' : 'Action delivered.')
-    });
+    if (calculatedDeltaHp < 0 && isTargetMonster) {
+      if (autoApplyMonsterDamage) {
+        toast.success(`${action.name} hit ${targetToken.name}!`, {
+          description: `Dealt ${Math.abs(calculatedDeltaHp)} damage (${formula || 'damage roll'}). Monster took damage.`
+        });
+      } else {
+        toast.info(`${action.name} hit ${targetToken.name}!`, {
+          description: `Rolled ${Math.abs(calculatedDeltaHp)} damage (${formula || 'damage roll'}). Broadcast to DM to apply.`
+        });
+      }
+    } else {
+      toast.success(`${action.name} executed on ${targetToken.name}!`, {
+        description: calculatedDeltaHp !== 0
+          ? `${calculatedDeltaHp > 0 ? `Restored +${calculatedDeltaHp} HP (${formula})` : `${calculatedDeltaHp} HP`}`
+          : (action.name.toLowerCase().includes('shield') ? 'Shield barrier active (+5 AC)' : 'Action delivered.')
+      });
+    }
 
     // Reset targeting state
     setActiveTargetingAction(null);
