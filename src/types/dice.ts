@@ -22,7 +22,7 @@ export interface DdbDiceRollEvent {
   theme?: string; // e.g. 'gemstone', 'rock', 'wooden', 'rust', 'blueGreenMetal', 'default'
   themeColor?: string; // Hex color for default theme
   timestamp: number;
-  source?: 'dndbeyond' | 'local' | 'simulation';
+  source?: 'dndbeyond' | 'local' | 'simulation' | 'player';
 }
 
 export interface DiceSkinConfig {

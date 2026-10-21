@@ -29,6 +29,7 @@ interface DmMonsterDockProps {
   hudData: DmMonsterHudData;
   onSelectAction: (action: MonsterActionItem) => void;
   onQuickRollAction: (action: MonsterActionItem) => void;
+  onRollToHit?: (action: MonsterActionItem) => void;
   activeTargetingAction?: MonsterActionItem | null;
   onCancelTargeting?: () => void;
   onDeselectToken: () => void;
@@ -49,6 +50,7 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
   hudData,
   onSelectAction,
   onQuickRollAction,
+  onRollToHit,
   activeTargetingAction,
   onCancelTargeting,
   onDeselectToken,
@@ -543,10 +545,23 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                     {/* Middle: Hit, Save, Damage Badges */}
                     <div className="flex items-center gap-1.5 font-mono text-[10px]">
                       {formattedHit && (
-                        <div className="flex flex-col items-center px-2 py-0.5 rounded bg-emerald-950/90 border border-emerald-500/40 text-emerald-300">
-                          <span className="text-[7px] uppercase text-emerald-400/80 leading-none">Hit</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onRollToHit) {
+                              onRollToHit(action);
+                            } else {
+                              onQuickRollAction(action);
+                            }
+                          }}
+                          className="flex flex-col items-center px-2 py-0.5 rounded bg-emerald-950/90 hover:bg-emerald-900 border border-emerald-500/40 hover:border-emerald-400 text-emerald-300 hover:text-white transition-all cursor-pointer active:scale-95 shadow-sm group/hit shrink-0"
+                          title={`Click to Roll to Hit: 1d20 ${formattedHit}`}
+                          aria-label={`Roll to Hit: 1d20 ${formattedHit}`}
+                        >
+                          <span className="text-[7px] uppercase text-emerald-400/80 group-hover/hit:text-emerald-200 leading-none">Hit</span>
                           <span className="font-bold text-xs">{formattedHit}</span>
-                        </div>
+                        </button>
                       )}
 
                       {action.saveDc && (
@@ -559,10 +574,19 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                       )}
 
                       {action.damageFormula && (
-                        <div className="flex flex-col items-center px-2 py-0.5 rounded bg-red-950/90 border border-red-500/40 text-red-300">
-                          <span className="text-[7px] uppercase text-red-400/80 leading-none">Dmg</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSelectAction(action);
+                          }}
+                          className="flex flex-col items-center px-2 py-0.5 rounded bg-red-950/90 hover:bg-red-900 border border-red-500/40 hover:border-red-400 text-red-300 hover:text-white transition-all cursor-pointer active:scale-95 shadow-sm group/dmg shrink-0"
+                          title={`Aim & Cast: ${action.name} (${action.damageFormula})`}
+                          aria-label={`Aim ${action.name}: ${action.damageFormula}`}
+                        >
+                          <span className="text-[7px] uppercase text-red-400/80 group-hover/dmg:text-red-200 leading-none">Dmg</span>
                           <span className="font-bold text-xs">{action.damageFormula}</span>
-                        </div>
+                        </button>
                       )}
                     </div>
 

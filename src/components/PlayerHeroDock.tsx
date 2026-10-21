@@ -437,11 +437,19 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
               <span className="hidden sm:inline text-zinc-400"> — Click target on battlemap</span>
             </span>
             {currentTargetingAction.hitBonus !== undefined && (
-              <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 text-[10px] border border-emerald-500/40 shrink-0 font-bold">
-                {String(currentTargetingAction.hitBonus).startsWith('+') || String(currentTargetingAction.hitBonus).startsWith('-')
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleRollToHit(currentTargetingAction);
+                }}
+                className="px-2 py-0.5 rounded bg-emerald-950 hover:bg-emerald-900 text-emerald-300 hover:text-white text-[10px] border border-emerald-500/40 hover:border-emerald-400 shrink-0 font-bold transition-all cursor-pointer active:scale-95 shadow-sm"
+                title={`Click to Roll to Hit: 1d20 ${String(currentTargetingAction.hitBonus).startsWith('+') || String(currentTargetingAction.hitBonus).startsWith('-') ? currentTargetingAction.hitBonus : `+${currentTargetingAction.hitBonus}`}`}
+              >
+                Hit {String(currentTargetingAction.hitBonus).startsWith('+') || String(currentTargetingAction.hitBonus).startsWith('-')
                   ? currentTargetingAction.hitBonus
                   : `+${currentTargetingAction.hitBonus}`}
-              </span>
+              </button>
             )}
             {currentTargetingAction.damageFormula && (
               <span className="px-2 py-0.5 rounded bg-rose-950 text-rose-300 text-[10px] border border-rose-500/40 shrink-0 font-bold">
@@ -820,15 +828,22 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                       </span>
                     )}
                     {action.damageFormula && (
-                      <span
-                        className={`px-2 py-1 rounded-lg font-bold border ${
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelectAction(action);
+                          setIsMobileDrawerOpen(false);
+                        }}
+                        className={`px-2 py-1 rounded-lg font-bold border transition-all cursor-pointer active:scale-95 ${
                           action.isHeal
-                            ? 'bg-emerald-950 border-emerald-500/50 text-emerald-300'
-                            : 'bg-rose-950 border-rose-500/50 text-rose-300'
+                            ? 'bg-emerald-950/90 hover:bg-emerald-900 border-emerald-500/50 text-emerald-300'
+                            : 'bg-rose-950/90 hover:bg-rose-900 border-rose-500/50 text-rose-300'
                         }`}
+                        title={`Cast & Fire: ${action.name} (${action.damageFormula})`}
                       >
                         {action.damageFormula}
-                      </span>
+                      </button>
                     )}
                     {action.uses && (
                       <span className="px-1.5 py-1 rounded-lg bg-indigo-950 border border-indigo-500/40 text-indigo-300 font-bold">
