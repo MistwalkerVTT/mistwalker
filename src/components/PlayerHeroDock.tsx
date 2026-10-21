@@ -44,6 +44,7 @@ interface PlayerHeroDockProps {
   onRefreshDdb?: () => void;
   isSyncingDdb?: boolean;
   isMobile?: boolean;
+  onTargetSelf?: () => void;
 }
 
 export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({

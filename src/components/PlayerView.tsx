@@ -464,20 +464,7 @@ const PlayerToken = React.memo(({
   const radius = tokenPx / 2;
   const groupRef = useRef<any>(null);
   const lastEmitTimeRef = useRef<number>(0);
-  const pointerDownTimeRef = useRef<number>(0);
-  const pointerDownPosRef = useRef<{ x: number; y: number } | null>(null);
-  const holdTimerRef = useRef<any>(null);
-  const isHoldMetRef = useRef<boolean>(false);
   const isCurrentlyDraggingRef = useRef<boolean>(false);
-
-  // Clear hold timer on unmount
-  useEffect(() => {
-    return () => {
-      if (holdTimerRef.current) {
-        clearTimeout(holdTimerRef.current);
-      }
-    };
-  }, []);
 
   const handleDragStart = (e: any) => {
     e.cancelBubble = true;
@@ -486,34 +473,11 @@ const PlayerToken = React.memo(({
       return;
     }
 
-    const now = Date.now();
-    const elapsed = pointerDownTimeRef.current > 0 ? (now - pointerDownTimeRef.current) : 999;
-    const clientX = e.evt?.clientX ?? (e.evt?.touches && e.evt.touches[0]?.clientX) ?? 0;
-    const clientY = e.evt?.clientY ?? (e.evt?.touches && e.evt.touches[0]?.clientY) ?? 0;
-    const dx = pointerDownPosRef.current ? clientX - pointerDownPosRef.current.x : 0;
-    const dy = pointerDownPosRef.current ? clientY - pointerDownPosRef.current.y : 0;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-
     // If targeting is active, abort dragging and execute action against clicked target token
     if (isTargetingActive) {
-      if (holdTimerRef.current) {
-        clearTimeout(holdTimerRef.current);
-      }
       e.target.stopDrag();
       if (onTargetToken) {
         onTargetToken(token);
-      }
-      return;
-    }
-
-    // If hold requirement not met (user clicked quickly without holding down or dragging far), abort drag and select token
-    if (!isHoldMetRef.current && elapsed < 160 && dist < 24) {
-      if (holdTimerRef.current) {
-        clearTimeout(holdTimerRef.current);
-      }
-      e.target.stopDrag();
-      if (!isMonster && !isCondition && onClaimToken) {
-        onClaimToken(token.id);
       }
       return;
     }
@@ -542,13 +506,8 @@ const PlayerToken = React.memo(({
 
   const handleDragEnd = (e: any) => {
     e.cancelBubble = true;
-    if (holdTimerRef.current) {
-      clearTimeout(holdTimerRef.current);
-    }
     const wasDragging = isCurrentlyDraggingRef.current;
     isCurrentlyDraggingRef.current = false;
-    isHoldMetRef.current = false;
-    pointerDownTimeRef.current = 0;
 
     const container = e.target.getStage()?.container();
     if (container) {
@@ -556,7 +515,7 @@ const PlayerToken = React.memo(({
     }
 
     if (!wasDragging) {
-      // Aborted drag from quick click - restore position to original token position
+      // Aborted drag - restore position to original token position
       e.target.position({ x: token.x, y: token.y });
       return;
     }
@@ -653,67 +612,22 @@ const PlayerToken = React.memo(({
       onMouseDown={(e: any) => {
         if (!isCondition && e.evt?.button !== 2) {
           e.cancelBubble = true;
-          pointerDownTimeRef.current = Date.now();
-          pointerDownPosRef.current = {
-            x: e.evt?.clientX ?? 0,
-            y: e.evt?.clientY ?? 0
-          };
-          isHoldMetRef.current = false;
-          if (holdTimerRef.current) {
-            clearTimeout(holdTimerRef.current);
-          }
-          holdTimerRef.current = setTimeout(() => {
-            isHoldMetRef.current = true;
-          }, 160);
         }
       }}
       onTouchStart={(e: any) => {
         if (!isCondition) {
           // If 2 or more touches on screen, do not swallow - let Stage handle multi-touch pinch-to-zoom!
           if (e.evt?.touches && e.evt.touches.length >= 2) {
-            if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
             if (groupRef.current?.isDragging()) groupRef.current.stopDrag();
             return;
           }
           e.cancelBubble = true;
-          pointerDownTimeRef.current = Date.now();
-          const t0 = e.evt?.touches?.[0];
-          pointerDownPosRef.current = {
-            x: t0?.clientX ?? 0,
-            y: t0?.clientY ?? 0
-          };
-          isHoldMetRef.current = false;
-          if (holdTimerRef.current) {
-            clearTimeout(holdTimerRef.current);
-          }
-          holdTimerRef.current = setTimeout(() => {
-            isHoldMetRef.current = true;
-          }, 160);
-        }
-      }}
-      onMouseUp={() => {
-        if (holdTimerRef.current) {
-          clearTimeout(holdTimerRef.current);
-        }
-        if (groupRef.current?.isDragging()) {
-          groupRef.current.stopDrag();
-        }
-      }}
-      onTouchEnd={() => {
-        if (holdTimerRef.current) {
-          clearTimeout(holdTimerRef.current);
-        }
-        if (groupRef.current?.isDragging()) {
-          groupRef.current.stopDrag();
         }
       }}
       onDragStart={handleDragStart}
       onDragMove={handleDragMove}
       onDragEnd={handleDragEnd}
       onClick={(e: any) => {
-        if (holdTimerRef.current) {
-          clearTimeout(holdTimerRef.current);
-        }
         if (!isCurrentlyDraggingRef.current) {
           e.cancelBubble = true;
           if (isTargetingActive) {
@@ -728,9 +642,6 @@ const PlayerToken = React.memo(({
         }
       }}
       onTap={(e: any) => {
-        if (holdTimerRef.current) {
-          clearTimeout(holdTimerRef.current);
-        }
         if (!isCurrentlyDraggingRef.current) {
           e.cancelBubble = true;
           if (isTargetingActive) {
@@ -1782,22 +1693,23 @@ export default function PlayerView() {
 
       if (state.tokens && Array.isArray(state.tokens)) {
         const normalizedTokens = state.tokens.map(normalizeToken);
-        if (activeDraggingTokenIdRef.current) {
-          const draggingId = activeDraggingTokenIdRef.current;
-          setTokens(prev => {
-            const currentDragging = prev.find(t => t.id === draggingId);
-            const next = normalizedTokens.map(t =>
-              (t.id === draggingId && currentDragging)
-                ? { ...t, x: currentDragging.x, y: currentDragging.y }
-                : t
-            );
-            tokensRef.current = next;
-            return next;
+        const draggingId = activeDraggingTokenIdRef.current;
+        const now = Date.now();
+        setTokens(prev => {
+          const currentDragging = draggingId ? prev.find(t => t.id === draggingId) : null;
+          const next = normalizedTokens.map(t => {
+            if (draggingId && t.id === draggingId && currentDragging) {
+              return { ...t, x: currentDragging.x, y: currentDragging.y };
+            }
+            const localMove = locallyMovedTokensRef.current.get(t.id);
+            if (localMove && (now - localMove.timestamp < 1500)) {
+              return { ...t, x: localMove.x, y: localMove.y };
+            }
+            return t;
           });
-        } else {
-          tokensRef.current = normalizedTokens;
-          setTokens(normalizedTokens);
-        }
+          tokensRef.current = next;
+          return next;
+        });
       }
       if (state.walls && Array.isArray(state.walls)) setWalls(state.walls);
       if (state.reveals) setReveals(state.reveals);
@@ -1920,6 +1832,8 @@ export default function PlayerView() {
     socket.on('MOVE_TOKEN', (data: { id: string; x: number; y: number }) => {
       if (data?.id) {
         if (activeDraggingTokenIdRef.current === data.id) return;
+        const localMove = locallyMovedTokensRef.current.get(data.id);
+        if (localMove && (Date.now() - localMove.timestamp < 1500)) return;
         setTokens(prev => {
           const next = prev.map(t => t.id === data.id ? { ...t, x: data.x, y: data.y } : t);
           tokensRef.current = next;
@@ -1931,22 +1845,23 @@ export default function PlayerView() {
     socket.on('SYNC_TOKENS', (syncedTokens: Token[]) => {
       if (Array.isArray(syncedTokens)) {
         const normalizedTokens = syncedTokens.map(normalizeToken);
-        if (activeDraggingTokenIdRef.current) {
-          const draggingId = activeDraggingTokenIdRef.current;
-          setTokens(prev => {
-            const currentDragging = prev.find(t => t.id === draggingId);
-            const next = normalizedTokens.map(t =>
-              (t.id === draggingId && currentDragging)
-                ? { ...t, x: currentDragging.x, y: currentDragging.y }
-                : t
-            );
-            tokensRef.current = next;
-            return next;
+        const draggingId = activeDraggingTokenIdRef.current;
+        const now = Date.now();
+        setTokens(prev => {
+          const currentDragging = draggingId ? prev.find(t => t.id === draggingId) : null;
+          const next = normalizedTokens.map(t => {
+            if (draggingId && t.id === draggingId && currentDragging) {
+              return { ...t, x: currentDragging.x, y: currentDragging.y };
+            }
+            const localMove = locallyMovedTokensRef.current.get(t.id);
+            if (localMove && (now - localMove.timestamp < 1500)) {
+              return { ...t, x: localMove.x, y: localMove.y };
+            }
+            return t;
           });
-        } else {
-          tokensRef.current = normalizedTokens;
-          setTokens(normalizedTokens);
-        }
+          tokensRef.current = next;
+          return next;
+        });
       }
     });
 
@@ -2389,8 +2304,16 @@ export default function PlayerView() {
         setTokens(prev => {
           if (!sceneChanged && !isNewerForceSync && prev.length > 0) return prev;
           const normalized = sess.tokens.map(normalizeToken);
-          tokensRef.current = normalized;
-          return normalized;
+          const now = Date.now();
+          const next = normalized.map(t => {
+            const localMove = locallyMovedTokensRef.current.get(t.id);
+            if (localMove && (now - localMove.timestamp < 1500)) {
+              return { ...t, x: localMove.x, y: localMove.y };
+            }
+            return t;
+          });
+          tokensRef.current = next;
+          return next;
         });
       }
       if (sess.walls && Array.isArray(sess.walls)) {
@@ -2543,6 +2466,8 @@ export default function PlayerView() {
   const handleMoveToken = useCallback((id: string, newX: number, newY: number, distanceMovedFt?: number) => {
     setIsDraggingToken(false);
     setTokenDragState(null);
+    locallyMovedTokensRef.current.set(id, { x: newX, y: newY, timestamp: Date.now() });
+
     const currentTokens = tokensRef.current;
     const nextTokens = currentTokens.map(t => t.id === id ? { ...t, x: newX, y: newY } : t);
     tokensRef.current = nextTokens;
@@ -2561,10 +2486,10 @@ export default function PlayerView() {
       if (activeDraggingTokenIdRef.current === id) {
         activeDraggingTokenIdRef.current = null;
       }
-    }, 150);
+    }, 1500);
   }, []);
 
-  // Global pointerup/touchend capture listener to ensure dragging ALWAYS releases cleanly
+  // Global pointerup/touchend listener to ensure dragging ALWAYS releases cleanly
   useEffect(() => {
     const handleGlobalPointerUp = () => {
       try {
@@ -2582,21 +2507,20 @@ export default function PlayerView() {
         console.warn('Error releasing Konva drag elements:', err);
       }
 
-      if (activeDraggingTokenIdRef.current || isDraggingToken) {
+      if (isDraggingToken) {
         setIsDraggingToken(false);
         setTokenDragState(null);
-        activeDraggingTokenIdRef.current = null;
       }
     };
 
-    window.addEventListener('mouseup', handleGlobalPointerUp, { capture: true });
-    window.addEventListener('touchend', handleGlobalPointerUp, { capture: true });
-    window.addEventListener('touchcancel', handleGlobalPointerUp, { capture: true });
+    window.addEventListener('mouseup', handleGlobalPointerUp);
+    window.addEventListener('touchend', handleGlobalPointerUp);
+    window.addEventListener('touchcancel', handleGlobalPointerUp);
 
     return () => {
-      window.removeEventListener('mouseup', handleGlobalPointerUp, { capture: true });
-      window.removeEventListener('touchend', handleGlobalPointerUp, { capture: true });
-      window.removeEventListener('touchcancel', handleGlobalPointerUp, { capture: true });
+      window.removeEventListener('mouseup', handleGlobalPointerUp);
+      window.removeEventListener('touchend', handleGlobalPointerUp);
+      window.removeEventListener('touchcancel', handleGlobalPointerUp);
     };
   }, [isDraggingToken]);
 

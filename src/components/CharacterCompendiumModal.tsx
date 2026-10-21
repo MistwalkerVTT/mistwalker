@@ -104,6 +104,51 @@ export const CharacterCompendiumModal: React.FC<CharacterCompendiumModalProps> =
   const [charToDelete, setCharToDelete] = useState<Character | null>(null);
   const [pdfViewerUrl, setPdfViewerUrl] = useState<string | null>(null);
   const [recentDigestSummary, setRecentDigestSummary] = useState<any | null>(null);
+  const [isSyncingAllCampaigns, setIsSyncingAllCampaigns] = useState(false);
+
+  const handleSyncAllCampaigns = async () => {
+    setIsSyncingAllCampaigns(true);
+    try {
+      const res = await fetch('/api/ddb/campaigns/sync-all', { method: 'POST' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const chars = data.characters || [];
+      let savedCount = 0;
+
+      for (const d of chars) {
+        const dId = String(d.id);
+        const fullChar: Character = {
+          id: `char_ddb_${dId}`,
+          ddbCharacterId: dId,
+          name: d.name,
+          race: d.race || 'Humanoid',
+          classLevel: d.classLevel || 'Hero',
+          alignment: 'Neutral',
+          avatarUrl: d.avatarUrl || getCharacterTokenUrl(d.name),
+          ac: d.ac || 10,
+          hp: d.currentHp,
+          maxHp: d.maxHp,
+          tempHp: d.tempHp || 0,
+          speed: d.speed || '30 ft.',
+          stats: d.stats || { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
+          features: [],
+          spells: [],
+          notes: `Imported from D&D Beyond Campaign (Player: ${d.playerName || 'Player'}). Direct URL: ${d.readonlyUrl || ''}`,
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        };
+        await saveCharacter(fullChar).catch(() => {});
+        savedCount++;
+      }
+
+      toast.success(`Synced ${savedCount} heroes from D&D Beyond campaigns into your Compendium!`);
+    } catch (err: any) {
+      console.error('Failed to sync all D&D Beyond campaigns:', err);
+      toast.error('Failed to sync campaigns from D&D Beyond');
+    } finally {
+      setIsSyncingAllCampaigns(false);
+    }
+  };
 
   // Sync with Firestore characters
   useEffect(() => {
@@ -516,6 +561,15 @@ export const CharacterCompendiumModal: React.FC<CharacterCompendiumModalProps> =
             >
               <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
               <span>D&D Beyond Party</span>
+            </button>
+            <button
+              onClick={handleSyncAllCampaigns}
+              disabled={isSyncingAllCampaigns}
+              className="px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-emerald-400 hover:text-emerald-300 border border-emerald-500/40 font-bold font-mono text-xs flex items-center gap-1.5 transition-all shadow-md cursor-pointer disabled:opacity-50"
+              title="Pull all characters across all active D&D Beyond campaigns into Compendium"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncingAllCampaigns ? 'animate-spin' : ''}`} />
+              <span>{isSyncingAllCampaigns ? 'Pulling...' : 'Pull DDB Heroes'}</span>
             </button>
             <button
               onClick={onClose}
