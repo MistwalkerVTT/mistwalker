@@ -3776,19 +3776,42 @@ export default function App() {
     const rotation = Math.atan2(dy, dx) * (180 / Math.PI);
     const isTrajectory = (activeEquippedAsset.paradigm === 'projectile' || activeEquippedAsset.paradigm === 'ray') ||
                          (Boolean(activeEquippedAsset.projectileWebm) && dist > 25);
+    const isAuraOrBuff = Boolean(
+      activeEquippedAsset.paradigm === 'aura' ||
+      activeEquippedAsset.shape === 'aura' ||
+      activeEquippedAsset.isPersistent ||
+      activeEquippedAsset.id === 'shield_of_faith' ||
+      activeEquippedAsset.id === 'sanctuary' ||
+      activeEquippedAsset.id === 'shield' ||
+      activeEquippedAsset.id === 'bless' ||
+      activeEquippedAsset.id === 'mage_armor' ||
+      activeEquippedAsset.name.toLowerCase().includes('shield of faith') ||
+      activeEquippedAsset.name.toLowerCase().includes('sanctuary') ||
+      activeEquippedAsset.name.toLowerCase().includes('bless')
+    );
+
+    const hitToken = isAuraOrBuff ? (
+      tokens.find(t => {
+        const tRad = ((t.size || 1) * gridSize) / 2;
+        const tcX = (t.x ?? 0) + tRad;
+        const tcY = (t.y ?? 0) + tRad;
+        return Math.hypot(target.x - tcX, target.y - tcY) <= tRad + 15;
+      }) || null
+    ) : null;
+
     const isPointAoe = activeEquippedAsset.paradigm === 'point' || activeEquippedAsset.paradigm === 'aura';
 
     const newEffect: VttEffectInstance = {
       id: `eff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-      name: activeEquippedAsset.name,
-      label: activeEquippedAsset.label,
+      name: hitToken ? `${activeEquippedAsset.name} (${hitToken.name})` : activeEquippedAsset.name,
+      label: hitToken ? `${activeEquippedAsset.label} on ${hitToken.name}` : activeEquippedAsset.label,
       assetKey: activeEquippedAsset.id,
       videoUrl: (isTrajectory && activeEquippedAsset.projectileWebm)
         ? activeEquippedAsset.projectileWebm
         : activeEquippedAsset.webm,
       loopVideoUrl: activeEquippedAsset.loopWebm,
       thumbUrl: activeEquippedAsset.thumb,
-      paradigm: isTrajectory ? 'projectile' : activeEquippedAsset.paradigm,
+      paradigm: isTrajectory ? 'projectile' : (isAuraOrBuff ? 'aura' : activeEquippedAsset.paradigm),
       x: isTrajectory ? origin.x : (isPointAoe ? target.x : origin.x),
       y: isTrajectory ? origin.y : (isPointAoe ? target.y : origin.y),
       originX: origin.x,
@@ -3799,8 +3822,9 @@ export default function App() {
       rotation: (activeEquippedAsset.paradigm === 'cone' || activeEquippedAsset.paradigm === 'line') ? rotation : 0,
       opacity: 1.0,
       blendMode: activeEquippedAsset.blendMode,
-      isPersistent: activeEquippedAsset.isPersistent,
-      loop: activeEquippedAsset.isPersistent,
+      isPersistent: isAuraOrBuff || Boolean(activeEquippedAsset.isPersistent),
+      loop: isAuraOrBuff || Boolean(activeEquippedAsset.isPersistent),
+      attachedTokenId: hitToken ? hitToken.id : undefined,
       castTime: Date.now(),
       durationMs: isTrajectory ? 2500 : 5000,
       soundKey: activeEquippedAsset.soundKey,

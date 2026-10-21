@@ -2930,6 +2930,30 @@ export default function PlayerView() {
       return;
     }
 
+    const isAuraOrBuff = Boolean(
+      activeEquippedAsset.paradigm === 'aura' ||
+      activeEquippedAsset.shape === 'aura' ||
+      activeEquippedAsset.isPersistent ||
+      activeEquippedAsset.id === 'shield_of_faith' ||
+      activeEquippedAsset.id === 'sanctuary' ||
+      activeEquippedAsset.id === 'shield' ||
+      activeEquippedAsset.id === 'bless' ||
+      activeEquippedAsset.id === 'mage_armor' ||
+      activeEquippedAsset.name.toLowerCase().includes('shield of faith') ||
+      activeEquippedAsset.name.toLowerCase().includes('sanctuary') ||
+      activeEquippedAsset.name.toLowerCase().includes('bless')
+    );
+
+    // Find if target point hits any token on the board
+    const hitToken = isAuraOrBuff ? (
+      tokens.find(t => {
+        const tRad = ((t.size || 1) * gridSize) / 2;
+        const tcX = (t.x ?? 0) + tRad;
+        const tcY = (t.y ?? 0) + tRad;
+        return Math.hypot(target.x - tcX, target.y - tcY) <= tRad + 15;
+      }) || claimedToken || null
+    ) : null;
+
     const newEffect: VttEffectInstance = {
       id: `eff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       name: hitToken && hitToken.id !== claimedToken?.id ? `${activeEquippedAsset.name} (${hitToken.name})` : activeEquippedAsset.name,

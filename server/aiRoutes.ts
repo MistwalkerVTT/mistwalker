@@ -593,8 +593,37 @@ Tactical Map Dimensions & Scale: ${gridW}x${gridH} grid squares (${gridW * 5} fe
 ${prompt ? `Custom Features & Landmarks: ${prompt}.` : ""}
 Tactical requirements: Pure top-down orthographic angle for a D&D 5e miniature grid, zero isometric tilt, no angled 3D camera view, flat playable battlefield surface, highly detailed ground materials and terrain textures, no player character figures, no tokens, no UI, no text or watermarks. Ultra-high resolution, crystal clear tactical clarity.`;
 
+  let walls: Array<{ id: string; p1: { x: number; y: number }; p2: { x: number; y: number }; wallType: 'normal' | 'door' }> = [];
+
   // Start image generation promise
   const generateImagePromise = (async () => {
+    // 1. If engine is flux (our default high-res free engine), generate photorealistic battlemap via Pollinations FLUX
+    if (engine === "flux" || engine === "nano-banana-pro" || engine === "nano-banana-2") {
+      try {
+        const fullFluxPrompt = encodeURIComponent(`A top-down bird's-eye orthographic tabletop RPG battlemap of a ${biome} setting, perfectly flat 90-degree overhead perspective. ${prompt ? prompt + '. ' : ''}${styleText} Ultra-high resolution, photorealistic, rich detailed textures, stone masonry, architectural corridors, clear walls, doorways, natural lighting, no characters, no tokens, no ui, no text`);
+        const fluxAspect = aspectRatio === "1:1" ? "&width=1024&height=1024" : aspectRatio === "4:3" ? "&width=1152&height=864" : "&width=1280&height=720";
+        const fluxUrl = `https://image.pollinations.ai/prompt/${fullFluxPrompt}?model=flux${fluxAspect}&nologo=true&seed=${seed}`;
+        
+        console.log(`[MapGen] Fetching high-res FLUX battlemap (seed ${seed})...`);
+        const fetchRes = await fetch(fluxUrl);
+        if (fetchRes.ok) {
+          const arrayBuffer = await fetchRes.arrayBuffer();
+          const buffer = Buffer.from(arrayBuffer);
+          if (buffer.length > 5000) {
+            console.log(`[MapGen] High-res FLUX image acquired (${(buffer.length / 1024).toFixed(1)} KB)`);
+            return {
+              url: `data:image/jpeg;base64,${buffer.toString("base64")}`,
+              rawBuffer: buffer,
+              engine: "flux"
+            };
+          }
+        }
+      } catch (fluxErr: any) {
+        console.warn("[MapGen] FLUX image generation failed, checking Gemini fallback:", fluxErr.message);
+      }
+    }
+
+    // 2. Gemini native image model fallback if requested and available
     if (engine === "nano-banana-pro" || engine === "nano-banana-2") {
       const modelToUse = engine === "nano-banana-pro" ? "gemini-3-pro-image" : "gemini-3.1-flash-image";
       try {
@@ -604,7 +633,6 @@ Tactical requirements: Pure top-down orthographic angle for a D&D 5e miniature g
         const imageConfig: any = {
           aspectRatio: validAspect
         };
-        // gemini-3-pro-image supports 1K, 2K, 4K
         if (engine === "nano-banana-pro") {
           imageConfig.imageSize = imageSize === "4K" ? "4K" : imageSize === "1K" ? "1K" : "2K";
         }
@@ -621,20 +649,20 @@ Tactical requirements: Pure top-down orthographic angle for a D&D 5e miniature g
         for (const part of parts) {
           if (part.inlineData && part.inlineData.data) {
             const mime = part.inlineData.mimeType || "image/png";
+            const buffer = Buffer.from(part.inlineData.data, "base64");
             return {
               url: `data:${mime};base64,${part.inlineData.data}`,
+              rawBuffer: buffer,
               engine
             };
           }
         }
-        throw new Error("No image data returned from model.");
       } catch (err: any) {
         console.warn(`[MapGen] ${modelToUse} failed:`, err.status || err.message);
         if (err.status === 429 || (err.message && (err.message.includes("quota") || err.message.includes("RESOURCE_EXHAUSTED")))) {
           requiresPaidKey = true;
         }
         generationError = err.message || "AI image generation error.";
-        return null;
       }
     }
     return null;
@@ -717,6 +745,68 @@ Provide a valid JSON response matching this exact schema:
   if (imageResult && imageResult.url) {
     imageUrl = imageResult.url;
     sourceEngine = imageResult.engine;
+
+    // Run AI Computer Vision to auto-detect walls and doors from the generated battlemap
+    if (imageResult.rawBuffer && imageResult.rawBuffer.length > 0) {
+      try {
+        const ai = getAI(clientKey);
+        const visionPrompt = `You are an expert Virtual Tabletop (VTT) Cartographer analyzing this top-down tactical D&D battlemap.
+Examine the image carefully and detect the layout of physical room boundaries, solid masonry walls, stone partitions, cavern edges, and doorways/entrances.
+Return a valid JSON object matching this schema:
+{
+  "walls": [
+    {
+      "x1": number, // 0 to 1000 normalized horizontal coordinate (0 = far left, 1000 = far right)
+      "y1": number, // 0 to 1000 normalized vertical coordinate (0 = top, 1000 = bottom)
+      "x2": number, // 0 to 1000 normalized horizontal coordinate
+      "y2": number, // 0 to 1000 normalized vertical coordinate
+      "wallType": "normal" | "door"
+    }
+  ]
+}
+Requirements:
+- Trace distinct line segments for solid impassable walls and room borders ("normal").
+- Identify open thresholds, arches, and door passages ("door").
+- Ensure wall lines follow the visual room contours accurately.
+- Provide between 15 and 50 clean line segments that capture the primary tactical floorplan.`;
+
+        const visionRes = await ai.models.generateContent({
+          model: "gemini-3-flash-preview",
+          contents: [
+            { text: visionPrompt },
+            { inlineData: { mimeType: "image/jpeg", data: imageResult.rawBuffer.toString("base64") } }
+          ],
+          config: {
+            responseMimeType: "application/json"
+          }
+        });
+
+        if (visionRes.text) {
+          const parsedVision = JSON.parse(visionRes.text);
+          if (Array.isArray(parsedVision.walls)) {
+            // Convert normalized [0..1000] coordinates to target pixel dimensions (1920x1080 standard virtual canvas)
+            const canvasW = 1920;
+            const canvasH = aspectRatio === "1:1" ? 1920 : aspectRatio === "4:3" ? 1440 : 1080;
+            walls = parsedVision.walls.map((w: any, idx: number) => ({
+              id: `ai_wall_${Date.now()}_${idx}`,
+              p1: {
+                x: Math.round((Math.max(0, Math.min(1000, Number(w.x1) || 0)) / 1000) * canvasW),
+                y: Math.round((Math.max(0, Math.min(1000, Number(w.y1) || 0)) / 1000) * canvasH)
+              },
+              p2: {
+                x: Math.round((Math.max(0, Math.min(1000, Number(w.x2) || 0)) / 1000) * canvasW),
+                y: Math.round((Math.max(0, Math.min(1000, Number(w.y2) || 0)) / 1000) * canvasH)
+              },
+              wallType: w.wallType === 'door' ? 'door' : 'normal',
+              doorState: w.wallType === 'door' ? 'closed' : undefined
+            }));
+            console.log(`[MapGen] Vision AI successfully traced ${walls.length} walls and doors`);
+          }
+        }
+      } catch (visionErr: any) {
+        console.warn("[MapGen] Vision auto-wall tracing error:", visionErr.message);
+      }
+    }
   } else {
     // Fallback to procedural high-detail engine if image generation failed or was explicitly requested
     const svg = generateCinematicBattlemap({
@@ -737,6 +827,7 @@ Provide a valid JSON response matching this exact schema:
     success: true,
     imageUrl,
     briefing,
+    walls,
     seed,
     source: sourceEngine,
     resolution: imageSize,
