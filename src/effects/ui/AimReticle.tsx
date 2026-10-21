@@ -46,16 +46,27 @@ export const AimReticle: React.FC<AimReticleProps> = React.memo(({
   const angleDeg = Math.atan2(dy, dx) * (180 / Math.PI);
   const color = asset.color || '#a855f7';
 
-  // 0. Teleportation Spells (Misty Step, Dimension Door, Arcane Gate, Thunder Step, Fey Step)
+  // 0. Teleportation Spells (Misty Step, Dimension Door, Arcane Gate, Thunder Step, Fey Step, Shadow Step, Vortex Warp)
   const isTeleport = asset.targetType === 'teleport' ||
     asset.id === 'misty_step' ||
     asset.id === 'dimension_door' ||
+    asset.id === 'thunder_step' ||
+    asset.id === 'fey_step' ||
+    asset.id === 'shadow_step' ||
+    asset.id === 'vortex_warp' ||
     asset.name.toLowerCase().includes('misty step') ||
     asset.name.toLowerCase().includes('dimension door') ||
-    asset.name.toLowerCase().includes('thunder step');
+    asset.name.toLowerCase().includes('thunder step') ||
+    asset.name.toLowerCase().includes('fey step') ||
+    asset.name.toLowerCase().includes('shadow step') ||
+    asset.name.toLowerCase().includes('vortex warp');
 
   if (isTeleport) {
-    const maxRangeFt = asset.rangeFt || (asset.id === 'misty_step' || asset.name.toLowerCase().includes('misty step') ? 30 : 500);
+    const maxRangeFt = asset.rangeFt || (
+      asset.id === 'misty_step' || asset.name.toLowerCase().includes('misty step') || asset.id === 'fey_step' ? 30 :
+      asset.id === 'shadow_step' ? 60 :
+      asset.id === 'thunder_step' || asset.id === 'vortex_warp' ? 90 : 500
+    );
     const isOutOfRange = distanceFt > maxRangeFt;
     const teleportColor = isOutOfRange ? '#ef4444' : (asset.color || '#818cf8');
     const rangeLimitRadiusPx = (maxRangeFt / 5) * gridSize;
@@ -84,7 +95,7 @@ export const AimReticle: React.FC<AimReticleProps> = React.memo(({
         />
 
         {/* Max Teleportation Range Boundary Circle (around Caster) */}
-        {maxRangeFt <= 60 && (
+        {maxRangeFt <= 120 && (
           <Circle
             x={origin.x}
             y={origin.y}

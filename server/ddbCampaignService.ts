@@ -227,8 +227,27 @@ function computeDdbCharacterSheet(c: any): {
     }
   }
 
-  let finalAc = (armorAc !== null ? armorAc : baseAc) + shieldAc + acBonuses;
-  if (typeof c.overrideArmorClass === 'number' && c.overrideArmorClass > 0) {
+  // Custom Character Values overrides and bonuses from D&D Beyond (e.g. typeId 1 = AC override, typeId 2 = AC bonus/adjustment)
+  let customAcBonus = 0;
+  let customAcOverride: number | null = null;
+  if (Array.isArray(c.characterValues)) {
+    for (const cv of c.characterValues) {
+      if (typeof cv.value === 'number') {
+        if (cv.typeId === 1 && cv.value > 0) {
+          customAcOverride = cv.value;
+        } else if (cv.typeId === 2 || cv.typeId === 3) {
+          // typeId 2 is Armor Class Adjustment (e.g. Book of Exalted Deeds +1, dual wield, etc.)
+          // typeId 3 is Misc / Situational AC bonus on sheet
+          customAcBonus += cv.value;
+        }
+      }
+    }
+  }
+
+  let finalAc = (armorAc !== null ? armorAc : baseAc) + shieldAc + acBonuses + customAcBonus;
+  if (customAcOverride !== null) {
+    finalAc = customAcOverride;
+  } else if (typeof c.overrideArmorClass === 'number' && c.overrideArmorClass > 0) {
     finalAc = c.overrideArmorClass;
   } else if (typeof c.armorClass === 'number' && c.armorClass > 0) {
     finalAc = c.armorClass;

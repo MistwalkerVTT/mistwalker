@@ -406,7 +406,7 @@ export const DEFAULT_CHARACTERS: Character[] = [
     background: 'Acolyte',
     alignment: 'Lawful Neutral',
     avatarUrl: 'https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/DwarfStavros.jpg/:/rs=w:1440,h:1440',
-    ac: 25,
+    ac: 26,
     hp: 110,
     maxHp: 138,
     speed: '25 ft.',

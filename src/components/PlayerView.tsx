@@ -108,6 +108,7 @@ import { PlayerDdbPrivacyModal } from './PlayerDdbPrivacyModal';
 import { PlayerHeroDock } from './PlayerHeroDock';
 import { HudCharacterData, HudActionItem } from '../types/hud';
 import { TokenDragRuler, TokenDragState, parseSpeedFt } from './TokenDragRuler';
+import { RoomHotspotLayer } from './RoomHotspotLayer';
 
 interface Token {
   id: string;
@@ -1223,6 +1224,7 @@ export default function PlayerView() {
   const [boardAnimatedFeatures, setBoardAnimatedFeatures] = useState<AnimatedFeature[]>(() => Array.isArray(initialBackup?.boardAnimatedFeatures) ? initialBackup.boardAnimatedFeatures : []);
   const [boardAnimatedEnabled, setBoardAnimatedEnabled] = useState<boolean>(() => initialBackup?.boardAnimatedEnabled !== undefined ? initialBackup.boardAnimatedEnabled : true);
   const [boardWeatherEffect, setBoardWeatherEffect] = useState<WeatherEffectType>(() => initialBackup?.boardWeatherEffect || 'none');
+  const [roomAnnotations, setRoomAnnotations] = useState<RoomAnnotation[]>(() => Array.isArray(initialBackup?.roomAnnotations) ? initialBackup.roomAnnotations : []);
 
   // Dynamic JB2A Animated Spell & Visual Effects State
   const [effects, setEffects] = useState<VttEffectInstance[]>([]);
@@ -1731,6 +1733,7 @@ export default function PlayerView() {
       if (state.visionConfig) setVisionConfig(state.visionConfig);
       if (state.fogResetKey !== undefined) setFogResetKey(state.fogResetKey);
       if (state.mapRotation !== undefined) setMapRotation(state.mapRotation);
+      if (state.roomAnnotations && Array.isArray(state.roomAnnotations)) setRoomAnnotations(state.roomAnnotations);
       if (state.effects && Array.isArray(state.effects)) setEffects(state.effects);
       if (state.activeSceneInfo) {
         setActiveSceneInfo(prev => {
@@ -2336,6 +2339,7 @@ export default function PlayerView() {
       }
       if (sess.fogResetKey) setFogResetKey(sess.fogResetKey);
       if (sess.mapRotation !== undefined) setMapRotation(sess.mapRotation);
+      if (sess.roomAnnotations && Array.isArray(sess.roomAnnotations)) setRoomAnnotations(sess.roomAnnotations);
       if (sess.boardAnimatedFeatures && Array.isArray(sess.boardAnimatedFeatures)) {
         setBoardAnimatedFeatures(sess.boardAnimatedFeatures);
       }
@@ -5107,6 +5111,22 @@ export default function PlayerView() {
           fogResetKey={fogResetKey}
           animatedFeatures={boardAnimatedFeatures}
         />
+
+        {/* Tactical Map Labels (Player Visible Navigation Points: Stairs, Ladders, Portals) */}
+        {targetMapW > 0 && targetMapH > 0 && roomAnnotations && roomAnnotations.length > 0 && (
+          <Layer>
+            <RoomHotspotLayer
+              annotations={roomAnnotations}
+              mapDimensions={{ width: targetMapW, height: targetMapH }}
+              stageScale={stageScale}
+              campaignMode="run"
+              isPlayerView={true}
+              selectedAnnotationId={null}
+              onSelectAnnotation={() => {}}
+              onOpenBriefing={() => {}}
+            />
+          </Layer>
+        )}
 
         {/* Layer 5: Tokens Layer (Rendered on top of fog so token opacity is 100% solid, while monsters in fog are filtered out) */}
         <Layer>
