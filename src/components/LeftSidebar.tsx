@@ -657,7 +657,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
       className="w-16 bg-zinc-950/98 backdrop-blur-xl border-r border-zinc-800/90 flex flex-col z-50 shadow-2xl h-full select-none shrink-0 relative text-zinc-300"
     >
       {/* Brand Icon */}
-      <div className="flex flex-col items-center py-3 border-b border-zinc-800/80 shrink-0">
+      <div className="flex flex-col items-center py-2.5 border-b border-zinc-800/80 shrink-0">
         <div
           id="mistwalker-brand-icon"
           className="w-11 h-11 rounded-xl overflow-hidden border border-zinc-700/70 bg-zinc-900 flex items-center justify-center cursor-pointer hover:border-amber-500/60 hover:shadow-[0_0_12px_rgba(245,158,11,0.25)] transition-all shadow-md active:scale-95"
@@ -672,11 +672,48 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
         </div>
       </div>
 
+      {/* Direct Tool 1: Select Tool (1-Click Toggle) */}
+      <div className="flex flex-col items-center py-2 border-b border-zinc-800/80 shrink-0 w-full px-1.5">
+        <button
+          id="tool-select-direct"
+          onClick={() => setTool(tool === 'select' ? 'pan' : 'select')}
+          className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all relative ${
+            tool === 'select'
+              ? 'bg-amber-500/25 text-amber-300 border border-amber-500/60 shadow-[0_0_14px_rgba(245,158,11,0.4)]'
+              : 'text-zinc-400 hover:text-amber-300 hover:bg-zinc-850 hover:border hover:border-zinc-700/60'
+          }`}
+          title={tool === 'select' ? "Select Tool Active (Click to switch to Pan)" : "Select & Move Objects (Click and drag tokens & items placed on board)"}
+        >
+          <MousePointer className="w-5.5 h-5.5" />
+          {selectedTokenIds && selectedTokenIds.length > 0 && (
+            <span className="absolute -top-1 -right-1 px-1 min-w-[15px] h-[15px] rounded-full bg-amber-500 text-zinc-950 text-[9px] font-bold font-mono flex items-center justify-center shadow">
+              {selectedTokenIds.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* Direct Tool 2: Pan Tool (1-Click Toggle) */}
+      <div className="flex flex-col items-center py-2 border-b border-zinc-800/80 shrink-0 w-full px-1.5">
+        <button
+          id="tool-pan-direct"
+          onClick={() => setTool(tool === 'pan' ? 'select' : 'pan')}
+          className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all ${
+            tool === 'pan'
+              ? 'bg-zinc-800 text-zinc-100 border border-zinc-600 shadow-md'
+              : 'text-zinc-400 hover:text-white hover:bg-zinc-850 hover:border hover:border-zinc-700/60'
+          }`}
+          title={tool === 'pan' ? "Pan Tool Active (Click to switch to Select)" : "Pan / Move Map (Click to activate)"}
+        >
+          <Move className="w-5.5 h-5.5" />
+        </button>
+      </div>
+
       {/* Main Condensed Tool Categories (Scrollable for any screen height) */}
       <div
         id="sidebar-tools-scroll"
-        className="flex-1 w-full overflow-y-auto overflow-x-hidden flex flex-col items-center py-3 gap-2 px-1.5 sidebar-scrollbar"
-        style={{ scrollbarWidth: 'thin', scrollbarColor: '#3f3f46 transparent' }}
+        className="flex-1 w-full overflow-y-auto overflow-x-hidden flex flex-col items-center py-2.5 gap-2 px-1.5 sidebar-scrollbar"
+        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
       >
         {/* 1. Campaign & Maps Group */}
         <div className="relative group shrink-0">
@@ -700,7 +737,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
           </button>
         </div>
 
-        {/* 3. Tokens & Bestiary Group */}
+        {/* 2. Tokens & Bestiary Group */}
         <div className="relative group shrink-0">
           <button
             id="group-btn-tokens"
@@ -723,7 +760,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
           </button>
         </div>
 
-        {/* 4. Dice Roller Group */}
+        {/* 3. Dice Roller Group */}
         <div className="relative group shrink-0">
           <button
             id="group-btn-dice"
@@ -746,7 +783,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
           </button>
         </div>
 
-        {/* 5. Combat & Encounters Group */}
+        {/* 4. Combat & Encounters Group */}
         <div className="relative group shrink-0">
           <button
             id="group-btn-combat"
@@ -767,7 +804,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
           </button>
         </div>
 
-        {/* Tactical Layers Group (Fog of War, FOV, Room Zones) */}
+        {/* 5. Tactical Layers Group (Fog of War, FOV, Room Zones) */}
         <div className="relative group shrink-0">
           <button
             id="group-btn-lighting"
@@ -796,7 +833,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
           </button>
         </div>
 
-        {/* Tactical & Weather FX Group */}
+        {/* 6. Tactical & Weather FX Group */}
         <div className="relative group shrink-0">
           <button
             id="group-btn-fx"
@@ -822,7 +859,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
           </button>
         </div>
 
-        {/* AI Dungeon Master Suite */}
+        {/* 7. AI Dungeon Master Suite */}
         <div className="relative group shrink-0">
           <button
             id="group-btn-ai"
@@ -842,9 +879,10 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
             )}
           </button>
         </div>
+      </div>
 
-        <div className="w-8 h-px bg-zinc-800/80 my-1 shrink-0" />
-
+      {/* Bottom Anchored Tools: Help, Bug Report, Bug Log / Notes, Settings */}
+      <div className="flex flex-col items-center py-2.5 border-t border-zinc-800/80 gap-2 shrink-0 w-full px-1.5 mt-auto bg-zinc-950/95">
         {/* Help & Support Group */}
         <div className="relative group shrink-0">
           <button
@@ -907,71 +945,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
             </button>
           </div>
         )}
-
-        {/* Direct Tools (Pan & Select) - Visible when map is loaded */}
-        {currentMapImage && (
-          <div className="flex flex-col gap-2 shrink-0 p-1 rounded-xl bg-zinc-900/40 border border-zinc-800/60 animate-in fade-in duration-200">
-            {/* Quick Pan Tool (Direct 1-Click Toggle) */}
-            <div className="relative group shrink-0">
-              <button
-                id="tool-pan-direct"
-                onClick={() => setTool(tool === 'pan' ? 'reveal' : 'pan')}
-                className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all ${
-                  tool === 'pan'
-                    ? 'bg-zinc-700 text-white border border-zinc-500 shadow-md'
-                    : 'text-zinc-400 hover:text-white hover:bg-zinc-850 hover:border hover:border-zinc-700/60'
-                }`}
-                title={tool === 'pan' ? "Pan Tool Active (Click to switch to Eraser)" : "Pan / Move Map (Click to activate)"}
-              >
-                <Move className="w-5.5 h-5.5" />
-              </button>
-            </div>
-
-            {/* Select Object Tool (Direct 1-Click Toggle under Pan) */}
-            <div className="relative group shrink-0">
-              <button
-                id="tool-select-direct"
-                onClick={() => setTool(tool === 'select' ? 'pan' : 'select')}
-                className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all relative ${
-                  tool === 'select'
-                    ? 'bg-amber-500 text-zinc-950 font-bold border border-amber-300 shadow-[0_0_14px_rgba(245,158,11,0.45)]'
-                    : 'text-zinc-400 hover:text-amber-300 hover:bg-zinc-850 hover:border hover:border-zinc-700/60'
-                }`}
-                title={tool === 'select' ? "Select Tool Active (Click to switch to Pan)" : "Select & Move Objects (Click and drag tokens & items placed on board)"}
-              >
-                <MousePointer className="w-5.5 h-5.5" />
-                {selectedTokenIds && selectedTokenIds.length > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 px-1 rounded-full bg-amber-400 text-zinc-950 text-[8px] font-bold font-mono">
-                    {selectedTokenIds.length}
-                  </span>
-                )}
-              </button>
-            </div>
-          </div>
-        )}
       </div>
-
-      {/* Bottom Zoom Controls - Only shown when active map exists */}
-      {currentMapImage && (
-        <div className="flex flex-col items-center py-2.5 border-t border-zinc-800/80 gap-1.5 shrink-0 w-full animate-in fade-in duration-200">
-          <button
-            id="btn-zoom-in"
-            onClick={zoomIn}
-            className="w-10 h-10 rounded-xl flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-850 transition-all active:scale-95"
-            title="Zoom In (+)"
-          >
-            <ZoomIn className="w-5 h-5" />
-          </button>
-          <button
-            id="btn-zoom-out"
-            onClick={zoomOut}
-            className="w-10 h-10 rounded-xl flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-850 transition-all active:scale-95"
-            title="Zoom Out (-)"
-          >
-            <ZoomOut className="w-5 h-5" />
-          </button>
-        </div>
-      )}
 
       {/* FLYOUT SIDE MENUS (Slide in on hover or click / Draggable when pinned) */}
       {activeGroup && (
