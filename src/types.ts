@@ -165,11 +165,16 @@ export interface VisionConfig {
   showDoorBadges?: boolean;
 }
 
+export type RoomAnnotationType = 'room' | 'label';
+
 export interface RoomAnnotation {
   id: string;
-  label: string; // e.g. "G10 - The Parlor" or "Area T4"
+  type?: RoomAnnotationType; // default 'room'
+  label: string; // e.g. "G10 - The Parlor" or "Stairs up to Chapter 2" or "Ladder down to Cellar"
   roomNumber?: string; // e.g. "G10", "4", "Area 1"
   roomName?: string; // e.g. "The Parlor", "Guard Post"
+  icon?: string; // e.g. "stairs-up", "stairs-down", "ladder", "portal", "door", "arrow-up", "arrow-down", "sign"
+  visibleToPlayers?: boolean; // If true, label renders on player view screen too
   bounds: {
     x: number; // percentage (0 - 100)
     y: number; // percentage (0 - 100)

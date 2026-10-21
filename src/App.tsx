@@ -132,6 +132,7 @@ import { DynamicLightingLayer } from './components/DynamicLightingLayer';
 import { WallEditorToolbar } from './components/WallEditorToolbar';
 import { RoomHotspotLayer } from './components/RoomHotspotLayer';
 import { RoomHotspotEditorModal } from './components/RoomHotspotEditorModal';
+import { RoomLabelEditorModal } from './components/RoomLabelEditorModal';
 import { AssignPolygonRoomModal } from './components/AssignPolygonRoomModal';
 import { ZoneDetailsSidePanel } from './components/ZoneDetailsSidePanel';
 import { RoomBriefingDrawer } from './components/RoomBriefingDrawer';
@@ -1717,6 +1718,9 @@ export default function App() {
   const [currentZonePolygonPoints, setCurrentZonePolygonPoints] = useState<number[]>([]);
   const [isZoneEditorOpen, setIsZoneEditorOpen] = useState(false);
   const [editingZone, setEditingZone] = useState<RoomAnnotation | null>(null);
+  const [isLabelEditorOpen, setIsLabelEditorOpen] = useState(false);
+  const [editingLabelAnnotation, setEditingLabelAnnotation] = useState<RoomAnnotation | null>(null);
+  const [pendingLabelPosition, setPendingLabelPosition] = useState<{ x: number; y: number } | null>(null);
   const [isZoneSidePanelOpen, setIsZoneSidePanelOpen] = useState(false);
   const [selectedZoneForSidePanel, setSelectedZoneForSidePanel] = useState<RoomAnnotation | null>(null);
   const [selectedRoomAnnotation, setSelectedRoomAnnotation] = useState<RoomAnnotation | null>(null);
@@ -8552,12 +8556,17 @@ export default function App() {
         <MapGenerator 
           onClose={() => setShowCinematicMapGenerator(false)} 
           onOpenApiKeyModal={() => setShowApiKeyModal(true)}
-          onApply={(url, briefing, genFeatures, genWeather, genSizePreset) => {
+          onApply={(url, briefing, genFeatures, genWeather, genSizePreset, walls) => {
             setImageFile(url);
             setMapType('image');
             setReveals([]);
             setPolygonReveals([]);
             setTokens([]);
+            if (walls && walls.length > 0) {
+              setWalls(walls);
+            } else {
+              setWalls([]);
+            }
             if (briefing?.readAloud) {
               setAIVoiceScript(briefing.readAloud);
             }
@@ -8575,7 +8584,11 @@ export default function App() {
               setGridVisible(true);
             }
             setShowCinematicMapGenerator(false);
-            toast.success("Battlemap and animated FX applied to the board!");
+            if (walls && walls.length > 0) {
+              toast.success(`High-res battlemap applied with ${walls.length} auto-traced walls and doors!`);
+            } else {
+              toast.success("Battlemap and animated FX applied to the board!");
+            }
           }}
         />
       )}

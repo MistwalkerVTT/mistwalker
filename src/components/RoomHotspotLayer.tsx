@@ -1,6 +1,22 @@
 import React, { useState } from 'react';
-import { Group, Rect, Line, Text } from 'react-konva';
+import { Group, Rect, Line, Text, Circle } from 'react-konva';
 import { RoomAnnotation, CampaignMode } from '../types';
+
+export const LABEL_GLYPHS: Record<string, string> = {
+  'stairs-up': '⤊',
+  'stairs-down': '⤋',
+  'ladder': '🪜',
+  'ladder-up': '🪜',
+  'ladder-down': '🪜',
+  'trapdoor': '🚪',
+  'portal': '🌀',
+  'secret': '🗝️',
+  'arrow-up': '⬆',
+  'arrow-down': '⬇',
+  'door': '🚪',
+  'tag': '🏷️',
+  'warning': '⚠️'
+};
 
 interface RoomHotspotLayerProps {
   annotations: RoomAnnotation[];
@@ -13,6 +29,7 @@ interface RoomHotspotLayerProps {
   onHoverAnnotation?: (annotationId: string | null) => void;
   onSelectAnnotation: (annotation: RoomAnnotation) => void;
   onOpenBriefing: (annotation: RoomAnnotation) => void;
+  onUpdateAnnotation?: (annotation: RoomAnnotation) => void;
 }
 
 export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
@@ -25,7 +42,8 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
   hoveredAnnotationId,
   onHoverAnnotation,
   onSelectAnnotation,
-  onOpenBriefing
+  onOpenBriefing,
+  onUpdateAnnotation
 }) => {
   const [internalHoveredAnnoId, setInternalHoveredAnnoId] = useState<string | null>(null);
   const activeHoveredId = hoveredAnnotationId !== undefined ? hoveredAnnotationId : internalHoveredAnnoId;
@@ -35,18 +53,21 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
     onHoverAnnotation?.(id);
   };
 
-  // CRITICAL SECURITY: Non-DM player clients cannot see room overlays or trigger popups under any circumstances.
-  if (isPlayerView) {
-    return null;
-  }
-
   const { width: mapW, height: mapH } = mapDimensions;
   if (!mapW || !mapH) return null;
 
+  // CRITICAL SECURITY & VISIBILITY:
+  // In Player View, only display annotations explicitly marked as 'label' with visibleToPlayers === true.
+  // Room polygons, secret rooms, and DM briefings are NEVER rendered to player clients.
+  const visibleAnnotations = isPlayerView
+    ? annotations.filter((a) => a.type === 'label' && a.visibleToPlayers === true)
+    : annotations;
+
+  if (visibleAnnotations.length === 0) return null;
+
   return (
     <Group id="room-hotspots-group">
-      {annotations.map((anno) => {
-        // Room Zone Polygons ONLY show up when hovering directly over the button associated with the zone (e.g. "V8")
+      {visibleAnnotations.map((anno) => {
         const isHovered = activeHoveredId === anno.id;
         const baseColor = anno.color || '#f59e0b'; // Default amber
         const hasPolygon = anno.polygonPoints && anno.polygonPoints.length >= 6;
@@ -54,8 +75,8 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
         // Convert percentage bounds to actual pixel positions on the map
         const pixelX = (anno.bounds.x / 100) * mapW;
         const pixelY = (anno.bounds.y / 100) * mapH;
-        const pixelW = (anno.bounds.width / 100) * mapW;
-        const pixelH = (anno.bounds.height / 100) * mapH;
+        const pixelW = ((anno.bounds.width || 6) / 100) * mapW;
+        const pixelH = ((anno.bounds.height || 3) / 100) * mapH;
 
         // Convert percentage polygon points to pixel coords
         const pixelPolyPoints: number[] = hasPolygon
@@ -63,8 +84,8 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
           : [];
 
         // Center calculation for label badge button
-        let centerPixelX = pixelX + pixelW / 2;
-        let centerPixelY = pixelY + pixelH / 2;
+        let centerPixelX = pixelX + (anno.type === 'label' ? 0 : pixelW / 2);
+        let centerPixelY = pixelY + (anno.type === 'label' ? 0 : pixelH / 2);
         if (hasPolygon && pixelPolyPoints.length >= 6) {
           let sumX = 0;
           let sumY = 0;
@@ -77,20 +98,13 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
           centerPixelY = sumY / count;
         }
 
-        const displayLabel = anno.label || (anno.roomNumber ? `${anno.roomNumber}: ${anno.roomName || 'Zone'}` : 'Room');
-        const badgeText = (anno.roomNumber || displayLabel.substring(0, 4)).toUpperCase();
-
-        const fontSize = Math.max(10, Math.min(18, 11 / stageScale));
-        const badgePadding = 8 / stageScale;
-        const badgeW = Math.max(28 / stageScale, badgeText.length * (fontSize * 0.6) + badgePadding * 2);
-        const badgeH = fontSize * 1.5;
-
         const handleRightClick = (e: any) => {
           e.cancelBubble = true;
           if (e.evt) {
             e.evt.preventDefault();
             e.evt.stopPropagation();
           }
+          if (isPlayerView) return;
           if (campaignMode === 'creator') {
             onSelectAnnotation(anno);
           } else {
@@ -104,12 +118,122 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
             e.evt.preventDefault();
             e.evt.stopPropagation();
           }
+          if (isPlayerView) return;
           if (campaignMode === 'creator') {
             onSelectAnnotation(anno);
           } else {
             onOpenBriefing(anno);
           }
         };
+
+        // =========================================================================
+        // 1. TACTICAL MAP LABEL PILL (e.g. "Stairs up to...", "Ladder down to...")
+        // =========================================================================
+        if (anno.type === 'label') {
+          const glyph = LABEL_GLYPHS[anno.icon || 'stairs-up'] || '🏷️';
+          const fullLabel = `${glyph}  ${anno.label}`;
+          const fontSize = Math.max(10, Math.min(18, 11.5 / stageScale));
+          const paddingX = 10 / stageScale;
+          const charW = fontSize * 0.65;
+          const pillW = Math.max(70 / stageScale, fullLabel.length * charW + paddingX * 2);
+          const pillH = Math.max(22 / stageScale, fontSize * 1.85);
+          const pillRadius = 6 / stageScale;
+
+          return (
+            <Group
+              key={anno.id}
+              id={`label-${anno.id}`}
+              x={centerPixelX}
+              y={centerPixelY}
+              draggable={!isPlayerView && campaignMode === 'creator'}
+              onDragEnd={(e) => {
+                if (isPlayerView || campaignMode !== 'creator') return;
+                const newPctX = Math.max(0, Math.min(100, (e.target.x() / mapW) * 100));
+                const newPctY = Math.max(0, Math.min(100, (e.target.y() / mapH) * 100));
+                onUpdateAnnotation?.({
+                  ...anno,
+                  bounds: {
+                    ...anno.bounds,
+                    x: newPctX,
+                    y: newPctY
+                  }
+                });
+              }}
+              onClick={handleBadgeLeftClick}
+              onTap={handleBadgeLeftClick}
+              onContextMenu={handleRightClick}
+              onMouseEnter={(e) => {
+                if (!isPlayerView) {
+                  setHovered(anno.id);
+                  const container = e.target.getStage()?.container();
+                  if (container) {
+                    container.style.cursor = campaignMode === 'creator' ? 'grab' : 'pointer';
+                  }
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isPlayerView) {
+                  setHovered(null);
+                  const container = e.target.getStage()?.container();
+                  if (container) container.style.cursor = 'default';
+                }
+              }}
+            >
+              {/* Outer Glow / Dark Shadow */}
+              <Rect
+                x={-(pillW / 2)}
+                y={-(pillH / 2)}
+                width={pillW}
+                height={pillH}
+                fill={isHovered ? 'rgba(24, 24, 27, 0.98)' : 'rgba(15, 23, 42, 0.92)'}
+                stroke={isHovered ? '#ffffff' : baseColor}
+                strokeWidth={(isHovered ? 2 : 1.2) / stageScale}
+                cornerRadius={pillRadius}
+                shadowColor={isHovered ? baseColor : 'black'}
+                shadowBlur={isHovered ? 12 / stageScale : 6 / stageScale}
+                shadowOpacity={0.85}
+              />
+
+              {/* Label Text with Icon */}
+              <Text
+                text={fullLabel}
+                fontSize={fontSize}
+                fontFamily="system-ui, -apple-system, sans-serif"
+                fontStyle="bold"
+                fill={isHovered ? '#ffffff' : '#f8fafc'}
+                align="center"
+                verticalAlign="middle"
+                x={-(pillW / 2)}
+                y={-(pillH / 2)}
+                width={pillW}
+                height={pillH}
+              />
+
+              {/* Status Indicator Dot for DM View (Green = Visible to players, Gray = DM only) */}
+              {!isPlayerView && (
+                <Circle
+                  x={(pillW / 2) - (6 / stageScale)}
+                  y={-(pillH / 2) + (6 / stageScale)}
+                  radius={2.5 / stageScale}
+                  fill={anno.visibleToPlayers ? '#10b981' : '#71717a'}
+                  stroke="#000000"
+                  strokeWidth={0.5 / stageScale}
+                />
+              )}
+            </Group>
+          );
+        }
+
+        // =========================================================================
+        // 2. ROOM ZONE POLYGON & NUMBERED BADGE (e.g. "V8", "12")
+        // =========================================================================
+        const displayLabel = anno.label || (anno.roomNumber ? `${anno.roomNumber}: ${anno.roomName || 'Zone'}` : 'Room');
+        const badgeText = (anno.roomNumber || displayLabel.substring(0, 4)).toUpperCase();
+
+        const fontSize = Math.max(10, Math.min(18, 11 / stageScale));
+        const badgePadding = 8 / stageScale;
+        const badgeW = Math.max(28 / stageScale, badgeText.length * (fontSize * 0.6) + badgePadding * 2);
+        const badgeH = fontSize * 1.5;
 
         return (
           <Group key={anno.id} id={`hotspot-${anno.id}`}>

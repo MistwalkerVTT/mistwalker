@@ -42,6 +42,7 @@ import {
   AnimatedFeatureType,
   WeatherEffectType
 } from './AnimatedMapOverlay';
+import { WallSegment } from '../types';
 
 // -- Types & Options --
 type Biome = 'forest' | 'desert' | 'snow' | 'swamp' | 'dungeon' | 'cave' | 'volcanic' | 'urban';
@@ -49,7 +50,7 @@ type TimeOfDay = 'dawn' | 'noon' | 'dusk' | 'midnight';
 type Weather = 'clear' | 'overcast' | 'rain' | 'fog' | 'snow' | 'storm';
 type LightType = 'torch' | 'magical' | 'daylight';
 type LightSource = { x: number; y: number; type: LightType; radius: number };
-type GeneratorEngine = 'nano-banana-pro' | 'nano-banana-2' | 'procedural';
+type GeneratorEngine = 'flux' | 'nano-banana-pro' | 'nano-banana-2' | 'procedural';
 type ImageResolution = '1K' | '2K' | '4K';
 type MapAspectRatio = '16:9' | '4:3' | '1:1';
 type ArtStyle = 'photorealistic' | 'dark-fantasy' | 'ethereal' | 'classic';
@@ -117,7 +118,8 @@ interface MapGeneratorProps {
     briefing?: CinematicBriefing,
     features?: AnimatedFeature[],
     weather?: WeatherEffectType,
-    sizePreset?: MapSizePresetKey
+    sizePreset?: MapSizePresetKey,
+    walls?: WallSegment[]
   ) => void;
 }
 
@@ -128,7 +130,7 @@ export default function MapGenerator({ onClose, onOpenApiKeyModal, onApply }: Ma
   const [weather, setWeather] = useState<Weather>('clear');
   const [customPrompt, setCustomPrompt] = useState<string>('');
   const [seed, setSeed] = useState<number>(() => Math.floor(Math.random() * 1000000));
-  const [engine, setEngine] = useState<GeneratorEngine>('nano-banana-pro');
+  const [engine, setEngine] = useState<GeneratorEngine>('flux');
   const [imageSize, setImageSize] = useState<ImageResolution>('2K');
   const [aspectRatio, setAspectRatio] = useState<MapAspectRatio>('16:9');
   const [artStyle, setArtStyle] = useState<ArtStyle>('photorealistic');
@@ -150,7 +152,9 @@ export default function MapGenerator({ onClose, onOpenApiKeyModal, onApply }: Ma
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [mapSource, setMapSource] = useState<string>('nano-banana-pro');
+  const [mapSource, setMapSource] = useState<string>('flux');
+  const [detectedWalls, setDetectedWalls] = useState<WallSegment[]>([]);
+  const [showDetectedWalls, setShowDetectedWalls] = useState(true);
   const [briefing, setBriefing] = useState<CinematicBriefing | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [requiresPaidKey, setRequiresPaidKey] = useState(false);
@@ -238,6 +242,11 @@ export default function MapGenerator({ onClose, onOpenApiKeyModal, onApply }: Ma
         setImageUrl(data.imageUrl);
         setMapSource(data.source || engine);
         setLights([]);
+        if (data.walls && Array.isArray(data.walls)) {
+          setDetectedWalls(data.walls);
+        } else {
+          setDetectedWalls([]);
+        }
         if (data.briefing) {
           setBriefing(data.briefing);
         }
@@ -402,10 +411,31 @@ export default function MapGenerator({ onClose, onOpenApiKeyModal, onApply }: Ma
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">AI Map Engine</label>
               <span className="text-[9px] font-mono font-bold text-amber-400 uppercase">
-                {engine === 'nano-banana-pro' ? 'gemini-3-pro-image' : engine === 'nano-banana-2' ? 'gemini-3.1-flash-image' : 'Vector SVG'}
+                {engine === 'flux' ? 'FLUX.1 + AI Walls (Free)' : engine === 'nano-banana-pro' ? 'gemini-3-pro-image' : engine === 'nano-banana-2' ? 'gemini-3.1-flash-image' : 'Vector SVG'}
               </span>
             </div>
             <div className="grid grid-cols-1 gap-1.5">
+              <button
+                type="button"
+                onClick={() => setEngine('flux')}
+                className={`flex items-center justify-between p-2.5 rounded-xl border text-left transition-all ${
+                  engine === 'flux'
+                    ? 'border-amber-500 bg-amber-500/15 text-white ring-1 ring-amber-500/30'
+                    : 'border-zinc-800 bg-zinc-900/60 hover:bg-zinc-800 text-zinc-400'
+                }`}
+              >
+                <div>
+                  <div className="text-xs font-bold flex items-center gap-1.5 text-amber-400">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>FLUX.1 ULTRA + AUTO-WALLS</span>
+                  </div>
+                  <div className="text-[10px] text-zinc-400">High-Res Photorealistic Battlemaps + Vision Walls (100% Free)</div>
+                </div>
+                <span className="text-[9px] font-mono uppercase bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded border border-emerald-500/40">
+                  FREE
+                </span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => setEngine('nano-banana-pro')}
@@ -416,34 +446,14 @@ export default function MapGenerator({ onClose, onOpenApiKeyModal, onApply }: Ma
                 }`}
               >
                 <div>
-                  <div className="text-xs font-bold flex items-center gap-1.5 text-amber-400">
-                    <Sparkles className="w-3.5 h-3.5" />
+                  <div className="text-xs font-bold flex items-center gap-1.5 text-zinc-200">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
                     <span>NANO BANANA PRO</span>
                   </div>
-                  <div className="text-[10px] text-zinc-400">Ultra-Realistic 2K/4K Photorealistic Maps</div>
+                  <div className="text-[10px] text-zinc-400">Gemini 3 Pro Photorealistic (Requires Gemini API Key)</div>
                 </div>
                 <span className="text-[9px] font-mono uppercase bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded border border-amber-500/40">
                   PRO
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setEngine('nano-banana-2')}
-                className={`flex items-center justify-between p-2.5 rounded-xl border text-left transition-all ${
-                  engine === 'nano-banana-2'
-                    ? 'border-amber-500 bg-amber-500/15 text-white ring-1 ring-amber-500/30'
-                    : 'border-zinc-800 bg-zinc-900/60 hover:bg-zinc-800 text-zinc-400'
-                }`}
-              >
-                <div>
-                  <div className="text-xs font-bold flex items-center gap-1.5 text-zinc-200">
-                    <span>NANO BANANA 2</span>
-                  </div>
-                  <div className="text-[10px] text-zinc-400">Fast High-Definition Generation</div>
-                </div>
-                <span className="text-[9px] font-mono uppercase bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded border border-zinc-700">
-                  FAST
                 </span>
               </button>
 
@@ -760,11 +770,11 @@ export default function MapGenerator({ onClose, onOpenApiKeyModal, onApply }: Ma
 
             {imageUrl && onApply && (
               <button
-                onClick={() => onApply(imageUrl, briefing || undefined, animatedFeatures, weatherEffect, mapSizeId)}
+                onClick={() => onApply(imageUrl, briefing || undefined, animatedFeatures, weatherEffect, mapSizeId, detectedWalls)}
                 className="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold py-3 px-4 rounded-xl transition-all uppercase tracking-wider shadow-[0_0_15px_rgba(79,70,229,0.35)] flex items-center justify-center gap-2"
               >
                 <Compass className="w-4 h-4" />
-                <span>Send to Campaign Board</span>
+                <span>Send to Campaign Board {detectedWalls.length > 0 ? `(${detectedWalls.length} Walls)` : ''}</span>
               </button>
             )}
           </div>
@@ -817,6 +827,21 @@ export default function MapGenerator({ onClose, onOpenApiKeyModal, onApply }: Ma
                 >
                   <GridIcon className="w-3.5 h-3.5" /> Grid 5ft
                 </button>
+
+                {detectedWalls.length > 0 && (
+                  <button
+                    onClick={() => setShowDetectedWalls(!showDetectedWalls)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${
+                      showDetectedWalls
+                        ? 'bg-amber-500/20 border border-amber-500/60 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
+                        : 'bg-zinc-900/60 border border-zinc-800 text-zinc-500'
+                    }`}
+                    title="Toggle AI-detected Wall & Door Preview Lines"
+                  >
+                    <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Walls ({detectedWalls.length})</span>
+                  </button>
+                )}
 
                 <button
                   onClick={() => {
@@ -1139,12 +1164,20 @@ export default function MapGenerator({ onClose, onOpenApiKeyModal, onApply }: Ma
                   <div className="absolute bottom-3 right-3 bg-zinc-950/90 border border-zinc-800 text-[9px] font-mono px-2.5 py-1 rounded-md text-zinc-300 backdrop-blur-md pointer-events-none flex items-center gap-2 shadow-lg z-20">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
                     <span className="uppercase tracking-wider font-semibold">
-                      {mapSource === 'nano-banana-pro'
+                      {mapSource === 'flux'
+                        ? 'FLUX.1 ULTRA • HIGH-RES'
+                        : mapSource === 'nano-banana-pro'
                         ? `NANO BANANA PRO • ${imageSize}`
                         : mapSource === 'nano-banana-2'
                         ? 'NANO BANANA 2 • HD'
                         : 'TACTICAL VECTOR'}
                     </span>
+                    {detectedWalls.length > 0 && (
+                      <>
+                        <span className="text-zinc-500">•</span>
+                        <span className="text-amber-300 font-bold">{detectedWalls.length} WALLS DETECTED</span>
+                      </>
+                    )}
                     <span className="text-zinc-500">•</span>
                     <span className="text-amber-400 font-bold">{currentGridWidth}×{currentGridHeight} ({currentGridWidth * 5}×{currentGridHeight * 5} FT)</span>
                   </div>
@@ -1158,6 +1191,37 @@ export default function MapGenerator({ onClose, onOpenApiKeyModal, onApply }: Ma
                         backgroundImage: `linear-gradient(to right, rgba(255,255,255,0.14) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.14) 1px, transparent 1px)`
                       }}
                     />
+                  )}
+
+                  {/* AI Auto-Detected Walls & Doors Overlay */}
+                  {showDetectedWalls && detectedWalls.length > 0 && (
+                    <svg
+                      className="absolute inset-0 w-full h-full pointer-events-none rounded-xl z-15"
+                      viewBox={aspectRatio === '1:1' ? '0 0 1920 1920' : aspectRatio === '4:3' ? '0 0 1920 1440' : '0 0 1920 1080'}
+                      preserveAspectRatio="none"
+                    >
+                      {detectedWalls.map((wall) => {
+                        const isDoor = wall.wallType === 'door';
+                        return (
+                          <g key={wall.id}>
+                            <line
+                              x1={wall.p1.x}
+                              y1={wall.p1.y}
+                              x2={wall.p2.x}
+                              y2={wall.p2.y}
+                              stroke={isDoor ? '#38bdf8' : '#f59e0b'}
+                              strokeWidth={isDoor ? 5 : 3.5}
+                              strokeDasharray={isDoor ? '6 4' : undefined}
+                              strokeLinecap="round"
+                              opacity={0.85}
+                            />
+                            {/* Endpoint dots */}
+                            <circle cx={wall.p1.x} cy={wall.p1.y} r={isDoor ? 4 : 3} fill={isDoor ? '#38bdf8' : '#f59e0b'} />
+                            <circle cx={wall.p2.x} cy={wall.p2.y} r={isDoor ? 4 : 3} fill={isDoor ? '#38bdf8' : '#f59e0b'} />
+                          </g>
+                        );
+                      })}
+                    </svg>
                   )}
 
                   {/* Dynamic Lighting FX Overlay */}
