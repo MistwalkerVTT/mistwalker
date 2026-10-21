@@ -1574,8 +1574,9 @@ export default function PlayerView() {
     return DICE_COLOR_PRESETS.find(p => p.id === dicePresetId) || DICE_COLOR_PRESETS[0];
   }, [dicePresetId]);
 
-  // Active drag state and claimedTokenId ref to prevent rubber-banding during local drag
+  // Active drag state, recent local move immunity, and claimedTokenId ref to prevent rubber-banding
   const activeDraggingTokenIdRef = useRef<string | null>(null);
+  const locallyMovedTokensRef = useRef<Map<string, { x: number; y: number; timestamp: number }>>(new Map());
   const claimedTokenIdRef = useRef<string | null>(claimedTokenId);
   const lastEmitTimeRef = useRef<number>(0);
   useEffect(() => {
@@ -1623,25 +1624,13 @@ export default function PlayerView() {
     });
   }, []);
 
-  // Web Audio procedural sub-bass impact thump on critical hit
+  // Studio sound impact on critical hit
   const playCriticalHitSound = useCallback(() => {
     try {
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioCtx) return;
-      const ctx = new AudioCtx();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(140, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(25, ctx.currentTime + 0.45);
-      gain.gain.setValueAtTime(0.7, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.45);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.5);
+      soundCatalog.play('thunder_boom', 1.2);
+      soundCatalog.play('metal_clang', 0.8);
     } catch {
-      // AudioContext policy fallback
+      // Audio fallback
     }
   }, []);
 

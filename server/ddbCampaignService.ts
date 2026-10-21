@@ -446,6 +446,19 @@ export async function checkDdbCharacterPrivacy(charId: string, forceRefresh = fa
   }
 }
 
+function decodeDdbHtmlEntities(str: string): string {
+  if (!str) return '';
+  return str
+    .replace(/&#x27;/gi, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/gi, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&#([0-9]+);/g, (_, code) => String.fromCharCode(parseInt(code, 10)));
+}
+
 // Fetch all characters in a D&D Beyond campaign
 export async function fetchDdbCampaignCharacters(campaignId: string): Promise<{ campaignTitle: string; characters: DdbCampaignCharacter[] }> {
   const headers = getDdbHeaders();
@@ -482,9 +495,9 @@ export async function fetchDdbCampaignCharacters(campaignId: string): Promise<{ 
       if (idM && nameM) {
         cards.push({
           id: idM[1],
-          name: nameM[1].trim(),
-          meta: metaM ? metaM[1].trim() : '',
-          playerName: playerM ? playerM[1].trim() : 'Player'
+          name: decodeDdbHtmlEntities(nameM[1].trim()),
+          meta: metaM ? decodeDdbHtmlEntities(metaM[1].trim()) : '',
+          playerName: playerM ? decodeDdbHtmlEntities(playerM[1].trim()) : 'Player'
         });
       }
     }
@@ -1755,6 +1768,38 @@ export class DdbHpSyncDaemon {
       console.warn(`[DdbHpSyncDaemon] Error attaching campaign ${campaignId}:`, err);
       return null;
     }
+  }
+
+  public async refreshAllCampaigns() {
+    const campaignIds = new Set<string>(['3290944', '6738033']);
+    if (process.env.DND_BEYOND_CAMPAIGN_ID) {
+      process.env.DND_BEYOND_CAMPAIGN_ID.split(',').map(s => s.trim()).filter(Boolean).forEach(id => campaignIds.add(id));
+    }
+    try {
+      const campaigns = await fetchDdbCampaigns();
+      for (const c of campaigns) {
+        if (c.id) campaignIds.add(c.id);
+      }
+    } catch (err: any) {
+      console.warn('[DdbHpSyncDaemon] Error refreshing campaigns list:', err.message);
+    }
+
+    for (const cId of campaignIds) {
+      await this.attachCampaign(cId);
+    }
+
+    if (this.io && this.cachedCharacters.length > 0) {
+      this.io.emit('DDB_CAMPAIGN_SYNC_INIT', {
+        campaignId: Array.from(campaignIds)[0],
+        characters: this.cachedCharacters
+      });
+    }
+
+    return {
+      campaignIds: Array.from(campaignIds),
+      totalCharacters: this.cachedCharacters.length,
+      characters: this.cachedCharacters
+    };
   }
 
   public async setMonitoredCampaign(campaignId: string) {

@@ -257,6 +257,17 @@ ddbRouter.post('/campaigns/poll-now', async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/ddb/campaigns/sync-all - Refresh and ingest all campaign characters from D&D Beyond
+ddbRouter.post('/campaigns/sync-all', async (req: Request, res: Response) => {
+  try {
+    const result = await DdbHpSyncDaemon.getInstance().refreshAllCampaigns();
+    res.json({ success: true, ...result });
+  } catch (err: any) {
+    console.error('[DdbRoutes] Error syncing all campaigns:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/ddb/monitor-characters - Register active character IDs for continuous HP polling
 ddbRouter.post('/monitor-characters', async (req: Request, res: Response) => {
   try {

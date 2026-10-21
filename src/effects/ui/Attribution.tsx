@@ -23,6 +23,15 @@ export const Attribution: React.FC<{ className?: string }> = ({ className = '' }
         className="text-zinc-400 hover:text-zinc-200 underline"
       >
         CC BY-NC-SA 4.0
+      </a>{' '}
+      • SFX by{' '}
+      <a
+        href="https://github.com/JimHPerry/psfx"
+        target="_blank"
+        rel="noreferrer"
+        className="text-cyan-400/90 hover:text-cyan-300 underline font-medium"
+      >
+        Peri's Sound Effects (PSFX)
       </a>
     </div>
   );

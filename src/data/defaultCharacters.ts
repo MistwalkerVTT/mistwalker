@@ -15,8 +15,14 @@ export const CHARACTER_TOKEN_IMAGES: Record<string, string> = {
   'stavros thurston': 'https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/DwarfStavros.jpg/:/rs=w:1440,h:1440',
   'sylas': 'https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/Brannoc.png/:/rs=w:1440,h:1440',
   'sylas gleeblood': 'https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/Brannoc.png/:/rs=w:1440,h:1440',
-  "g'aiah": 'https://i.ibb.co/nNm5TBg2/Mayo.gif',
-  'gaiah': 'https://i.ibb.co/nNm5TBg2/Mayo.gif',
+  'arameng': 'https://www.dndbeyond.com/avatars/17/368/636377878055945748.jpeg?width=150&height=150&fit=crop&quality=95&auto=webp',
+  'arameng of rosslandia': 'https://www.dndbeyond.com/avatars/17/368/636377878055945748.jpeg?width=150&height=150&fit=crop&quality=95&auto=webp',
+  'etho': 'https://www.dndbeyond.com/avatars/43901/181/1581111423-80588084.jpeg?width=150&height=150&fit=crop&quality=95&auto=webp',
+  'etho corvellion': 'https://www.dndbeyond.com/avatars/43901/181/1581111423-80588084.jpeg?width=150&height=150&fit=crop&quality=95&auto=webp',
+  'zal-tan': 'https://www.dndbeyond.com/avatars/10080/68/637233785467106744.jpeg?width=150&height=150&fit=crop&quality=95&auto=webp',
+  'zaltan': 'https://www.dndbeyond.com/avatars/10080/68/637233785467106744.jpeg?width=150&height=150&fit=crop&quality=95&auto=webp',
+  "g'aiah": 'https://www.dndbeyond.com/avatars/51499/925/1581111423-152250633.jpeg?width=150&height=150&fit=crop&quality=95&auto=webp',
+  'gaiah': 'https://www.dndbeyond.com/avatars/51499/925/1581111423-152250633.jpeg?width=150&height=150&fit=crop&quality=95&auto=webp',
   'mayo': 'https://i.ibb.co/nNm5TBg2/Mayo.gif'
 };
 
@@ -277,33 +283,22 @@ export const DEFAULT_CHARACTERS: Character[] = [
     id: 'char_aziza',
     ddbCharacterId: 27571081,
     name: 'Aziza',
-    race: 'Elf',
-    classLevel: 'Rogue 5',
-    background: 'Criminal',
+    race: 'Human',
+    classLevel: 'Fighter 15',
+    background: 'Soldier',
     alignment: 'Neutral Good',
     avatarUrl: 'https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/Aziza.png/:/rs=w:1440,h:1440',
-    ac: 15,
-    hp: 36,
-    maxHp: 36,
+    ac: 18,
+    hp: 95,
+    maxHp: 109,
     speed: '30 ft.',
     initiativeBonus: 4,
-    proficiencyBonus: 3,
-    passivePerception: 14,
-    stats: { str: 10, dex: 18, con: 12, int: 14, wis: 13, cha: 10 },
-    savingThrows: { str: '+0', dex: '+7', con: '+1', int: '+5', wis: '+1', cha: '+0' },
-    actions: [
-      {
-        name: 'Shortsword',
-        type: 'melee',
-        hitBonus: '+7',
-        damage: '1d6+4 Piercing',
-        notes: 'Finesse, Light, Vex',
-        description: 'Masterwork elven blades.'
-      }
-    ],
-    features: ['Sneak Attack (3d6)', 'Cunning Action', 'Uncanny Dodge', 'Evasion', 'Expertise (Stealth, Sleight of Hand)'],
+    proficiencyBonus: 5,
+    passivePerception: 10,
+    stats: { str: 20, dex: 19, con: 12, int: 12, wis: 11, cha: 11 },
+    features: ['Second Wind', 'Action Surge', 'Extra Attack (x3)', 'Indomitable'],
     spells: [],
-    notes: 'Shadow dancer and master infiltration specialist with dual shortswords.',
+    notes: 'Campaign: An Unspeakable Power (but this time with a vengeance). Player: NorahTheExplorah. Synced from D&D Beyond.',
     createdAt: Date.now(),
     updatedAt: Date.now()
   },
@@ -311,19 +306,19 @@ export const DEFAULT_CHARACTERS: Character[] = [
     id: 'char_noctua',
     ddbCharacterId: 147334187,
     name: 'Noctua Shadowclaw',
-    race: 'Human',
-    classLevel: 'Ranger 5 / Rogue 1',
+    race: 'Owlin',
+    classLevel: 'Ranger 5 / Rogue 2',
     background: 'Sage',
     alignment: 'Neutral',
     avatarUrl: 'https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/Noctua.png/:/rs=w:1440,h:1440',
-    ac: 14,
-    hp: 39,
-    maxHp: 39,
+    ac: 17,
+    hp: 58,
+    maxHp: 58,
     speed: '30 ft.',
-    initiativeBonus: 3,
+    initiativeBonus: 5,
     proficiencyBonus: 3,
-    passivePerception: 14,
-    stats: { str: 8, dex: 16, con: 14, int: 12, wis: 14, cha: 10 },
+    passivePerception: 13,
+    stats: { str: 8, dex: 20, con: 14, int: 10, wis: 16, cha: 8 },
     savingThrows: { str: '+2', dex: '+6', con: '+2', int: '+1', wis: '+2', cha: '+0' },
     features: ['Sneak Attack', 'Expertise', 'Archery Style', 'Cunning Action', 'Favored Foe'],
     spells: ["Hunter's Mark", 'Pass without Trace', 'Cure Wounds'],
@@ -335,26 +330,22 @@ export const DEFAULT_CHARACTERS: Character[] = [
     id: 'char_burmi',
     ddbCharacterId: 57022089,
     name: 'Burmi',
-    race: 'Dwarf',
-    classLevel: 'Cleric 5',
-    background: 'Acolyte',
+    race: 'Half-Orc',
+    classLevel: 'Monk 15',
+    background: 'Hermit',
     alignment: 'Lawful Good',
     avatarUrl: 'https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/Burmi.png/:/rs=w:1440,h:1440',
-    ac: 17,
-    hp: 40,
-    maxHp: 40,
-    speed: '25 ft.',
-    initiativeBonus: -1,
-    proficiencyBonus: 3,
-    passivePerception: 17,
-    stats: { str: 14, dex: 8, con: 14, int: 10, wis: 18, cha: 12 },
-    savingThrows: { str: '+2', dex: '-1', con: '+2', int: '+0', wis: '+7', cha: '+4' },
-    defenses: {
-      resistances: ['Poison (Dwarven Resilience)']
-    },
-    features: ['Channel Divinity: Turn Undead', 'Life Domain Disciple of Life', 'Destroy Undead (CR 1/2)'],
-    spells: ['Healing Word', 'Mass Cure Wounds', 'Guiding Bolt', 'Spiritual Weapon', 'Revivify'],
-    notes: 'Devoted healer and bulwark against undead horrors with heavy mace and warding shield.',
+    ac: 19,
+    hp: 109,
+    maxHp: 123,
+    speed: '30 ft.',
+    initiativeBonus: 4,
+    proficiencyBonus: 5,
+    passivePerception: 11,
+    stats: { str: 14, dex: 18, con: 16, int: 10, wis: 13, cha: 8 },
+    features: ['Flurry of Blows', 'Patient Defense', 'Step of the Wind', 'Stunning Strike', 'Evasion', 'Diamond Soul', 'Relentless Endurance'],
+    spells: [],
+    notes: 'Campaign: An Unspeakable Power (but this time with a vengeance). Player: Perethorn. Synced from D&D Beyond.',
     createdAt: Date.now(),
     updatedAt: Date.now()
   },
@@ -409,24 +400,26 @@ export const DEFAULT_CHARACTERS: Character[] = [
   {
     id: 'char_stavros',
     ddbCharacterId: 27463658,
-    name: 'Stavros',
-    race: 'Dwarf',
-    classLevel: 'Fighter 5',
-    background: 'Soldier',
+    name: 'Stavros Thurston',
+    race: 'Hill Dwarf',
+    classLevel: 'Cleric 15',
+    background: 'Acolyte',
     alignment: 'Lawful Neutral',
     avatarUrl: 'https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/DwarfStavros.jpg/:/rs=w:1440,h:1440',
-    ac: 19,
-    hp: 52,
-    maxHp: 52,
+    ac: 25,
+    hp: 110,
+    maxHp: 138,
     speed: '25 ft.',
-    initiativeBonus: 1,
-    proficiencyBonus: 3,
-    passivePerception: 14,
-    stats: { str: 18, dex: 12, con: 16, int: 10, wis: 12, cha: 8 },
-    savingThrows: { str: '+7', dex: '+1', con: '+6', int: '+0', wis: '+1', cha: '-1' },
-    features: ['Second Wind', 'Action Surge', 'Battle Master Maneuvers (Riposte, Trip Attack, Menacing Attack)', 'Extra Attack'],
-    spells: [],
-    notes: 'Battle-hardened dwarven infantry veteran clad in heavy plate armor with battleaxe and tower shield.',
+    initiativeBonus: -1,
+    proficiencyBonus: 5,
+    passivePerception: 17,
+    stats: { str: 16, dex: 8, con: 16, int: 8, wis: 25, cha: 10 },
+    defenses: {
+      resistances: ['Poison (Dwarven Resilience)']
+    },
+    features: ['Channel Divinity', 'Destroy Undead (CR 3)', 'Divine Intervention', 'Dwarven Toughness'],
+    spells: ['Healing Word', 'Spirit Guardians', 'Revivify', 'Mass Cure Wounds', 'Heal'],
+    notes: 'Campaign: An Unspeakable Power (but this time with a vengeance). Player: SWITCH540. Synced from D&D Beyond.',
     createdAt: Date.now(),
     updatedAt: Date.now()
   },
@@ -481,47 +474,95 @@ export const DEFAULT_CHARACTERS: Character[] = [
     id: 'char_gaiah',
     ddbCharacterId: 152250633,
     name: "G'aiah",
-    race: 'Genasi',
-    classLevel: 'Sorcerer 6',
-    background: 'Sage',
+    race: 'Wood Elf',
+    classLevel: 'Druid 7',
+    background: 'Outlander',
     alignment: 'Neutral Good',
-    avatarUrl: 'https://i.ibb.co/nNm5TBg2/Mayo.gif',
-    ac: 15,
-    hp: 42,
-    maxHp: 42,
+    avatarUrl: 'https://www.dndbeyond.com/avatars/51499/925/1581111423-152250633.jpeg?width=150&height=150&fit=crop&quality=95&auto=webp',
+    ac: 13,
+    hp: 52,
+    maxHp: 52,
     speed: '30 ft.',
     initiativeBonus: 2,
     proficiencyBonus: 3,
-    passivePerception: 13,
-    stats: { str: 10, dex: 14, con: 14, int: 12, wis: 12, cha: 18 },
-    savingThrows: { str: '+0', dex: '+2', con: '+5', int: '+1', wis: '+1', cha: '+7' },
-    features: ['Metamagic: Quickened Spell', 'Metamagic: Twinned Spell', 'Font of Magic'],
-    spells: ['Chaos Bolt', 'Shield', 'Haste', 'Lightning Bolt'],
-    notes: 'Innate elemental power channeling wild arcane energy.',
+    passivePerception: 14,
+    stats: { str: 10, dex: 14, con: 14, int: 13, wis: 19, cha: 10 },
+    savingThrows: { str: '+0', dex: '+2', con: '+2', int: '+4', wis: '+7', cha: '+0' },
+    features: ['Wild Shape', 'Druid Circle', 'Wild Companion', 'Fey Ancestry', 'Trance'],
+    spells: ['Shillelagh', 'Produce Flame', 'Healing Word', 'Moonbeam', 'Call Lightning', 'Polymorph'],
+    notes: 'Campaign: Keys from the Golden Vault. Player: NorahTheExplorah. Synced from D&D Beyond.',
     createdAt: Date.now(),
     updatedAt: Date.now()
   },
   {
     id: 'char_etho',
     ddbCharacterId: 80588084,
-    name: 'Etho',
-    race: 'Human',
-    classLevel: 'Monk 6',
-    background: 'Hermit',
-    alignment: 'Lawful Neutral',
-    avatarUrl: 'https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/Varrak.png/:/rs=w:1440,h:1440',
+    name: 'Etho Corvellion',
+    race: 'High Elf',
+    classLevel: 'Wizard 15',
+    background: 'Sage',
+    alignment: 'Neutral Good',
+    avatarUrl: 'https://www.dndbeyond.com/avatars/43901/181/1581111423-80588084.jpeg?width=150&height=150&fit=crop&quality=95&auto=webp',
+    ac: 12,
+    hp: 92,
+    maxHp: 92,
+    speed: '30 ft.',
+    initiativeBonus: 2,
+    proficiencyBonus: 5,
+    passivePerception: 11,
+    stats: { str: 8, dex: 15, con: 14, int: 20, wis: 12, cha: 10 },
+    savingThrows: { str: '-1', dex: '+2', con: '+2', int: '+10', wis: '+6', cha: '+0' },
+    features: ['Arcane Recovery', 'Spellcasting', 'Fey Ancestry', 'Arcane Tradition'],
+    spells: ['Fire Bolt', 'Mage Armor', 'Shield', 'Counterspell', 'Fireball', 'Teleport'],
+    notes: 'Campaign: An Unspeakable Power (but this time with a vengeance). Player: Cudder1. Synced from D&D Beyond.',
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  },
+  {
+    id: 'char_arameng',
+    ddbCharacterId: 27456605,
+    name: 'Arameng of Rosslandia',
+    race: 'Drow',
+    classLevel: 'Rogue 15',
+    background: 'Noble',
+    alignment: 'Chaotic Good',
+    avatarUrl: 'https://www.dndbeyond.com/avatars/17/368/636377878055945748.jpeg?width=150&height=150&fit=crop&quality=95&auto=webp',
+    ac: 19,
+    hp: 115,
+    maxHp: 115,
+    speed: '30 ft.',
+    initiativeBonus: 4,
+    proficiencyBonus: 5,
+    passivePerception: 10,
+    stats: { str: 13, dex: 19, con: 12, int: 11, wis: 11, cha: 13 },
+    savingThrows: { str: '+1', dex: '+9', con: '+1', int: '+5', wis: '+5', cha: '+1' },
+    features: ['Sneak Attack (8d6)', 'Cunning Action', 'Uncanny Dodge', 'Evasion', 'Reliable Talent', 'Blindsense'],
+    spells: ['Dancing Lights', 'Faerie Fire', 'Darkness'],
+    notes: 'Campaign: An Unspeakable Power (but this time with a vengeance). Player: Arameng. Synced from D&D Beyond.',
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  },
+  {
+    id: 'char_zaltan',
+    ddbCharacterId: 27455124,
+    name: 'Zal-tan',
+    race: 'Tiefling',
+    classLevel: 'Warlock 15',
+    background: 'Charlatan',
+    alignment: 'Chaotic Neutral',
+    avatarUrl: 'https://www.dndbeyond.com/avatars/10080/68/637233785467106744.jpeg?width=150&height=150&fit=crop&quality=95&auto=webp',
     ac: 16,
-    hp: 45,
-    maxHp: 45,
-    speed: '45 ft.',
-    initiativeBonus: 3,
-    proficiencyBonus: 3,
-    passivePerception: 15,
-    stats: { str: 10, dex: 16, con: 14, int: 10, wis: 16, cha: 8 },
-    savingThrows: { str: '+3', dex: '+6', con: '+2', int: '+0', wis: '+3', cha: '-1' },
-    features: ['Flurry of Blows', 'Patient Defense', 'Step of the Wind', 'Stunning Strike', 'Ki-Empowered Strikes'],
-    spells: [],
-    notes: 'Disciplined martial artist channeling ki into devastating strikes.',
+    hp: 78,
+    maxHp: 78,
+    speed: '30 ft.',
+    initiativeBonus: 0,
+    proficiencyBonus: 5,
+    passivePerception: 12,
+    stats: { str: 8, dex: 10, con: 11, int: 15, wis: 15, cha: 18 },
+    savingThrows: { str: '-1', dex: '+0', con: '+0', int: '+2', wis: '+7', cha: '+9' },
+    features: ['Pact Magic', 'Eldritch Invocations', 'Mystic Arcanum', 'Hellish Resistance'],
+    spells: ['Eldritch Blast', 'Hellish Rebuke', 'Darkness', 'Hold Monster', 'Crown of Stars'],
+    notes: 'Campaign: An Unspeakable Power (but this time with a vengeance). Player: TotoMojo. Synced from D&D Beyond.',
     createdAt: Date.now(),
     updatedAt: Date.now()
   }
@@ -559,8 +600,14 @@ export function isDdbMatch(
   if (nA && nB) {
     if (nA === nB) return true;
     if (nA.includes(nB) || nB.includes(nA)) return true;
-    const firstA = nA.split(/[\s"'(]/)[0];
-    const firstB = nB.split(/[\s"'(]/)[0];
+
+    // Normalize apostrophes, quotes, and punctuation (e.g. "G'aiah" vs "Gaiah" vs "G’aiah")
+    const cleanA = nA.replace(/['’"`&#x27;]/g, '');
+    const cleanB = nB.replace(/['’"`&#x27;]/g, '');
+    if (cleanA && cleanB && (cleanA === cleanB || cleanA.includes(cleanB) || cleanB.includes(cleanA))) return true;
+
+    const firstA = nA.split(/[\s"'(]/)[0].replace(/['’]/g, '');
+    const firstB = nB.split(/[\s"'(]/)[0].replace(/['’]/g, '');
     if (firstA && firstB && firstA.length >= 3 && firstA === firstB) return true;
   }
   return false;
@@ -573,6 +620,7 @@ export function resolveTokenCharacterStats(
   const characters = customCharacters && customCharacters.length > 0 ? customCharacters : DEFAULT_CHARACTERS;
   const rawName = (token.name || '').trim();
   const tokenName = rawName.toLowerCase();
+  const cleanTokenName = tokenName.replace(/['’"`&#x27;]/g, '');
 
   // 0. Match by character ID or ddbCharacterId if present
   let char = token.characterId
@@ -595,14 +643,18 @@ export function resolveTokenCharacterStats(
 
   // 1. Exact match on character name
   if (!char && tokenName) {
-    char = characters.find(c => c.name.toLowerCase().trim() === tokenName);
+    char = characters.find(c => {
+      const cName = c.name.toLowerCase().trim();
+      return cName === tokenName || cName.replace(/['’"`&#x27;]/g, '') === cleanTokenName;
+    });
   }
   
   // 2. Partial match (e.g. token "Varrak" matches "Varrak \"Onikuma\" of Sky Veil Clan" or "Stavros" matches "Stavros Thurston")
   if (!char && tokenName) {
     char = characters.find(c => {
       const cName = c.name.toLowerCase().trim();
-      return cName.includes(tokenName) || tokenName.includes(cName);
+      const cClean = cName.replace(/['’"`&#x27;]/g, '');
+      return cName.includes(tokenName) || tokenName.includes(cName) || cClean.includes(cleanTokenName) || cleanTokenName.includes(cClean);
     });
   }
 

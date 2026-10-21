@@ -1003,6 +1003,7 @@ export default function App() {
     const unsub = subscribeToConnectionState((connected) => {
       setIsFirebaseConnected(connected);
     });
+    soundCatalog.preloadCommonSounds();
     return () => unsub();
   }, []);
   const [fireballImg] = useImage('https://cdn.pixabay.com/animation/2024/06/15/20/34/20-34-39-5_512.gif', 'anonymous');
@@ -1882,22 +1883,10 @@ export default function App() {
 
   const playCriticalHitSound = () => {
     try {
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioCtx) return;
-      const ctx = new AudioCtx();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(100, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(25, ctx.currentTime + 0.45);
-      gain.gain.setValueAtTime(0.7, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.45);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.5);
+      soundCatalog.play('thunder_boom', 1.2);
+      soundCatalog.play('metal_clang', 0.8);
     } catch {
-      // AudioContext policy fallback
+      // Audio fallback
     }
   };
 
@@ -2391,6 +2380,7 @@ export default function App() {
 
   // Flag to prevent echoing back token updates initiated remotely by players
   const isRemoteTokenUpdateRef = useRef<boolean>(false);
+  const lastRemoteTokenUpdateTimeRef = useRef<number>(0);
   const isInitialTokenMountRef = useRef<boolean>(true);
 
   // Real-time synchronization of DM token updates (conditions, monster spawns, edits, deletions) to Player View
@@ -2407,6 +2397,8 @@ export default function App() {
       isRemoteTokenUpdateRef.current = false;
       return;
     }
+    // Prevent echo loop when tokens were updated remotely by a player within the last 1200ms
+    if (Date.now() - lastRemoteTokenUpdateTimeRef.current < 1200) return;
     if (isSwitchingMapSlotRef.current || (Date.now() - lastSlotSwitchTimeRef.current < 1500)) return;
     if (currentSlot !== liveMapIdRef.current) return;
     if (socketRef.current?.connected) {
@@ -2498,6 +2490,7 @@ export default function App() {
 
     socket.on('MOVE_TOKEN', (data: { id: string; x: number; y: number }) => {
       if (data?.id) {
+        lastRemoteTokenUpdateTimeRef.current = Date.now();
         console.log('[DM Socket] Live MOVE_TOKEN from player:', data.id, data.x, data.y);
         const liveSlot = liveMapIdRef.current;
         if (mapsDataRef.current[liveSlot]?.tokens) {
@@ -2515,6 +2508,7 @@ export default function App() {
     socket.on('PLAYER_MOVE_TOKEN', (data: { tokenId?: string; id?: string; x: number; y: number; distanceMovedFt?: number }) => {
       const id = data?.tokenId || data?.id;
       if (id) {
+        lastRemoteTokenUpdateTimeRef.current = Date.now();
         console.log('[DM Socket] Live PLAYER_MOVE_TOKEN from player:', id, data.x, data.y, data.distanceMovedFt);
         const liveSlot = liveMapIdRef.current;
         if (mapsDataRef.current[liveSlot]?.tokens) {
