@@ -185,7 +185,7 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(JSON.stringify(errInfo));
 }
 
-import { WallSegment, VisionConfig, RoomAnnotation, ChapterPdfDigest } from '../types';
+import { WallSegment, VisionConfig, RoomAnnotation, ChapterPdfDigest, RevealPoint } from '../types';
 
 // Data Interfaces as specified in User Requirements
 export interface SceneToken {
@@ -224,11 +224,19 @@ export interface Scene {
   mapThumbnailUrl?: string;
   mapWidth?: number;
   mapHeight?: number;
+  mapType?: 'image' | 'video';
+  mapRotation?: number;
   dmNotes: string;
   tokens: SceneToken[];
   gridSize?: number;
   gridOpacity?: number;
+  gridVisible?: boolean;
+  gridOffsetX?: number;
+  gridOffsetY?: number;
   isFogVisible?: boolean;
+  reveals?: RevealPoint[];
+  polygonReveals?: number[][];
+  fogResetKey?: number;
   walls?: WallSegment[];
   visionConfig?: VisionConfig;
   roomAnnotations?: RoomAnnotation[];
@@ -271,11 +279,19 @@ export interface ActiveSessionData {
   mapThumbnailUrl?: string;
   mapWidth?: number;
   mapHeight?: number;
+  mapType?: 'image' | 'video';
+  mapRotation?: number;
   dmNotes: string;
   tokens: SceneToken[];
   gridSize?: number;
   gridOpacity?: number;
+  gridVisible?: boolean;
+  gridOffsetX?: number;
+  gridOffsetY?: number;
   isFogVisible?: boolean;
+  reveals?: RevealPoint[];
+  polygonReveals?: number[][];
+  fogResetKey?: number;
   walls?: WallSegment[];
   visionConfig?: VisionConfig;
   roomAnnotations?: RoomAnnotation[];
@@ -850,8 +866,21 @@ async function sanitizeSceneForStorage(scene: Scene): Promise<Scene> {
       ...ra,
       sceneId: ra.sceneId || scene.sceneId
     }));
-  } else {
-    updatedScene.roomAnnotations = [];
+  }
+
+  // Preserve and compact Fog of War brush reveals if present to protect against 1MB Firestore limit
+  if (scene.reveals && Array.isArray(scene.reveals)) {
+    if (scene.reveals.length > 1000) {
+      // Thin points evenly so fog boundaries remain smooth without bloating payload
+      const step = Math.ceil(scene.reveals.length / 800);
+      updatedScene.reveals = scene.reveals.filter((_, idx) => idx % step === 0);
+    } else {
+      updatedScene.reveals = scene.reveals;
+    }
+  }
+
+  if (scene.polygonReveals && Array.isArray(scene.polygonReveals)) {
+    updatedScene.polygonReveals = scene.polygonReveals;
   }
 
   // 1. Measure and preserve map dimensions if missing
@@ -894,11 +923,12 @@ async function sanitizeSceneForStorage(scene: Scene): Promise<Scene> {
     }
   }
 
-  // 2. Generate and embed high-clarity thumbnail if missing and mapUrl is available
-  if (!updatedScene.mapThumbnailUrl && updatedScene.mapUrl) {
+  // 2. Generate and embed high-clarity thumbnail if missing or recompress if excessively bloated (>80KB)
+  const isBloatedThumb = updatedScene.mapThumbnailUrl && updatedScene.mapThumbnailUrl.startsWith('data:') && updatedScene.mapThumbnailUrl.length > 80000;
+  if ((!updatedScene.mapThumbnailUrl || isBloatedThumb) && updatedScene.mapUrl && !updatedScene.mapUrl.startsWith('data:')) {
     try {
-      const thumb = await createThumbnailDataUrl(updatedScene.mapUrl, 800, 0.75);
-      if (thumb) {
+      const thumb = await createThumbnailDataUrl(updatedScene.mapUrl, 600, 0.7);
+      if (thumb && thumb.length < 50000) {
         updatedScene.mapThumbnailUrl = thumb;
       }
     } catch (thumbErr) {
@@ -976,7 +1006,27 @@ export async function saveSceneToCampaign(
         foundChapter = true;
         const sceneExists = ch.scenes.some(s => s.sceneId === sanitizedScene.sceneId);
         const updatedScenes = sceneExists
-          ? ch.scenes.map(s => s.sceneId === sanitizedScene.sceneId ? sanitizedScene : s)
+          ? ch.scenes.map(s => {
+              if (s.sceneId !== sanitizedScene.sceneId) return s;
+              // Safe non-destructive deep merge: preserves all existing scene fields and properties
+              return {
+                ...s,
+                ...sanitizedScene,
+                // Critical safeguard: Never overwrite non-empty room annotations with an empty array
+                roomAnnotations: (sanitizedScene.roomAnnotations && sanitizedScene.roomAnnotations.length > 0)
+                  ? sanitizedScene.roomAnnotations
+                  : (s.roomAnnotations || []),
+                // Critical safeguard: Never overwrite non-empty walls with an empty array
+                walls: (sanitizedScene.walls && sanitizedScene.walls.length > 0)
+                  ? sanitizedScene.walls
+                  : (s.walls || []),
+                // Critical safeguard: Never overwrite non-empty tokens with an empty array
+                tokens: (sanitizedScene.tokens && sanitizedScene.tokens.length > 0)
+                  ? sanitizedScene.tokens
+                  : (s.tokens || []),
+                updatedAt: Date.now()
+              };
+            })
           : [...ch.scenes, sanitizedScene];
         return {
           ...ch,

@@ -1,3 +1,9 @@
+export interface RevealPoint {
+  x: number;
+  y: number;
+  radius: number;
+}
+
 export interface Combatant {
   id: string;
   name: string;

@@ -30,7 +30,8 @@ import {
   Video,
   Share2,
   GripVertical,
-  Copy
+  Copy,
+  Download
 } from 'lucide-react';
 import {
   Campaign,
@@ -721,7 +722,15 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
       roomAnnotations: clonedRooms,
       gridSize: updatedSourceScene.gridSize || currentGridSize || 50,
       gridOpacity: updatedSourceScene.gridOpacity ?? currentGridOpacity ?? 0.25,
+      gridVisible: updatedSourceScene.gridVisible !== undefined ? updatedSourceScene.gridVisible : true,
+      gridOffsetX: updatedSourceScene.gridOffsetX ?? 0,
+      gridOffsetY: updatedSourceScene.gridOffsetY ?? 0,
+      mapType: updatedSourceScene.mapType || 'image',
+      mapRotation: updatedSourceScene.mapRotation || 0,
       isFogVisible: updatedSourceScene.isFogVisible ?? currentIsFogVisible ?? true,
+      reveals: updatedSourceScene.reveals ? JSON.parse(JSON.stringify(updatedSourceScene.reveals)) : [],
+      polygonReveals: updatedSourceScene.polygonReveals ? JSON.parse(JSON.stringify(updatedSourceScene.polygonReveals)) : [],
+      fogResetKey: updatedSourceScene.fogResetKey,
       visionConfig: updatedSourceScene.visionConfig ? JSON.parse(JSON.stringify(updatedSourceScene.visionConfig)) : undefined,
       boardAnimatedFeatures: updatedSourceScene.boardAnimatedFeatures ? JSON.parse(JSON.stringify(updatedSourceScene.boardAnimatedFeatures)) : undefined,
       boardAnimatedEnabled: updatedSourceScene.boardAnimatedEnabled,
@@ -803,6 +812,95 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
       await loadCampaigns();
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // 1-Click Export Campaign as JSON Backup file
+  const handleExportCampaign = (campaign: Campaign) => {
+    try {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(campaign, null, 2));
+      const downloadAnchor = document.createElement('a');
+      const filename = `${campaign.campaignTitle.toLowerCase().replace(/[^a-z0-9_-]/g, '_')}_backup.json`;
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", filename);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+      toast.success(`Exported backup for "${campaign.campaignTitle}"`);
+    } catch (err: any) {
+      toast.error('Failed to export campaign backup: ' + err.message);
+    }
+  };
+
+  // 1-Click Export Complete Scene Bundle as JSON
+  const handleExportScene = (scene: Scene) => {
+    try {
+      const payload = {
+        version: '1.0',
+        app: 'MistWalker VTT',
+        exportedAt: new Date().toISOString(),
+        scene: scene
+      };
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(payload, null, 2));
+      const downloadAnchor = document.createElement('a');
+      const filename = `${scene.sceneTitle.toLowerCase().replace(/[^a-z0-9_-]/g, '_')}_scene_bundle.json`;
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", filename);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+      toast.success(`Exported scene bundle for "${scene.sceneTitle}"`);
+    } catch (err: any) {
+      toast.error('Failed to export scene: ' + err.message);
+    }
+  };
+
+  // Import Scene Bundle from JSON File into Selected Chapter
+  const handleImportSceneFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedCampaign || !selectedChapter) return;
+
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      const importedSceneRaw: Scene = parsed.scene || parsed;
+      if (!importedSceneRaw.sceneTitle || !importedSceneRaw.mapUrl) {
+        toast.error('Invalid scene bundle file: missing title or map asset.');
+        return;
+      }
+
+      const importedScene: Scene = {
+        ...importedSceneRaw,
+        sceneId: `scene_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        sceneTitle: importedSceneRaw.sceneTitle + ' (Imported)',
+        updatedAt: Date.now()
+      };
+
+      const updatedChapters = selectedCampaign.chapters.map(ch => {
+        if (ch.chapterId === selectedChapter.chapterId) {
+          return {
+            ...ch,
+            scenes: [...ch.scenes, importedScene]
+          };
+        }
+        return ch;
+      });
+
+      const updatedCamp: Campaign = {
+        ...selectedCampaign,
+        chapters: updatedChapters,
+        updatedAt: Date.now()
+      };
+
+      await saveCampaignDoc(updatedCamp);
+      setCampaigns(prev => prev.map(c => c.campaignId === updatedCamp.campaignId ? updatedCamp : c));
+      setSelectedSceneId(importedScene.sceneId);
+      toast.success(`Imported scene "${importedScene.sceneTitle}" with all walls, rooms, and tokens!`);
+    } catch (err: any) {
+      console.error('Failed to import scene file:', err);
+      toast.error('Error importing scene bundle: ' + err.message);
+    } finally {
+      e.target.value = '';
     }
   };
 
@@ -1933,6 +2031,17 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
 
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleExportCampaign(camp);
+                            }}
+                            title={`Download Backup of "${camp.campaignTitle}" (.json)`}
+                            className="p-1 hover:bg-zinc-800 rounded text-zinc-400 hover:text-emerald-300"
+                          >
+                            <Download className="w-3 h-3" />
+                          </button>
+                          <button
                             onClick={(e) => {
                               e.stopPropagation();
                               setSelectedCampaignId(camp.campaignId);
@@ -2432,6 +2541,32 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
                     >
                       <Plus className="w-3.5 h-3.5 text-emerald-400" />
                       Add Scene Underneath
+                    </button>
+
+                    <label
+                      id="btn-import-scene-bundle"
+                      className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-amber-300 border border-amber-500/30 text-xs font-medium flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                      title="Import a .json scene bundle into this chapter"
+                    >
+                      <Upload className="w-3.5 h-3.5 text-amber-400" />
+                      Import Bundle
+                      <input
+                        type="file"
+                        accept=".json"
+                        onChange={handleImportSceneFile}
+                        className="hidden"
+                      />
+                    </label>
+
+                    <button
+                      id="btn-export-scene-bundle"
+                      type="button"
+                      onClick={() => handleExportScene(selectedScene)}
+                      className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-emerald-300 border border-emerald-500/30 text-xs font-medium flex items-center gap-1.5 transition-all active:scale-95"
+                      title={`Export complete scene bundle for "${selectedScene.sceneTitle}" (map, walls, rooms, grid, fog)`}
+                    >
+                      <Download className="w-3.5 h-3.5 text-emerald-400" />
+                      Export Bundle
                     </button>
 
                     <button

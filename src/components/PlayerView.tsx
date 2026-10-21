@@ -2342,7 +2342,23 @@ export default function PlayerView() {
       }
       if (sess.gridSize) setGridSize(prev => (sceneChanged || isNewerForceSync || !prev) ? sess.gridSize! : prev);
       if (sess.gridOpacity !== undefined) setGridOpacity(sess.gridOpacity);
+      if (sess.gridVisible !== undefined) setGridVisible(sess.gridVisible);
+      if (sess.gridOffsetX !== undefined) setGridOffsetX(sess.gridOffsetX);
+      if (sess.gridOffsetY !== undefined) setGridOffsetY(sess.gridOffsetY);
       if (sess.isFogVisible !== undefined) setIsFogVisible(sess.isFogVisible);
+      if (sess.reveals && Array.isArray(sess.reveals)) {
+        setReveals(sess.reveals);
+      }
+      if (sess.polygonReveals && Array.isArray(sess.polygonReveals)) {
+        setPolygonReveals(sess.polygonReveals);
+      }
+      if (sess.fogResetKey) setFogResetKey(sess.fogResetKey);
+      if (sess.mapRotation !== undefined) setMapRotation(sess.mapRotation);
+      if (sess.boardAnimatedFeatures && Array.isArray(sess.boardAnimatedFeatures)) {
+        setBoardAnimatedFeatures(sess.boardAnimatedFeatures);
+      }
+      if (sess.boardAnimatedEnabled !== undefined) setBoardAnimatedEnabled(sess.boardAnimatedEnabled);
+      if (sess.boardWeatherEffect) setBoardWeatherEffect(sess.boardWeatherEffect);
       if (sess.visionConfig) setVisionConfig(sess.visionConfig);
       if (sess.sceneId || sess.sceneTitle || validUrl) {
         setActiveSceneInfo(prev => (sceneChanged || isNewerForceSync || !prev) ? {

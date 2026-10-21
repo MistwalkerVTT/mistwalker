@@ -24,7 +24,7 @@ import {
   publishActiveSession
 } from '../lib/firebase';
 import { createThumbnailDataUrl, saveLocalAsset, isVideoAsset } from '../lib/storageCache';
-import { WallSegment, VisionConfig, RoomAnnotation, AnimatedFeature, WeatherEffectType } from '../types';
+import { WallSegment, VisionConfig, RoomAnnotation, AnimatedFeature, WeatherEffectType, RevealPoint } from '../types';
 
 interface SaveToCampaignModalProps {
   isOpen: boolean;
@@ -33,6 +33,8 @@ interface SaveToCampaignModalProps {
   currentMapUrl: string;
   currentMapWidth?: number;
   currentMapHeight?: number;
+  currentMapType?: 'image' | 'video';
+  currentMapRotation?: number;
   currentTokens: Array<{
     id: string;
     name: string;
@@ -49,7 +51,13 @@ interface SaveToCampaignModalProps {
   }>;
   currentGridSize: number;
   currentGridOpacity: number;
+  currentGridVisible?: boolean;
+  currentGridOffsetX?: number;
+  currentGridOffsetY?: number;
   currentIsFogVisible: boolean;
+  currentReveals?: RevealPoint[];
+  currentPolygonReveals?: number[][];
+  currentFogResetKey?: number;
   currentWalls?: WallSegment[];
   currentVisionConfig?: VisionConfig;
   currentRoomAnnotations?: RoomAnnotation[];
@@ -77,10 +85,18 @@ export const SaveToCampaignModal: React.FC<SaveToCampaignModalProps> = ({
   currentMapUrl,
   currentMapWidth,
   currentMapHeight,
+  currentMapType = 'image',
+  currentMapRotation = 0,
   currentTokens,
   currentGridSize,
   currentGridOpacity,
+  currentGridVisible = true,
+  currentGridOffsetX = 0,
+  currentGridOffsetY = 0,
   currentIsFogVisible,
+  currentReveals = [],
+  currentPolygonReveals = [],
+  currentFogResetKey,
   currentWalls = [],
   currentVisionConfig,
   currentRoomAnnotations = [],
@@ -209,21 +225,30 @@ export const SaveToCampaignModal: React.FC<SaveToCampaignModalProps> = ({
         mapThumbnailUrl: embeddedThumbnail || activeSceneInfo?.mapThumbnailUrl || existingScene?.mapThumbnailUrl,
         mapWidth: currentMapWidth || activeSceneInfo?.mapWidth || existingScene?.mapWidth,
         mapHeight: currentMapHeight || activeSceneInfo?.mapHeight || existingScene?.mapHeight,
+        mapType: currentMapType || existingScene?.mapType || 'image',
+        mapRotation: currentMapRotation || existingScene?.mapRotation || 0,
         dmNotes: dmNotes.trim(),
         tokens: sceneTokensToSave,
-        gridSize: currentGridSize ?? 50,
-        gridOpacity: currentGridOpacity ?? 0.25,
-        isFogVisible: currentIsFogVisible ?? true,
-        walls: currentWalls || [],
-        visionConfig: currentVisionConfig,
-        roomAnnotations: currentRoomAnnotations || [],
-        boardAnimatedFeatures: currentBoardAnimatedFeatures || [],
-        boardAnimatedEnabled: currentBoardAnimatedEnabled !== undefined ? currentBoardAnimatedEnabled : true,
-        boardWeatherEffect: currentBoardWeatherEffect || 'none',
+        gridSize: currentGridSize ?? existingScene?.gridSize ?? 50,
+        gridOpacity: currentGridOpacity ?? existingScene?.gridOpacity ?? 0.25,
+        gridVisible: currentGridVisible !== undefined ? currentGridVisible : (existingScene?.gridVisible ?? true),
+        gridOffsetX: currentGridOffsetX ?? existingScene?.gridOffsetX ?? 0,
+        gridOffsetY: currentGridOffsetY ?? existingScene?.gridOffsetY ?? 0,
+        isFogVisible: currentIsFogVisible ?? existingScene?.isFogVisible ?? true,
+        reveals: (currentReveals && currentReveals.length > 0) ? currentReveals : (existingScene?.reveals || []),
+        polygonReveals: (currentPolygonReveals && currentPolygonReveals.length > 0) ? currentPolygonReveals : (existingScene?.polygonReveals || []),
+        fogResetKey: currentFogResetKey || existingScene?.fogResetKey,
+        walls: (currentWalls && currentWalls.length > 0) ? currentWalls : (existingScene?.walls || []),
+        visionConfig: currentVisionConfig || existingScene?.visionConfig,
+        roomAnnotations: (currentRoomAnnotations && currentRoomAnnotations.length > 0) ? currentRoomAnnotations : (existingScene?.roomAnnotations || []),
+        boardAnimatedFeatures: currentBoardAnimatedFeatures || existingScene?.boardAnimatedFeatures || [],
+        boardAnimatedEnabled: currentBoardAnimatedEnabled !== undefined ? currentBoardAnimatedEnabled : (existingScene?.boardAnimatedEnabled ?? true),
+        boardWeatherEffect: currentBoardWeatherEffect || existingScene?.boardWeatherEffect || 'none',
         pdfUrl: existingScene?.pdfUrl,
         pdfFilename: existingScene?.pdfFilename,
         pdfSection: existingScene?.pdfSection,
-        pdfPage: existingScene?.pdfPage
+        pdfPage: existingScene?.pdfPage,
+        updatedAt: Date.now()
       };
 
       let finalCampaignId = selectedCampaignId;
@@ -266,11 +291,22 @@ export const SaveToCampaignModal: React.FC<SaveToCampaignModalProps> = ({
         sceneId: sceneToSave.sceneId,
         sceneTitle: sceneToSave.sceneTitle,
         mapUrl: sceneToSave.mapUrl,
+        mapThumbnailUrl: sceneToSave.mapThumbnailUrl,
+        mapWidth: sceneToSave.mapWidth,
+        mapHeight: sceneToSave.mapHeight,
+        mapType: sceneToSave.mapType,
+        mapRotation: sceneToSave.mapRotation,
         dmNotes: sceneToSave.dmNotes,
         tokens: sceneToSave.tokens,
         gridSize: sceneToSave.gridSize,
         gridOpacity: sceneToSave.gridOpacity,
+        gridVisible: sceneToSave.gridVisible,
+        gridOffsetX: sceneToSave.gridOffsetX,
+        gridOffsetY: sceneToSave.gridOffsetY,
         isFogVisible: sceneToSave.isFogVisible,
+        reveals: sceneToSave.reveals,
+        polygonReveals: sceneToSave.polygonReveals,
+        fogResetKey: sceneToSave.fogResetKey,
         walls: sceneToSave.walls,
         visionConfig: sceneToSave.visionConfig,
         roomAnnotations: sceneToSave.roomAnnotations,

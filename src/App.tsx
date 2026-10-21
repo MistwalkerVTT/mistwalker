@@ -3096,7 +3096,6 @@ export default function App() {
     // Clear existing annotations to start fresh
     setRoomAnnotations([]);
     setCurrentZonePolygonPoints([]);
-    setPolygonReveals([]);
 
     // 1. Update Map with robust resolver (full-resolution ONLY)
     let fullResUrl = '';
@@ -3191,10 +3190,24 @@ export default function App() {
       setTokens(loadedTokens);
     }
 
-    // 3. Grid & Fog configuration
+    // 3. Grid & Fog configuration (restores full scene bundle with safe fallbacks)
     if (scene.gridSize) setGridSize(scene.gridSize);
     if (scene.gridOpacity !== undefined) setGridOpacity(scene.gridOpacity);
+    if (scene.gridVisible !== undefined) setGridVisible(scene.gridVisible); else setGridVisible(true);
+    if (scene.gridOffsetX !== undefined) setGridOffsetX(scene.gridOffsetX); else setGridOffsetX(0);
+    if (scene.gridOffsetY !== undefined) setGridOffsetY(scene.gridOffsetY); else setGridOffsetY(0);
+
+    // 3.5 Fog of War exploration status & brush/polygon reveals
     if (scene.isFogVisible !== undefined) setIsFogVisible(scene.isFogVisible);
+    const loadedReveals = (scene.reveals && Array.isArray(scene.reveals)) ? scene.reveals : [];
+    const loadedPolygonReveals = (scene.polygonReveals && Array.isArray(scene.polygonReveals)) ? scene.polygonReveals : [];
+    setReveals(loadedReveals);
+    setPolygonReveals(loadedPolygonReveals);
+    if (scene.fogResetKey) setFogResetKey(scene.fogResetKey);
+
+    // 3.6 Map orientation
+    const loadedRotation = scene.mapRotation || 0;
+    setMapRotation(loadedRotation);
 
     // 4. Walls, Doors, Windows & Vision
     if (scene.walls && Array.isArray(scene.walls)) {
@@ -3297,18 +3310,18 @@ export default function App() {
       imageFile: authoritativeMapUrl,
       mapType: (isVideoAsset(authoritativeMapUrl) || isVideoAsset(scene.mapUrl)) ? 'video' : 'image',
       videoSize: { width: scene.mapWidth || 0, height: scene.mapHeight || 0 },
-      mapRotation: 0,
+      mapRotation: loadedRotation,
       stageScale: 1,
       stagePos: { x: 0, y: 0 },
-      reveals: [],
-      polygonReveals: [],
+      reveals: loadedReveals,
+      polygonReveals: loadedPolygonReveals,
       isFogVisible: scene.isFogVisible ?? true,
       tokens: loadedTokens,
-      gridVisible: true,
+      gridVisible: scene.gridVisible !== undefined ? scene.gridVisible : true,
       gridOpacity: scene.gridOpacity ?? 0.3,
       gridSize: scene.gridSize || 50,
-      gridOffsetX: 0,
-      gridOffsetY: 0,
+      gridOffsetX: scene.gridOffsetX || 0,
+      gridOffsetY: scene.gridOffsetY || 0,
       boardAnimatedFeatures: loadedFeatures,
       boardAnimatedEnabled: loadedFeaturesEnabled,
       boardWeatherEffect: loadedWeather,
@@ -3402,24 +3415,39 @@ export default function App() {
             ? activeSceneInfo.mapUrl
             : (imageFile || activeSceneInfo.mapUrl || ''));
 
+      // Safe non-destructive lookup of existing scene in campaign list
+      const existingCamp = campaignsList.find(c => c.campaignId === activeSceneInfo.campaignId);
+      const existingChap = existingCamp?.chapters?.find(ch => ch.chapterId === activeSceneInfo.chapterId);
+      const existingScene = existingChap?.scenes?.find(s => s.sceneId === activeSceneInfo.sceneId);
+
       const updatedScene: Scene = {
+        ...(existingScene || {}),
         sceneId: activeSceneInfo.sceneId,
         sceneTitle: activeSceneInfo.sceneTitle,
         mapUrl: targetMapUrl,
-        mapThumbnailUrl: activeSceneInfo.mapThumbnailUrl,
-        mapWidth: activeSceneInfo.mapWidth || currentDims.width,
-        mapHeight: activeSceneInfo.mapHeight || currentDims.height,
+        mapThumbnailUrl: activeSceneInfo.mapThumbnailUrl || existingScene?.mapThumbnailUrl,
+        mapWidth: activeSceneInfo.mapWidth || currentDims.width || existingScene?.mapWidth,
+        mapHeight: activeSceneInfo.mapHeight || currentDims.height || existingScene?.mapHeight,
+        mapType: mapType || existingScene?.mapType || 'image',
+        mapRotation: mapRotation || existingScene?.mapRotation || 0,
         dmNotes: activeDmNotes,
         tokens: sceneTokensToSave,
-        gridSize: gridSize ?? 50,
-        gridOpacity: gridOpacity ?? 0.25,
-        isFogVisible: isFogVisible ?? true,
-        walls: walls,
-        visionConfig: visionConfig,
-        roomAnnotations: roomAnnotations,
+        gridSize: gridSize ?? existingScene?.gridSize ?? 50,
+        gridOpacity: gridOpacity ?? existingScene?.gridOpacity ?? 0.25,
+        gridVisible: gridVisible !== undefined ? gridVisible : (existingScene?.gridVisible ?? true),
+        gridOffsetX: gridOffsetX ?? existingScene?.gridOffsetX ?? 0,
+        gridOffsetY: gridOffsetY ?? existingScene?.gridOffsetY ?? 0,
+        isFogVisible: isFogVisible ?? existingScene?.isFogVisible ?? true,
+        reveals: (reveals && reveals.length > 0) ? reveals : (existingScene?.reveals || []),
+        polygonReveals: (polygonReveals && polygonReveals.length > 0) ? polygonReveals : (existingScene?.polygonReveals || []),
+        fogResetKey: fogResetKey || existingScene?.fogResetKey,
+        walls: (walls && walls.length > 0) ? walls : (existingScene?.walls || []),
+        visionConfig: visionConfig || existingScene?.visionConfig,
+        roomAnnotations: (roomAnnotations && roomAnnotations.length > 0) ? roomAnnotations : (existingScene?.roomAnnotations || []),
         boardAnimatedFeatures: boardAnimatedFeatures,
         boardAnimatedEnabled: boardAnimatedEnabled,
-        boardWeatherEffect: boardWeatherEffect
+        boardWeatherEffect: boardWeatherEffect,
+        updatedAt: Date.now()
       };
 
       await saveSceneToCampaign(
@@ -3441,11 +3469,19 @@ export default function App() {
           mapThumbnailUrl: updatedScene.mapThumbnailUrl,
           mapWidth: updatedScene.mapWidth,
           mapHeight: updatedScene.mapHeight,
+          mapType: updatedScene.mapType,
+          mapRotation: updatedScene.mapRotation,
           dmNotes: updatedScene.dmNotes,
           tokens: updatedScene.tokens,
           gridSize: updatedScene.gridSize,
           gridOpacity: updatedScene.gridOpacity,
+          gridVisible: updatedScene.gridVisible,
+          gridOffsetX: updatedScene.gridOffsetX,
+          gridOffsetY: updatedScene.gridOffsetY,
           isFogVisible: updatedScene.isFogVisible,
+          reveals: updatedScene.reveals,
+          polygonReveals: updatedScene.polygonReveals,
+          fogResetKey: updatedScene.fogResetKey,
           walls: updatedScene.walls,
           visionConfig: updatedScene.visionConfig,
           roomAnnotations: updatedScene.roomAnnotations,
@@ -4399,9 +4435,17 @@ export default function App() {
               if (typeof (t as any).visionEnabled === 'boolean') (tok as any).visionEnabled = (t as any).visionEnabled;
               return tok;
             }),
-            gridSize: gridSize ?? 50,
-            gridOpacity: gridOpacity ?? 0.25,
-            isFogVisible: isFogVisible ?? true,
+            gridSize: gridSize ?? existingScene?.gridSize ?? 50,
+            gridOpacity: gridOpacity ?? existingScene?.gridOpacity ?? 0.25,
+            gridVisible: gridVisible !== undefined ? gridVisible : (existingScene?.gridVisible ?? true),
+            gridOffsetX: gridOffsetX ?? existingScene?.gridOffsetX ?? 0,
+            gridOffsetY: gridOffsetY ?? existingScene?.gridOffsetY ?? 0,
+            isFogVisible: isFogVisible ?? existingScene?.isFogVisible ?? true,
+            reveals: (reveals && reveals.length > 0) ? reveals : (existingScene?.reveals || []),
+            polygonReveals: (polygonReveals && polygonReveals.length > 0) ? polygonReveals : (existingScene?.polygonReveals || []),
+            fogResetKey: fogResetKey || existingScene?.fogResetKey,
+            mapType: mapType || existingScene?.mapType || 'image',
+            mapRotation: mapRotation || existingScene?.mapRotation || 0,
             walls,
             visionConfig,
             roomAnnotations: nextAnnotations,
@@ -4540,9 +4584,17 @@ export default function App() {
             if (typeof (t as any).visionEnabled === 'boolean') (tok as any).visionEnabled = (t as any).visionEnabled;
             return tok;
           }),
-          gridSize: gridSize ?? 50,
-          gridOpacity: gridOpacity ?? 0.25,
-          isFogVisible: isFogVisible ?? true,
+          gridSize: gridSize ?? existingScene?.gridSize ?? 50,
+          gridOpacity: gridOpacity ?? existingScene?.gridOpacity ?? 0.25,
+          gridVisible: gridVisible !== undefined ? gridVisible : (existingScene?.gridVisible ?? true),
+          gridOffsetX: gridOffsetX ?? existingScene?.gridOffsetX ?? 0,
+          gridOffsetY: gridOffsetY ?? existingScene?.gridOffsetY ?? 0,
+          isFogVisible: isFogVisible ?? existingScene?.isFogVisible ?? true,
+          reveals: (reveals && reveals.length > 0) ? reveals : (existingScene?.reveals || []),
+          polygonReveals: (polygonReveals && polygonReveals.length > 0) ? polygonReveals : (existingScene?.polygonReveals || []),
+          fogResetKey: fogResetKey || existingScene?.fogResetKey,
+          mapType: mapType || existingScene?.mapType || 'image',
+          mapRotation: mapRotation || existingScene?.mapRotation || 0,
           walls,
           visionConfig,
           roomAnnotations: nextAnnotations,
@@ -4725,9 +4777,17 @@ export default function App() {
         mapHeight: activeSceneInfo.mapHeight || currentDims.height,
         dmNotes: activeDmNotes,
         tokens: sceneTokensToSave,
-        gridSize: gridSize ?? 50,
-        gridOpacity: gridOpacity ?? 0.25,
-        isFogVisible: isFogVisible ?? true,
+        gridSize: gridSize ?? existingScene?.gridSize ?? 50,
+        gridOpacity: gridOpacity ?? existingScene?.gridOpacity ?? 0.25,
+        gridVisible: gridVisible !== undefined ? gridVisible : (existingScene?.gridVisible ?? true),
+        gridOffsetX: gridOffsetX ?? existingScene?.gridOffsetX ?? 0,
+        gridOffsetY: gridOffsetY ?? existingScene?.gridOffsetY ?? 0,
+        isFogVisible: isFogVisible ?? existingScene?.isFogVisible ?? true,
+        reveals: (reveals && reveals.length > 0) ? reveals : (existingScene?.reveals || []),
+        polygonReveals: (polygonReveals && polygonReveals.length > 0) ? polygonReveals : (existingScene?.polygonReveals || []),
+        fogResetKey: fogResetKey || existingScene?.fogResetKey,
+        mapType: mapType || existingScene?.mapType || 'image',
+        mapRotation: mapRotation || existingScene?.mapRotation || 0,
         walls,
         visionConfig,
         roomAnnotations: nextAnnotations,
@@ -8739,10 +8799,18 @@ export default function App() {
         currentMapUrl={imageFile || ''}
         currentMapWidth={getMapDimensions().width}
         currentMapHeight={getMapDimensions().height}
+        currentMapType={mapType}
+        currentMapRotation={mapRotation}
         currentTokens={tokens}
         currentGridSize={gridSize}
         currentGridOpacity={gridOpacity}
+        currentGridVisible={gridVisible}
+        currentGridOffsetX={gridOffsetX}
+        currentGridOffsetY={gridOffsetY}
         currentIsFogVisible={isFogVisible}
+        currentReveals={reveals}
+        currentPolygonReveals={polygonReveals}
+        currentFogResetKey={fogResetKey}
         currentWalls={walls}
         currentVisionConfig={visionConfig}
         currentRoomAnnotations={roomAnnotations}
