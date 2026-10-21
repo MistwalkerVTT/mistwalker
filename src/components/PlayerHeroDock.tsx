@@ -94,6 +94,17 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
     setSearchQuery('');
   }, [characterData?.id, claimedToken?.id]);
 
+  // Close hover/cast description card on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && hoveredAction) {
+        setHoveredAction(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [hoveredAction]);
+
   // Character vitals & metadata
   const name = characterData?.name || claimedToken?.name || 'Adventurer';
   const classLevel = characterData?.classLevel || '';
@@ -408,8 +419,8 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
       {/* DESKTOP HOVER DETAIL POPOVER                                              */}
       {/* ========================================================================= */}
       {hoveredAction && !currentTargetingAction && (
-        <div className="hidden md:block pointer-events-none mb-2 px-4 py-3 rounded-xl bg-zinc-950/98 border border-zinc-700/90 shadow-2xl text-left w-full max-w-2xl animate-in fade-in duration-100">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="hidden md:block pointer-events-auto relative mb-2 px-4 py-3 rounded-xl bg-zinc-950/98 border border-zinc-700/90 shadow-2xl text-left w-full max-w-2xl animate-in fade-in duration-100">
+          <div className="flex items-center justify-between gap-3 flex-wrap pr-8">
             <div className="flex items-center gap-2">
               {renderActionGlyph(hoveredAction, 'w-4 h-4')}
               <span className="font-bold text-white font-mono text-xs">{hoveredAction.name}</span>
@@ -459,6 +470,21 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
               )}
             </div>
           </div>
+
+          {/* Top-right X Close Button */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setHoveredAction(null);
+            }}
+            className="absolute top-2.5 right-2.5 p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
+            title="Close Description (Escape)"
+            aria-label="Close Description"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+
           {hoveredAction.notes && (
             <div className="text-[10px] font-mono text-amber-400/90 mt-1">
               Properties & Mastery: {hoveredAction.notes}

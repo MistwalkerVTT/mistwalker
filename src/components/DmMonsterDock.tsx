@@ -604,9 +604,21 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
 
           {/* Description Preview Tooltip Footer */}
           {hoveredAction && (
-            <div className="px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-800 text-[11px] text-zinc-300 leading-snug animate-in fade-in duration-150">
+            <div className="relative px-3 py-1.5 pr-8 rounded-xl bg-zinc-900 border border-zinc-800 text-[11px] text-zinc-300 leading-snug animate-in fade-in duration-150">
               <span className="font-bold text-red-300 mr-1.5">{hoveredAction.name}:</span>
               <span>{hoveredAction.description}</span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setHoveredAction(null);
+                }}
+                className="absolute top-1.5 right-1.5 p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
+                title="Close description"
+                aria-label="Close description"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
             </div>
           )}
         </div>
