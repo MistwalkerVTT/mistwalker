@@ -1859,7 +1859,7 @@ export default function App() {
     // Pre-calculate / import all map tokens into the tracker
     tokens.forEach(t => {
       const isMonster = t.isMonster || t.category === 'monster';
-      const isNpc = t.category === 'npc';
+      const isNpc = (t.category as string) === 'npc' || t.category === 'ally';
       const type: 'player' | 'enemy' | 'npc' = isMonster ? 'enemy' : isNpc ? 'npc' : 'player';
 
       // Resolve character stats to get true D&D Beyond initiative bonus

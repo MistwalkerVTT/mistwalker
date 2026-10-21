@@ -67,7 +67,7 @@ import { DiceTableOverlay } from './DiceTableOverlay';
 import { PlayerDiceRollerModal } from './PlayerDiceRollerModal';
 import { DdbDiceRollEvent } from '../types/dice';
 import { DICE_COLOR_PRESETS, DiceColorPreset } from '../graphics/dice/diceTextures';
-import { WallSegment, VisionConfig, RoomAnnotation, Combatant, isMonsterToken, AURA_PRESETS, AURA_COLOR_PALETTE, TokenAura, AuraPreset } from '../types';
+import { WallSegment, VisionConfig, RoomAnnotation, normalizeRoomAnnotations, Combatant, isMonsterToken, AURA_PRESETS, AURA_COLOR_PALETTE, TokenAura, AuraPreset } from '../types';
 import homeBackgroundImage from '../assets/images/home_background.jpg';
 import sceneBackdropImage from '../assets/images/scene_backdrop.jpg';
 import { base64AudioToBlob, getNarrationVoice } from '../services/audioNarrationService';
@@ -143,6 +143,7 @@ interface Token {
   auraPulse?: boolean;
   auras?: TokenAura[];
   speed?: number;
+  videoUrl?: string;
 }
 
 /**
@@ -659,8 +660,8 @@ const PlayerToken = React.memo(({
       onContextMenu={(e: any) => {
         e.evt.preventDefault();
         e.cancelBubble = true;
-        if (holdTimerRef.current) {
-          clearTimeout(holdTimerRef.current);
+        if (false) {
+          // no-op
         }
         if (!isMonster && !isCondition && onContextMenu) {
           onContextMenu(token.id, e.evt.clientX, e.evt.clientY);
@@ -1224,7 +1225,7 @@ export default function PlayerView() {
   const [boardAnimatedFeatures, setBoardAnimatedFeatures] = useState<AnimatedFeature[]>(() => Array.isArray(initialBackup?.boardAnimatedFeatures) ? initialBackup.boardAnimatedFeatures : []);
   const [boardAnimatedEnabled, setBoardAnimatedEnabled] = useState<boolean>(() => initialBackup?.boardAnimatedEnabled !== undefined ? initialBackup.boardAnimatedEnabled : true);
   const [boardWeatherEffect, setBoardWeatherEffect] = useState<WeatherEffectType>(() => initialBackup?.boardWeatherEffect || 'none');
-  const [roomAnnotations, setRoomAnnotations] = useState<RoomAnnotation[]>(() => Array.isArray(initialBackup?.roomAnnotations) ? initialBackup.roomAnnotations : []);
+  const [roomAnnotations, setRoomAnnotations] = useState<RoomAnnotation[]>(() => Array.isArray(initialBackup?.roomAnnotations) ? normalizeRoomAnnotations(initialBackup.roomAnnotations) : []);
 
   // Dynamic JB2A Animated Spell & Visual Effects State
   const [effects, setEffects] = useState<VttEffectInstance[]>([]);
@@ -1741,7 +1742,7 @@ export default function PlayerView() {
       if (state.visionConfig) setVisionConfig(state.visionConfig);
       if (state.fogResetKey !== undefined) setFogResetKey(state.fogResetKey);
       if (state.mapRotation !== undefined) setMapRotation(state.mapRotation);
-      if (state.roomAnnotations && Array.isArray(state.roomAnnotations)) setRoomAnnotations(state.roomAnnotations);
+      if (state.roomAnnotations && Array.isArray(state.roomAnnotations)) setRoomAnnotations(normalizeRoomAnnotations(state.roomAnnotations));
       if (state.effects && Array.isArray(state.effects)) setEffects(state.effects);
       if (state.activeSceneInfo) {
         setActiveSceneInfo(prev => {
@@ -2377,7 +2378,7 @@ export default function PlayerView() {
       }
       if (sess.fogResetKey) setFogResetKey(sess.fogResetKey);
       if (sess.mapRotation !== undefined) setMapRotation(sess.mapRotation);
-      if (sess.roomAnnotations && Array.isArray(sess.roomAnnotations)) setRoomAnnotations(sess.roomAnnotations);
+      if (sess.roomAnnotations && Array.isArray(sess.roomAnnotations)) setRoomAnnotations(normalizeRoomAnnotations(sess.roomAnnotations));
       if (sess.boardAnimatedFeatures && Array.isArray(sess.boardAnimatedFeatures)) {
         setBoardAnimatedFeatures(sess.boardAnimatedFeatures);
       }

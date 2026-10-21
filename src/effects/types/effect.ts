@@ -93,6 +93,8 @@ export interface Jb2aAssetDefinition {
   soundKey?: string;
   projectileWebm?: string;   // Optional travel bolt WebM for spells with both travel + impact
   burstWebm?: string;        // Optional impact detonation burst WebM
+  departureWebm?: string;    // Optional departure burst WebM for teleport spells
+  arrivalWebm?: string;      // Optional arrival burst WebM for teleport spells
   targetType?: 'single' | 'aoe' | 'self' | 'aura' | 'cone' | 'line' | 'teleport';
   rangeFt?: number;          // Official 5e spell range in feet (0 = Self, 5 = Touch, etc.)
 }
