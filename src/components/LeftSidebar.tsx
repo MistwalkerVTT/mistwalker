@@ -446,7 +446,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
       setIsLoadingDdbParty(false);
     }
   }, []);
-  const [lightingSubTab, setLightingSubTab] = useState<'lighting' | 'fog' | 'zones'>('fog');
+  const [lightingSubTab, setLightingSubTab] = useState<'lighting' | 'fog' | 'grid' | 'zones'>('lighting');
   const [fxCategory, setFxCategory] = useState<'spells' | 'tactical'>('spells');
   const [fxSubTab, setFxSubTab] = useState<'features' | 'weather' | 'scale'>('features');
   const [selectedScalePreset, setSelectedScalePreset] = useState<MapSizePresetKey>('medium');
@@ -826,11 +826,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
             <span className="text-[6px] font-black font-mono tracking-wider text-amber-400 -mt-0.5 leading-none">
               LAYERS
             </span>
-            {(walls.length > 0 || roomAnnotations.length > 0) && (
-              <span className="absolute -top-1 -right-1 px-1 min-w-[14px] h-[14px] rounded-full bg-amber-500 text-[8px] font-bold font-mono text-zinc-950 flex items-center justify-center shadow">
-                {walls.length + roomAnnotations.length}
-              </span>
-            )}
             {isFogActive && (
               <span className="absolute bottom-1 right-1 w-2 h-2 rounded-full bg-teal-400 shadow-[0_0_6px_rgba(45,212,191,0.9)]" />
             )}
@@ -1651,43 +1646,59 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                   </button>
                   <button
                     onClick={closeFlyout}
-                    className="p-1 rounded-md text-zinc-500 hover:text-zinc-300 transition-colors"
+                    className="p-1 rounded-md text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>
 
-              {/* Subtabs Switcher: Fog of War vs Dynamic Lighting & FOV vs Draw Room Zones */}
-              <div className="grid grid-cols-3 bg-zinc-950/80 p-1 rounded-xl border border-zinc-800 gap-1 shrink-0">
-                <button
-                  id="subtab-fog-grid"
-                  onClick={() => setLightingSubTab('fog')}
-                  className={`py-1.5 px-1.5 rounded-lg text-xs font-bold font-mono transition-all flex items-center justify-center gap-1 cursor-pointer ${
-                    lightingSubTab === 'fog'
-                      ? 'bg-teal-500 text-zinc-950 shadow-sm'
-                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850'
-                  }`}
-                  title="Fog of War, Brush Reveal & Battle Grid"
-                >
-                  <Eye className="w-3.5 h-3.5 shrink-0" />
-                  <span className="truncate">FOG</span>
-                  {isFogActive && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-teal-400 shrink-0" />
-                  )}
-                </button>
+              {/* Subtabs Switcher: 4 Streamlined Tactical Layer Tabs */}
+              <div className="grid grid-cols-4 bg-zinc-950/80 p-1 rounded-xl border border-zinc-800 gap-1 shrink-0">
                 <button
                   id="subtab-lighting-fov"
                   onClick={() => setLightingSubTab('lighting')}
-                  className={`py-1.5 px-1.5 rounded-lg text-xs font-bold font-mono transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                  className={`py-1.5 px-1 rounded-lg text-[10px] font-bold font-mono transition-all flex items-center justify-center gap-1 cursor-pointer ${
                     lightingSubTab === 'lighting'
                       ? 'bg-amber-500 text-zinc-950 shadow-sm'
                       : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850'
                   }`}
                   title="Dynamic Lighting, Walls & Token Vision"
                 >
-                  <Shield className="w-3.5 h-3.5 shrink-0" />
-                  <span className="truncate">FOV</span>
+                  <Shield className="w-3 h-3 shrink-0" />
+                  <span className="truncate">WALLS</span>
+                </button>
+                <button
+                  id="subtab-fog-grid"
+                  onClick={() => setLightingSubTab('fog')}
+                  className={`py-1.5 px-1 rounded-lg text-[10px] font-bold font-mono transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                    lightingSubTab === 'fog'
+                      ? 'bg-teal-500 text-zinc-950 shadow-sm'
+                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850'
+                  }`}
+                  title="Fog of War & Brush/Polygon Reveal"
+                >
+                  <Eye className="w-3 h-3 shrink-0" />
+                  <span className="truncate">FOG</span>
+                  {isFogActive && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-teal-400 shrink-0" />
+                  )}
+                </button>
+                <button
+                  id="subtab-grid-layer"
+                  onClick={() => setLightingSubTab('grid')}
+                  className={`py-1.5 px-1 rounded-lg text-[10px] font-bold font-mono transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                    lightingSubTab === 'grid'
+                      ? 'bg-cyan-500 text-zinc-950 shadow-sm'
+                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850'
+                  }`}
+                  title="Battle Grid Visibility, Scale & Alignment"
+                >
+                  <Grid3X3 className="w-3 h-3 shrink-0" />
+                  <span className="truncate">GRID</span>
+                  {gridVisible && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 shrink-0" />
+                  )}
                 </button>
                 <button
                   id="subtab-room-zones"
@@ -1697,17 +1708,17 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                       setCampaignMode('creator');
                     }
                   }}
-                  className={`py-1.5 px-1.5 rounded-lg text-xs font-bold font-mono transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                  className={`py-1.5 px-1 rounded-lg text-[10px] font-bold font-mono transition-all flex items-center justify-center gap-1 cursor-pointer ${
                     lightingSubTab === 'zones'
                       ? 'bg-amber-500 text-zinc-950 shadow-sm'
                       : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850'
                   }`}
                   title="Room Polygon Zones, Badges & DM Briefings"
                 >
-                  <Pentagon className="w-3.5 h-3.5 shrink-0" />
+                  <Pentagon className="w-3 h-3 shrink-0" />
                   <span className="truncate">ROOMS</span>
                   {roomAnnotations.length > 0 && (
-                    <span className={`text-[9px] px-1 rounded-full font-bold ${
+                    <span className={`text-[8px] px-1 rounded-full font-bold ${
                       lightingSubTab === 'zones' ? 'bg-zinc-950 text-amber-300' : 'bg-zinc-800 text-zinc-300'
                     }`}>
                       {roomAnnotations.length}
@@ -1716,763 +1727,508 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                 </button>
               </div>
 
-              {/* SUBTAB CONTENT: DYNAMIC LIGHTING & FOV */}
+              {/* ========================================================================= */}
+              {/* TAB 1: WALLS & DYNAMIC FOV LIGHTING                                       */}
+              {/* ========================================================================= */}
               {lightingSubTab === 'lighting' && (
-                <>
-              {/* Master Vision & Ambient Mode */}
-              <div className="flex flex-col gap-2">
-                <span className="text-[10px] uppercase font-bold font-mono text-zinc-400">Master Lighting Engine</span>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {setVisionConfig && (
-                    <button
-                      id="btn-sidebar-toggle-vision"
-                      onClick={() =>
-                        setVisionConfig((prev) => ({ ...prev, enabled: !prev.enabled }))
-                      }
-                      className={`py-2 px-2 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-1.5 ${
-                        visionConfig.enabled
-                          ? 'bg-amber-500/20 border-amber-500 text-amber-300 shadow-sm'
-                          : 'bg-zinc-850 border-zinc-750 text-zinc-500 hover:text-zinc-300'
-                      }`}
-                    >
-                      <Zap className="w-3.5 h-3.5" />
-                      {visionConfig.enabled ? 'FOV Active' : 'FOV Disabled'}
-                    </button>
-                  )}
-
-                  {setVisionConfig && (
-                    <button
-                      id="btn-sidebar-toggle-ambient"
-                      onClick={() =>
-                        setVisionConfig((prev) => ({ ...prev, ambientLight: !prev.ambientLight }))
-                      }
-                      className={`py-2 px-2 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-1.5 ${
-                        visionConfig.ambientLight
-                          ? 'bg-amber-500/20 border-amber-500/50 text-amber-300'
-                          : 'bg-indigo-950/40 border-indigo-700/50 text-indigo-300'
-                      }`}
-                      title={visionConfig.ambientLight ? 'Daylight: Map fully visible' : 'Darkness: Only token light illuminates'}
-                    >
-                      {visionConfig.ambientLight ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5 text-indigo-400" />}
-                      {visionConfig.ambientLight ? 'Daylight' : 'Darkness'}
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Campaign Mode Switcher (Creator Mode vs Run Campaign Mode) */}
-              <div className="flex flex-col gap-2 pt-2 border-t border-zinc-800">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] uppercase font-bold font-mono text-zinc-400">Campaign Mode</span>
-                  <span
-                    className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded ${
-                      campaignMode === 'creator'
-                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                        : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                    }`}
-                  >
-                    {campaignMode === 'creator' ? 'CREATOR MODE' : 'RUN CAMPAIGN'}
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-1.5">
-                  <button
-                    id="btn-sidebar-mode-run"
-                    onClick={() => {
-                      if (setCampaignMode) setCampaignMode('run');
-                      if (tool === 'wall') setTool('select');
-                    }}
-                    className={`py-2 px-2 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-1.5 ${
-                      campaignMode === 'run'
-                        ? 'bg-emerald-600 text-white border-emerald-400 shadow-md shadow-emerald-600/30'
-                        : 'bg-zinc-800 hover:bg-zinc-750 border-zinc-700 text-zinc-300 hover:text-white'
-                    }`}
-                    title="Run Campaign: Wall lines are hidden from view. Doors remain clickable to open/close."
-                  >
-                    <Play className="w-3.5 h-3.5 text-emerald-300" />
-                    <span>Run Mode</span>
-                  </button>
-
-                  <button
-                    id="btn-sidebar-mode-creator"
-                    onClick={() => {
-                      if (setCampaignMode) setCampaignMode('creator');
-                      setTool('wall');
-                    }}
-                    className={`py-2 px-2 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-1.5 ${
-                      campaignMode === 'creator'
-                        ? 'bg-amber-500 text-zinc-950 border-amber-400 shadow-md shadow-amber-500/30'
-                        : 'bg-zinc-800 hover:bg-zinc-750 border-zinc-700 text-zinc-300 hover:text-white'
-                    }`}
-                    title="Creator Mode: Draw wall lines, place doors/windows, edit room geometry."
-                  >
-                    <Layers className="w-3.5 h-3.5" />
-                    <span>Creator Mode</span>
-                  </button>
-                </div>
-                <p className="text-[10px] text-zinc-400 font-mono leading-tight bg-zinc-900/60 p-2 rounded-lg border border-zinc-800/80">
-                  {campaignMode === 'run'
-                    ? '⚔️ Lines are hidden for an immersive map. Click any door to open or close it.'
-                    : '🔨 Draw wall lines and doors. Edit room boundaries and configure lighting.'}
-                </p>
-              </div>
-
-              {/* Wall Drawing Tool & Snapping */}
-              <div className="flex flex-col gap-2 pt-2 border-t border-zinc-800">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] uppercase font-bold font-mono text-zinc-400">Wall & Obstacle Tools</span>
-                  <span className="text-[9px] font-mono text-zinc-500">{walls.length} active segments</span>
-                </div>
-                
-                <div className="grid grid-cols-3 gap-1.5">
-                  <button
-                    id="btn-sidebar-wall-tool"
-                    onClick={() => {
-                      if (setCampaignMode && campaignMode !== 'creator') setCampaignMode('creator');
-                      setTool(tool === 'wall' ? 'select' : 'wall');
-                    }}
-                    className={`py-2 px-1.5 rounded-xl text-[11px] font-bold transition-all border flex items-center justify-center gap-1.5 cursor-pointer ${
-                      tool === 'wall'
-                        ? 'bg-blue-600 text-white border-blue-400 shadow-md shadow-blue-600/30 font-extrabold'
-                        : 'bg-zinc-800 hover:bg-zinc-750 border-zinc-700 text-zinc-300 hover:text-white'
-                    }`}
-                    title="Draw solid lines, doors, or windows that block FOV light and movement"
-                  >
-                    <Layers className="w-3.5 h-3.5 shrink-0" />
-                    <span>Draw</span>
-                  </button>
-
-                  <button
-                    id="btn-sidebar-erase-wall-tool"
-                    onClick={() => {
-                      if (setCampaignMode && campaignMode !== 'creator') setCampaignMode('creator');
-                      setTool(tool === 'erase_wall' ? 'select' : 'erase_wall');
-                    }}
-                    className={`py-2 px-1.5 rounded-xl text-[11px] font-bold transition-all border flex items-center justify-center gap-1.5 cursor-pointer ${
-                      tool === 'erase_wall'
-                        ? 'bg-red-600 text-white border-red-400 shadow-md shadow-red-600/30 font-extrabold animate-pulse'
-                        : 'bg-zinc-800 hover:bg-red-950/40 border-zinc-700 text-zinc-300 hover:text-red-300'
-                    }`}
-                    title="Erase individual wall sections: Click any wall or drag across walls to delete without erasing all walls"
-                  >
-                    <Eraser className="w-3.5 h-3.5 text-red-400 shrink-0" />
-                    <span>Erase</span>
-                  </button>
-
-                  <button
-                    id="btn-sidebar-split-wall-tool"
-                    onClick={() => {
-                      if (setCampaignMode && campaignMode !== 'creator') setCampaignMode('creator');
-                      setTool(tool === 'split_wall' ? 'select' : 'split_wall');
-                    }}
-                    className={`py-2 px-1.5 rounded-xl text-[11px] font-bold transition-all border flex items-center justify-center gap-1.5 cursor-pointer ${
-                      tool === 'split_wall'
-                        ? 'bg-amber-600 text-white border-amber-400 shadow-md shadow-amber-600/30 font-extrabold'
-                        : 'bg-zinc-800 hover:bg-amber-950/40 border-zinc-700 text-zinc-300 hover:text-amber-300'
-                    }`}
-                    title="Split wall segments: Click anywhere along a wall line to divide it into two sections so you can remove just one section"
-                  >
-                    <Scissors className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                    <span>Split</span>
-                  </button>
-                </div>
-
-                {/* Wall Type Selection */}
-                <div className="flex flex-col gap-1.5 bg-zinc-950/60 p-2.5 rounded-xl border border-zinc-800">
-                  <div className="flex items-center justify-between text-[10px] font-mono text-zinc-400">
-                    <span>WALL TYPE:</span>
-                    <span className="text-amber-400 font-bold uppercase">{activeWallType === 'secret_door' ? 'Secret Door' : activeWallType}</span>
-                  </div>
-                  <div className="grid grid-cols-4 gap-1">
-                    <button
-                      onClick={() => setActiveWallType && setActiveWallType('normal')}
-                      className={`py-1.5 rounded-lg text-[10px] font-mono font-bold border transition-all ${
-                        activeWallType === 'normal'
-                          ? 'bg-blue-500/30 border-blue-400 text-blue-300 shadow-sm'
-                          : 'bg-zinc-800/80 border-zinc-700/60 text-zinc-400 hover:text-zinc-200'
-                      }`}
-                    >
-                      Solid
-                    </button>
-                    <button
-                      onClick={() => setActiveWallType && setActiveWallType('door')}
-                      className={`py-1.5 rounded-lg text-[10px] font-mono font-bold border transition-all flex items-center justify-center gap-1 ${
-                        activeWallType === 'door'
-                          ? 'bg-amber-500/30 border-amber-400 text-amber-300 shadow-sm'
-                          : 'bg-zinc-800/80 border-zinc-700/60 text-zinc-400 hover:text-zinc-200'
-                      }`}
-                    >
-                      <DoorClosed className="w-3 h-3" /> Door
-                    </button>
-                    <button
-                      onClick={() => setActiveWallType && setActiveWallType('secret_door')}
-                      className={`py-1.5 rounded-lg text-[10px] font-mono font-bold border transition-all flex items-center justify-center gap-1 ${
-                        activeWallType === 'secret_door'
-                          ? 'bg-purple-500/30 border-purple-400 text-purple-300 shadow-sm'
-                          : 'bg-zinc-800/80 border-zinc-700/60 text-zinc-400 hover:text-zinc-200'
-                      }`}
-                      title="Secret Door: Appears as a solid wall to players until opened"
-                    >
-                      <EyeOff className="w-3 h-3 text-purple-400" /> Secret
-                    </button>
-                    <button
-                      onClick={() => setActiveWallType && setActiveWallType('window')}
-                      className={`py-1.5 rounded-lg text-[10px] font-mono font-bold border transition-all ${
-                        activeWallType === 'window'
-                          ? 'bg-cyan-500/30 border-cyan-400 text-cyan-300 shadow-sm'
-                          : 'bg-zinc-800/80 border-zinc-700/60 text-zinc-400 hover:text-zinc-200'
-                      }`}
-                    >
-                      Window
-                    </button>
-                  </div>
-
-                  {(activeWallType === 'door' || activeWallType === 'secret_door') && (
-                    <div className="flex flex-col gap-1.5 mt-1 pt-1.5 border-t border-zinc-800/80">
-                      {activeWallType === 'secret_door' && (
-                        <div className="text-[9px] text-purple-300/90 font-mono bg-purple-950/40 px-2 py-1 rounded border border-purple-500/30">
-                          • Secret Door: Appears as a solid wall to players until opened.
-                        </div>
+                <div className="flex flex-col gap-3">
+                  {/* Master Vision & Ambient Mode */}
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-[10px] uppercase font-bold font-mono text-zinc-400">Master Lighting Engine</span>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {setVisionConfig && (
+                        <button
+                          id="btn-sidebar-toggle-vision"
+                          onClick={() =>
+                            setVisionConfig((prev) => ({ ...prev, enabled: !prev.enabled }))
+                          }
+                          className={`py-2 px-2 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-1.5 cursor-pointer ${
+                            visionConfig.enabled
+                              ? 'bg-amber-500/20 border-amber-500 text-amber-300 shadow-sm'
+                              : 'bg-zinc-850 border-zinc-750 text-zinc-500 hover:text-zinc-300'
+                          }`}
+                        >
+                          <Zap className="w-3.5 h-3.5" />
+                          {visionConfig.enabled ? 'FOV Active' : 'FOV Disabled'}
+                        </button>
                       )}
-                      <div className="flex items-center gap-1">
-                        <span className="text-[9px] font-mono text-zinc-400 uppercase mr-0.5">STATE:</span>
-                        {(['closed', 'open', 'locked'] as DoorState[]).map((state) => (
-                          <button
-                            key={state}
-                            onClick={() => setActiveDoorState && setActiveDoorState(state)}
-                            className={`flex-1 py-1 rounded-md text-[9px] font-mono border capitalize transition-all ${
-                              activeDoorState === state
-                                ? state === 'open'
-                                  ? 'bg-emerald-500/30 border-emerald-400 text-emerald-300 font-bold'
-                                  : state === 'locked'
-                                  ? 'bg-red-500/30 border-red-400 text-red-300 font-bold'
-                                  : activeWallType === 'secret_door'
-                                  ? 'bg-purple-500/30 border-purple-400 text-purple-300 font-bold'
-                                  : 'bg-amber-500/30 border-amber-400 text-amber-300 font-bold'
-                                : 'bg-zinc-800 border-zinc-700/60 text-zinc-400'
-                            }`}
-                          >
-                            {state}
-                          </button>
-                        ))}
-                      </div>
 
                       {setVisionConfig && (
-                        <div className="flex items-center justify-between px-2 py-1 bg-zinc-900 rounded-lg border border-zinc-800/90 text-[10px] font-mono">
-                          <span className="text-zinc-400 flex items-center gap-1">
-                            <DoorClosed className="w-3 h-3 text-amber-400 shrink-0" />
-                            <span>"Door" Circle Badge</span>
-                          </span>
+                        <button
+                          id="btn-sidebar-toggle-ambient"
+                          onClick={() =>
+                            setVisionConfig((prev) => ({ ...prev, ambientLight: !prev.ambientLight }))
+                          }
+                          className={`py-2 px-2 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-1.5 cursor-pointer ${
+                            visionConfig.ambientLight
+                              ? 'bg-amber-500/20 border-amber-500/50 text-amber-300'
+                              : 'bg-indigo-950/40 border-indigo-700/50 text-indigo-300'
+                          }`}
+                          title={visionConfig.ambientLight ? 'Daylight: Map fully visible' : 'Darkness: Only token light illuminates'}
+                        >
+                          {visionConfig.ambientLight ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5 text-indigo-400" />}
+                          {visionConfig.ambientLight ? 'Daylight' : 'Darkness'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Mode & Wall Tools */}
+                  <div className="flex flex-col gap-2 pt-2 border-t border-zinc-800">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] uppercase font-bold font-mono text-zinc-400">Wall & Obstacle Tools</span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => {
+                            if (setCampaignMode) setCampaignMode(campaignMode === 'creator' ? 'run' : 'creator');
+                          }}
+                          className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded transition-all cursor-pointer ${
+                            campaignMode === 'creator'
+                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                              : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                          }`}
+                          title="Click to toggle between Creator Mode (draw/edit) and Run Mode (play session)"
+                        >
+                          {campaignMode === 'creator' ? 'CREATOR' : 'RUN MODE'}
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-3 gap-1.5">
+                      <button
+                        id="btn-sidebar-wall-tool"
+                        onClick={() => {
+                          if (setCampaignMode && campaignMode !== 'creator') setCampaignMode('creator');
+                          setTool(tool === 'wall' ? 'select' : 'wall');
+                        }}
+                        className={`py-2 px-1.5 rounded-xl text-[11px] font-bold transition-all border flex items-center justify-center gap-1.5 cursor-pointer ${
+                          tool === 'wall'
+                            ? 'bg-blue-600 text-white border-blue-400 shadow-md shadow-blue-600/30 font-extrabold'
+                            : 'bg-zinc-800 hover:bg-zinc-750 border-zinc-700 text-zinc-300 hover:text-white'
+                        }`}
+                        title="Draw solid lines, doors, or windows that block FOV light and movement"
+                      >
+                        <Layers className="w-3.5 h-3.5 shrink-0" />
+                        <span>Draw</span>
+                      </button>
+
+                      <button
+                        id="btn-sidebar-erase-wall-tool"
+                        onClick={() => {
+                          if (setCampaignMode && campaignMode !== 'creator') setCampaignMode('creator');
+                          setTool(tool === 'erase_wall' ? 'select' : 'erase_wall');
+                        }}
+                        className={`py-2 px-1.5 rounded-xl text-[11px] font-bold transition-all border flex items-center justify-center gap-1.5 cursor-pointer ${
+                          tool === 'erase_wall'
+                            ? 'bg-red-600 text-white border-red-400 shadow-md shadow-red-600/30 font-extrabold animate-pulse'
+                            : 'bg-zinc-800 hover:bg-red-950/40 border-zinc-700 text-zinc-300 hover:text-red-300'
+                        }`}
+                        title="Erase individual wall sections: Click any wall or drag across walls to delete"
+                      >
+                        <Eraser className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                        <span>Erase</span>
+                      </button>
+
+                      <button
+                        id="btn-sidebar-split-wall-tool"
+                        onClick={() => {
+                          if (setCampaignMode && campaignMode !== 'creator') setCampaignMode('creator');
+                          setTool(tool === 'split_wall' ? 'select' : 'split_wall');
+                        }}
+                        className={`py-2 px-1.5 rounded-xl text-[11px] font-bold transition-all border flex items-center justify-center gap-1.5 cursor-pointer ${
+                          tool === 'split_wall'
+                            ? 'bg-amber-600 text-white border-amber-400 shadow-md shadow-amber-600/30 font-extrabold'
+                            : 'bg-zinc-800 hover:bg-amber-950/40 border-zinc-700 text-zinc-300 hover:text-amber-300'
+                        }`}
+                        title="Split wall segments: Click along a wall to cut it into two sections"
+                      >
+                        <Scissors className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                        <span>Split</span>
+                      </button>
+                    </div>
+
+                    {/* Wall Type Selection */}
+                    <div className="flex flex-col gap-1.5 bg-zinc-950/60 p-2.5 rounded-xl border border-zinc-800">
+                      <div className="flex items-center justify-between text-[10px] font-mono text-zinc-400">
+                        <span>WALL TYPE:</span>
+                        <span className="text-amber-400 font-bold uppercase">{activeWallType === 'secret_door' ? 'Secret Door' : activeWallType}</span>
+                      </div>
+                      <div className="grid grid-cols-4 gap-1">
+                        <button
+                          onClick={() => setActiveWallType && setActiveWallType('normal')}
+                          className={`py-1.5 rounded-lg text-[10px] font-mono font-bold border transition-all cursor-pointer ${
+                            activeWallType === 'normal'
+                              ? 'bg-blue-500/30 border-blue-400 text-blue-300 shadow-sm'
+                              : 'bg-zinc-800/80 border-zinc-700/60 text-zinc-400 hover:text-zinc-200'
+                          }`}
+                        >
+                          Solid
+                        </button>
+                        <button
+                          onClick={() => setActiveWallType && setActiveWallType('door')}
+                          className={`py-1.5 rounded-lg text-[10px] font-mono font-bold border transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                            activeWallType === 'door'
+                              ? 'bg-amber-500/30 border-amber-400 text-amber-300 shadow-sm'
+                              : 'bg-zinc-800/80 border-zinc-700/60 text-zinc-400 hover:text-zinc-200'
+                          }`}
+                        >
+                          <DoorClosed className="w-3 h-3" /> Door
+                        </button>
+                        <button
+                          onClick={() => setActiveWallType && setActiveWallType('secret_door')}
+                          className={`py-1.5 rounded-lg text-[10px] font-mono font-bold border transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                            activeWallType === 'secret_door'
+                              ? 'bg-purple-500/30 border-purple-400 text-purple-300 shadow-sm'
+                              : 'bg-zinc-800/80 border-zinc-700/60 text-zinc-400 hover:text-zinc-200'
+                          }`}
+                          title="Secret Door: Appears as a solid wall to players until opened"
+                        >
+                          <EyeOff className="w-3 h-3 text-purple-400" /> Secret
+                        </button>
+                        <button
+                          onClick={() => setActiveWallType && setActiveWallType('window')}
+                          className={`py-1.5 rounded-lg text-[10px] font-mono font-bold border transition-all cursor-pointer ${
+                            activeWallType === 'window'
+                              ? 'bg-cyan-500/30 border-cyan-400 text-cyan-300 shadow-sm'
+                              : 'bg-zinc-800/80 border-zinc-700/60 text-zinc-400 hover:text-zinc-200'
+                          }`}
+                        >
+                          Window
+                        </button>
+                      </div>
+
+                      {(activeWallType === 'door' || activeWallType === 'secret_door') && (
+                        <div className="flex flex-col gap-1.5 mt-1 pt-1.5 border-t border-zinc-800/80">
+                          <div className="flex items-center gap-1">
+                            <span className="text-[9px] font-mono text-zinc-400 uppercase mr-0.5">STATE:</span>
+                            {(['closed', 'open', 'locked'] as DoorState[]).map((state) => (
+                              <button
+                                key={state}
+                                onClick={() => setActiveDoorState && setActiveDoorState(state)}
+                                className={`flex-1 py-1 rounded-md text-[9px] font-mono border capitalize transition-all cursor-pointer ${
+                                  activeDoorState === state
+                                    ? state === 'open'
+                                      ? 'bg-emerald-500/30 border-emerald-400 text-emerald-300 font-bold'
+                                      : state === 'locked'
+                                      ? 'bg-red-500/30 border-red-400 text-red-300 font-bold'
+                                      : activeWallType === 'secret_door'
+                                      ? 'bg-purple-500/30 border-purple-400 text-purple-300 font-bold'
+                                      : 'bg-amber-500/30 border-amber-400 text-amber-300 font-bold'
+                                    : 'bg-zinc-800 border-zinc-700/60 text-zinc-400'
+                                }`}
+                              >
+                                {state}
+                              </button>
+                            ))}
+                          </div>
+
+                          {setVisionConfig && (
+                            <div className="flex items-center justify-between px-2 py-1 bg-zinc-900 rounded-lg border border-zinc-800/90 text-[10px] font-mono">
+                              <span className="text-zinc-400 flex items-center gap-1">
+                                <DoorClosed className="w-3 h-3 text-amber-400 shrink-0" />
+                                <span>Door Status Badges</span>
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setVisionConfig((prev) => ({
+                                    ...prev,
+                                    showDoorBadges: !prev.showDoorBadges
+                                  }))
+                                }
+                                className={`px-1.5 py-0.5 rounded text-[9px] font-bold border transition-all cursor-pointer ${
+                                  visionConfig.showDoorBadges
+                                    ? 'bg-amber-500/20 border-amber-500/50 text-amber-300'
+                                    : 'bg-zinc-800 border-zinc-700 text-zinc-500 hover:text-zinc-300'
+                                }`}
+                              >
+                                {visionConfig.showDoorBadges ? 'SHOW' : 'HIDE'}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {setSnapToGridWalls && (
+                      <div className="flex items-center justify-between px-2.5 py-1.5 bg-zinc-900/60 rounded-xl border border-zinc-800 text-[10px] font-mono">
+                        <span className="text-zinc-400 flex items-center gap-1.5">
+                          <Magnet className="w-3 h-3 text-emerald-400" />
+                          <span>Wall Grid Snapping</span>
+                        </span>
+                        <button
+                          id="btn-sidebar-wall-snap"
+                          onClick={() => setSnapToGridWalls(!snapToGridWalls)}
+                          className={`px-2 py-0.5 rounded text-[9px] font-bold border transition-all cursor-pointer ${
+                            snapToGridWalls
+                              ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
+                              : 'bg-zinc-800 border-zinc-700 text-zinc-500'
+                          }`}
+                        >
+                          {snapToGridWalls ? 'ON' : 'OFF'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Exploration & Lighting Density Controls */}
+                  <div className="flex flex-col gap-2 pt-2 border-t border-zinc-800">
+                    <span className="text-[10px] uppercase font-bold font-mono text-zinc-400">Exploration & Light Density</span>
+                    {setVisionConfig && (
+                      <>
+                        <div className="grid grid-cols-2 gap-1.5">
                           <button
-                            type="button"
+                            id="btn-sidebar-exploration-memory"
                             onClick={() =>
                               setVisionConfig((prev) => ({
                                 ...prev,
-                                showDoorBadges: !prev.showDoorBadges
+                                explorationMemory: !prev.explorationMemory
                               }))
                             }
-                            className={`px-1.5 py-0.5 rounded text-[9px] font-bold border transition-all cursor-pointer ${
-                              visionConfig.showDoorBadges
-                                ? 'bg-amber-500/20 border-amber-500/50 text-amber-300'
-                                : 'bg-zinc-800 border-zinc-700 text-zinc-500 hover:text-zinc-300'
+                            className={`p-2 rounded-xl text-[10px] font-mono border text-left transition-all flex flex-col gap-0.5 cursor-pointer ${
+                              visionConfig.explorationMemory
+                                ? 'bg-blue-500/20 border-blue-500/50 text-blue-300 font-bold'
+                                : 'bg-zinc-850 border-zinc-750 text-zinc-400'
                             }`}
-                            title="Toggle the descriptive 'DOOR' / status circles on drawn doors (defaults to off)"
+                            title="Exploration memory reveals explored areas in dim silhouette"
                           >
-                            {visionConfig.showDoorBadges ? 'SHOW' : 'HIDE'}
+                            <span className="text-zinc-500 text-[9px]">EXPLORATION:</span>
+                            <span>Memory: {visionConfig.explorationMemory ? 'ON' : 'OFF'}</span>
+                          </button>
+
+                          <button
+                            id="btn-sidebar-dm-los"
+                            onClick={() =>
+                              setVisionConfig((prev) => ({
+                                ...prev,
+                                dmPreviewMode: !prev.dmPreviewMode
+                              }))
+                            }
+                            className={`p-2 rounded-xl text-[10px] font-mono border text-left transition-all flex flex-col gap-0.5 cursor-pointer ${
+                              visionConfig.dmPreviewMode
+                                ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 font-bold'
+                                : 'bg-zinc-850 border-zinc-750 text-zinc-400'
+                            }`}
+                            title="Preview field of view exactly as players experience it"
+                          >
+                            <span className="text-zinc-500 text-[9px]">LOS MODE:</span>
+                            <span>{visionConfig.dmPreviewMode ? 'Player LOS' : 'DM Oversight'}</span>
                           </button>
                         </div>
-                      )}
-                    </div>
-                  )}
-                </div>
 
-                {setSnapToGridWalls && (
-                  <div className="flex items-center justify-between px-2 py-1 bg-zinc-900/60 rounded-lg border border-zinc-800 text-[10px] font-mono">
-                    <span className="text-zinc-400 flex items-center gap-1.5">
-                      <Magnet className="w-3 h-3 text-emerald-400" />
-                      <span>Grid Snapping</span>
-                    </span>
-                    <button
-                      id="btn-sidebar-wall-snap"
-                      onClick={() => setSnapToGridWalls(!snapToGridWalls)}
-                      className={`px-2 py-0.5 rounded text-[9px] font-bold border transition-all ${
-                        snapToGridWalls
-                          ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
-                          : 'bg-zinc-800 border-zinc-700 text-zinc-500'
-                      }`}
-                    >
-                      {snapToGridWalls ? 'ON' : 'OFF'}
-                    </button>
+                        {/* Density Sliders */}
+                        <div className="flex flex-col gap-2 bg-zinc-950/60 p-2.5 rounded-xl border border-zinc-800">
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center justify-between text-[10px] font-mono">
+                              <span className="text-zinc-400">DARKNESS DENSITY</span>
+                              <span className="text-amber-400 font-bold">
+                                {Math.round((visionConfig.darknessOpacity ?? 1.0) * 100)}%
+                              </span>
+                            </div>
+                            <input
+                              type="range"
+                              min="0.3"
+                              max="1.0"
+                              step="0.05"
+                              value={visionConfig.darknessOpacity ?? 1.0}
+                              onChange={(e) =>
+                                setVisionConfig((prev) => ({
+                                  ...prev,
+                                  darknessOpacity: parseFloat(e.target.value)
+                                }))
+                              }
+                              className="w-full accent-amber-500 h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer"
+                            />
+                          </div>
+
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center justify-between text-[10px] font-mono">
+                              <span className="text-zinc-400">EXPLORED MEMORY FADE</span>
+                              <span className="text-blue-400 font-bold">
+                                {Math.round((visionConfig.dimVisionOpacity ?? 0.5) * 100)}%
+                              </span>
+                            </div>
+                            <input
+                              type="range"
+                              min="0.1"
+                              max="0.9"
+                              step="0.05"
+                              value={visionConfig.dimVisionOpacity ?? 0.5}
+                              onChange={(e) =>
+                                setVisionConfig((prev) => ({
+                                  ...prev,
+                                  dimVisionOpacity: parseFloat(e.target.value)
+                                }))
+                              }
+                              className="w-full accent-blue-500 h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer"
+                            />
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
-                )}
 
-                {/* Interactive Tool Guidance Banners */}
-                {tool === 'erase_wall' && (
-                  <div className="p-2.5 rounded-xl bg-red-950/50 border border-red-500/50 text-[10px] font-mono text-red-200 flex flex-col gap-1 shadow-md">
-                    <div className="font-bold flex items-center gap-1.5 text-red-300 text-[11px]">
-                      <Eraser className="w-3.5 h-3.5" />
-                      <span>Wall Eraser Tool Active</span>
-                    </div>
-                    <div>• <strong>Click</strong> any wall, door, or window on the map to remove that section.</div>
-                    <div>• <strong>Click & drag</strong> across wall lines to cut and delete multiple sections at once.</div>
-                  </div>
-                )}
-
-                {tool === 'split_wall' && (
-                  <div className="p-2.5 rounded-xl bg-amber-950/50 border border-amber-500/50 text-[10px] font-mono text-amber-200 flex flex-col gap-1 shadow-md">
-                    <div className="font-bold flex items-center gap-1.5 text-amber-300 text-[11px]">
-                      <Scissors className="w-3.5 h-3.5" />
-                      <span>Wall Split / Scissors Tool Active</span>
-                    </div>
-                    <div>• <strong>Click</strong> anywhere along a wall line to divide it into two separate sections.</div>
-                    <div>• Once split, switch to <strong>Erase</strong> to remove just the section you don't need!</div>
-                  </div>
-                )}
-
-                {/* Selected Wall Section Detail Card */}
-                {(() => {
-                  const selectedWall = walls.find(w => w.id === selectedWallId);
-                  if (!selectedWall) return null;
-                  return (
-                    <div className="p-2.5 rounded-xl bg-pink-950/30 border border-pink-500/50 flex flex-col gap-2 shadow-lg animate-in fade-in">
-                      <div className="flex items-center justify-between text-[10px] font-mono">
-                        <span className="text-pink-300 font-bold uppercase flex items-center gap-1">
-                          <span>Selected Wall Section ({selectedWall.wallType === 'secret_door' ? 'secret door' : (selectedWall.wallType || 'solid')})</span>
-                        </span>
-                        <button
-                          onClick={() => setSelectedWallId?.(null)}
-                          className="text-zinc-400 hover:text-zinc-200 text-[10px] underline cursor-pointer"
-                        >
-                          Deselect
-                        </button>
-                      </div>
-                      {(selectedWall.wallType === 'door' || selectedWall.wallType === 'secret_door') && (
-                        <div className="flex items-center gap-1 bg-zinc-900/80 p-1 rounded-lg border border-zinc-800 text-[9px] font-mono">
-                          <span className="text-zinc-400 uppercase mr-1">STATE:</span>
-                          {(['closed', 'open', 'locked'] as DoorState[]).map((st) => (
+                  {/* Selected Token Vision Quick Settings */}
+                  {(() => {
+                    const selToken = tokens.find((t) => selectedTokenIds.includes(t.id));
+                    if (
+                      !selToken ||
+                      !onUpdateTokenVision ||
+                      isMonsterToken(selToken) ||
+                      selToken.isMonster === true ||
+                      selToken.category === 'monster' ||
+                      selToken.isPlayer === false
+                    ) return null;
+                    return (
+                      <div className="flex flex-col gap-2 pt-2 border-t border-zinc-800">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] uppercase font-bold font-mono text-zinc-400">Token Vision: {selToken.name}</span>
+                          <span className="text-[10px] font-mono text-amber-400 font-bold">{selToken.visionRadius || 60}ft</span>
+                        </div>
+                        <div className="grid grid-cols-4 gap-1">
+                          {[30, 60, 90, 120].map((ft) => (
                             <button
-                              key={st}
-                              type="button"
-                              onClick={() => {
-                                if (setWalls) {
-                                  setWalls(prev => prev.map(w => w.id === selectedWall.id ? { ...w, doorState: st } : w));
-                                }
-                              }}
-                              className={`flex-1 py-0.5 rounded text-[9px] capitalize border transition-all ${
-                                (selectedWall.doorState || 'closed') === st
-                                  ? st === 'open'
-                                    ? 'bg-emerald-500/30 border-emerald-400 text-emerald-300 font-bold'
-                                    : st === 'locked'
-                                    ? 'bg-red-500/30 border-red-400 text-red-300 font-bold'
-                                    : selectedWall.wallType === 'secret_door'
-                                    ? 'bg-purple-500/30 border-purple-400 text-purple-300 font-bold'
-                                    : 'bg-amber-500/30 border-amber-400 text-amber-300 font-bold'
-                                  : 'bg-zinc-800 border-zinc-700 text-zinc-400'
+                              key={ft}
+                              onClick={() => onUpdateTokenVision(selToken.id, { visionRadius: ft })}
+                              className={`py-1 rounded text-[9px] font-mono border cursor-pointer ${
+                                (selToken.visionRadius || 60) === ft
+                                  ? 'bg-amber-500/30 border-amber-400 text-amber-300 font-bold'
+                                  : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-zinc-200'
                               }`}
                             >
-                              {st}
+                              {ft}ft
                             </button>
                           ))}
                         </div>
-                      )}
-                      <div className="flex items-center gap-1.5">
+                      </div>
+                    );
+                  })()}
+
+                  {/* Wall Management & Clear */}
+                  <div className="flex flex-col gap-2 pt-2 border-t border-zinc-800">
+                    <div className="flex items-center justify-between text-[10px] font-mono text-zinc-400">
+                      <span className="font-bold text-zinc-300">{walls.length} Wall Segments</span>
+                      <div className="flex items-center gap-2">
                         <button
-                          id="btn-sidebar-delete-selected-wall"
-                          onClick={() => {
-                            if (onDeleteWall) onDeleteWall(selectedWall.id);
-                            else if (setWalls) setWalls(prev => prev.filter(w => w.id !== selectedWall.id));
-                            setSelectedWallId?.(null);
-                          }}
-                          className="flex-1 py-1.5 px-2.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-mono text-[10px] font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow"
+                          onClick={() => uvttFileInputRef.current?.click()}
+                          className="text-purple-400 hover:text-purple-300 flex items-center gap-1 hover:underline transition-all cursor-pointer"
+                          title="Import walls, doors & lights from a Universal VTT (.dd2vtt) file"
                         >
-                          <Trash2 className="w-3 h-3" />
-                          <span>Remove Section</span>
+                          <FileCode2 className="w-3 h-3" /> Import .dd2vtt
                         </button>
-                        {onSplitWall && (
+                        {walls.length > 0 && (
                           <button
-                            id="btn-sidebar-split-selected-wall"
-                            onClick={() => onSplitWall(selectedWall.id)}
-                            className="py-1.5 px-2.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-mono text-[10px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer shadow"
-                            title="Split this wall section into two equal halves"
+                            onClick={() => setShowWallSectionsList(!showWallSectionsList)}
+                            className="text-blue-400 hover:text-blue-300 underline cursor-pointer"
                           >
-                            <Scissors className="w-3 h-3" />
-                            <span>Split</span>
+                            {showWallSectionsList ? 'Hide List' : 'Review'}
+                          </button>
+                        )}
+                        {onGeneratePresetRoom && (
+                          <button
+                            id="btn-sidebar-preset-room"
+                            onClick={onGeneratePresetRoom}
+                            className="text-amber-400 hover:text-amber-300 flex items-center gap-1 hover:underline transition-all cursor-pointer"
+                          >
+                            <Plus className="w-3 h-3" /> Preset
                           </button>
                         )}
                       </div>
                     </div>
-                  );
-                })()}
 
-                {/* Clear distinction link to the dedicated Room Polygon Tool */}
-                <div className="p-2 rounded-xl bg-zinc-900/80 border border-zinc-800 flex items-center justify-between text-[10px] font-mono text-zinc-400">
-                  <div className="flex items-center gap-1.5">
-                    <Pentagon className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                    <span>Want to map room areas?</span>
-                  </div>
-                  <button
-                    id="btn-sidebar-switch-to-zone-tool"
-                    type="button"
-                    onClick={() => {
-                      if (setCampaignMode && campaignMode !== 'creator') {
-                        setCampaignMode('creator');
-                      }
-                      setLightingSubTab('zones');
-                      setTool('zone');
-                      setCurrentPolygonPoints([]);
-                    }}
-                    className="text-amber-400 hover:underline font-bold shrink-0 cursor-pointer"
-                  >
-                    Room Polygon Tool →
-                  </button>
-                </div>
-              </div>
-
-              {/* Exploration Memory, DM View Simulation & Door Badge Toggle */}
-              <div className="flex flex-col gap-2 pt-2 border-t border-zinc-800">
-                <span className="text-[10px] uppercase font-bold font-mono text-zinc-400">View & Simulation Modes</span>
-                {setVisionConfig && (
-                  <>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <button
-                      id="btn-sidebar-exploration-memory"
-                      onClick={() =>
-                        setVisionConfig((prev) => ({
-                          ...prev,
-                          explorationMemory: !prev.explorationMemory
-                        }))
-                      }
-                      className={`p-2 rounded-xl text-[10px] font-mono border text-left transition-all flex flex-col gap-0.5 ${
-                        visionConfig.explorationMemory
-                          ? 'bg-blue-500/20 border-blue-500/50 text-blue-300 font-bold'
-                          : 'bg-zinc-850 border-zinc-750 text-zinc-400'
-                      }`}
-                      title="Exploration memory reveals explored areas in dim silhouette"
-                    >
-                      <span className="text-zinc-500 text-[9px]">EXPLORATION:</span>
-                      <span>Memory: {visionConfig.explorationMemory ? 'ON' : 'OFF'}</span>
-                    </button>
-
-                    <button
-                      id="btn-sidebar-dm-los"
-                      onClick={() =>
-                        setVisionConfig((prev) => ({
-                          ...prev,
-                          dmPreviewMode: !prev.dmPreviewMode
-                        }))
-                      }
-                      className={`p-2 rounded-xl text-[10px] font-mono border text-left transition-all flex flex-col gap-0.5 ${
-                        visionConfig.dmPreviewMode
-                          ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 font-bold'
-                          : 'bg-zinc-850 border-zinc-750 text-zinc-400'
-                      }`}
-                      title="Preview field of view exactly as players experience it"
-                    >
-                      <span className="text-zinc-500 text-[9px]">LOS MODE:</span>
-                      <span>{visionConfig.dmPreviewMode ? 'Player LOS' : 'DM Oversight'}</span>
-                    </button>
-                  </div>
-
-                  <div className="flex items-center justify-between px-2.5 py-1.5 bg-zinc-900/60 rounded-xl border border-zinc-800 text-[10px] font-mono">
-                    <span className="text-zinc-400 flex items-center gap-1.5">
-                      <DoorClosed className="w-3 h-3 text-amber-400 shrink-0" />
-                      <span>Door "Door" Badges</span>
-                    </span>
-                    <button
-                      id="btn-toggle-door-badge-labels"
-                      type="button"
-                      onClick={() =>
-                        setVisionConfig((prev) => ({
-                          ...prev,
-                          showDoorBadges: !prev.showDoorBadges
-                        }))
-                      }
-                      className={`px-2 py-0.5 rounded text-[9px] font-bold border transition-all cursor-pointer ${
-                        visionConfig.showDoorBadges
-                          ? 'bg-amber-500/20 border-amber-500/50 text-amber-300'
-                          : 'bg-zinc-800 border-zinc-700 text-zinc-500 hover:text-zinc-300'
-                      }`}
-                      title="Toggle the descriptive 'DOOR' / status circles on drawn doors (defaults to off)"
-                    >
-                      {visionConfig.showDoorBadges ? 'SHOW' : 'HIDE'}
-                    </button>
-                  </div>
-                  </>
-                )}
-
-                {/* Opacity Sliders */}
-                {setVisionConfig && (
-                  <div className="flex flex-col gap-2 bg-zinc-950/60 p-2.5 rounded-xl border border-zinc-800">
-                    <div className="flex flex-col gap-1">
-                      <div className="flex items-center justify-between text-[10px] font-mono">
-                        <span className="text-zinc-400">DARKNESS DENSITY</span>
-                        <span className="text-amber-400 font-bold">
-                          {Math.round((visionConfig.darknessOpacity ?? 1.0) * 100)}%
-                        </span>
-                      </div>
-                      <input
-                        type="range"
-                        min="0.3"
-                        max="1.0"
-                        step="0.05"
-                        value={visionConfig.darknessOpacity ?? 1.0}
-                        onChange={(e) =>
-                          setVisionConfig((prev) => ({
-                            ...prev,
-                            darknessOpacity: parseFloat(e.target.value)
-                          }))
-                        }
-                        className="w-full accent-amber-500 h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer"
-                      />
-                    </div>
-
-                    <div className="flex flex-col gap-1">
-                      <div className="flex items-center justify-between text-[10px] font-mono">
-                        <span className="text-zinc-400">EXPLORED MEMORY FADE</span>
-                        <span className="text-blue-400 font-bold">
-                          {Math.round((visionConfig.dimVisionOpacity ?? 0.5) * 100)}%
-                        </span>
-                      </div>
-                      <input
-                        type="range"
-                        min="0.1"
-                        max="0.9"
-                        step="0.05"
-                        value={visionConfig.dimVisionOpacity ?? 0.5}
-                        onChange={(e) =>
-                          setVisionConfig((prev) => ({
-                            ...prev,
-                            dimVisionOpacity: parseFloat(e.target.value)
-                          }))
-                        }
-                        className="w-full accent-blue-500 h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Selected Token Vision Quick Settings (Strictly Hidden for Monster tokens) */}
-              {(() => {
-                const selToken = tokens.find((t) => selectedTokenIds.includes(t.id));
-                if (
-                  !selToken ||
-                  !onUpdateTokenVision ||
-                  isMonsterToken(selToken) ||
-                  selToken.isMonster === true ||
-                  selToken.category === 'monster' ||
-                  selToken.isPlayer === false
-                ) return null;
-                return (
-                  <div className="flex flex-col gap-2 pt-2 border-t border-zinc-800">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] uppercase font-bold font-mono text-zinc-400">Token Vision: {selToken.name}</span>
-                      <span className="text-[10px] font-mono text-amber-400 font-bold">{selToken.visionRadius || 60}ft</span>
-                    </div>
-                    <div className="grid grid-cols-4 gap-1">
-                      {[30, 60, 90, 120].map((ft) => (
-                        <button
-                          key={ft}
-                          onClick={() => onUpdateTokenVision(selToken.id, { visionRadius: ft })}
-                          className={`py-1 rounded text-[9px] font-mono border ${
-                            (selToken.visionRadius || 60) === ft
-                              ? 'bg-amber-500/30 border-amber-400 text-amber-300 font-bold'
-                              : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-zinc-200'
-                          }`}
-                        >
-                          {ft}ft
-                        </button>
-                      ))}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <span className="text-[9px] font-mono text-zinc-500">Angle:</span>
-                      {[360, 90, 60].map((deg) => (
-                        <button
-                          key={deg}
-                          onClick={() => onUpdateTokenVision(selToken.id, { visionAngle: deg })}
-                          className={`flex-1 py-0.5 rounded text-[9px] font-mono border ${
-                            (selToken.visionAngle ?? 360) === deg
-                              ? 'bg-blue-500/30 border-blue-400 text-blue-300 font-bold'
-                              : 'bg-zinc-800 border-zinc-700 text-zinc-400'
-                          }`}
-                        >
-                          {deg === 360 ? '360°' : `${deg}° Cone`}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Wall Management & Clear Walls Button */}
-              <div className="flex flex-col gap-2 pt-2 border-t border-zinc-800">
-                <div className="flex items-center justify-between text-[10px] font-mono text-zinc-400">
-                  <span className="font-bold text-zinc-300">{walls.length} Total Wall Sections</span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => uvttFileInputRef.current?.click()}
-                      className="text-purple-400 hover:text-purple-300 flex items-center gap-1 hover:underline transition-all cursor-pointer"
-                      title="Import walls, doors & lights from a Universal VTT (.dd2vtt) file"
-                    >
-                      <FileCode2 className="w-3 h-3" /> Import .dd2vtt
-                    </button>
-                    {walls.length > 0 && (
-                      <button
-                        onClick={() => setShowWallSectionsList(!showWallSectionsList)}
-                        className="text-blue-400 hover:text-blue-300 underline cursor-pointer"
-                      >
-                        {showWallSectionsList ? 'Hide List' : 'Review Sections'}
-                      </button>
-                    )}
-                    {onGeneratePresetRoom && (
-                      <button
-                        id="btn-sidebar-preset-room"
-                        onClick={onGeneratePresetRoom}
-                        className="text-amber-400 hover:text-amber-300 flex items-center gap-1 hover:underline transition-all"
-                      >
-                        <Plus className="w-3 h-3" /> Preset Room
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Individual Wall Sections List */}
-                {showWallSectionsList && walls.length > 0 && (
-                  <div className="flex flex-col gap-1 p-2 bg-zinc-900/90 rounded-xl border border-zinc-800 max-h-48 overflow-y-auto">
-                    <div className="text-[9px] font-mono text-zinc-500 uppercase tracking-wider mb-1 flex items-center justify-between">
-                      <span>Click to select • Trash to remove</span>
-                      <span>{walls.length} sections</span>
-                    </div>
-                    {walls.map((w, idx) => {
-                      const isSel = selectedWallId === w.id;
-                      const len = Math.round(Math.hypot(w.p2.x - w.p1.x, w.p2.y - w.p1.y) / 5);
-                      return (
-                        <div
-                          key={w.id}
-                          onClick={() => setSelectedWallId?.(isSel ? null : w.id)}
-                          className={`flex items-center justify-between p-1.5 rounded-lg text-[10px] font-mono cursor-pointer transition-all border ${
-                            isSel
-                              ? 'bg-pink-950/40 border-pink-500/60 text-pink-200'
-                              : 'bg-zinc-850 hover:bg-zinc-800 border-zinc-750 text-zinc-300'
-                          }`}
-                        >
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-zinc-500 font-bold">#{idx + 1}</span>
-                            <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${
-                              w.wallType === 'door'
-                                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                                : w.wallType === 'secret_door'
-                                ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-                                : w.wallType === 'window'
-                                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
-                                : 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
-                            }`}>
-                              {w.wallType === 'secret_door' ? 'secret' : (w.wallType || 'wall')}
-                            </span>
-                            <span className="text-zinc-400 text-[9px]">~{len}ft</span>
-                          </div>
-
-                          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                            {onSplitWall && (
-                              <button
-                                onClick={() => onSplitWall(w.id)}
-                                className="p-1 rounded hover:bg-amber-500/20 text-zinc-400 hover:text-amber-300 transition-colors"
-                                title="Split this section into two"
-                              >
-                                <Scissors className="w-3 h-3" />
-                              </button>
-                            )}
-                            <button
-                              onClick={() => {
-                                if (onDeleteWall) onDeleteWall(w.id);
-                                else if (setWalls) setWalls(prev => prev.filter(item => item.id !== w.id));
-                                if (selectedWallId === w.id) setSelectedWallId?.(null);
-                              }}
-                              className="p-1 rounded hover:bg-red-500/20 text-zinc-400 hover:text-red-400 transition-colors"
-                              title="Delete only this wall section"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          </div>
+                    {/* Wall Sections List */}
+                    {showWallSectionsList && walls.length > 0 && (
+                      <div className="flex flex-col gap-1 p-2 bg-zinc-900/90 rounded-xl border border-zinc-800 max-h-40 overflow-y-auto sidebar-scrollbar">
+                        <div className="text-[9px] font-mono text-zinc-500 uppercase tracking-wider mb-1 flex items-center justify-between">
+                          <span>Click to select • Trash to delete</span>
+                          <span>{walls.length} sections</span>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
+                        {walls.map((w, idx) => {
+                          const isSel = selectedWallId === w.id;
+                          const len = Math.round(Math.hypot(w.p2.x - w.p1.x, w.p2.y - w.p1.y) / 5);
+                          return (
+                            <div
+                              key={w.id}
+                              onClick={() => setSelectedWallId?.(isSel ? null : w.id)}
+                              className={`flex items-center justify-between p-1.5 rounded-lg border text-[10px] font-mono transition-all cursor-pointer ${
+                                isSel
+                                  ? 'bg-amber-500/20 border-amber-500 text-amber-300'
+                                  : 'bg-zinc-800/60 border-zinc-700/50 text-zinc-300 hover:bg-zinc-800'
+                              }`}
+                            >
+                              <div className="flex items-center gap-1.5 truncate">
+                                <span className="text-zinc-500">#{idx + 1}</span>
+                                <span className="capitalize font-bold">{w.wallType === 'secret_door' ? 'Secret Door' : (w.wallType || 'Solid')}</span>
+                                <span className="text-[9px] text-zinc-500">({len}ft)</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (onDeleteWall) onDeleteWall(w.id);
+                                  else if (setWalls) setWalls(prev => prev.filter(x => x.id !== w.id));
+                                  if (selectedWallId === w.id) setSelectedWallId?.(null);
+                                }}
+                                className="p-1 hover:text-red-400 text-zinc-500 transition-colors cursor-pointer"
+                                title="Delete Section"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
 
-                {/* Quick Switch to Erase Section */}
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => {
-                      if (setCampaignMode && campaignMode !== 'creator') setCampaignMode('creator');
-                      setTool(tool === 'erase_wall' ? 'select' : 'erase_wall');
-                    }}
-                    className={`flex-1 py-1.5 px-2 rounded-xl text-[10px] font-mono font-bold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
-                      tool === 'erase_wall'
-                        ? 'bg-red-600 text-white border-red-400 shadow'
-                        : 'bg-zinc-800 hover:bg-red-950/30 border-zinc-700 text-zinc-300 hover:text-red-300'
-                    }`}
-                  >
-                    <Eraser className="w-3.5 h-3.5 text-red-400" />
-                    <span>{tool === 'erase_wall' ? 'Erase Tool Active' : 'Remove Wall Section Tool'}</span>
-                  </button>
-                </div>
-
-                {/* Foolproof Clear Walls Button */}
-                {confirmClearWalls ? (
-                  <div className="flex flex-col gap-1.5 p-2 bg-red-950/70 border border-red-500/50 rounded-xl shadow-lg">
-                    <div className="flex items-center justify-between text-[11px] font-mono text-red-200">
-                      <span>Clear all {walls.length} walls & doors?</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
+                    {/* Clear Walls Button */}
+                    {confirmClearWalls ? (
+                      <div className="flex flex-col gap-1.5 p-2 bg-red-950/70 border border-red-500/50 rounded-xl shadow-lg">
+                        <div className="flex items-center justify-between text-[11px] font-mono text-red-200">
+                          <span>Clear all {walls.length} walls & doors?</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            id="btn-sidebar-confirm-clear-walls"
+                            onClick={() => {
+                              if (onClearWalls) {
+                                onClearWalls();
+                              } else if (setWalls) {
+                                setWalls([]);
+                                setSelectedWallId?.(null);
+                              }
+                              setConfirmClearWalls(false);
+                            }}
+                            className="flex-1 py-1 px-2 rounded-lg bg-red-600 hover:bg-red-500 text-white font-mono text-[10px] font-bold transition-all shadow cursor-pointer"
+                          >
+                            Yes, Clear All
+                          </button>
+                          <button
+                            id="btn-sidebar-cancel-clear-walls"
+                            onClick={() => setConfirmClearWalls(false)}
+                            className="py-1 px-2.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-mono text-[10px] transition-all cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
                       <button
-                        id="btn-sidebar-confirm-clear-walls"
-                        onClick={() => {
-                          if (onClearWalls) {
-                            onClearWalls();
-                          } else if (setWalls) {
-                            setWalls([]);
-                            setSelectedWallId?.(null);
-                          }
-                          setConfirmClearWalls(false);
-                        }}
-                        className="flex-1 py-1 px-2 rounded-lg bg-red-600 hover:bg-red-500 text-white font-mono text-[10px] font-bold transition-all shadow"
+                        id="btn-sidebar-clear-walls"
+                        onClick={() => setConfirmClearWalls(true)}
+                        disabled={walls.length === 0}
+                        className="w-full py-1.5 px-3 rounded-xl bg-red-500/10 hover:bg-red-500/20 disabled:opacity-40 disabled:cursor-not-allowed text-red-400 hover:text-red-300 border border-red-500/30 text-xs font-mono flex items-center justify-center gap-2 transition-all cursor-pointer"
                       >
-                        Yes, Clear All
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Clear All Walls ({walls.length})
                       </button>
-                      <button
-                        id="btn-sidebar-cancel-clear-walls"
-                        onClick={() => setConfirmClearWalls(false)}
-                        className="py-1 px-2.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-mono text-[10px] transition-all"
-                      >
-                        Cancel
-                      </button>
-                    </div>
+                    )}
                   </div>
-                ) : (
-                  <button
-                    id="btn-sidebar-clear-walls"
-                    onClick={() => setConfirmClearWalls(true)}
-                    disabled={walls.length === 0}
-                    className="w-full py-2 px-3 rounded-xl bg-red-500/10 hover:bg-red-500/20 disabled:opacity-40 disabled:cursor-not-allowed text-red-400 hover:text-red-300 border border-red-500/30 text-xs font-mono flex items-center justify-center gap-2 transition-all"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    Clear All Walls ({walls.length})
-                  </button>
-                )}
-
-                {/* Helpful Canvas Tips */}
-                <div className="p-2 bg-zinc-950/60 border border-zinc-800/80 rounded-xl space-y-1 text-[10px] font-mono text-zinc-500">
-                  <div className="text-zinc-400 font-bold">Shortcuts:</div>
-                  <div>• Click canvas to place wall vertices</div>
-                  <div>• Hold Shift to chain consecutive walls</div>
-                  <div>• Click doors to open, close, or lock</div>
-                  <div>• Del/Backspace deletes selected wall</div>
                 </div>
-              </div>
-                </>
               )}
 
-              {/* SUBTAB CONTENT: FOG OF WAR & GRID */}
+              {/* ========================================================================= */}
+              {/* TAB 2: FOG OF WAR                                                         */}
+              {/* ========================================================================= */}
               {lightingSubTab === 'fog' && (
                 <div className="flex flex-col gap-3">
                   {/* Fog Master Controls */}
@@ -2503,23 +2259,14 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                     </div>
                   </div>
 
-                  {/* Eraser & Player Token Reveal Modes */}
+                  {/* Reveal Tools */}
                   <div className="flex flex-col gap-2 pt-2 border-t border-zinc-800">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] uppercase font-bold font-mono text-zinc-400">Reveal Options</span>
-                      {visionConfig?.enabled && (
-                        <span className="text-[9px] font-mono text-teal-400 font-semibold flex items-center gap-1">
-                          <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse" />
-                          Token Vision Active
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-1.5">
+                    <span className="text-[10px] uppercase font-bold font-mono text-zinc-400">Reveal Tools</span>
+                    <div className="grid grid-cols-2 gap-1.5">
                       <button
                         id="btn-reveal-brush"
                         onClick={() => setTool('reveal')}
-                        className={`py-1.5 px-2 rounded-xl text-xs font-medium transition-all border whitespace-nowrap text-center cursor-pointer ${
+                        className={`py-2 px-2 rounded-xl text-xs font-medium transition-all border whitespace-nowrap text-center cursor-pointer ${
                           tool === 'reveal'
                             ? 'bg-teal-500 text-zinc-950 font-bold border-teal-400 shadow-sm'
                             : 'bg-zinc-800/80 border-zinc-700 text-zinc-400 hover:text-zinc-200'
@@ -2531,40 +2278,14 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                       <button
                         id="btn-reveal-polygon"
                         onClick={() => { setTool('polygon_reveal'); setCurrentPolygonPoints([]); }}
-                        className={`py-1.5 px-2 rounded-xl text-xs font-medium transition-all border whitespace-nowrap text-center cursor-pointer ${
+                        className={`py-2 px-2 rounded-xl text-xs font-medium transition-all border whitespace-nowrap text-center cursor-pointer ${
                           tool === 'polygon_reveal'
                             ? 'bg-teal-500 text-zinc-950 font-bold border-teal-400 shadow-sm'
                             : 'bg-zinc-800/80 border-zinc-700 text-zinc-400 hover:text-zinc-200'
                         }`}
-                        title="Polygon Reveal: Click corners to reveal custom polygon room boundaries"
+                        title="Polygon Reveal: Click corners to reveal custom polygon boundaries"
                       >
                         Polygon Reveal
-                      </button>
-                      <button
-                        id="btn-reveal-player-token"
-                        onClick={() => {
-                          if (setVisionConfig) {
-                            setVisionConfig((prev) => ({ ...prev, enabled: !prev.enabled }));
-                          }
-                        }}
-                        className={`py-1.5 px-1.5 rounded-xl text-xs font-medium transition-all border whitespace-nowrap flex items-center justify-center gap-1 cursor-pointer ${
-                          visionConfig?.enabled
-                            ? 'bg-teal-500/25 text-teal-300 border-teal-500/60 font-bold shadow-[0_0_10px_rgba(20,184,166,0.25)]'
-                            : 'bg-zinc-800/80 border-zinc-700 text-zinc-400 hover:text-zinc-200'
-                        }`}
-                        title={visionConfig?.enabled ? "Player Token Reveal is ON: Player tokens automatically reveal fog of war via line-of-sight" : "Player Token Reveal is OFF: Player tokens do not reveal fog of war"}
-                      >
-                        <Users className="w-3.5 h-3.5 text-teal-400 shrink-0" />
-                        <span>Play Token</span>
-                        <span
-                          className={`text-[9px] px-1 py-0.2 rounded font-mono font-bold ${
-                            visionConfig?.enabled
-                              ? 'bg-teal-500 text-zinc-950'
-                              : 'bg-zinc-700 text-zinc-400'
-                          }`}
-                        >
-                          {visionConfig?.enabled ? 'ON' : 'OFF'}
-                        </span>
                       </button>
                     </div>
 
@@ -2626,49 +2347,37 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                           ? 'Player tokens automatically pierce and reveal fog of war as they move based on line-of-sight.'
                           : 'Player token fog vision is OFF. Only manual brush & polygon reveals uncover the map.'}
                       </p>
-                      {visionConfig?.enabled && setVisionConfig && (
-                        <div className="flex items-center justify-between pt-1.5 mt-0.5 border-t border-teal-500/20 text-[10px] font-mono">
-                          <span className="text-zinc-400">Exploration Memory:</span>
-                          <button
-                            id="btn-toggle-exploration-memory-fogmenu"
-                            onClick={() =>
-                              setVisionConfig((prev) => ({ ...prev, explorationMemory: !prev.explorationMemory }))
-                            }
-                            className={`px-2 py-0.5 rounded-md text-[9px] font-bold border transition-all cursor-pointer ${
-                              visionConfig.explorationMemory
-                                ? 'bg-teal-500/20 border-teal-500/40 text-teal-300'
-                                : 'bg-zinc-800 border-zinc-700 text-zinc-500'
-                            }`}
-                            title="When enabled, player tokens keep visited rooms visible in dim silhouette"
-                          >
-                            {visionConfig.explorationMemory ? 'Retain Explored' : 'Active LOS Only'}
-                          </button>
-                        </div>
-                      )}
                     </div>
                   </div>
+                </div>
+              )}
 
-                  {/* Grid Settings */}
-                  <div className="flex flex-col gap-2 pt-2 border-t border-zinc-800">
+              {/* ========================================================================= */}
+              {/* TAB 3: BATTLE GRID LAYER                                                  */}
+              {/* ========================================================================= */}
+              {lightingSubTab === 'grid' && (
+                <div className="flex flex-col gap-3">
+                  {/* Grid Visibility Toggle */}
+                  <div className="flex flex-col gap-2">
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] uppercase font-bold font-mono text-zinc-400">Battle Grid Layer</span>
                       <button
                         onClick={() => setGridVisible(!gridVisible)}
                         className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold transition-all border cursor-pointer ${
                           gridVisible
-                            ? 'bg-teal-500/20 border-teal-500/40 text-teal-300'
+                            ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300'
                             : 'bg-zinc-800 border-zinc-700 text-zinc-500'
                         }`}
                       >
-                        {gridVisible ? 'ON' : 'OFF'}
+                        {gridVisible ? 'GRID ON' : 'GRID OFF'}
                       </button>
                     </div>
 
                     {/* Opacity slider */}
                     <div className="flex flex-col gap-1 bg-zinc-950/60 p-2.5 rounded-xl border border-zinc-800">
                       <div className="flex items-center justify-between text-xs font-mono">
-                        <span className="text-zinc-400">OPACITY</span>
-                        <span className="text-teal-400 font-bold">{Math.round(gridOpacity * 100)}%</span>
+                        <span className="text-zinc-400">GRID OPACITY</span>
+                        <span className="text-cyan-400 font-bold">{Math.round(gridOpacity * 100)}%</span>
                       </div>
                       <input
                         type="range"
@@ -2677,7 +2386,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                         step="0.05"
                         value={gridOpacity}
                         onChange={(e) => setGridOpacity(parseFloat(e.target.value))}
-                        className="w-full accent-teal-500 h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer"
+                        className="w-full accent-cyan-500 h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer"
                       />
                     </div>
 
@@ -2712,7 +2421,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                                 setIsEditingGridSize(false);
                               }
                             }}
-                            className="w-16 px-1 py-0.5 bg-zinc-900 border border-teal-500/60 rounded text-teal-300 font-bold text-xs text-right outline-none"
+                            className="w-16 px-1 py-0.5 bg-zinc-900 border border-cyan-500/60 rounded text-cyan-300 font-bold text-xs text-right outline-none"
                           />
                         ) : (
                           <span
@@ -2720,8 +2429,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                               setCustomGridSizeInput(String(gridSize));
                               setIsEditingGridSize(true);
                             }}
-                            className="text-teal-400 font-bold cursor-pointer hover:underline hover:text-teal-300 transition-colors"
-                            title="Click to enter custom square size"
+                            className="text-cyan-400 font-bold cursor-pointer hover:underline hover:text-cyan-300 transition-colors"
+                            title="Click to enter custom square size in pixels"
                           >
                             {gridSize}px
                           </span>
@@ -2742,7 +2451,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                           step="0.5"
                           value={gridSize}
                           onChange={(e) => setGridSize(parseFloat(e.target.value))}
-                          className="w-full accent-teal-500 h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer"
+                          className="w-full accent-cyan-500 h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer"
                         />
                         <button
                           onClick={() => setGridSize(Math.min(500, Math.round((gridSize + 0.5) * 10) / 10))}
@@ -2780,7 +2489,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                         >
                           <ChevronLeft className="w-4 h-4" />
                         </button>
-                        <div className="h-7 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-[10px] font-mono text-teal-400">
+                        <div className="h-7 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-[10px] font-mono text-cyan-400">
                           {gridOffsetX},{gridOffsetY}
                         </div>
                         <button
@@ -2803,59 +2512,11 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                 </div>
               )}
 
-              {/* SUBTAB CONTENT: DRAW ROOM ZONES */}
+              {/* ========================================================================= */}
+              {/* TAB 4: ROOM POLYGONS & BRIEFINGS                                          */}
+              {/* ========================================================================= */}
               {lightingSubTab === 'zones' && (
                 <div className="flex flex-col gap-3">
-                  {/* Campaign Mode Switcher */}
-                  <div className="flex flex-col gap-1.5 bg-zinc-950/60 p-2.5 rounded-xl border border-zinc-800">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] uppercase font-bold font-mono text-zinc-400">Campaign Mode</span>
-                      <span
-                        className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded ${
-                          campaignMode === 'creator'
-                            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                            : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                        }`}
-                      >
-                        {campaignMode === 'creator' ? 'CREATOR MODE' : 'RUN CAMPAIGN'}
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      <button
-                        id="btn-zones-mode-run"
-                        onClick={() => {
-                          if (setCampaignMode) setCampaignMode('run');
-                          if (tool === 'zone' || tool === 'polygon_zone' || tool === 'hotspot') setTool('select');
-                        }}
-                        className={`py-1.5 px-2 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-1.5 cursor-pointer ${
-                          campaignMode === 'run'
-                            ? 'bg-emerald-600 text-white border-emerald-400 shadow-md shadow-emerald-600/30'
-                            : 'bg-zinc-800 hover:bg-zinc-750 border-zinc-700 text-zinc-300 hover:text-white'
-                        }`}
-                        title="Run Mode: Room outlines are hidden from view. Click room pins to open read-aloud briefings."
-                      >
-                        <Play className="w-3.5 h-3.5 text-emerald-300" />
-                        <span>Run Mode</span>
-                      </button>
-
-                      <button
-                        id="btn-zones-mode-creator"
-                        onClick={() => {
-                          if (setCampaignMode) setCampaignMode('creator');
-                        }}
-                        className={`py-1.5 px-2 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-1.5 cursor-pointer ${
-                          campaignMode === 'creator'
-                            ? 'bg-amber-500 text-zinc-950 border-amber-400 shadow-md shadow-amber-500/30'
-                            : 'bg-zinc-800 hover:bg-zinc-750 border-zinc-700 text-zinc-300 hover:text-white'
-                        }`}
-                        title="Creator Mode: Draw polygon room zones and place numbered room badges."
-                      >
-                        <Layers className="w-3.5 h-3.5" />
-                        <span>Creator Mode</span>
-                      </button>
-                    </div>
-                  </div>
-
                   {/* Room Zone Tools */}
                   <div className="flex flex-col gap-2">
                     <span className="text-[10px] uppercase font-bold font-mono text-zinc-400">Room Tools</span>
@@ -2943,27 +2604,25 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                         </span>
                       </div>
                     ) : (
-                      <div className="max-h-[260px] overflow-y-auto flex flex-col gap-1.5 pr-1">
+                      <div className="max-h-[240px] overflow-y-auto flex flex-col gap-1.5 pr-1 sidebar-scrollbar">
                         {roomAnnotations.map((anno, idx) => (
                           <div
                             key={anno.id || idx}
                             onClick={() => onOpenZoneDetails?.(anno)}
-                            onMouseEnter={() => onHoverZone?.(anno.id)}
-                            onMouseLeave={() => onHoverZone?.(null)}
-                            className="p-2 rounded-xl bg-zinc-900/80 hover:bg-zinc-800/90 border border-zinc-800 hover:border-amber-500/40 transition-all flex items-center justify-between gap-2 cursor-pointer group"
+                            className="p-2.5 rounded-xl bg-zinc-950/60 border border-zinc-800 hover:border-amber-500/40 transition-all flex items-center justify-between gap-2 cursor-pointer group"
                           >
                             <div className="flex items-center gap-2 min-w-0">
-                              <span className="px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[9px] font-mono font-bold shrink-0">
-                                #{anno.roomNumber || idx + 1}
+                              <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold font-mono flex items-center justify-center shrink-0">
+                                {anno.badgeNumber || idx + 1}
                               </span>
-                              <div className="flex flex-col min-w-0">
-                                <span className="text-xs font-bold text-zinc-200 group-hover:text-amber-300 truncate">
-                                  {anno.roomName || anno.label || `Room ${anno.roomNumber || idx + 1}`}
+                              <div className="min-w-0">
+                                <span className="text-xs font-bold text-zinc-200 group-hover:text-amber-200 truncate block">
+                                  {anno.title || `Room ${anno.badgeNumber || idx + 1}`}
                                 </span>
-                                {(anno.boxedText || anno.dmNotes) && (
-                                  <span className="text-[9px] text-zinc-500 truncate">
-                                    {anno.boxedText || anno.dmNotes}
-                                  </span>
+                                {anno.readAloudText && (
+                                  <p className="text-[9.5px] text-zinc-500 truncate">
+                                    {anno.readAloudText}
+                                  </p>
                                 )}
                               </div>
                             </div>
@@ -2971,31 +2630,22 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                onOpenZoneDetails?.(anno);
+                                onDeleteZoneAnnotation?.(anno.id);
                               }}
-                              className="p-1 rounded-md text-zinc-500 group-hover:text-amber-400 shrink-0 cursor-pointer"
-                              title="Open Room Briefing"
+                              className="text-zinc-500 hover:text-red-400 p-1 rounded transition-colors cursor-pointer"
+                              title="Delete Room Annotation"
                             >
-                              <BookOpen className="w-3.5 h-3.5" />
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         ))}
                       </div>
                     )}
                   </div>
-
-                  {/* Room Tips */}
-                  <div className="p-2 bg-zinc-950/60 border border-zinc-800/80 rounded-xl space-y-1 text-[10px] font-mono text-zinc-500">
-                    <div className="text-zinc-400 font-bold">Room Interactions:</div>
-                    <div>• Click room badge to open briefing & boxed text</div>
-                    <div>• Right-click room polygon on map to view notes</div>
-                    <div>• Hover badge to highlight room polygon boundary</div>
-                  </div>
                 </div>
               )}
             </div>
           )}
-
           {activeGroup === 'combat' && (
             <div className="p-3.5 flex flex-col gap-3 min-w-[260px]">
               {/* Header */}
