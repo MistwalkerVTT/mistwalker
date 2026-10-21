@@ -64,7 +64,8 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
   isCharacterPrivate = false,
   onOpenRestModal,
   onRefreshDdb,
-  isSyncingDdb = false
+  isSyncingDdb = false,
+  onTargetSelf
 }) => {
   const currentTargetingAction = activeTargetingAction ?? selectedAction ?? (
     activeEquippedAsset ? {
@@ -461,6 +462,19 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
               <span className="px-2 py-0.5 rounded bg-zinc-900 text-zinc-300 text-[10px] border border-zinc-700 shrink-0">
                 {currentTargetingAction.rangeFt} ft.
               </span>
+            )}
+            {claimedToken && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onTargetSelf) onTargetSelf();
+                }}
+                className="px-2 py-0.5 rounded bg-emerald-950/90 hover:bg-emerald-900 text-emerald-300 hover:text-white text-[10px] border border-emerald-500/50 hover:border-emerald-400 shrink-0 font-bold transition-all cursor-pointer active:scale-95 shadow-sm flex items-center gap-1"
+                title={`Cast on self (${claimedToken.name || 'Hero'})`}
+              >
+                <span>Target Self</span>
+              </button>
             )}
           </div>
           <div className="flex items-center gap-1.5 shrink-0">

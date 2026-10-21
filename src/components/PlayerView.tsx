@@ -595,7 +595,7 @@ const PlayerToken = React.memo(({
       x={token.x}
       y={token.y}
       name="token"
-      draggable={!isCondition && canDrag}
+      draggable={!isTargetingActive && !isCondition && canDrag}
       dragDistance={10}
       onMouseEnter={(e: any) => {
         if (canDrag && !isCurrentlyDraggingRef.current) {
@@ -3020,8 +3020,12 @@ export default function PlayerView() {
       matchedAsset = findJb2aAsset(action.name);
     }
 
-    // Immediate execution for Self-Targeted Actions / Bonus Actions (e.g., Rage, Large Form, Second Wind, Dash, Dodge, Disengage)
-    if (action.isSelfAction && claimedToken) {
+    // Immediate execution for pure physical combat maneuvers (e.g., Rage, Dash, Dodge, Disengage)
+    // Spells (like Shield, Cure Wounds, Healing Word, Bless, etc.) enter active targeting so the player can aim/select onto tokens or self!
+    const lowerName = action.name.toLowerCase();
+    const isManeuver = ['dash', 'dodge', 'disengage', 'hide', 'rage', 'action surge', 'second wind'].some(k => lowerName.includes(k));
+    const isSpellOrTargeted = action.category === 'spells' || action.subCategory === 'spell' || action.isHeal || lowerName.includes('shield');
+    if (action.isSelfAction && isManeuver && !isSpellOrTargeted && claimedToken) {
       const tokenRadius = ((claimedToken.size || 1) * gridSize) / 2;
       const casterCenter = { x: claimedToken.x + tokenRadius, y: claimedToken.y + tokenRadius };
 
@@ -3205,55 +3209,77 @@ export default function PlayerView() {
     const distPx = Math.hypot(targetCenter.x - casterCenter.x, targetCenter.y - casterCenter.y);
     const distFt = Math.round((distPx / gridSize) * 5);
 
+    // Range checks
+    const isSelfTarget = targetToken.id === caster.id;
+    if (action.rangeFt === 0 && !isSelfTarget && action.isSelfAction) {
+      toast.warning(`${action.name} only targets yourself!`);
+      return;
+    }
+
     if (action.rangeFt && action.rangeFt > 0 && distFt > action.rangeFt + 2) {
       toast.error(`Out of range! Target is ${distFt} ft away (Max range: ${action.rangeFt} ft).`);
       return;
     }
 
     // 2. Play JB2A Spell Animation & Sound
-    if (activeEquippedAsset) {
-      castSpellAt(casterCenter, targetCenter);
-    } else if (action.jb2aAssetId) {
-      const asset = JB2A_REGISTRY.find(a => a.id === action.jb2aAssetId);
-      if (asset) {
-        const isTrajectory = (asset.paradigm === 'projectile' || asset.paradigm === 'ray') || Boolean(asset.projectileWebm);
-        const newEffect: VttEffectInstance = {
-          id: `eff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-          name: asset.name,
-          label: asset.label,
-          assetKey: asset.id,
-          videoUrl: (isTrajectory && asset.projectileWebm) ? asset.projectileWebm : asset.webm,
-          thumbUrl: asset.thumb,
-          paradigm: isTrajectory ? 'projectile' : asset.paradigm,
-          x: isTrajectory ? casterCenter.x : targetCenter.x,
-          y: isTrajectory ? casterCenter.y : targetCenter.y,
-          originX: casterCenter.x,
-          originY: casterCenter.y,
-          targetX: targetCenter.x,
-          targetY: targetCenter.y,
-          sizeFt: asset.defaultSizeFt,
-          rotation: Math.atan2(targetCenter.y - casterCenter.y, targetCenter.x - casterCenter.x) * (180 / Math.PI),
-          opacity: 1.0,
-          blendMode: asset.blendMode,
-          isPersistent: asset.isPersistent,
-          loop: asset.isPersistent,
-          castTime: Date.now(),
-          durationMs: isTrajectory ? 2500 : 5000,
-          soundKey: asset.soundKey,
-          color: asset.color
-        };
-        setEffects(prev => [...prev, newEffect]);
-        if (asset.soundKey) soundCatalog.play(asset.soundKey);
-        if (socketRef.current?.connected) {
-          socketRef.current.emit('EFFECT_SPAWN', newEffect);
-        }
+    const asset = activeEquippedAsset || (action.jb2aAssetId ? JB2A_REGISTRY.find(a => a.id === action.jb2aAssetId) : undefined) || findJb2aAsset(action.name);
+    if (asset) {
+      const isTrajectory = ((asset.paradigm === 'projectile' || asset.paradigm === 'ray') || Boolean(asset.projectileWebm)) && distPx > 25;
+      const newEffect: VttEffectInstance = {
+        id: `eff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        name: asset.name,
+        label: asset.label,
+        assetKey: asset.id,
+        videoUrl: (isTrajectory && asset.projectileWebm) ? asset.projectileWebm : asset.webm,
+        loopVideoUrl: asset.loopWebm,
+        thumbUrl: asset.thumb,
+        paradigm: isTrajectory ? 'projectile' : asset.paradigm,
+        x: isTrajectory ? casterCenter.x : targetCenter.x,
+        y: isTrajectory ? casterCenter.y : targetCenter.y,
+        originX: casterCenter.x,
+        originY: casterCenter.y,
+        targetX: targetCenter.x,
+        targetY: targetCenter.y,
+        sizeFt: asset.defaultSizeFt,
+        rotation: isTrajectory ? Math.atan2(targetCenter.y - casterCenter.y, targetCenter.x - casterCenter.x) * (180 / Math.PI) : 0,
+        opacity: 1.0,
+        blendMode: asset.blendMode,
+        isPersistent: asset.isPersistent,
+        loop: asset.isPersistent,
+        castTime: Date.now(),
+        durationMs: isTrajectory ? 2500 : 5000,
+        soundKey: asset.soundKey,
+        color: asset.color,
+        trajectory: isTrajectory ? {
+          startX: casterCenter.x,
+          startY: casterCenter.y,
+          endX: targetCenter.x,
+          endY: targetCenter.y,
+          speedPxSec: 1400,
+          burstOnImpact: true,
+          burstVideoUrl: asset.burstWebm || asset.webm,
+          burstSoundKey: asset.soundKey
+        } : undefined
+      };
+      setEffects(prev => [...prev, newEffect]);
+      if (asset.soundKey) soundCatalog.play(asset.soundKey);
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('EFFECT_SPAWN', newEffect);
       }
     }
 
-    // 3. Roll 3D Physics Dice if action has damageFormula or hitBonus
+    // 3. Roll 3D Physics Dice if action has damageFormula or hitBonus or isHeal
+    let formula = action.damageFormula;
+    if (!formula && action.isHeal) {
+      const lower = action.name.toLowerCase();
+      if (lower.includes('healing word')) formula = '1d4 + 3';
+      else if (lower.includes('cure wounds')) formula = '1d8 + 3';
+      else formula = '1d8 + 2';
+    }
+
     let calculatedDeltaHp = 0;
-    if (action.damageFormula) {
-      const rollParts = action.damageFormula.match(/(\d+)d(\d+)(?:\s*([+-])\s*(\d+))?/i);
+    if (formula) {
+      const rollParts = formula.match(/(\d+)d(\d+)(?:\s*([+-])\s*(\d+))?/i);
       let rolledTotal = 0;
       const diceResults: Array<{ sides: number; result: number; type: string }> = [];
       if (rollParts) {
@@ -3274,29 +3300,35 @@ export default function PlayerView() {
 
       calculatedDeltaHp = action.isHeal ? rolledTotal : -rolledTotal;
 
-      // Trigger 3D dice physics
+      const diceEvent: DdbDiceRollEvent = {
+        id: `roll-${Date.now()}`,
+        characterId: String(hudCharacterData?.id || caster.id || ''),
+        characterName: caster.name || 'Hero',
+        avatarUrl: hudCharacterData?.avatarUrl || caster.avatarUrl || caster.url,
+        action: `${action.name} (${action.isHeal ? 'Healing' : 'Damage'})`,
+        rollType: action.isHeal ? 'heal' : 'damage',
+        formula,
+        diceNotation: formula,
+        dice: diceResults.length > 0 ? diceResults : [{ sides: action.isHeal ? 8 : 20, result: Math.abs(calculatedDeltaHp), type: action.isHeal ? 'd8' : 'd20' }],
+        total: Math.abs(calculatedDeltaHp),
+        isCritical: false,
+        isFumble: false,
+        theme: selectedDicePreset.id,
+        themeColor: action.isHeal ? '#10b981' : selectedDicePreset.theme.primaryColor,
+        timestamp: Date.now(),
+        source: 'player'
+      };
+
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', diceEvent);
+      }
       if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
-        (window as any).__mistwalkerRoll3d({
-          id: `roll-${Date.now()}`,
-          characterName: caster.name || 'Hero',
-          action: `${action.name} (${action.isHeal ? 'Healing' : 'Damage'})`,
-          rollType: action.isHeal ? 'heal' : 'damage',
-          formula: action.damageFormula,
-          diceNotation: action.damageFormula,
-          dice: diceResults.length > 0 ? diceResults : [{ sides: 20, result: 15, type: 'd20' }],
-          total: Math.abs(calculatedDeltaHp),
-          isCritical: false,
-          isFumble: false,
-          theme: selectedDicePreset.id,
-          themeColor: selectedDicePreset.theme.primaryColor,
-          timestamp: Date.now(),
-          source: 'player'
-        });
+        (window as any).__mistwalkerRoll3d(diceEvent);
       }
     }
 
     // 4. Emit REQUEST_TOKEN_MUTATION
-    const isTargetOtherPlayer = targetToken.isPlayer && targetToken.id !== caster.id;
+    const isTargetOtherPlayer = targetToken.isPlayer && !isSelfTarget && !action.isHeal;
     const payload = {
       sourceTokenId: caster.id,
       sourceName: caster.name || 'Hero',
@@ -3314,8 +3346,8 @@ export default function PlayerView() {
 
     toast.success(`${action.name} executed on ${targetToken.name}!`, {
       description: calculatedDeltaHp !== 0
-        ? `${calculatedDeltaHp > 0 ? '+' : ''}${calculatedDeltaHp} HP`
-        : 'Action delivered.'
+        ? `${calculatedDeltaHp > 0 ? `Restored +${calculatedDeltaHp} HP (${formula})` : `${calculatedDeltaHp} HP`}`
+        : (action.name.toLowerCase().includes('shield') ? 'Shield barrier active (+5 AC)' : 'Action delivered.')
     });
 
     // Reset targeting state
@@ -3323,7 +3355,7 @@ export default function PlayerView() {
     setActiveEquippedAsset(null);
     setAimOrigin(null);
     setAimCurrent(null);
-  }, [activeTargetingAction, claimedToken, gridSize, activeEquippedAsset, selectedDicePreset, castSpellAt]);
+  }, [activeTargetingAction, claimedToken, gridSize, activeEquippedAsset, selectedDicePreset, hudCharacterData]);
 
   const handleApproveMutation = useCallback(() => {
     if (!incomingMutationPrompt) return;
@@ -3362,10 +3394,34 @@ export default function PlayerView() {
       setAimCurrent(null);
       return;
     }
+
+    // If clicking on a token element, let the token's onClick / onTap handle targeting!
+    const targetName = typeof e.target?.name === 'function' ? e.target.name() : e.target?.name;
+    const isTokenElement = targetName === 'token' || Boolean(e.target?.findAncestor?.('.token')) || Boolean(e.target?.findAncestor?.('Group')?.name?.() === 'token');
+    if (isTokenElement) {
+      return;
+    }
+
     const stage = e.target.getStage();
     if (!stage) return;
     const point = getStageRelativePointerPosition(stage);
     if (!point) return;
+
+    // If aiming a creature-targeted spell / action (heal, attack, or self-only), do not drop on empty ground!
+    if (activeTargetingAction) {
+      const isCreatureTargeted = Boolean(
+        activeTargetingAction.isHeal ||
+        activeTargetingAction.hitBonus !== undefined ||
+        activeTargetingAction.rangeFt === 0 ||
+        activeTargetingAction.name.toLowerCase().includes('cure wounds') ||
+        activeTargetingAction.name.toLowerCase().includes('healing word') ||
+        activeTargetingAction.name.toLowerCase().includes('shield')
+      );
+      if (isCreatureTargeted) {
+        toast.info(`Click on a token to target ${activeTargetingAction.name}${claimedToken ? ' (or click Target Self in the dock)' : ''}.`);
+        return;
+      }
+    }
 
     // Point AoE spells (Fireball, Fog Cloud, Web, Darkness, etc.) drop immediately on click!
     if (activeEquippedAsset.paradigm === 'point' || activeEquippedAsset.shape === 'circle' || activeEquippedAsset.paradigm === 'aura') {
@@ -5630,6 +5686,11 @@ export default function PlayerView() {
             setActiveEquippedAsset(null);
             setAimOrigin(null);
             setAimCurrent(null);
+          }}
+          onTargetSelf={() => {
+            if (claimedToken) {
+              handleTargetToken(claimedToken);
+            }
           }}
           isMyTurn={Boolean(visibleCombatants.find(c => c.isClaimed)?.isCurrentTurn)}
           onEndTurn={() => {
