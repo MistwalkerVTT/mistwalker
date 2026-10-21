@@ -354,6 +354,98 @@ export async function fetchDdbCharacterData(charId: string): Promise<Partial<Ddb
   }
 }
 
+export interface DdbCharacterPrivacyResult {
+  characterId: string;
+  isPrivate: boolean;
+  statusCode: number;
+  name?: string;
+  avatarUrl?: string;
+  builderPreferencesUrl: string;
+  characterSheetUrl: string;
+}
+
+// Check if a character sheet on D&D Beyond is public or private
+export async function checkDdbCharacterPrivacy(charId: string, forceRefresh = false): Promise<DdbCharacterPrivacyResult> {
+  const cleanId = String(charId).replace(/^char_ddb_/, '').trim();
+  const builderPreferencesUrl = `https://www.dndbeyond.com/characters/${cleanId}/builder#/home/basic`;
+  const characterSheetUrl = `https://www.dndbeyond.com/characters/${cleanId}`;
+
+  if (!cleanId) {
+    return {
+      characterId: charId,
+      isPrivate: true,
+      statusCode: 400,
+      builderPreferencesUrl,
+      characterSheetUrl
+    };
+  }
+
+  if (forceRefresh) {
+    rawDdbCharacterCache.delete(cleanId);
+  }
+
+  try {
+    const res = await fetch(`https://character-service.dndbeyond.com/character/v5/character/${cleanId}`);
+    if (res.status === 403) {
+      return {
+        characterId: cleanId,
+        isPrivate: true,
+        statusCode: 403,
+        builderPreferencesUrl,
+        characterSheetUrl
+      };
+    }
+
+    if (res.ok) {
+      const json = await res.json();
+      const charData = json?.data;
+      let avatarUrl = charData?.decorations?.avatarUrl || charData?.avatarUrl;
+      if (avatarUrl && avatarUrl.includes('/thumbnails/')) {
+        avatarUrl = avatarUrl.replace(/\/thumbnails\/([0-9]+)\/([0-9]+)\/[0-9]+\/[0-9]+\//, '/thumbnails/$1/$2/1000/1000/');
+      }
+
+      try {
+        const daemon = DdbHpSyncDaemon.getInstance();
+        const cached = daemon.getCachedCharacters().find(c => c.id === cleanId);
+        if (cached) {
+          cached.isPrivate = false;
+          if (charData?.name) cached.name = charData.name;
+          if (avatarUrl) cached.avatarUrl = avatarUrl;
+        }
+      } catch {
+        // Daemon cache update is best-effort
+      }
+
+      return {
+        characterId: cleanId,
+        isPrivate: false,
+        statusCode: 200,
+        name: charData?.name,
+        avatarUrl,
+        builderPreferencesUrl,
+        characterSheetUrl
+      };
+    }
+
+    return {
+      characterId: cleanId,
+      isPrivate: res.status !== 200,
+      statusCode: res.status,
+      builderPreferencesUrl,
+      characterSheetUrl
+    };
+  } catch (err: any) {
+    console.warn(`[checkDdbCharacterPrivacy] Error checking character ${cleanId}:`, err);
+    return {
+      characterId: cleanId,
+      isPrivate: true,
+      statusCode: 500,
+      builderPreferencesUrl,
+      characterSheetUrl
+    };
+  }
+}
+
 // Fetch all characters in a D&D Beyond campaign
 export async function fetchDdbCampaignCharacters(campaignId: string): Promise<{ campaignTitle: string; characters: DdbCampaignCharacter[] }> {
   const headers = getDdbHeaders();
@@ -1873,6 +1965,10 @@ export class DdbHpSyncDaemon {
     } finally {
       this.isPolling = false;
     }
+  }
+
+  public getCachedCharacters(): DdbCampaignCharacter[] {
+    return this.cachedCharacters;
   }
 
   public getStatus() {

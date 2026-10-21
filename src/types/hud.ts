@@ -63,6 +63,8 @@ export interface HudCharacterData {
   id: string;
   ddbCharacterId?: string;
   isLiveSynced?: boolean;
+  isPrivate?: boolean;
+  builderPreferencesUrl?: string;
   name: string;
   avatarUrl: string;
   race: string;

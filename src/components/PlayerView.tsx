@@ -4858,6 +4858,8 @@ export default function PlayerView() {
                 key={token.id}
                 token={token}
                 gridSize={gridSize}
+                gridOffsetX={gridOffsetX}
+                gridOffsetY={gridOffsetY}
                 stageScale={stageScale}
                 characters={compendiumCharacters}
                 combatants={combatState.combatants}
@@ -4873,6 +4875,17 @@ export default function PlayerView() {
               />
           ))}
         </Layer>
+
+        {/* Real-time Token Drag Ruler & Ghost Token HUD Layer */}
+        {tokenDragState && (
+          <Layer listening={false}>
+            <TokenDragRuler
+              dragState={tokenDragState}
+              gridSize={gridSize}
+              stageScale={stageScale}
+            />
+          </Layer>
+        )}
 
         {/* Dynamic JB2A Reticle Layer (Targeting Preview while Aiming) */}
         {activeEquippedAsset && aimOrigin && aimCurrent && (

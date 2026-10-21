@@ -18,6 +18,7 @@ import {
   fetchDdbCharacterData,
   fetchRawDdbCharacter,
   normalizeDdbCharacterToHud,
+  checkDdbCharacterPrivacy,
   DdbHpSyncDaemon
 } from './ddbCampaignService';
 import { DdbGameLogDaemon } from './ddbGameLogDaemon';
@@ -285,6 +286,19 @@ ddbRouter.get('/characters/:id', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/ddb/characters/:id/privacy - Check character sheet privacy & return quicklink
+ddbRouter.get('/characters/:id/privacy', async (req: Request, res: Response) => {
+  try {
+    const charId = String(req.params.id).replace(/^char_ddb_/, '').trim();
+    const forceRefresh = req.query.refresh === 'true' || req.query.refresh === '1';
+    const result = await checkDdbCharacterPrivacy(charId, forceRefresh);
+    res.json(result);
+  } catch (err: any) {
+    console.error(`[DdbRoutes] Error checking privacy for character ${req.params.id}:`, err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/ddb/characters/:id/hud-data - Fetch normalized D&D Beyond tactical HUD payload
 ddbRouter.get('/characters/:id/hud-data', async (req: Request, res: Response) => {
   try {
@@ -292,7 +306,15 @@ ddbRouter.get('/characters/:id/hud-data', async (req: Request, res: Response) =>
     const forceRefresh = req.query.refresh === 'true' || req.query.refresh === '1';
     const raw = await fetchRawDdbCharacter(charId, forceRefresh);
     if (!raw) {
-      return res.status(404).json({ error: `Character ${charId} not found on D&D Beyond` });
+      const privacy = await checkDdbCharacterPrivacy(charId, forceRefresh);
+      return res.status(privacy.isPrivate ? 403 : 404).json({
+        error: privacy.isPrivate
+          ? `Character ${charId} sheet is Private on D&D Beyond`
+          : `Character ${charId} not found on D&D Beyond`,
+        isPrivate: privacy.isPrivate,
+        builderPreferencesUrl: privacy.builderPreferencesUrl,
+        characterSheetUrl: privacy.characterSheetUrl
+      });
     }
     const hudPayload = normalizeDdbCharacterToHud(raw, charId);
     if (hudPayload && typeof hudPayload.currentHp === 'number' && typeof hudPayload.maxHp === 'number') {
@@ -304,7 +326,7 @@ ddbRouter.get('/characters/:id/hud-data', async (req: Request, res: Response) =>
         hudPayload.tempHp || 0
       );
     }
-    res.json(hudPayload);
+    res.json({ ...hudPayload, isPrivate: false });
   } catch (err: any) {
     console.error(`[DdbRoutes] Error generating HUD data for ${req.params.id}:`, err);
     res.status(500).json({ error: err.message });
