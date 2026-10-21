@@ -1264,6 +1264,72 @@ export const SRD_MONSTERS: Monster[] = [
       { name: 'Club', type: 'attack', attackBonus: 6, reachRange: 'reach 5 ft.', damage: '8 (1d8 + 4) bludgeoning', description: 'Melee Weapon Attack: +6 to hit, reach 5 ft., one target. Hit: 8 (1d8 + 4) bludgeoning damage.' }
     ],
     source: 'SRD 5.1'
+  },
+  {
+    monsterId: 'monster_goblin',
+    name: 'Goblin',
+    size: 'Small',
+    type: 'Humanoid (Goblinoid)',
+    alignment: 'Neutral Evil',
+    ac: 15,
+    acNotes: '(leather armor, shield)',
+    hp: 7,
+    hpFormula: '(2d6)',
+    speed: '30 ft.',
+    initiativeBonus: 2,
+    str: 8,
+    dex: 14,
+    con: 10,
+    int: 10,
+    wis: 8,
+    cha: 8,
+    skills: 'Stealth +6',
+    senses: 'Darkvision 60 ft., Passive Perception 9',
+    languages: 'Common, Goblin',
+    challenge: '1/4 (50 XP)',
+    proficiencyBonus: 2,
+    avatarUrl: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?auto=format&fit=crop&w=300&q=80',
+    traits: [
+      { name: 'Nimble Escape', description: 'The goblin can take the Disengage or Hide action as a bonus action on each of its turns.' }
+    ],
+    actions: [
+      { name: 'Scimitar', type: 'attack', attackBonus: 4, reachRange: 'reach 5 ft.', damage: '5 (1d6 + 2) slashing', description: 'Melee Weapon Attack: +4 to hit, reach 5 ft., one target. Hit: 5 (1d6 + 2) slashing damage.' },
+      { name: 'Shortbow', type: 'attack', attackBonus: 4, reachRange: 'range 80/320 ft.', damage: '5 (1d6 + 2) piercing', description: 'Ranged Weapon Attack: +4 to hit, range 80/320 ft., one target. Hit: 5 (1d6 + 2) piercing damage.' }
+    ],
+    source: 'SRD 5.1'
+  },
+  {
+    monsterId: 'monster_orc',
+    name: 'Orc',
+    size: 'Medium',
+    type: 'Humanoid (Orc)',
+    alignment: 'Chaotic Evil',
+    ac: 13,
+    acNotes: '(hide armor)',
+    hp: 15,
+    hpFormula: '(2d8 + 6)',
+    speed: '30 ft.',
+    initiativeBonus: 1,
+    str: 16,
+    dex: 12,
+    con: 16,
+    int: 7,
+    wis: 11,
+    cha: 10,
+    skills: 'Intimidation +2',
+    senses: 'Darkvision 60 ft., Passive Perception 10',
+    languages: 'Common, Orc',
+    challenge: '1/2 (100 XP)',
+    proficiencyBonus: 2,
+    avatarUrl: 'https://images.unsplash.com/photo-1563089145-599997674d42?auto=format&fit=crop&w=300&q=80',
+    traits: [
+      { name: 'Aggressive', description: 'As a bonus action, the orc can move up to its speed toward a hostile creature that it can see.' }
+    ],
+    actions: [
+      { name: 'Greataxe', type: 'attack', attackBonus: 5, reachRange: 'reach 5 ft.', damage: '9 (1d12 + 3) slashing', description: 'Melee Weapon Attack: +5 to hit, reach 5 ft., one target. Hit: 9 (1d12 + 3) slashing damage.' },
+      { name: 'Javelin', type: 'attack', attackBonus: 5, reachRange: 'range 30/120 ft.', damage: '6 (1d6 + 3) piercing', description: 'Melee or Ranged Weapon Attack: +5 to hit, reach 5 ft. or range 30/120 ft., one target. Hit: 6 (1d6 + 3) piercing damage.' }
+    ],
+    source: 'SRD 5.1'
   }
 ];
 

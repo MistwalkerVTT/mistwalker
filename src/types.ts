@@ -304,5 +304,6 @@ export const NARRATION_VOICES: NarrationVoice[] = [
 export type { Scene, Chapter, Campaign, SceneToken } from './lib/firebase';
 
 export * from './types/aura';
+export * from './types/monsterHud';
 export type { Ally, AllyAction, AllyTrait } from './types/ally';
 

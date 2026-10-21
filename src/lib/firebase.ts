@@ -185,7 +185,7 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(JSON.stringify(errInfo));
 }
 
-import { WallSegment, VisionConfig, RoomAnnotation, ChapterPdfDigest, RevealPoint } from '../types';
+import { WallSegment, VisionConfig, RoomAnnotation, ChapterPdfDigest, RevealPoint, TokenMonsterState } from '../types';
 
 // Data Interfaces as specified in User Requirements
 export interface SceneToken {
@@ -215,6 +215,7 @@ export interface SceneToken {
   auraName?: string;
   auraPulse?: boolean;
   auras?: any[];
+  monsterState?: TokenMonsterState;
 }
 
 export interface Scene {

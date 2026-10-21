@@ -51,6 +51,7 @@ import {
   videoCacheManager,
   soundCatalog
 } from './effects';
+import { JB2A_REGISTRY, findJb2aAsset } from './effects/db/jb2aRegistry';
 import { CampaignBuilderModal } from './components/CampaignBuilderModal';
 import { SaveToCampaignModal } from './components/SaveToCampaignModal';
 import { LoadCampaignModal } from './components/LoadCampaignModal';
@@ -121,7 +122,10 @@ import {
   RoomAnnotation,
   isMonsterToken,
   AURA_PRESETS,
-  AURA_COLOR_PALETTE
+  AURA_COLOR_PALETTE,
+  TokenMonsterState,
+  DmMonsterHudData,
+  MonsterActionItem
 } from './types';
 import { PresetBattlemap } from './data/presetBattlemaps';
 import { DynamicLightingLayer } from './components/DynamicLightingLayer';
@@ -131,6 +135,8 @@ import { RoomHotspotEditorModal } from './components/RoomHotspotEditorModal';
 import { AssignPolygonRoomModal } from './components/AssignPolygonRoomModal';
 import { ZoneDetailsSidePanel } from './components/ZoneDetailsSidePanel';
 import { RoomBriefingDrawer } from './components/RoomBriefingDrawer';
+import { DmMonsterDock } from './components/DmMonsterDock';
+import { buildDmMonsterHudData } from './services/monsterHudService';
 import { GridLayer } from './components/GridLayer';
 import { BugReportModal } from './components/BugReportModal';
 import { BugReportManagerModal } from './components/BugReportManagerModal';
@@ -182,6 +188,7 @@ interface Token {
   auraName?: string;
   auraPulse?: boolean;
   auras?: any[];
+  monsterState?: TokenMonsterState;
 }
 
 interface RollResult {
@@ -1132,6 +1139,7 @@ export default function App() {
   // MistWalker 4.0 Effects Engine State
   const [effects, setEffects] = useState<VttEffectInstance[]>([]);
   const [activeEquippedAsset, setActiveEquippedAsset] = useState<Jb2aAssetDefinition | null>(null);
+  const [activeDmMonsterAction, setActiveDmMonsterAction] = useState<MonsterActionItem | null>(null);
   const [aimOrigin, setAimOrigin] = useState<{ x: number; y: number } | null>(null);
   const [aimCurrent, setAimCurrent] = useState<{ x: number; y: number } | null>(null);
 
@@ -3632,6 +3640,118 @@ export default function App() {
     };
   }, [socketRef.current]);
 
+  const executeMonsterRoll = useCallback((token: Token, action: MonsterActionItem) => {
+    const diceResults: Array<{ sides: number; result: number; type: string }> = [];
+    let d20Result = 0;
+    let attackTotal = 0;
+    let isCrit = false;
+    let isFumble = false;
+
+    // 1. Attack Roll
+    if (action.hitBonus !== undefined) {
+      const rawHit = parseInt(String(action.hitBonus).replace('+', ''), 10) || 0;
+      d20Result = Math.floor(Math.random() * 20) + 1;
+      attackTotal = d20Result + rawHit;
+      isCrit = d20Result === 20;
+      isFumble = d20Result === 1;
+      diceResults.push({ sides: 20, result: d20Result, type: 'd20' });
+    }
+
+    // 2. Damage Roll
+    let rolledDamage = 0;
+    if (action.damageFormula) {
+      const formulaMatch = action.damageFormula.match(/(\d+)d(\d+)(?:\s*([+-])\s*(\d+))?/i);
+      if (formulaMatch) {
+        const numDice = (parseInt(formulaMatch[1], 10) || 1) * (isCrit ? 2 : 1);
+        const sides = parseInt(formulaMatch[2], 10) || 6;
+        const sign = formulaMatch[3] === '-' ? -1 : 1;
+        const mod = parseInt(formulaMatch[4], 10) || 0;
+        let sum = 0;
+        for (let i = 0; i < numDice; i++) {
+          const r = Math.floor(Math.random() * sides) + 1;
+          sum += r;
+          diceResults.push({ sides, result: r, type: `d${sides}` });
+        }
+        rolledDamage = Math.max(1, sum + sign * mod);
+      } else {
+        rolledDamage = parseInt(action.damageFormula, 10) || 0;
+      }
+    }
+
+    // 3. 3D Physics Dice Event
+    const diceEvent: DdbDiceRollEvent = {
+      id: `roll-${Date.now()}`,
+      characterName: token.name || 'Monster',
+      avatarUrl: token.url,
+      action: action.name,
+      rollType: action.isHeal ? 'heal' : (action.hitBonus !== undefined ? 'attack' : 'damage'),
+      formula: action.hitBonus !== undefined ? `1d20${action.hitBonus} (To Hit) | ${action.damageFormula || ''} (Damage)` : (action.damageFormula || ''),
+      diceNotation: diceResults.map(d => d.type).join('+'),
+      dice: diceResults,
+      total: action.hitBonus !== undefined ? attackTotal : rolledDamage,
+      isCritical: isCrit,
+      isFumble: isFumble,
+      theme: 'rust',
+      themeColor: '#dc2626',
+      timestamp: Date.now(),
+      source: 'local'
+    };
+
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', diceEvent);
+    }
+    if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+      (window as any).__mistwalkerRoll3d(diceEvent);
+    }
+
+    // 4. Update Token Consumable State
+    setTokens(prev => {
+      const next = prev.map(t => {
+        if (t.id !== token.id) return t;
+        const curState = t.monsterState || {
+          rechargeAvailable: {},
+          spellSlotsUsed: {},
+          legendaryActionsMax: 3,
+          legendaryActionsUsed: 0
+        };
+        const nextState = { ...curState };
+
+        if (action.recharge) {
+          nextState.rechargeAvailable = {
+            ...nextState.rechargeAvailable,
+            [action.name]: false
+          };
+        }
+        if (action.category === 'legendary') {
+          const cost = action.legendaryCost || 1;
+          nextState.legendaryActionsUsed = Math.min(nextState.legendaryActionsMax, (nextState.legendaryActionsUsed || 0) + cost);
+        }
+        if (action.level && action.level > 0) {
+          nextState.spellSlotsUsed = {
+            ...nextState.spellSlotsUsed,
+            [action.level]: (nextState.spellSlotsUsed[action.level] || 0) + 1
+          };
+        }
+
+        return { ...t, monsterState: nextState };
+      });
+
+      if (mapsDataRef.current[activeMapId]) {
+        mapsDataRef.current[activeMapId].tokens = next;
+      }
+      if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) {
+        socketRef.current.emit('SYNC_TOKENS', next);
+      }
+      return next;
+    });
+
+    const desc = action.hitBonus !== undefined
+      ? `Attack: ${attackTotal} (d20: ${d20Result})${isCrit ? ' CRITICAL HIT!' : isFumble ? ' NATURAL 1 FUMBLE!' : ''}${action.damageFormula ? ` • Damage: ${rolledDamage} ${action.damageType || ''}` : ''}`
+      : `Damage: ${rolledDamage} ${action.damageType || ''}`;
+
+    toast.success(`${token.name}: ${action.name}!`, { description: desc });
+  }, [activeMapId]);
+
   const castSpellAt = useCallback((origin: { x: number; y: number }, target: { x: number; y: number }) => {
     if (!activeEquippedAsset) return;
 
@@ -3687,13 +3807,22 @@ export default function App() {
     if (socketRef.current?.connected) {
       socketRef.current.emit('EFFECT_SPAWN', newEffect);
     }
-    toast.success(`Cast ${activeEquippedAsset.name}!`);
+
+    if (activeDmMonsterAction) {
+      const singleSelected = selectedTokenIds.length === 1 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
+      if (singleSelected) {
+        executeMonsterRoll(singleSelected, activeDmMonsterAction);
+      }
+      setActiveDmMonsterAction(null);
+    } else {
+      toast.success(`Cast ${activeEquippedAsset.name}!`);
+    }
 
     setAimOrigin(null);
     setAimCurrent(null);
     setActiveEquippedAsset(null);
     setTool('pan');
-  }, [activeEquippedAsset]);
+  }, [activeEquippedAsset, activeDmMonsterAction, selectedTokenIds, tokens, executeMonsterRoll]);
 
   const handleEquipAsset = useCallback((asset: Jb2aAssetDefinition) => {
     setActiveEquippedAsset(asset);
@@ -3718,6 +3847,326 @@ export default function App() {
         : 'Click caster then target, or click and drag towards target.'
     });
   }, [setTool, selectedTokenIds, tokens, gridSize]);
+
+  const handleSelectDmMonsterAction = useCallback((action: MonsterActionItem) => {
+    if (activeDmMonsterAction?.id === action.id) {
+      setActiveDmMonsterAction(null);
+      setActiveEquippedAsset(null);
+      setAimOrigin(null);
+      setAimCurrent(null);
+      setTool('pan');
+      return;
+    }
+
+    const singleToken = selectedTokenIds.length === 1 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
+    if (!singleToken) return;
+
+    let matchedAsset: Jb2aAssetDefinition | undefined;
+    if (action.jb2aAssetId) {
+      matchedAsset = JB2A_REGISTRY.find(a => a.id === action.jb2aAssetId);
+    }
+    if (!matchedAsset) {
+      matchedAsset = findJb2aAsset(action.name);
+    }
+    if (!matchedAsset && action.damageType) {
+      if (action.damageType === 'fire') matchedAsset = findJb2aAsset('fire_bolt');
+      else if (action.damageType === 'cold') matchedAsset = findJb2aAsset('ray_of_frost');
+      else if (action.damageType === 'lightning') matchedAsset = findJb2aAsset('shocking_grasp') || findJb2aAsset('lightning_bolt');
+      else if (action.damageType === 'necrotic') matchedAsset = findJb2aAsset('chill_touch');
+      else if (action.damageType === 'radiant') matchedAsset = findJb2aAsset('sacred_flame');
+      else if (action.damageType === 'force') matchedAsset = findJb2aAsset('magic_missile') || findJb2aAsset('eldritch_blast');
+      else if (action.type === 'attack' || action.category === 'attacks') matchedAsset = findJb2aAsset('attack_slash');
+    }
+
+    if (action.isSelfAction) {
+      const tokenRadius = ((singleToken.size || 1) * gridSize) / 2;
+      const center = { x: singleToken.x + tokenRadius, y: singleToken.y + tokenRadius };
+
+      if (matchedAsset) {
+        const newEffect: VttEffectInstance = {
+          id: `eff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          name: matchedAsset.name,
+          label: matchedAsset.label,
+          assetKey: matchedAsset.id,
+          videoUrl: matchedAsset.webm,
+          loopVideoUrl: matchedAsset.loopWebm,
+          thumbUrl: matchedAsset.thumb,
+          paradigm: matchedAsset.paradigm,
+          x: center.x,
+          y: center.y,
+          sizeFt: matchedAsset.defaultSizeFt,
+          rotation: 0,
+          opacity: 1.0,
+          blendMode: matchedAsset.blendMode,
+          isPersistent: matchedAsset.isPersistent,
+          loop: matchedAsset.isPersistent,
+          castTime: Date.now(),
+          durationMs: 4000,
+          soundKey: matchedAsset.soundKey,
+          color: matchedAsset.color
+        };
+        setEffects(prev => [...prev, newEffect]);
+        if (matchedAsset.soundKey) soundCatalog.play(matchedAsset.soundKey);
+        if (socketRef.current?.connected) {
+          socketRef.current.emit('EFFECT_SPAWN', newEffect);
+        }
+      }
+
+      if (action.damageFormula) {
+        executeMonsterRoll(singleToken, action);
+      } else {
+        toast.success(`${singleToken.name} activated ${action.name}!`, {
+          description: action.description
+        });
+      }
+
+      setActiveDmMonsterAction(null);
+      return;
+    }
+
+    setActiveDmMonsterAction(action);
+    if (matchedAsset) {
+      handleEquipAsset(matchedAsset);
+    } else {
+      const fallbackAsset: Jb2aAssetDefinition = {
+        id: `generic_${action.id}`,
+        name: action.name,
+        label: `${action.name} (${action.rangeFt || 5} ft)`,
+        paradigm: (action.rangeFt || 5) > 5 ? 'projectile' : 'melee',
+        shape: (action.rangeFt || 5) > 5 ? 'ray' : 'circle',
+        defaultSizeFt: action.rangeFt || 5,
+        webm: '/jb2a/Library/Cantrip/Fire_Bolt/FireBolt_01_Regular_Orange_30ft_1600x400.webm',
+        thumb: '/jb2a/Library/Cantrip/Fire_Bolt/FireBolt_01_Regular_Orange_Thumb.webp',
+        isPersistent: false,
+        blendMode: 'screen',
+        tags: ['attack']
+      };
+      handleEquipAsset(fallbackAsset);
+    }
+  }, [activeDmMonsterAction, selectedTokenIds, tokens, gridSize, executeMonsterRoll, handleEquipAsset]);
+
+  const handleQuickRollDmMonsterAction = useCallback((action: MonsterActionItem) => {
+    const singleToken = selectedTokenIds.length === 1 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
+    if (!singleToken) return;
+    executeMonsterRoll(singleToken, action);
+  }, [selectedTokenIds, tokens, executeMonsterRoll]);
+
+  const handleRollDmMonsterRecharge = useCallback((action: MonsterActionItem) => {
+    const singleToken = selectedTokenIds.length === 1 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
+    if (!singleToken) return;
+
+    const roll = Math.floor(Math.random() * 6) + 1;
+    const targetMin = action.recharge?.includes('5') ? 5 : 6;
+    const succeeded = roll >= targetMin;
+
+    const diceEvent: DdbDiceRollEvent = {
+      id: `roll-${Date.now()}`,
+      characterName: singleToken.name,
+      avatarUrl: singleToken.url,
+      action: `${action.name} Recharge Check`,
+      rollType: 'check',
+      formula: `1d6 (Target ${action.recharge || '5-6'})`,
+      dice: [{ sides: 6, result: roll, type: 'd6' }],
+      total: roll,
+      isCritical: roll === 6,
+      theme: 'rust',
+      themeColor: succeeded ? '#10b981' : '#dc2626',
+      timestamp: Date.now(),
+      source: 'local'
+    };
+
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', diceEvent);
+    }
+    if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+      (window as any).__mistwalkerRoll3d(diceEvent);
+    }
+
+    if (succeeded) {
+      setTokens(prev => {
+        const next = prev.map(t => {
+          if (t.id !== singleToken.id) return t;
+          const state = t.monsterState || { rechargeAvailable: {}, spellSlotsUsed: {}, legendaryActionsMax: 3, legendaryActionsUsed: 0 };
+          return {
+            ...t,
+            monsterState: {
+              ...state,
+              rechargeAvailable: { ...state.rechargeAvailable, [action.name]: true }
+            }
+          };
+        });
+        if (mapsDataRef.current[activeMapId]) mapsDataRef.current[activeMapId].tokens = next;
+        if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) socketRef.current.emit('SYNC_TOKENS', next);
+        return next;
+      });
+      toast.success(`${singleToken.name}: Recharge SUCCESS! (Rolled ${roll})`, {
+        description: `${action.name} is ready to use again!`
+      });
+    } else {
+      toast.error(`${singleToken.name}: Recharge FAILED (Rolled ${roll})`, {
+        description: `Needed ${action.recharge}. Try again next round!`
+      });
+    }
+  }, [selectedTokenIds, tokens, activeMapId]);
+
+  const handleToggleMonsterRecharge = useCallback((actionName: string) => {
+    const singleToken = selectedTokenIds.length === 1 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
+    if (!singleToken) return;
+
+    setTokens(prev => {
+      const next = prev.map(t => {
+        if (t.id !== singleToken.id) return t;
+        const state = t.monsterState || { rechargeAvailable: {}, spellSlotsUsed: {}, legendaryActionsMax: 3, legendaryActionsUsed: 0 };
+        const cur = state.rechargeAvailable[actionName] ?? true;
+        return {
+          ...t,
+          monsterState: {
+            ...state,
+            rechargeAvailable: { ...state.rechargeAvailable, [actionName]: !cur }
+          }
+        };
+      });
+      if (mapsDataRef.current[activeMapId]) mapsDataRef.current[activeMapId].tokens = next;
+      if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) socketRef.current.emit('SYNC_TOKENS', next);
+      return next;
+    });
+  }, [selectedTokenIds, tokens, activeMapId]);
+
+  const handleModifyMonsterHp = useCallback((delta: number) => {
+    const singleToken = selectedTokenIds.length === 1 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
+    if (!singleToken) return;
+
+    const currentMax = singleToken.maxHp || 10;
+    const current = singleToken.currentHp !== undefined ? singleToken.currentHp : (singleToken.hp !== undefined ? singleToken.hp : currentMax);
+    const nextHp = Math.max(0, Math.min(currentMax, current + delta));
+
+    setTokens(prev => {
+      const next = prev.map(t => t.id === singleToken.id ? { ...t, currentHp: nextHp, hp: nextHp } : t);
+      if (mapsDataRef.current[activeMapId]) mapsDataRef.current[activeMapId].tokens = next;
+      if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) socketRef.current.emit('SYNC_TOKENS', next);
+      return next;
+    });
+
+    setCombatTrackerCombatants(prev => prev.map(c =>
+      c.id === singleToken.id || (c as any).tokenId === singleToken.id || c.name.toLowerCase() === singleToken.name.toLowerCase()
+        ? { ...c, currentHp: nextHp }
+        : c
+    ));
+
+    toast.info(`${singleToken.name} HP: ${nextHp} / ${currentMax} (${delta >= 0 ? `+${delta}` : delta})`);
+  }, [selectedTokenIds, tokens, activeMapId]);
+
+  const handleModifyMonsterTempHp = useCallback((delta: number) => {
+    const singleToken = selectedTokenIds.length === 1 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
+    if (!singleToken) return;
+
+    const nextTemp = Math.max(0, (singleToken.tempHp || 0) + delta);
+    setTokens(prev => {
+      const next = prev.map(t => t.id === singleToken.id ? { ...t, tempHp: nextTemp } : t);
+      if (mapsDataRef.current[activeMapId]) mapsDataRef.current[activeMapId].tokens = next;
+      if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) socketRef.current.emit('SYNC_TOKENS', next);
+      return next;
+    });
+  }, [selectedTokenIds, tokens, activeMapId]);
+
+  const handleConsumeMonsterSpellSlot = useCallback((level: number) => {
+    const singleToken = selectedTokenIds.length === 1 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
+    if (!singleToken) return;
+
+    setTokens(prev => {
+      const next = prev.map(t => {
+        if (t.id !== singleToken.id) return t;
+        const state = t.monsterState || { rechargeAvailable: {}, spellSlotsUsed: {}, legendaryActionsMax: 3, legendaryActionsUsed: 0 };
+        return {
+          ...t,
+          monsterState: {
+            ...state,
+            spellSlotsUsed: {
+              ...state.spellSlotsUsed,
+              [level]: (state.spellSlotsUsed[level] || 0) + 1
+            }
+          }
+        };
+      });
+      if (mapsDataRef.current[activeMapId]) mapsDataRef.current[activeMapId].tokens = next;
+      if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) socketRef.current.emit('SYNC_TOKENS', next);
+      return next;
+    });
+    toast.info(`${singleToken.name}: Used Level ${level} spell slot`);
+  }, [selectedTokenIds, tokens, activeMapId]);
+
+  const handleRestoreMonsterSpellSlot = useCallback((level: number) => {
+    const singleToken = selectedTokenIds.length === 1 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
+    if (!singleToken) return;
+
+    setTokens(prev => {
+      const next = prev.map(t => {
+        if (t.id !== singleToken.id) return t;
+        const state = t.monsterState || { rechargeAvailable: {}, spellSlotsUsed: {}, legendaryActionsMax: 3, legendaryActionsUsed: 0 };
+        return {
+          ...t,
+          monsterState: {
+            ...state,
+            spellSlotsUsed: {
+              ...state.spellSlotsUsed,
+              [level]: Math.max(0, (state.spellSlotsUsed[level] || 0) - 1)
+            }
+          }
+        };
+      });
+      if (mapsDataRef.current[activeMapId]) mapsDataRef.current[activeMapId].tokens = next;
+      if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) socketRef.current.emit('SYNC_TOKENS', next);
+      return next;
+    });
+    toast.info(`${singleToken.name}: Restored Level ${level} spell slot`);
+  }, [selectedTokenIds, tokens, activeMapId]);
+
+  const handleUseMonsterLegendaryAction = useCallback((cost: number = 1) => {
+    const singleToken = selectedTokenIds.length === 1 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
+    if (!singleToken) return;
+
+    setTokens(prev => {
+      const next = prev.map(t => {
+        if (t.id !== singleToken.id) return t;
+        const state = t.monsterState || { rechargeAvailable: {}, spellSlotsUsed: {}, legendaryActionsMax: 3, legendaryActionsUsed: 0 };
+        const used = Math.min(state.legendaryActionsMax, (state.legendaryActionsUsed || 0) + cost);
+        return {
+          ...t,
+          monsterState: {
+            ...state,
+            legendaryActionsUsed: used
+          }
+        };
+      });
+      if (mapsDataRef.current[activeMapId]) mapsDataRef.current[activeMapId].tokens = next;
+      if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) socketRef.current.emit('SYNC_TOKENS', next);
+      return next;
+    });
+    toast.info(`${singleToken.name}: Spent ${cost} Legendary Action point${cost > 1 ? 's' : ''}`);
+  }, [selectedTokenIds, tokens, activeMapId]);
+
+  const handleResetMonsterLegendaryActions = useCallback(() => {
+    const singleToken = selectedTokenIds.length === 1 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
+    if (!singleToken) return;
+
+    setTokens(prev => {
+      const next = prev.map(t => {
+        if (t.id !== singleToken.id) return t;
+        const state = t.monsterState || { rechargeAvailable: {}, spellSlotsUsed: {}, legendaryActionsMax: 3, legendaryActionsUsed: 0 };
+        return {
+          ...t,
+          monsterState: {
+            ...state,
+            legendaryActionsUsed: 0
+          }
+        };
+      });
+      if (mapsDataRef.current[activeMapId]) mapsDataRef.current[activeMapId].tokens = next;
+      if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) socketRef.current.emit('SYNC_TOKENS', next);
+      return next;
+    });
+    toast.success(`${singleToken.name}: Reset all Legendary Action points!`);
+  }, [selectedTokenIds, tokens, activeMapId]);
 
   const handleQuickPlaceAsset = useCallback((asset: Jb2aAssetDefinition) => {
     const dims = getMapDimensions();
@@ -7576,6 +8025,51 @@ export default function App() {
               const singleSelectedToken = selectedTokenIds.length === 1
                 ? tokens.find(t => t.id === selectedTokenIds[0])
                 : null;
+
+              const isMonster = singleSelectedToken && !singleSelectedToken.isCondition && !singleSelectedToken.allyId && (
+                singleSelectedToken.isMonster === true ||
+                singleSelectedToken.category === 'monster' ||
+                singleSelectedToken.isPlayer === false ||
+                isMonsterToken(singleSelectedToken)
+              );
+
+              // If single monster is selected, render the tactical DmMonsterDock
+              if (singleSelectedToken && isMonster) {
+                const dmMonsterHudData = buildDmMonsterHudData(singleSelectedToken, compendiumMonsters);
+                if (dmMonsterHudData) {
+                  return (
+                    <DmMonsterDock
+                      hudData={dmMonsterHudData}
+                      onSelectAction={handleSelectDmMonsterAction}
+                      onQuickRollAction={handleQuickRollDmMonsterAction}
+                      activeTargetingAction={activeDmMonsterAction}
+                      onCancelTargeting={() => {
+                        setActiveDmMonsterAction(null);
+                        setActiveEquippedAsset(null);
+                        setAimOrigin(null);
+                        setAimCurrent(null);
+                        setTool('pan');
+                      }}
+                      onDeselectToken={() => {
+                        setSelectedTokenIds([]);
+                        setActiveDmMonsterAction(null);
+                        setActiveEquippedAsset(null);
+                        setAimOrigin(null);
+                        setAimCurrent(null);
+                      }}
+                      onModifyHp={handleModifyMonsterHp}
+                      onModifyTempHp={handleModifyMonsterTempHp}
+                      onToggleRecharge={handleToggleMonsterRecharge}
+                      onRollRecharge={handleRollDmMonsterRecharge}
+                      onConsumeSpellSlot={handleConsumeMonsterSpellSlot}
+                      onRestoreSpellSlot={handleRestoreMonsterSpellSlot}
+                      onUseLegendaryAction={handleUseMonsterLegendaryAction}
+                      onResetLegendaryActions={handleResetMonsterLegendaryActions}
+                    />
+                  );
+                }
+              }
+
               const isRenamingSingle = Boolean(singleSelectedToken && editingTokenNameId === singleSelectedToken.id);
               const isRenamingBatch = editingTokenNameId === 'batch';
 
