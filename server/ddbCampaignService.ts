@@ -452,7 +452,7 @@ export async function fetchDdbCampaignCharacters(campaignId: string): Promise<{ 
 }
 
 // Map spell names or common weapon attacks to authentic JB2A asset IDs (verified against JB2A_REGISTRY)
-function matchJb2aAssetId(name: string): string | undefined {
+export function matchJb2aAssetId(name: string): string | undefined {
   if (!name) return undefined;
   const n = name.toLowerCase().trim();
 
@@ -469,6 +469,35 @@ function matchJb2aAssetId(name: string): string | undefined {
   if (n.includes('create bonfire') || n === 'bonfire') return 'bonfire';
   if (n.includes('teleportation circle') || n === 'teleport') return 'teleport';
   if (n.includes('barkskin')) return 'barkskin';
+  if (n.includes('detect magic')) return 'detect_magic';
+  if (n.includes('wind wall')) return 'wind_wall';
+
+  // Authentic Community Animations (JAA & Jack Kerouac)
+  if (n.includes('mansion')) return 'mordenkainens_mansion';
+  if (n.includes('blade barrier')) return 'blade_barrier';
+  if (n.includes('glyph of warding')) return 'glyph_of_warding';
+  if (n.includes('alarm')) return 'alarm';
+  if (n.includes('hold person') || n.includes('hold monster')) return 'hold_person';
+  if (n.includes('arcane eye')) return 'arcane_eye';
+  if (n.includes('color spray') || n.includes('colour spray')) return 'color_spray';
+  if (n.includes('circle of death')) return 'circle_of_death';
+  if (n.includes('cloudkill')) return 'cloudkill';
+  if (n.includes('incendiary cloud')) return 'incendiary_cloud';
+  if (n.includes('aura of vitality')) return 'aura_of_vitality';
+  if (n.includes('aura of life')) return 'aura_of_life';
+  if (n.includes('earth tremor')) return 'earth_tremor';
+  if (n.includes('destructive wave')) return 'destructive_wave';
+  if (n.includes('ensnaring strike')) return 'ensnaring_strike';
+  if (n.includes('insect plague')) return 'insect_plague';
+  if (n.includes('tiny hut')) return 'tiny_hut';
+  if (n.includes('thorn whip')) return 'thorn_whip';
+  if (n.includes('armor of agathys') || n.includes('agathys')) return 'armor_of_agathys';
+  if (n.includes('holy aura') || n.includes('channel divinity')) return 'holy_aura';
+  if (n === 'fly' || n.includes('flight') || n.includes('fly spell')) return 'fly';
+  if (n.includes('blight') || n.includes('bestow curse')) return 'blight';
+  if (n.includes('warding bond')) return 'warding_bond';
+  if (n.includes('magic circle')) return 'magic_circle';
+  if (n.includes('counterspell') || n.includes('dispel magic')) return 'counterspell';
 
   if (n.includes('fireball')) return 'fireball';
   if (n.includes('fire bolt') || n.includes('firebolt')) return 'fire_bolt';
@@ -523,22 +552,14 @@ function matchJb2aAssetId(name: string): string | undefined {
   if (n.includes('wall of fire')) return 'wall_of_fire';
   if (n.includes('whirlwind')) return 'whirlwind';
 
-  // Explicitly ignore spells that have no authentic JB2A animation yet to prevent false substitutions
+  // Explicitly ignore spells that have no authentic animation yet to prevent false substitutions
   if (
     n.includes('blade ward') ||
-    n.includes('blade barrier') ||
-    n.includes('glyph of warding') ||
-    n.includes('warding bond') ||
-    n.includes('hold monster') ||
-    n.includes('mansion') ||
     n.includes('false life') ||
     n.includes('restoration') ||
     n.includes('holy weapon') ||
     n.includes('divine word') ||
     n.includes('fire storm') ||
-    n.includes('holy aura') ||
-    n.includes('magic circle') ||
-    n.includes('blight') ||
     n.includes('flame strike') ||
     n.includes('power word') ||
     n.includes('wall of thorns') ||
