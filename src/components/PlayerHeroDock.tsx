@@ -23,6 +23,7 @@ import {
   Users
 } from 'lucide-react';
 import { HudCharacterData, HudActionItem, HudActionCategory } from '../types/hud';
+import { findJb2aAsset } from '../effects/db/jb2aRegistry';
 import { toast } from 'sonner';
 
 interface PlayerHeroDockProps {
@@ -45,6 +46,8 @@ interface PlayerHeroDockProps {
   isSyncingDdb?: boolean;
   isMobile?: boolean;
   onTargetSelf?: () => void;
+  activeEffects?: any[];
+  onDispelEffect?: (effectId: string) => void;
 }
 
 export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
@@ -65,7 +68,9 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
   onOpenRestModal,
   onRefreshDdb,
   isSyncingDdb = false,
-  onTargetSelf
+  onTargetSelf,
+  activeEffects = [],
+  onDispelEffect
 }) => {
   const currentTargetingAction = activeTargetingAction ?? selectedAction ?? (
     activeEquippedAsset ? {
@@ -334,10 +339,45 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
   };
 
   const renderActionGlyph = (action: HudActionItem, sizeClass = 'w-4 h-4') => {
+    const isSpell = action.category === 'spells' || action.subCategory === 'spell';
+
+    // Copy and display authentic JB2A spell thumbnail where available
+    const asset = findJb2aAsset(action.jb2aAssetId || action.name);
+    const thumbUrl = action.iconUrl || asset?.thumb;
+
+    if (thumbUrl && !thumbUrl.endsWith('.webm')) {
+      return (
+        <div className="w-full h-full relative flex items-center justify-center overflow-hidden rounded-lg">
+          <img
+            src={thumbUrl}
+            alt={action.name}
+            className="w-full h-full object-cover rounded-lg"
+            loading="lazy"
+            onError={(e) => {
+              (e.target as HTMLElement).style.display = 'none';
+            }}
+          />
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none -z-10">
+            {isSpell ? (
+              (action.level ?? 0) === 0 ? (
+                <Wand2 className={`${sizeClass} text-cyan-400`} />
+              ) : (
+                <Sparkles className={`${sizeClass} text-blue-400`} />
+              )
+            ) : action.isHeal ? (
+              <Heart className={`${sizeClass} text-emerald-400`} />
+            ) : (
+              <Swords className={`${sizeClass} text-rose-400`} />
+            )}
+          </div>
+        </div>
+      );
+    }
+
     if (action.isHeal) {
       return <Heart className={`${sizeClass} text-emerald-400`} />;
     }
-    if (action.category === 'spells' || action.subCategory === 'spell') {
+    if (isSpell) {
       return (action.level ?? 0) === 0 ? (
         <Wand2 className={`${sizeClass} text-cyan-400`} />
       ) : (
@@ -507,7 +547,9 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
         <div className="hidden md:block pointer-events-auto relative mb-2 px-4 py-3 rounded-xl bg-zinc-950/98 border border-zinc-700/90 shadow-2xl text-left w-full max-w-2xl animate-in fade-in duration-100">
           <div className="flex items-center justify-between gap-3 flex-wrap pr-8">
             <div className="flex items-center gap-2">
-              {renderActionGlyph(hoveredAction, 'w-4 h-4')}
+              <div className="w-6 h-6 rounded-md bg-zinc-950 border border-zinc-800 flex items-center justify-center shrink-0 overflow-hidden relative shadow-inner">
+                {renderActionGlyph(hoveredAction, 'w-3.5 h-3.5')}
+              </div>
               <span className="font-bold text-white font-mono text-xs">{hoveredAction.name}</span>
               {hoveredAction.sourceLabel && (
                 <span className="px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-[10px] font-mono text-zinc-300">
@@ -804,7 +846,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                   }`}
                 >
                   <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                    <div className="w-8 h-8 rounded-lg bg-zinc-950 border border-zinc-800 flex items-center justify-center shrink-0">
+                    <div className="w-8 h-8 rounded-lg bg-zinc-950 border border-zinc-800 flex items-center justify-center shrink-0 overflow-hidden relative shadow-inner">
                       {renderActionGlyph(action, 'w-4 h-4')}
                     </div>
                     <div className="min-w-0 flex-1">
@@ -1264,7 +1306,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                   >
                     {/* Left: Action Icon + Name + Range/Source Subtitle */}
                     <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                      <div className="w-9 h-9 rounded-lg bg-zinc-950 border border-zinc-800 group-hover:border-zinc-700 flex items-center justify-center shrink-0">
+                      <div className="w-9 h-9 rounded-lg bg-zinc-950 border border-zinc-800 group-hover:border-zinc-700 flex items-center justify-center shrink-0 overflow-hidden relative shadow-inner">
                         {renderActionGlyph(action, 'w-4 h-4')}
                       </div>
                       <div className="min-w-0 flex-1">

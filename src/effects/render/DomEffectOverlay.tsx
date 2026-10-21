@@ -4,6 +4,7 @@
 // and live animated targeting preview under the cursor while aiming spells.
 
 import React, { useEffect, useCallback } from 'react';
+import { X, Sparkles } from 'lucide-react';
 import { VttEffectInstance, Jb2aAssetDefinition } from '../types/effect';
 import { soundCatalog } from '../db/soundCatalog';
 import { getConditionFx, getAuraVideoUrl } from '../db/tokenFxMap';
@@ -20,6 +21,7 @@ interface DomEffectOverlayProps {
   aimOrigin?: { x: number; y: number } | null;
   aimCurrent?: { x: number; y: number } | null;
   onEffectComplete?: (effectId: string) => void;
+  onDispelEffect?: (effectId: string) => void;
 }
 
 export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
@@ -33,7 +35,8 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
   activeEquippedAsset,
   aimOrigin,
   aimCurrent,
-  onEffectComplete
+  onEffectComplete,
+  onDispelEffect
 }) => {
   // Lifetime expiration timer for non-persistent single-shot blasts (e.g. 5s fallback)
   useEffect(() => {
@@ -335,6 +338,45 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                 pointerEvents: 'none'
               }}
             />
+          );
+        })}
+
+        {/* 2b. Direct On-Map Dispel Pins for Persistent / Looping Spell Animations */}
+        {effects.map((effect) => {
+          if (!onDispelEffect || (!effect.isPersistent && !effect.loop)) return null;
+
+          const radiusPx = (effect.sizeFt / 5) * gridSize;
+          const topY = effect.y - radiusPx - 6;
+
+          return (
+            <div
+              key={`dispel-${effect.id}`}
+              className="absolute pointer-events-auto group/dispel z-[40]"
+              style={{
+                left: `${effect.x}px`,
+                top: `${topY}px`,
+                transform: 'translate(-50%, -100%)',
+              }}
+            >
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-zinc-950/90 hover:bg-zinc-900 border border-purple-500/50 hover:border-red-500/70 shadow-lg backdrop-blur-md transition-all select-none">
+                <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse shrink-0" />
+                <span className="text-[10px] font-mono font-bold text-purple-200 truncate max-w-[110px]">
+                  {effect.name}
+                </span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDispelEffect(effect.id);
+                  }}
+                  className="p-0.5 rounded-full hover:bg-red-500/30 text-zinc-400 hover:text-red-400 transition-colors cursor-pointer"
+                  title={`Dispel ${effect.name} (Keep other active animations)`}
+                  aria-label={`Dispel ${effect.name}`}
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
           );
         })}
 

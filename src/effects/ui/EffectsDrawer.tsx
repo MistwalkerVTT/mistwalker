@@ -19,10 +19,11 @@ import {
   Droplets,
   Shield,
   Skull,
-  Eye
+  Eye,
+  X
 } from 'lucide-react';
 import { JB2A_REGISTRY, getJb2aAssetById } from '../db/jb2aRegistry';
-import { Jb2aAssetDefinition, SpellSchool } from '../types/effect';
+import { Jb2aAssetDefinition, SpellSchool, VttEffectInstance } from '../types/effect';
 import { soundCatalog } from '../db/soundCatalog';
 import { Attribution } from './Attribution';
 
@@ -32,6 +33,8 @@ interface EffectsDrawerProps {
   onQuickPlaceEffect?: (asset: Jb2aAssetDefinition) => void;
   onQuickPlaceAsset?: (asset: Jb2aAssetDefinition) => void;
   onClearEffects?: () => void;
+  onDispelEffect?: (effectId: string) => void;
+  activeEffects?: VttEffectInstance[];
   onOpenCompendium?: () => void;
   activeEquippedId?: string | null;
   activeEquippedAsset?: Jb2aAssetDefinition | null;
@@ -57,6 +60,8 @@ export const EffectsDrawer: React.FC<EffectsDrawerProps> = ({
   onQuickPlaceEffect,
   onQuickPlaceAsset,
   onClearEffects,
+  onDispelEffect,
+  activeEffects,
   onOpenCompendium,
   activeEquippedId,
   activeEquippedAsset,
@@ -162,15 +167,17 @@ export const EffectsDrawer: React.FC<EffectsDrawerProps> = ({
             return (
               <div
                 key={asset.id}
-                className={`p-2.5 rounded-xl border transition-all ${
+                onClick={() => handleEquip && handleEquip(asset)}
+                className={`p-2.5 rounded-xl border transition-all cursor-pointer group select-none ${
                   isEquipped
-                    ? 'bg-purple-950/40 border-purple-500 ring-1 ring-purple-500/30'
-                    : 'bg-zinc-900/80 border-zinc-800 hover:border-zinc-700'
+                    ? 'bg-purple-950/50 border-purple-400 ring-2 ring-purple-400/50 shadow-[0_0_16px_rgba(168,85,247,0.4)]'
+                    : 'bg-zinc-900/80 border-zinc-800 hover:border-purple-500/70 hover:bg-zinc-850 hover:shadow-md'
                 }`}
+                title={isEquipped ? "Aiming on map — click anywhere on battlemap to place/detonate (or click card to re-equip)" : `Click to place ${asset.name} on the map`}
               >
-                <div className="flex items-start justify-between gap-2 mb-1.5">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-9 h-9 rounded-lg bg-zinc-950 border border-zinc-700/80 flex items-center justify-center shrink-0 overflow-hidden relative shadow-inner">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <div className="w-10 h-10 rounded-lg bg-zinc-950 border border-zinc-700/80 flex items-center justify-center shrink-0 overflow-hidden relative shadow-inner group-hover:border-purple-400/60 transition-colors">
                       <img
                         src={asset.thumb || asset.webm}
                         alt={asset.name}
@@ -180,11 +187,11 @@ export const EffectsDrawer: React.FC<EffectsDrawerProps> = ({
                           (e.target as HTMLElement).style.display = 'none';
                         }}
                       />
-                      <Sparkles className="w-3.5 h-3.5 text-zinc-600 absolute pointer-events-none" />
+                      <Sparkles className="w-4 h-4 text-zinc-600 absolute pointer-events-none" />
                     </div>
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-xs font-bold font-sans text-zinc-100 truncate">
+                        <span className="text-xs font-bold font-sans text-zinc-100 group-hover:text-purple-200 transition-colors truncate">
                           {asset.name}
                         </span>
                         <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-amber-950/80 text-amber-300 border border-amber-600/50 shadow-sm">
@@ -200,50 +207,31 @@ export const EffectsDrawer: React.FC<EffectsDrawerProps> = ({
                     </div>
                   </div>
 
-                  {/* Audio Preview Sound Button */}
-                  {asset.soundKey && (
-                    <button
-                      type="button"
-                      onClick={e => handlePlaySound(asset, e)}
-                      title="Test Audio FX"
-                      className={`p-1.5 rounded-lg border transition-all shrink-0 cursor-pointer ${
-                        isPlaying
-                          ? 'bg-amber-500/20 border-amber-500 text-amber-300 scale-105'
-                          : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-amber-300 hover:border-zinc-700'
-                      }`}
-                    >
-                      <Volume2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {/* Active Aiming Status Indicator */}
+                    {isEquipped && (
+                      <span className="px-2 py-0.5 rounded-md bg-purple-500 text-white font-mono text-[9px] font-bold shadow-sm animate-pulse flex items-center gap-1">
+                        <Crosshair className="w-2.5 h-2.5" />
+                        <span>Aiming</span>
+                      </span>
+                    )}
 
-                {/* Actions: Quick Place & Aim on Map */}
-                <div className="flex gap-1.5 mt-2 pt-2 border-t border-zinc-800/60">
-                  {handleQuickPlace && (
-                    <button
-                      type="button"
-                      onClick={() => handleQuickPlace(asset)}
-                      className="flex-1 py-1.5 px-2 rounded-lg bg-zinc-800 hover:bg-zinc-750 text-zinc-200 text-[11px] font-mono font-semibold border border-zinc-700/80 transition-all flex items-center justify-center gap-1 cursor-pointer"
-                    >
-                      <Plus className="w-3 h-3 text-emerald-400" />
-                      <span>Quick Place</span>
-                    </button>
-                  )}
-
-                  {handleEquip && (
-                    <button
-                      type="button"
-                      onClick={() => handleEquip(asset)}
-                      className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] font-mono font-semibold transition-all flex items-center justify-center gap-1 cursor-pointer ${
-                        isEquipped
-                          ? 'bg-rose-600 hover:bg-rose-700 text-white'
-                          : 'bg-purple-600 hover:bg-purple-500 text-white shadow-sm'
-                      }`}
-                    >
-                      <Crosshair className="w-3 h-3" />
-                      <span>{isEquipped ? 'Aiming...' : 'Aim on Map'}</span>
-                    </button>
-                  )}
+                    {/* Audio Preview Sound Button */}
+                    {asset.soundKey && (
+                      <button
+                        type="button"
+                        onClick={e => handlePlaySound(asset, e)}
+                        title="Test Audio FX"
+                        className={`p-1.5 rounded-lg border transition-all shrink-0 cursor-pointer ${
+                          isPlaying
+                            ? 'bg-amber-500/20 border-amber-500 text-amber-300 scale-105'
+                            : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-amber-300 hover:border-zinc-700'
+                        }`}
+                      >
+                        <Volume2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             );
@@ -261,6 +249,55 @@ export const EffectsDrawer: React.FC<EffectsDrawerProps> = ({
           <BookOpen className="w-3.5 h-3.5 text-amber-400" />
           <span>Browse Compendium & Custom Overrides</span>
         </button>
+      )}
+
+      {/* Active Board Spells & Dispel Panel */}
+      {activeEffects && activeEffects.length > 0 && (
+        <div className="p-2.5 rounded-xl bg-purple-950/40 border border-purple-500/30 space-y-2">
+          <div className="flex items-center justify-between text-xs font-bold text-purple-200">
+            <span className="flex items-center gap-1.5 font-mono">
+              <Sparkles className="w-3.5 h-3.5 text-purple-400 animate-pulse" />
+              Active Board FX ({activeEffects.length})
+            </span>
+            <span className="text-[10px] text-purple-400 font-mono">Dispel Single Spell</span>
+          </div>
+
+          <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1 sidebar-scrollbar">
+            {activeEffects.map((eff) => (
+              <div
+                key={eff.id}
+                className="flex items-center justify-between gap-2 p-2 rounded-lg bg-zinc-900/80 border border-zinc-800 hover:border-purple-500/40 transition-colors"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 truncate">
+                    <span className="text-xs font-bold text-zinc-100 truncate">{eff.name}</span>
+                    {(eff.isPersistent || eff.loop) && (
+                      <span className="px-1 py-0.2 rounded bg-purple-900/80 border border-purple-400/40 text-purple-200 text-[8px] font-mono shrink-0">
+                        Looping
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[10px] font-mono text-zinc-400 truncate">
+                    {eff.sizeFt}ft {eff.paradigm}
+                    {eff.casterName ? ` • ${eff.casterName}` : ''}
+                  </div>
+                </div>
+
+                {onDispelEffect && (
+                  <button
+                    type="button"
+                    onClick={() => onDispelEffect(eff.id)}
+                    className="px-2 py-1 rounded-md bg-red-950/80 hover:bg-red-900 border border-red-500/40 hover:border-red-400 text-red-300 hover:text-white text-[10px] font-mono font-bold transition-all cursor-pointer flex items-center gap-1 active:scale-95 shrink-0 shadow-sm"
+                    title={`Dispel ${eff.name} (Keep other active animations)`}
+                  >
+                    <X className="w-3 h-3" />
+                    <span>Dispel</span>
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* Clear Active Board Effects */}

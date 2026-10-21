@@ -55,6 +55,7 @@ export interface VttEffectInstance {
   soundKey?: string;
   color?: string;            // Secondary tint or outline indicator
   ownerId?: string;          // Player or DM userId who cast it
+  casterName?: string;       // Character or creature name who cast the effect
   spellId?: string;          // Associated 5e spell ID if cast from Compendium
 }
 

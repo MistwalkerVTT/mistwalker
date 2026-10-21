@@ -261,6 +261,8 @@ interface LeftSidebarProps {
   onEquipAsset?: (asset: Jb2aAssetDefinition) => void;
   onQuickPlaceAsset?: (asset: Jb2aAssetDefinition) => void;
   onClearEffects?: () => void;
+  onDispelEffect?: (effectId: string) => void;
+  activeEffects?: any[];
 }
 
 type GroupMenuId = 'maps' | 'zones' | 'fog-grid' | 'lighting' | 'combat' | 'fx' | 'spells' | 'tokens' | 'dice' | 'ai' | 'help';
@@ -274,6 +276,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   onEquipAsset,
   onQuickPlaceAsset,
   onClearEffects,
+  onDispelEffect,
+  activeEffects,
   handleMapSwitch,
   onClearMapSlot,
   handleFileUpload,
@@ -3167,6 +3171,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                   onEquipEffect={onEquipAsset}
                   onQuickPlaceEffect={onQuickPlaceAsset}
                   onClearEffects={onClearEffects}
+                  onDispelEffect={onDispelEffect}
+                  activeEffects={activeEffects}
                   activeEquippedId={activeEquippedAsset?.id}
                   gridSize={gridSize}
                 />

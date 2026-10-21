@@ -1466,6 +1466,8 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
     const isReaction = actType === 4;
     const castingTime = isBonusAction ? '1 Bonus Action' : isReaction ? '1 Reaction' : '1 Action';
     const jb2aAssetId = matchJb2aAssetId(name);
+    const matchedJb2a = jb2aAssetId ? findJb2aAsset(jb2aAssetId) : findJb2aAsset(name);
+    const iconUrl = matchedJb2a?.thumb && !matchedJb2a.thumb.endsWith('.webm') ? matchedJb2a.thumb : undefined;
 
     // Determine spellcasting ability modifier for this specific spell
     const spellStatId = sp.spellCastingAbilityId || def.spellCastingAbilityId;
@@ -1553,6 +1555,7 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
       spellSlotRequired: level > 0 && !sp.usesSpellSlot === false ? level : (level > 0 ? level : undefined),
       description: cleanDesc,
       jb2aAssetId,
+      iconUrl,
       isHeal,
       isAttack: Boolean(def.requiresAttackRoll),
       isSelfAction: rangeFt === 0 && !def.requiresAttackRoll && !def.requiresSavingThrow,

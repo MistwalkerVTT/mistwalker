@@ -4280,6 +4280,18 @@ export default function App() {
     toast.info('Cleared all visual effects from battlemap.');
   }, []);
 
+  const handleDispelEffect = useCallback((effectId: string) => {
+    const target = effects.find(e => e.id === effectId);
+    setEffects(prev => prev.filter(e => e.id !== effectId));
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('EFFECT_REMOVE', { id: effectId });
+    }
+    soundCatalog.play('magic_shatter');
+    toast.success(`Dispelled ${target?.name || 'spell animation'}!`, {
+      description: 'The visual effect has been removed without clearing other spells.'
+    });
+  }, [effects]);
+
   const handleEffectComplete = useCallback((effectId: string) => {
     setEffects(prev => prev.filter(e => e.id !== effectId));
     if (socketRef.current?.connected) {
@@ -6804,6 +6816,8 @@ export default function App() {
           onEquipAsset={handleEquipAsset}
           onQuickPlaceAsset={handleQuickPlaceAsset}
           onClearEffects={handleClearEffects}
+          onDispelEffect={handleDispelEffect}
+          activeEffects={effects}
           handleMapSwitch={handleMapSwitch}
           onClearMapSlot={handleClearMapSlot}
           handleFileUpload={handleFileUpload}
@@ -7820,6 +7834,7 @@ export default function App() {
               aimOrigin={aimOrigin}
               aimCurrent={aimCurrent}
               onEffectComplete={handleEffectComplete}
+              onDispelEffect={handleDispelEffect}
             />
 
             {/* Environmental & Animated Map FX Overlay (Uploaded & Generated Maps) */}

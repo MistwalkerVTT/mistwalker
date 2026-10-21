@@ -1230,6 +1230,7 @@ export default function PlayerView() {
   const [aimOrigin, setAimOrigin] = useState<{ x: number; y: number } | null>(null);
   const [aimCurrent, setAimCurrent] = useState<{ x: number; y: number } | null>(null);
   const [showEffectsDrawer, setShowEffectsDrawer] = useState<boolean>(false);
+  const [showActiveSpellsMenu, setShowActiveSpellsMenu] = useState<boolean>(false);
 
   // Grid Settings
   const [gridVisible, setGridVisible] = useState<boolean>(() => initialBackup?.gridVisible !== undefined ? initialBackup.gridVisible : true);
@@ -2865,7 +2866,9 @@ export default function PlayerView() {
         burstOnImpact: true,
         burstVideoUrl: activeEquippedAsset.burstWebm || activeEquippedAsset.webm,
         burstSoundKey: activeEquippedAsset.soundKey
-      } : undefined
+      } : undefined,
+      ownerId: claimedToken?.id || claimedToken?.name || 'player',
+      casterName: claimedToken?.name || 'Hero'
     };
 
     setEffects(prev => [...prev, newEffect]);
@@ -2938,7 +2941,9 @@ export default function PlayerView() {
       castTime: Date.now(),
       durationMs: 5000,
       soundKey: asset.soundKey,
-      color: asset.color
+      color: asset.color,
+      ownerId: claimedToken?.id || claimedToken?.name || 'player',
+      casterName: claimedToken?.name || 'Hero'
     };
 
     setEffects(prev => [...prev, newEffect]);
@@ -2957,6 +2962,18 @@ export default function PlayerView() {
       socketRef.current.emit('EFFECT_CLEAR_ALL');
     }
   }, []);
+
+  const handleDispelEffect = useCallback((effectId: string) => {
+    const target = effects.find(e => e.id === effectId);
+    setEffects(prev => prev.filter(e => e.id !== effectId));
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('EFFECT_REMOVE', { id: effectId });
+    }
+    soundCatalog.play('magic_shatter');
+    toast.success(`Dispelled ${target?.name || 'spell animation'}!`, {
+      description: 'The visual effect has been removed without clearing other spells.'
+    });
+  }, [effects]);
 
   const handleEffectComplete = useCallback((effectId: string) => {
     setEffects(prev => prev.filter(e => e.id !== effectId));
@@ -4495,6 +4512,8 @@ export default function PlayerView() {
               onEquipAsset={handleEquipAsset}
               onQuickPlaceAsset={handleQuickPlaceAsset}
               onClearEffects={handleClearEffects}
+              onDispelEffect={handleDispelEffect}
+              activeEffects={effects}
             />
           </div>
         </div>
@@ -5012,6 +5031,7 @@ export default function PlayerView() {
         aimOrigin={aimOrigin}
         aimCurrent={aimCurrent}
         onEffectComplete={handleEffectComplete}
+        onDispelEffect={handleDispelEffect}
       />
 
       {/* ========================================================= */}
