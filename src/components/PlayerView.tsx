@@ -3413,6 +3413,8 @@ export default function PlayerView() {
         activeTargetingAction.isHeal ||
         activeTargetingAction.hitBonus !== undefined ||
         activeTargetingAction.rangeFt === 0 ||
+        activeEquippedAsset?.targetType === 'single' ||
+        activeEquippedAsset?.targetType === 'self' ||
         activeTargetingAction.name.toLowerCase().includes('cure wounds') ||
         activeTargetingAction.name.toLowerCase().includes('healing word') ||
         activeTargetingAction.name.toLowerCase().includes('shield')
