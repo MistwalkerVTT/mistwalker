@@ -26,6 +26,19 @@ export interface DiceColorPreset {
 
 export const DICE_COLOR_PRESETS: DiceColorPreset[] = [
   {
+    id: 'contrast_black',
+    name: 'Contrast Black',
+    description: 'Sleek matte obsidian with high-contrast sharp white numerals.',
+    theme: {
+      primaryColor: '#18181b',
+      secondaryColor: '#09090b',
+      borderColor: '#3f3f46',
+      numberColor: '#ffffff'
+    },
+    previewColor: '#27272a',
+    previewGradient: 'from-zinc-800 to-zinc-950'
+  },
+  {
     id: 'amber_gold',
     name: 'Gilded Amber',
     description: 'Classic D&D warm amber resin with burnished gold trim.',

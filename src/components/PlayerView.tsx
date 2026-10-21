@@ -64,6 +64,7 @@ import { DynamicLightingLayer } from './DynamicLightingLayer';
 import { GridLayer } from './GridLayer';
 import { AnimatedFeaturesKonvaImage, AnimatedFeature, WeatherEffectType } from './AnimatedMapOverlay';
 import { DiceTableOverlay } from './DiceTableOverlay';
+import { PlayerDiceRollerModal } from './PlayerDiceRollerModal';
 import { DdbDiceRollEvent } from '../types/dice';
 import { DICE_COLOR_PRESETS, DiceColorPreset } from '../graphics/dice/diceTextures';
 import { WallSegment, VisionConfig, RoomAnnotation, Combatant, isMonsterToken, AURA_PRESETS, AURA_COLOR_PALETTE, TokenAura, AuraPreset } from '../types';
@@ -102,6 +103,8 @@ import {
   findJb2aAsset
 } from '../effects';
 import { PlayerStationModal, PlayerStationMode } from './PlayerStationModal';
+import { PlayerCharacterSelectModal, PlayerCharacterChoiceItem } from './PlayerCharacterSelectModal';
+import { PlayerDdbPrivacyModal } from './PlayerDdbPrivacyModal';
 import { PlayerHeroDock } from './PlayerHeroDock';
 import { HudCharacterData, HudActionItem } from '../types/hud';
 import { TokenDragRuler, TokenDragState, parseSpeedFt } from './TokenDragRuler';
@@ -1369,6 +1372,15 @@ export default function PlayerView() {
   const [hudCharacterData, setHudCharacterData] = useState<HudCharacterData | null>(null);
   const [activeTargetingAction, setActiveTargetingAction] = useState<HudActionItem | null>(null);
   const [isSyncingHudDdb, setIsSyncingHudDdb] = useState<boolean>(false);
+  const [showCharacterSelectModal, setShowCharacterSelectModal] = useState<boolean>(false);
+  const [isCurrentCharacterPrivate, setIsCurrentCharacterPrivate] = useState<boolean>(false);
+  const [privacyModalState, setPrivacyModalState] = useState<{
+    isOpen: boolean;
+    characterId: string;
+    characterName: string;
+    avatarUrl?: string;
+    pendingChoice?: PlayerCharacterChoiceItem | null;
+  } | null>(null);
 
   // Incoming Token Mutation Prompt (Targeted Healing or Damage from another player)
   const [incomingMutationPrompt, setIncomingMutationPrompt] = useState<{
@@ -1388,6 +1400,13 @@ export default function PlayerView() {
   useEffect(() => {
     videoCacheManager.prewarmTopSpells();
   }, []);
+
+  // If remote player mode is active and no character is claimed yet, prompt character selection
+  useEffect(() => {
+    if (stationMode === 'remote_player' && !claimedTokenId && !showStationModal) {
+      setShowCharacterSelectModal(true);
+    }
+  }, [stationMode, claimedTokenId, showStationModal]);
 
   // Automatically reconcile claimedTokenId when tokens change (e.g. across scene transitions where token IDs differ)
   useEffect(() => {
@@ -1501,6 +1520,7 @@ export default function PlayerView() {
         if (res.ok) {
           const data = await res.json();
           if (data && data.name) {
+            setIsCurrentCharacterPrivate(false);
             setHudCharacterData({
               ...data,
               avatarUrl: claimedToken.url || claimedToken.avatarUrl || data.avatarUrl || getCharacterTokenUrl(data.name)
@@ -1512,6 +1532,8 @@ export default function PlayerView() {
             }
             return;
           }
+        } else if (res.status === 403) {
+          setIsCurrentCharacterPrivate(true);
         }
       }
 
@@ -1546,6 +1568,7 @@ export default function PlayerView() {
     return localStorage.getItem('mistwalker_player_dice_preset') || 'amber_gold';
   });
   const [showDicePaletteModal, setShowDicePaletteModal] = useState<boolean>(false);
+  const [showDiceRollerModal, setShowDiceRollerModal] = useState<boolean>(false);
 
   const selectedDicePreset = useMemo<DiceColorPreset>(() => {
     return DICE_COLOR_PRESETS.find(p => p.id === dicePresetId) || DICE_COLOR_PRESETS[0];
@@ -1554,6 +1577,7 @@ export default function PlayerView() {
   // Active drag state and claimedTokenId ref to prevent rubber-banding during local drag
   const activeDraggingTokenIdRef = useRef<string | null>(null);
   const claimedTokenIdRef = useRef<string | null>(claimedTokenId);
+  const lastEmitTimeRef = useRef<number>(0);
   useEffect(() => {
     claimedTokenIdRef.current = claimedTokenId;
   }, [claimedTokenId]);
@@ -3025,12 +3049,45 @@ export default function PlayerView() {
     if (typeof window !== 'undefined') {
       sessionStorage.setItem('mistwalker_player_station_mode', mode);
     }
-    toast.success(
-      mode === 'tv_table'
-        ? 'Digital TV Table Mode active: Clean battlemap presentation.'
-        : 'Remote Player Mode active: D&D Beyond Tactical HUD ready.'
-    );
+    if (mode === 'remote_player') {
+      setShowCharacterSelectModal(true);
+    } else {
+      toast.success('Digital TV Table Mode active: Clean battlemap presentation.');
+    }
   }, []);
+
+  const handleSelectCharacterChoice = useCallback((choice: PlayerCharacterChoiceItem) => {
+    if (typeof window !== 'undefined' && choice.name) {
+      localStorage.setItem('mistwalker_player_claimed_name', choice.name);
+    }
+
+    if (choice.tokenId) {
+      if (claimedTokenIdRef.current !== choice.tokenId) {
+        claimedTokenIdRef.current = choice.tokenId;
+        setClaimedTokenId(choice.tokenId);
+      }
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('mistwalker_player_claimed_token', choice.tokenId);
+      }
+    } else {
+      const match = tokens.find(t => (t.name || '').trim().toLowerCase() === choice.name.trim().toLowerCase());
+      if (match) {
+        claimedTokenIdRef.current = match.id;
+        setClaimedTokenId(match.id);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('mistwalker_player_claimed_token', match.id);
+        }
+      } else {
+        claimedTokenIdRef.current = null;
+        setClaimedTokenId(null);
+      }
+    }
+
+    toast.success(`Playing as ${choice.name}!`, {
+      description: `${choice.race} • ${choice.classLevel}`
+    });
+    setShowCharacterSelectModal(false);
+  }, [tokens]);
 
   const handleSelectHudAction = useCallback((action: HudActionItem) => {
     if (activeTargetingAction?.id === action.id) {
@@ -3168,6 +3225,55 @@ export default function PlayerView() {
       description: 'Click target token to execute action, or press Esc to cancel.'
     });
   }, [activeTargetingAction, claimedToken, gridSize, selectedDicePreset]);
+
+  const handleRollToHit = useCallback((action: HudActionItem) => {
+    if (action.hitBonus === undefined) return;
+
+    const rawHit = typeof action.hitBonus === 'number'
+      ? action.hitBonus
+      : (parseInt(String(action.hitBonus).replace('+', ''), 10) || 0);
+    const modStr = rawHit >= 0 ? `+${rawHit}` : `${rawHit}`;
+    const d20 = Math.floor(Math.random() * 20) + 1;
+    const total = d20 + rawHit;
+    const isCrit = d20 === 20;
+    const isFumble = d20 === 1;
+
+    const charName = hudCharacterData?.name || claimedToken?.name || 'Hero';
+    const diceEvent: DdbDiceRollEvent = {
+      id: `roll-${Date.now()}`,
+      characterId: String(hudCharacterData?.id || claimedToken?.id || ''),
+      characterName: charName,
+      avatarUrl: hudCharacterData?.avatarUrl || claimedToken?.avatarUrl || claimedToken?.url,
+      action: `${action.name} (To Hit)`,
+      rollType: 'attack',
+      formula: `1d20 ${modStr}`,
+      diceNotation: '1d20',
+      dice: [{ sides: 20, result: d20, type: 'd20' }],
+      modifier: rawHit,
+      total,
+      isCritical: isCrit,
+      isFumble: isFumble,
+      theme: selectedDicePreset.id,
+      themeColor: isCrit ? '#10b981' : isFumble ? '#ef4444' : selectedDicePreset.theme.primaryColor,
+      timestamp: Date.now(),
+      source: 'player'
+    };
+
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', diceEvent);
+    }
+    if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+      (window as any).__mistwalkerRoll3d(diceEvent);
+    }
+
+    toast.success(`${charName}: ${action.name} To Hit!`, {
+      description: isCrit
+        ? `CRITICAL HIT! Nat 20 ${modStr} = ${total}`
+        : isFumble
+        ? `NATURAL 1 FUMBLE! Nat 1 ${modStr} = ${total}`
+        : `Rolled ${d20} ${modStr} = ${total} to Hit!`
+    });
+  }, [hudCharacterData, claimedToken, selectedDicePreset]);
 
   const handleTargetToken = useCallback((targetToken: Token) => {
     if (!activeTargetingAction) return;
@@ -4091,7 +4197,7 @@ export default function PlayerView() {
 
                           <button
                             onClick={() => {
-                              setShowClaimMenu(true);
+                              setShowCharacterSelectModal(true);
                               if (isMobile) setIsMobileSidebarOpen(false);
                             }}
                             className="p-1 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
@@ -4128,7 +4234,7 @@ export default function PlayerView() {
                     ) : (
                       <button
                         onClick={() => {
-                          setShowClaimMenu(true);
+                          setShowCharacterSelectModal(true);
                           if (isMobile) setIsMobileSidebarOpen(false);
                         }}
                         className={`w-full flex items-center justify-center gap-2 bg-indigo-600/80 hover:bg-indigo-600 text-white rounded-xl py-2 px-2.5 shadow-sm transition-all border border-indigo-500/50 group cursor-pointer ${
@@ -4175,16 +4281,19 @@ export default function PlayerView() {
                       </button>
                     )}
 
-                    {/* Quick 3D Physics Dice Roller */}
+                    {/* 3D Physics Polyhedral Dice Roller Menu */}
                     <button
-                      onClick={handleQuickRollDice}
+                      onClick={() => {
+                        setShowDiceRollerModal(true);
+                        if (isMobile) setIsMobileSidebarOpen(false);
+                      }}
                       className={`w-full flex items-center rounded-xl transition-all cursor-pointer border bg-zinc-900/80 hover:bg-zinc-900 hover:border-amber-500/50 text-zinc-300 hover:text-amber-300 border-zinc-800 group ${
                         isFull ? 'px-2.5 py-2 gap-2 text-xs font-medium' : 'p-2.5 justify-center'
                       }`}
-                      title="Roll 3D Physics d20"
+                      title="Roll Dice (d20, d12, d100, d10, d8, d6, d4)"
                     >
                       <Dices className="w-4 h-4 text-amber-400 group-hover:rotate-12 transition-transform shrink-0" />
-                      {isFull && <span>Roll 3D Dice</span>}
+                      {isFull && <span>Roll Dice</span>}
                     </button>
 
                     {/* 3D Dice Style & Material Palette */}
@@ -5346,6 +5455,49 @@ export default function PlayerView() {
 
 
 
+      {/* Interactive Polyhedral Dice Roller Modal */}
+      <PlayerDiceRollerModal
+        isOpen={showDiceRollerModal}
+        onClose={() => setShowDiceRollerModal(false)}
+        selectedDicePreset={selectedDicePreset}
+        onOpenDicePalette={() => {
+          setShowDiceRollerModal(false);
+          setShowDicePaletteModal(true);
+        }}
+        characterName={claimedToken?.name || 'Local Player'}
+        onRoll={(rollEvent, isPublic) => {
+          // 1. Trigger local 3D physics dice simulation
+          if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+            (window as any).__mistwalkerRoll3d(rollEvent);
+          }
+
+          // 2. If public, broadcast to table via socket
+          if (isPublic && socketRef.current?.connected) {
+            socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', rollEvent);
+          }
+
+          // 3. Screen shake on natural 20
+          if (rollEvent.isCritical) {
+            setIsShaking(true);
+            playCriticalHitSound();
+            setTimeout(() => setIsShaking(false), 600);
+            if (socketRef.current?.connected) {
+              socketRef.current.emit('SYNC_SHAKE', {});
+            }
+          }
+
+          toast.success(`${rollEvent.characterName} rolled ${rollEvent.formula}`, {
+            description: `Total: ${rollEvent.total} (${isPublic ? 'Public to everyone' : 'Private to self'})`
+          });
+        }}
+        onClearDice={() => {
+          if (typeof window !== 'undefined' && (window as any).__mistwalkerClearDice3d) {
+            (window as any).__mistwalkerClearDice3d();
+            toast.info('Dice cleared from table');
+          }
+        }}
+      />
+
       {/* 3D Dice Color Customization Modal */}
       {showDicePaletteModal && (
         <div
@@ -5557,6 +5709,7 @@ export default function PlayerView() {
           characterData={hudCharacterData}
           claimedToken={claimedToken}
           onSelectAction={handleSelectHudAction}
+          onRollToHit={handleRollToHit}
           activeTargetingAction={activeTargetingAction}
           activeEquippedAsset={activeEquippedAsset}
           onCancelTargeting={() => {
@@ -5576,6 +5729,19 @@ export default function PlayerView() {
             toast.info('Turn passed.');
           }}
           onSwitchStationMode={() => setShowStationModal(true)}
+          onSwitchCharacter={() => setShowCharacterSelectModal(true)}
+          onOpenPrivacyModal={() => {
+            const charId = resolvedClaimedDdbId || (claimedToken as any)?.ddbCharacterId;
+            if (charId) {
+              setPrivacyModalState({
+                isOpen: true,
+                characterId: String(charId),
+                characterName: claimedToken?.name || 'Character',
+                avatarUrl: claimedToken?.url || claimedToken?.avatarUrl
+              });
+            }
+          }}
+          isCharacterPrivate={isCurrentCharacterPrivate}
           onRefreshDdb={() => syncHudFromDdb(true)}
           isSyncingDdb={isSyncingHudDdb}
         />
@@ -5589,6 +5755,55 @@ export default function PlayerView() {
         onSelectStation={handleSelectStationMode}
         characterName={claimedToken?.name}
       />
+
+      {/* ========================================================= */}
+      {/* Player Character Select Modal (Choose Hero in Player View) */}
+      {/* ========================================================= */}
+      <PlayerCharacterSelectModal
+        isOpen={showCharacterSelectModal}
+        onClose={() => setShowCharacterSelectModal(false)}
+        tokens={tokens}
+        compendiumCharacters={compendiumCharacters}
+        claimedTokenId={claimedTokenId}
+        onSelectCharacter={handleSelectCharacterChoice}
+        onReleaseCharacter={handleReleaseToken}
+        onPromptPrivacy={(details) => {
+          setPrivacyModalState({
+            isOpen: true,
+            characterId: details.characterId,
+            characterName: details.characterName,
+            avatarUrl: details.avatarUrl,
+            pendingChoice: details.choice
+          });
+        }}
+      />
+
+      {/* ========================================================= */}
+      {/* D&D Beyond Character Sheet Privacy Notice Modal           */}
+      {/* ========================================================= */}
+      {privacyModalState && (
+        <PlayerDdbPrivacyModal
+          isOpen={privacyModalState.isOpen}
+          onClose={() => setPrivacyModalState(null)}
+          characterName={privacyModalState.characterName}
+          characterId={privacyModalState.characterId}
+          avatarUrl={privacyModalState.avatarUrl}
+          onPrivacyResolved={() => {
+            if (privacyModalState.pendingChoice) {
+              handleSelectCharacterChoice(privacyModalState.pendingChoice);
+            }
+            setIsCurrentCharacterPrivate(false);
+            syncHudFromDdb(true);
+            toast.success(`${privacyModalState.characterName}'s sheet is now Public and fully synced!`);
+          }}
+          onContinueLimited={() => {
+            if (privacyModalState.pendingChoice) {
+              handleSelectCharacterChoice(privacyModalState.pendingChoice);
+            }
+            toast.info(`Continuing with local character sheet for ${privacyModalState.characterName}.`);
+          }}
+        />
+      )}
 
       {/* ========================================================= */}
       {/* 1-Tap Mutation Approval Prompt (Incoming Healing/Damage)  */}

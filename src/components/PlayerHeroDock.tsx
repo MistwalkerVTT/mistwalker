@@ -18,14 +18,18 @@ import {
   Wand2,
   Search,
   Eye,
-  Footprints
+  Footprints,
+  Lock,
+  Users
 } from 'lucide-react';
 import { HudCharacterData, HudActionItem, HudActionCategory } from '../types/hud';
+import { toast } from 'sonner';
 
 interface PlayerHeroDockProps {
   characterData: HudCharacterData | null;
   claimedToken?: any | null;
   onSelectAction: (action: HudActionItem) => void;
+  onRollToHit?: (action: HudActionItem) => void;
   activeTargetingAction?: HudActionItem | null;
   selectedAction?: HudActionItem | null;
   activeEquippedAsset?: any | null;
@@ -33,6 +37,9 @@ interface PlayerHeroDockProps {
   onEndTurn?: () => void;
   isMyTurn?: boolean;
   onSwitchStationMode?: () => void;
+  onSwitchCharacter?: () => void;
+  onOpenPrivacyModal?: () => void;
+  isCharacterPrivate?: boolean;
   onOpenRestModal?: () => void;
   onRefreshDdb?: () => void;
   isSyncingDdb?: boolean;
@@ -43,6 +50,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
   characterData,
   claimedToken,
   onSelectAction,
+  onRollToHit,
   activeTargetingAction,
   selectedAction,
   activeEquippedAsset,
@@ -50,6 +58,9 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
   onEndTurn,
   isMyTurn = false,
   onSwitchStationMode,
+  onSwitchCharacter,
+  onOpenPrivacyModal,
+  isCharacterPrivate = false,
   onOpenRestModal,
   onRefreshDdb,
   isSyncingDdb = false
@@ -104,6 +115,57 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [hoveredAction]);
+
+  // Dedicated To-Hit Roll Handler
+  const handleRollToHit = (action: HudActionItem) => {
+    if (onRollToHit) {
+      onRollToHit(action);
+      return;
+    }
+
+    if (action.hitBonus === undefined) return;
+    const rawHit = typeof action.hitBonus === 'number'
+      ? action.hitBonus
+      : (parseInt(String(action.hitBonus).replace('+', ''), 10) || 0);
+    const modStr = rawHit >= 0 ? `+${rawHit}` : `${rawHit}`;
+    const d20 = Math.floor(Math.random() * 20) + 1;
+    const total = d20 + rawHit;
+    const isCrit = d20 === 20;
+    const isFumble = d20 === 1;
+
+    const charName = characterData?.name || claimedToken?.name || 'Hero';
+    const diceEvent: any = {
+      id: `roll-${Date.now()}`,
+      characterId: String(characterData?.id || claimedToken?.id || ''),
+      characterName: charName,
+      avatarUrl: characterData?.avatarUrl || claimedToken?.avatarUrl || claimedToken?.url,
+      action: `${action.name} (To Hit)`,
+      rollType: 'attack',
+      formula: `1d20 ${modStr}`,
+      diceNotation: '1d20',
+      dice: [{ sides: 20, result: d20, type: 'd20' }],
+      modifier: rawHit,
+      total,
+      isCritical: isCrit,
+      isFumble: isFumble,
+      theme: 'default',
+      themeColor: isCrit ? '#10b981' : isFumble ? '#ef4444' : '#10b981',
+      timestamp: Date.now(),
+      source: 'player'
+    };
+
+    if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+      (window as any).__mistwalkerRoll3d(diceEvent);
+    }
+
+    toast.success(`${charName}: ${action.name} To Hit!`, {
+      description: isCrit
+        ? `CRITICAL HIT! Nat 20 ${modStr} = ${total}`
+        : isFumble
+        ? `NATURAL 1 FUMBLE! Nat 1 ${modStr} = ${total}`
+        : `Rolled ${d20} ${modStr} = ${total} to Hit!`
+    });
+  };
 
   // Character vitals & metadata
   const name = characterData?.name || claimedToken?.name || 'Adventurer';
@@ -443,9 +505,17 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                 <span>• {hoveredAction.rangeFt > 0 ? `${hoveredAction.rangeFt} ft.` : 'Self'}</span>
               )}
               {hoveredAction.hitBonus !== undefined && (
-                <span className="px-1.5 py-0.5 rounded bg-emerald-950 border border-emerald-500/50 text-emerald-300 font-bold">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRollToHit(hoveredAction);
+                  }}
+                  className="px-2 py-0.5 rounded bg-emerald-950 hover:bg-emerald-900 border border-emerald-500/50 hover:border-emerald-400 text-emerald-300 hover:text-white font-bold transition-all cursor-pointer active:scale-95 shadow-sm"
+                  title={`Click to Roll to Hit: 1d20 ${String(hoveredAction.hitBonus).startsWith('+') || String(hoveredAction.hitBonus).startsWith('-') ? hoveredAction.hitBonus : `+${hoveredAction.hitBonus}`}`}
+                >
                   To Hit: {String(hoveredAction.hitBonus).startsWith('+') || String(hoveredAction.hitBonus).startsWith('-') ? hoveredAction.hitBonus : `+${hoveredAction.hitBonus}`}
-                </span>
+                </button>
               )}
               {hoveredAction.saveDc && (
                 <span className="px-1.5 py-0.5 rounded bg-amber-950 border border-amber-500/50 text-amber-300 font-bold">
@@ -689,14 +759,22 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
             {currentCategoryList.map((action, idx) => {
               const isTargetingThis = currentTargetingAction?.id === action.id;
               return (
-                <button
+                <div
                   key={action.id || idx}
-                  type="button"
+                  role="button"
+                  tabIndex={0}
                   onClick={() => {
                     onSelectAction(action);
                     setIsMobileDrawerOpen(false);
                   }}
-                  className={`w-full p-2.5 rounded-xl border text-left transition-all flex items-center justify-between gap-2.5 cursor-pointer ${
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onSelectAction(action);
+                      setIsMobileDrawerOpen(false);
+                    }
+                  }}
+                  className={`w-full p-2.5 rounded-xl border text-left transition-all flex items-center justify-between gap-2.5 cursor-pointer select-none ${
                     isTargetingThis
                       ? 'border-amber-400 bg-amber-500/20 ring-1 ring-amber-400'
                       : 'border-zinc-800 bg-zinc-900/70 hover:bg-zinc-850'
@@ -724,9 +802,17 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
 
                   <div className="flex items-center gap-1.5 shrink-0 font-mono text-[10px]">
                     {action.hitBonus !== undefined && (
-                      <span className="px-2 py-1 rounded-lg bg-emerald-950 border border-emerald-500/50 text-emerald-300 font-bold">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRollToHit(action);
+                        }}
+                        className="px-2 py-1 rounded-lg bg-emerald-950 hover:bg-emerald-900 border border-emerald-500/50 hover:border-emerald-400 text-emerald-300 hover:text-white font-bold transition-all cursor-pointer active:scale-95 shadow-sm shrink-0"
+                        title={`Click to Roll to Hit: 1d20 ${String(action.hitBonus).startsWith('+') || String(action.hitBonus).startsWith('-') ? action.hitBonus : `+${action.hitBonus}`}`}
+                      >
                         {String(action.hitBonus).startsWith('+') || String(action.hitBonus).startsWith('-') ? action.hitBonus : `+${action.hitBonus}`}
-                      </span>
+                      </button>
                     )}
                     {action.saveDc && (
                       <span className="px-2 py-1 rounded-lg bg-amber-950 border border-amber-500/50 text-amber-300 font-bold">
@@ -750,7 +836,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                       </span>
                     )}
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>
@@ -798,6 +884,17 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                   >
                     DDB LIVE
                   </span>
+                )}
+                {isCharacterPrivate && (
+                  <button
+                    type="button"
+                    onClick={onOpenPrivacyModal}
+                    className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/50 text-amber-300 hover:bg-amber-500/30 text-[9px] font-mono font-bold tracking-wide shrink-0 flex items-center gap-1 cursor-pointer transition-colors shadow-sm"
+                    title="Character sheet is Private on D&D Beyond. Click to view quicklink to make it Public."
+                  >
+                    <Lock className="w-2.5 h-2.5 text-amber-400" />
+                    <span>SHEET PRIVATE</span>
+                  </button>
                 )}
               </div>
               <div className="text-[11px] font-mono text-zinc-400 truncate">
@@ -936,6 +1033,17 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
               >
                 <ExternalLink className="w-4 h-4" />
               </a>
+            )}
+
+            {onSwitchCharacter && (
+              <button
+                type="button"
+                onClick={onSwitchCharacter}
+                className="p-1.5 rounded-xl bg-zinc-950 hover:bg-zinc-800 text-zinc-400 hover:text-amber-400 border border-zinc-800 transition-colors cursor-pointer"
+                title="Switch Character / Hero"
+              >
+                <Users className="w-4 h-4" />
+              </button>
             )}
 
             {onSwitchStationMode && (
@@ -1105,13 +1213,20 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                     : null;
 
                 return (
-                  <button
+                  <div
                     key={action.id || idx}
-                    type="button"
+                    role="button"
+                    tabIndex={0}
                     onClick={() => onSelectAction(action)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        onSelectAction(action);
+                      }
+                    }}
                     onMouseEnter={() => setHoveredAction(action)}
                     onMouseLeave={() => setHoveredAction(null)}
-                    className={`group p-2.5 rounded-xl border text-left transition-all flex items-center justify-between gap-2.5 cursor-pointer ${
+                    className={`group p-2.5 rounded-xl border text-left transition-all flex items-center justify-between gap-2.5 cursor-pointer select-none ${
                       isTargetingThis
                         ? 'border-amber-400 bg-amber-500/20 shadow-[0_0_15px_rgba(245,158,11,0.35)] ring-1 ring-amber-400'
                         : 'border-zinc-800/90 hover:border-amber-500/50 bg-zinc-900/75 hover:bg-zinc-900'
@@ -1154,28 +1269,52 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                     {/* Right: D&D Beyond Hit / Save / Damage / Uses Badges */}
                     <div className="flex items-center gap-1.5 shrink-0 font-mono text-[10px]">
                       {formattedHit && (
-                        <div className="flex flex-col items-center px-2 py-1 rounded-lg bg-emerald-950/90 border border-emerald-500/40 text-emerald-300">
-                          <span className="text-[8px] uppercase text-emerald-400/80 leading-none">Hit</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRollToHit(action);
+                          }}
+                          className="flex flex-col items-center px-2 py-1 rounded-lg bg-emerald-950/90 hover:bg-emerald-900 border border-emerald-500/40 hover:border-emerald-400 text-emerald-300 hover:text-white transition-all cursor-pointer shadow-sm hover:shadow-[0_0_12px_rgba(16,185,129,0.5)] active:scale-95 group/hit shrink-0"
+                          title={`Click to Roll to Hit: 1d20 ${formattedHit}`}
+                          aria-label={`Roll to Hit: 1d20 ${formattedHit}`}
+                        >
+                          <span className="text-[8px] uppercase text-emerald-400/80 group-hover/hit:text-emerald-200 leading-none">Hit</span>
                           <span className="font-bold text-xs leading-tight">{formattedHit}</span>
-                        </div>
+                        </button>
                       )}
 
                       {action.saveDc && (
-                        <div className="flex flex-col items-center px-2 py-1 rounded-lg bg-amber-950/90 border border-amber-500/40 text-amber-300">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSelectAction(action);
+                          }}
+                          className="flex flex-col items-center px-2 py-1 rounded-lg bg-amber-950/90 hover:bg-amber-900 border border-amber-500/40 hover:border-amber-400 text-amber-300 hover:text-white transition-all cursor-pointer active:scale-95 shrink-0"
+                          title={`Cast ${action.name} (DC ${action.saveDc} ${action.saveAbility || ''})`}
+                        >
                           <span className="text-[8px] uppercase text-amber-400/80 leading-none">
                             {action.saveAbility || 'Save'}
                           </span>
                           <span className="font-bold text-xs leading-tight">DC {action.saveDc}</span>
-                        </div>
+                        </button>
                       )}
 
                       {action.damageFormula && (
-                        <div
-                          className={`flex flex-col items-center px-2 py-1 rounded-lg border ${
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSelectAction(action);
+                          }}
+                          className={`flex flex-col items-center px-2 py-1 rounded-lg border transition-all cursor-pointer active:scale-95 shrink-0 ${
                             action.isHeal
-                              ? 'bg-emerald-950/90 border-emerald-500/40 text-emerald-300'
-                              : 'bg-rose-950/90 border-rose-500/40 text-rose-300'
+                              ? 'bg-emerald-950/90 hover:bg-emerald-900 border-emerald-500/40 hover:border-emerald-400 text-emerald-300 hover:text-white shadow-sm hover:shadow-[0_0_12px_rgba(16,185,129,0.5)]'
+                              : 'bg-rose-950/90 hover:bg-rose-900 border-rose-500/40 hover:border-rose-400 text-rose-300 hover:text-white shadow-sm hover:shadow-[0_0_12px_rgba(244,63,94,0.5)]'
                           }`}
+                          title={`Cast & Fire: ${action.name} (${action.damageFormula})`}
+                          aria-label={`Fire ${action.name}: ${action.damageFormula}`}
                         >
                           <span className="text-[8px] uppercase opacity-75 leading-none truncate max-w-[56px]">
                             {action.damageType || (action.isHeal ? 'Heal' : 'Dmg')}
@@ -1183,7 +1322,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                           <span className="font-bold text-xs leading-tight">
                             {action.damageFormula.replace(/\s+/g, '')}
                           </span>
-                        </div>
+                        </button>
                       )}
 
                       {action.uses && (
@@ -1201,7 +1340,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                         </span>
                       )}
                     </div>
-                  </button>
+                  </div>
                 );
               })}
 

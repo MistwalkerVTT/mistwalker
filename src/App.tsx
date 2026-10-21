@@ -3953,7 +3953,7 @@ export default function App() {
         id: `generic_${action.id}`,
         name: action.name,
         label: `${action.name} (${action.rangeFt || 5} ft)`,
-        paradigm: (action.rangeFt || 5) > 5 ? 'projectile' : 'melee',
+        paradigm: (action.rangeFt || 5) > 5 ? 'projectile' : 'point',
         shape: (action.rangeFt || 5) > 5 ? 'ray' : 'circle',
         defaultSizeFt: action.rangeFt || 5,
         webm: '/jb2a/Library/Cantrip/Fire_Bolt/FireBolt_01_Regular_Orange_30ft_1600x400.webm',

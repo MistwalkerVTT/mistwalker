@@ -535,6 +535,9 @@ export interface ResolvedTokenStats {
   tempHp?: number;
   characterName: string;
   isFromCharacterSheet: boolean;
+  race?: string;
+  classLevel?: string;
+  speed?: string | number;
 }
 
 export function isDdbMatch(
@@ -637,7 +640,10 @@ export function resolveTokenCharacterStats(
       currentHp,
       tempHp,
       characterName: char.name,
-      isFromCharacterSheet: true
+      isFromCharacterSheet: true,
+      race: char.race,
+      classLevel: char.classLevel,
+      speed: char.speed
     };
   }
 
@@ -656,6 +662,7 @@ export function resolveTokenCharacterStats(
     currentHp,
     tempHp,
     characterName: rawName || 'Token',
-    isFromCharacterSheet: false
+    isFromCharacterSheet: false,
+    speed: (token as any).speed
   };
 }

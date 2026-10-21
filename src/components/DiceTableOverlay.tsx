@@ -159,14 +159,22 @@ export const DiceTableOverlay: React.FC<Props> = ({
     };
   }, [socket, roll3d]);
 
-  // Expose roll function to window for immediate local triggering
+  // Expose roll and clear functions to window for immediate local triggering
   useEffect(() => {
     if (typeof window !== 'undefined') {
       (window as any).__mistwalkerRoll3d = roll3d;
+      (window as any).__mistwalkerClearDice3d = () => {
+        try {
+          engineRef.current?.clearDice();
+        } catch (e) {
+          console.warn('[DiceTableOverlay] Failed to clear dice:', e);
+        }
+      };
     }
     return () => {
       if (typeof window !== 'undefined') {
         delete (window as any).__mistwalkerRoll3d;
+        delete (window as any).__mistwalkerClearDice3d;
       }
     };
   }, [roll3d]);

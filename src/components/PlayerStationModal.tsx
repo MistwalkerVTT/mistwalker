@@ -78,13 +78,13 @@ export const PlayerStationModal: React.FC<PlayerStationModalProps> = ({
                   </span>
                 </h3>
                 <p className="text-[11px] text-zinc-400 font-sans mt-1 leading-relaxed">
-                  For online players on laptops/PCs. Interactive bottom action bar, spell slots, targeting & token vision.
+                  For online players on laptops/PCs. Choose your adventurer, access interactive D&D Beyond HUD, spell slots, targeting & token vision.
                 </p>
               </div>
             </div>
 
             <div className="mt-4 pt-3 border-t border-zinc-800 flex items-center justify-between text-xs font-mono text-amber-400 font-bold">
-              <span>{characterName ? `Play as ${characterName}` : 'Enter Player Station'}</span>
+              <span>{characterName ? `Play as ${characterName} (or Choose Hero)` : 'Choose Your Character & Enter'}</span>
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </div>
           </button>

@@ -14,6 +14,7 @@ export type MonsterActionType =
   | 'attack'
   | 'spell'
   | 'multiattack'
+  | 'action'
   | 'special'
   | 'trait'
   | 'reaction'
