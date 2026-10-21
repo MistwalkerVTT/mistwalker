@@ -8690,12 +8690,14 @@ export default function App() {
         <MapGenerator 
           onClose={() => setShowCinematicMapGenerator(false)} 
           onOpenApiKeyModal={() => setShowApiKeyModal(true)}
-          onApply={(url, briefing, genFeatures, genWeather, genSizePreset, walls) => {
+          onApply={(url, briefing, genFeatures, genWeather, genSizePreset, walls, canvasSize) => {
             setImageFile(url);
             setMapType('image');
             setReveals([]);
             setPolygonReveals([]);
             setTokens([]);
+            setGridOffsetX(0);
+            setGridOffsetY(0);
             if (walls && walls.length > 0) {
               setWalls(walls);
             } else {
@@ -8711,7 +8713,10 @@ export default function App() {
             if (genWeather && genWeather !== 'none') {
               setBoardWeatherEffect(genWeather);
             }
-            if (genSizePreset && genSizePreset !== 'custom') {
+            if (canvasSize && canvasSize.cellPx > 0) {
+              setGridSize(canvasSize.cellPx);
+              setGridVisible(true);
+            } else if (genSizePreset && genSizePreset !== 'custom') {
               const preset = MAP_SIZE_PRESETS[genSizePreset];
               const newGrid = Math.round(1920 / preset.width);
               setGridSize(newGrid);
@@ -8719,7 +8724,9 @@ export default function App() {
             }
             setShowCinematicMapGenerator(false);
             if (walls && walls.length > 0) {
-              toast.success(`High-res battlemap applied with ${walls.length} auto-traced walls and doors!`);
+              const numDoors = walls.filter(w => w.wallType === 'door').length;
+              const numWalls = walls.length - numDoors;
+              toast.success(`Overhead 1" grid battlemap applied with ${numWalls} walls and ${numDoors} doors!`);
             } else {
               toast.success("Battlemap and animated FX applied to the board!");
             }

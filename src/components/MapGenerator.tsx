@@ -50,12 +50,20 @@ type TimeOfDay = 'dawn' | 'noon' | 'dusk' | 'midnight';
 type Weather = 'clear' | 'overcast' | 'rain' | 'fog' | 'snow' | 'storm';
 type LightType = 'torch' | 'magical' | 'daylight';
 type LightSource = { x: number; y: number; type: LightType; radius: number };
-type GeneratorEngine = 'flux' | 'nano-banana-pro' | 'nano-banana-2' | 'procedural';
+type GeneratorEngine = 'architectural' | 'flux' | 'nano-banana-pro' | 'nano-banana-2' | 'procedural';
 type ImageResolution = '1K' | '2K' | '4K';
 type MapAspectRatio = '16:9' | '4:3' | '1:1';
 type ArtStyle = 'photorealistic' | 'dark-fantasy' | 'ethereal' | 'classic';
 
 export type MapSizePresetKey = 'small' | 'medium' | 'large' | 'colossal' | 'custom';
+
+export interface GeneratedCanvasSize {
+  width: number;
+  height: number;
+  gridW: number;
+  gridH: number;
+  cellPx: number;
+}
 
 export const MAP_SIZE_PRESETS: Record<
   Exclude<MapSizePresetKey, 'custom'>,
@@ -119,7 +127,8 @@ interface MapGeneratorProps {
     features?: AnimatedFeature[],
     weather?: WeatherEffectType,
     sizePreset?: MapSizePresetKey,
-    walls?: WallSegment[]
+    walls?: WallSegment[],
+    canvasSize?: GeneratedCanvasSize
   ) => void;
 }
 
@@ -130,7 +139,7 @@ export default function MapGenerator({ onClose, onOpenApiKeyModal, onApply }: Ma
   const [weather, setWeather] = useState<Weather>('clear');
   const [customPrompt, setCustomPrompt] = useState<string>('');
   const [seed, setSeed] = useState<number>(() => Math.floor(Math.random() * 1000000));
-  const [engine, setEngine] = useState<GeneratorEngine>('flux');
+  const [engine, setEngine] = useState<GeneratorEngine>('architectural');
   const [imageSize, setImageSize] = useState<ImageResolution>('2K');
   const [aspectRatio, setAspectRatio] = useState<MapAspectRatio>('16:9');
   const [artStyle, setArtStyle] = useState<ArtStyle>('photorealistic');
@@ -152,9 +161,16 @@ export default function MapGenerator({ onClose, onOpenApiKeyModal, onApply }: Ma
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [mapSource, setMapSource] = useState<string>('flux');
+  const [mapSource, setMapSource] = useState<string>('architectural');
   const [detectedWalls, setDetectedWalls] = useState<WallSegment[]>([]);
   const [showDetectedWalls, setShowDetectedWalls] = useState(true);
+  const [canvasSize, setCanvasSize] = useState<GeneratedCanvasSize>({
+    width: 1920,
+    height: 1280,
+    gridW: 30,
+    gridH: 20,
+    cellPx: 64
+  });
   const [briefing, setBriefing] = useState<CinematicBriefing | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [requiresPaidKey, setRequiresPaidKey] = useState(false);
@@ -242,6 +258,17 @@ export default function MapGenerator({ onClose, onOpenApiKeyModal, onApply }: Ma
         setImageUrl(data.imageUrl);
         setMapSource(data.source || engine);
         setLights([]);
+        if (data.canvasSize && data.canvasSize.width > 0 && data.canvasSize.height > 0) {
+          setCanvasSize(data.canvasSize);
+        } else {
+          setCanvasSize({
+            width: currentGridWidth * 64,
+            height: currentGridHeight * 64,
+            gridW: currentGridWidth,
+            gridH: currentGridHeight,
+            cellPx: 64
+          });
+        }
         if (data.walls && Array.isArray(data.walls)) {
           setDetectedWalls(data.walls);
         } else {
@@ -409,12 +436,33 @@ export default function MapGenerator({ onClose, onOpenApiKeyModal, onApply }: Ma
           {/* AI Generator Model Engine */}
           <section>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">AI Map Engine</label>
+              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Map & Wall Engine</label>
               <span className="text-[9px] font-mono font-bold text-amber-400 uppercase">
-                {engine === 'flux' ? 'FLUX.1 + AI Walls (Free)' : engine === 'nano-banana-pro' ? 'gemini-3-pro-image' : engine === 'nano-banana-2' ? 'gemini-3.1-flash-image' : 'Vector SVG'}
+                {engine === 'architectural' ? '1" Grid Overhead + Exact Walls' : engine === 'flux' ? 'FLUX.1 + Vision Walls' : engine === 'nano-banana-pro' ? 'gemini-3-pro-image' : 'Vector SVG'}
               </span>
             </div>
             <div className="grid grid-cols-1 gap-1.5">
+              <button
+                type="button"
+                onClick={() => setEngine('architectural')}
+                className={`flex items-center justify-between p-2.5 rounded-xl border text-left transition-all ${
+                  engine === 'architectural'
+                    ? 'border-amber-500 bg-amber-500/15 text-white ring-1 ring-amber-500/30'
+                    : 'border-zinc-800 bg-zinc-900/60 hover:bg-zinc-800 text-zinc-400'
+                }`}
+              >
+                <div>
+                  <div className="text-xs font-bold flex items-center gap-1.5 text-amber-400">
+                    <GridIcon className="w-3.5 h-3.5" />
+                    <span>OVERHEAD 1" GRID ARCHITECT</span>
+                  </div>
+                  <div className="text-[10px] text-zinc-400">True 90° Top-Down D&D Floorplan + 100% Exact Walls & Doors</div>
+                </div>
+                <span className="text-[9px] font-mono uppercase bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded border border-emerald-500/40">
+                  BEST
+                </span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => setEngine('flux')}
@@ -425,11 +473,11 @@ export default function MapGenerator({ onClose, onOpenApiKeyModal, onApply }: Ma
                 }`}
               >
                 <div>
-                  <div className="text-xs font-bold flex items-center gap-1.5 text-amber-400">
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>FLUX.1 ULTRA + AUTO-WALLS</span>
+                  <div className="text-xs font-bold flex items-center gap-1.5 text-zinc-200">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                    <span>FLUX.1 TOP-DOWN + VISION WALLS</span>
                   </div>
-                  <div className="text-[10px] text-zinc-400">High-Res Photorealistic Battlemaps + Vision Walls (100% Free)</div>
+                  <div className="text-[10px] text-zinc-400">AI Painted Overhead Artwork + Vision Auto-Wall Tracing</div>
                 </div>
                 <span className="text-[9px] font-mono uppercase bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded border border-emerald-500/40">
                   FREE
@@ -450,30 +498,10 @@ export default function MapGenerator({ onClose, onOpenApiKeyModal, onApply }: Ma
                     <Sparkles className="w-3.5 h-3.5 text-amber-400" />
                     <span>NANO BANANA PRO</span>
                   </div>
-                  <div className="text-[10px] text-zinc-400">Gemini 3 Pro Photorealistic (Requires Gemini API Key)</div>
+                  <div className="text-[10px] text-zinc-400">Gemini 3 Pro Overhead Map (Requires Gemini API Key)</div>
                 </div>
                 <span className="text-[9px] font-mono uppercase bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded border border-amber-500/40">
                   PRO
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setEngine('procedural')}
-                className={`flex items-center justify-between p-2.5 rounded-xl border text-left transition-all ${
-                  engine === 'procedural'
-                    ? 'border-amber-500 bg-amber-500/15 text-white ring-1 ring-amber-500/30'
-                    : 'border-zinc-800 bg-zinc-900/60 hover:bg-zinc-800 text-zinc-400'
-                }`}
-              >
-                <div>
-                  <div className="text-xs font-bold flex items-center gap-1.5 text-zinc-200">
-                    <span>PROCEDURAL TACTICAL</span>
-                  </div>
-                  <div className="text-[10px] text-zinc-400">Instant Deterministic Vector SVG</div>
-                </div>
-                <span className="text-[9px] font-mono uppercase bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded border border-zinc-700">
-                  SVG
                 </span>
               </button>
             </div>
@@ -770,11 +798,16 @@ export default function MapGenerator({ onClose, onOpenApiKeyModal, onApply }: Ma
 
             {imageUrl && onApply && (
               <button
-                onClick={() => onApply(imageUrl, briefing || undefined, animatedFeatures, weatherEffect, mapSizeId, detectedWalls)}
+                onClick={() => onApply(imageUrl, briefing || undefined, animatedFeatures, weatherEffect, mapSizeId, detectedWalls, canvasSize)}
                 className="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold py-3 px-4 rounded-xl transition-all uppercase tracking-wider shadow-[0_0_15px_rgba(79,70,229,0.35)] flex items-center justify-center gap-2"
               >
                 <Compass className="w-4 h-4" />
-                <span>Send to Campaign Board {detectedWalls.length > 0 ? `(${detectedWalls.length} Walls)` : ''}</span>
+                <span>
+                  Send to Campaign Board{' '}
+                  {detectedWalls.length > 0
+                    ? `(${detectedWalls.filter(w => w.wallType !== 'door').length} Walls, ${detectedWalls.filter(w => w.wallType === 'door').length} Doors)`
+                    : ''}
+                </span>
               </button>
             )}
           </div>
@@ -1126,18 +1159,15 @@ export default function MapGenerator({ onClose, onOpenApiKeyModal, onApply }: Ma
                 <div
                   ref={mapContainerRef}
                   onClick={handleMapClick}
-                  className={`relative bg-zinc-950 border border-zinc-800 rounded-xl shadow-[0_25px_60px_rgba(0,0,0,0.85)] max-w-full max-h-full transition-all duration-300 ${
-                    aspectRatio === '16:9'
-                      ? 'aspect-[16/9]'
-                      : aspectRatio === '4:3'
-                      ? 'aspect-[4/3]'
-                      : 'aspect-square'
-                  } ${placingLightType || placingAnimatedType ? 'cursor-crosshair' : ''}`}
+                  style={{
+                    aspectRatio: `${canvasSize.width || 1920} / ${canvasSize.height || 1280}`
+                  }}
+                  className={`relative bg-zinc-950 border border-zinc-800 rounded-xl shadow-[0_25px_60px_rgba(0,0,0,0.85)] max-w-full max-h-full transition-all duration-300 ${placingLightType || placingAnimatedType ? 'cursor-crosshair' : ''}`}
                 >
                   <img
                     src={imageUrl}
                     alt="Generated Tactical Battlemap"
-                    className="w-full h-full object-contain rounded-xl"
+                    className="w-full h-full object-fill rounded-xl"
                     referrerPolicy="no-referrer"
                   />
 
@@ -1164,8 +1194,10 @@ export default function MapGenerator({ onClose, onOpenApiKeyModal, onApply }: Ma
                   <div className="absolute bottom-3 right-3 bg-zinc-950/90 border border-zinc-800 text-[9px] font-mono px-2.5 py-1 rounded-md text-zinc-300 backdrop-blur-md pointer-events-none flex items-center gap-2 shadow-lg z-20">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
                     <span className="uppercase tracking-wider font-semibold">
-                      {mapSource === 'flux'
-                        ? 'FLUX.1 ULTRA • HIGH-RES'
+                      {mapSource === 'architectural'
+                        ? 'OVERHEAD 1" GRID ARCHITECT'
+                        : mapSource === 'flux'
+                        ? 'FLUX.1 TOP-DOWN • HIGH-RES'
                         : mapSource === 'nano-banana-pro'
                         ? `NANO BANANA PRO • ${imageSize}`
                         : mapSource === 'nano-banana-2'
@@ -1175,20 +1207,22 @@ export default function MapGenerator({ onClose, onOpenApiKeyModal, onApply }: Ma
                     {detectedWalls.length > 0 && (
                       <>
                         <span className="text-zinc-500">•</span>
-                        <span className="text-amber-300 font-bold">{detectedWalls.length} WALLS DETECTED</span>
+                        <span className="text-amber-300 font-bold">
+                          {detectedWalls.filter(w => w.wallType !== 'door').length} WALLS & {detectedWalls.filter(w => w.wallType === 'door').length} DOORS
+                        </span>
                       </>
                     )}
                     <span className="text-zinc-500">•</span>
-                    <span className="text-amber-400 font-bold">{currentGridWidth}×{currentGridHeight} ({currentGridWidth * 5}×{currentGridHeight * 5} FT)</span>
+                    <span className="text-amber-400 font-bold">{currentGridWidth}×{currentGridHeight} 1" SQUARES ({currentGridWidth * 5}×{currentGridHeight * 5} FT)</span>
                   </div>
 
-                  {/* 5ft Grid Overlay scaled precisely to chosen map dimensions */}
+                  {/* 5ft (1") Grid Overlay scaled precisely to chosen map dimensions */}
                   {showGrid && (
                     <div
                       className="absolute inset-0 pointer-events-none rounded-xl z-10"
                       style={{
-                        backgroundSize: `${100 / currentGridWidth}% ${100 / currentGridHeight}%`,
-                        backgroundImage: `linear-gradient(to right, rgba(255,255,255,0.14) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.14) 1px, transparent 1px)`
+                        backgroundSize: `${100 / (canvasSize.gridW || currentGridWidth)}% ${100 / (canvasSize.gridH || currentGridHeight)}%`,
+                        backgroundImage: `linear-gradient(to right, rgba(255,255,255,0.22) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.22) 1px, transparent 1px)`
                       }}
                     />
                   )}
@@ -1197,11 +1231,13 @@ export default function MapGenerator({ onClose, onOpenApiKeyModal, onApply }: Ma
                   {showDetectedWalls && detectedWalls.length > 0 && (
                     <svg
                       className="absolute inset-0 w-full h-full pointer-events-none rounded-xl z-15"
-                      viewBox={aspectRatio === '1:1' ? '0 0 1920 1920' : aspectRatio === '4:3' ? '0 0 1920 1440' : '0 0 1920 1080'}
+                      viewBox={`0 0 ${canvasSize.width || 1920} ${canvasSize.height || 1280}`}
                       preserveAspectRatio="none"
                     >
                       {detectedWalls.map((wall) => {
                         const isDoor = wall.wallType === 'door';
+                        const midX = (wall.p1.x + wall.p2.x) / 2;
+                        const midY = (wall.p1.y + wall.p2.y) / 2;
                         return (
                           <g key={wall.id}>
                             <line
@@ -1210,14 +1246,23 @@ export default function MapGenerator({ onClose, onOpenApiKeyModal, onApply }: Ma
                               x2={wall.p2.x}
                               y2={wall.p2.y}
                               stroke={isDoor ? '#38bdf8' : '#f59e0b'}
-                              strokeWidth={isDoor ? 5 : 3.5}
-                              strokeDasharray={isDoor ? '6 4' : undefined}
+                              strokeWidth={isDoor ? 8 : 5}
+                              strokeDasharray={isDoor ? '10 6' : undefined}
                               strokeLinecap="round"
-                              opacity={0.85}
+                              opacity={0.95}
                             />
-                            {/* Endpoint dots */}
-                            <circle cx={wall.p1.x} cy={wall.p1.y} r={isDoor ? 4 : 3} fill={isDoor ? '#38bdf8' : '#f59e0b'} />
-                            <circle cx={wall.p2.x} cy={wall.p2.y} r={isDoor ? 4 : 3} fill={isDoor ? '#38bdf8' : '#f59e0b'} />
+                            {/* Endpoint vertex nodes */}
+                            <circle cx={wall.p1.x} cy={wall.p1.y} r={isDoor ? 5 : 4} fill={isDoor ? '#38bdf8' : '#f59e0b'} />
+                            <circle cx={wall.p2.x} cy={wall.p2.y} r={isDoor ? 5 : 4} fill={isDoor ? '#38bdf8' : '#f59e0b'} />
+                            {/* Distinct Door Badge on Doorways */}
+                            {isDoor && (
+                              <g transform={`translate(${midX}, ${midY})`}>
+                                <rect x="-12" y="-8" width="24" height="16" rx="4" fill="#0284c7" stroke="#bae6fd" strokeWidth="2" />
+                                <text x="0" y="3.5" textAnchor="middle" fill="#ffffff" fontSize="9" fontWeight="bold" fontFamily="monospace">
+                                  DOOR
+                                </text>
+                              </g>
+                            )}
                           </g>
                         );
                       })}
