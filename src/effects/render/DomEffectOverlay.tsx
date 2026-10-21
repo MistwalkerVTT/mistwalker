@@ -305,9 +305,17 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
             );
           }
 
-          // D. Point / Sphere / Circle / Aura (Fireball, Darkness, Fog Cloud, Web)
-          const diameterFt = sizeFt * 2;
-          const pixelDiameter = (diameterFt / 5) * gridSize;
+          // D. Point / Sphere / Circle / Aura (Fireball, Darkness, Fog Cloud, Web, Shield of Faith, Sanctuary)
+          const attachedToken = effect.attachedTokenId ? tokens?.find((t: any) => t.id === effect.attachedTokenId) : null;
+          const attachedTokenSize = attachedToken ? (attachedToken.size || 1) : 1;
+          const attachedTokenRadius = (attachedTokenSize * gridSize) / 2;
+          const posX = attachedToken ? (attachedToken.x ?? 0) + attachedTokenRadius : effect.x;
+          const posY = attachedToken ? (attachedToken.y ?? 0) + attachedTokenRadius : effect.y;
+          const effDiameterFt = attachedToken
+            ? Math.max(attachedTokenSize * 5, (effect.sizeFt || 5) * 2)
+            : (sizeFt * 2);
+          const pixelDiameter = (effDiameterFt / 5) * gridSize;
+
           return (
             <video
               key={effect.id}
@@ -322,8 +330,8 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
               onEnded={() => handleEnded(effect)}
               style={{
                 position: 'absolute',
-                left: `${effect.x}px`,
-                top: `${effect.y}px`,
+                left: `${posX}px`,
+                top: `${posY}px`,
                 width: `${pixelDiameter}px`,
                 height: `${pixelDiameter}px`,
                 maxWidth: 'none',
@@ -345,22 +353,40 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
         {effects.map((effect) => {
           if (!onDispelEffect || (!effect.isPersistent && !effect.loop)) return null;
 
-          const radiusPx = (effect.sizeFt / 5) * gridSize;
-          const topY = effect.y - radiusPx - 6;
+          const attachedToken = effect.attachedTokenId ? tokens?.find((t: any) => t.id === effect.attachedTokenId) : null;
+          const attachedTokenSize = attachedToken ? (attachedToken.size || 1) : 1;
+          const attachedTokenRadius = (attachedTokenSize * gridSize) / 2;
+
+          const posX = attachedToken ? (attachedToken.x ?? 0) + attachedTokenRadius : effect.x;
+          const posY = attachedToken ? (attachedToken.y ?? 0) + attachedTokenRadius : effect.y;
+
+          const radiusPx = attachedToken
+            ? attachedTokenRadius + 12
+            : (effect.sizeFt / 5) * gridSize;
+
+          // Vertically stack dispel badges when multiple auras/spells are attached to the same token or position
+          const matchingEffects = effects.filter(e => (e.isPersistent || e.loop) && (
+            (effect.attachedTokenId && e.attachedTokenId === effect.attachedTokenId) ||
+            (!effect.attachedTokenId && !e.attachedTokenId && Math.hypot((e.x ?? 0) - (effect.x ?? 0), (e.y ?? 0) - (effect.y ?? 0)) < 15)
+          ));
+          const stackIdx = matchingEffects.findIndex(e => e.id === effect.id);
+          const stackOffset = stackIdx > 0 ? stackIdx * 28 : 0;
+
+          const topY = posY - radiusPx - 6 - stackOffset;
 
           return (
             <div
               key={`dispel-${effect.id}`}
               className="absolute pointer-events-auto group/dispel z-[40]"
               style={{
-                left: `${effect.x}px`,
+                left: `${posX}px`,
                 top: `${topY}px`,
                 transform: 'translate(-50%, -100%)',
               }}
             >
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-zinc-950/90 hover:bg-zinc-900 border border-purple-500/50 hover:border-red-500/70 shadow-lg backdrop-blur-md transition-all select-none">
                 <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse shrink-0" />
-                <span className="text-[10px] font-mono font-bold text-purple-200 truncate max-w-[110px]">
+                <span className="text-[10px] font-mono font-bold text-purple-200 truncate max-w-[120px]">
                   {effect.name}
                 </span>
                 <button

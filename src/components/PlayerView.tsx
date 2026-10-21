@@ -2457,6 +2457,9 @@ export default function PlayerView() {
     });
 
     const now = Date.now();
+    // Keep local tokens array updated in real-time so attached auras track dragging smoothly
+    setTokens(prev => prev.map(t => t.id === id ? { ...t, x: rawX, y: rawY } : t));
+
     if (now - lastEmitTimeRef.current > 30) {
       lastEmitTimeRef.current = now;
       if (socketRef.current?.connected) {
@@ -2830,17 +2833,114 @@ export default function PlayerView() {
                          (Boolean(activeEquippedAsset.projectileWebm) && dist > 25);
     const isPointAoe = activeEquippedAsset.paradigm === 'point' || activeEquippedAsset.paradigm === 'aura';
 
+    // Teleportation Spells (Misty Step, Dimension Door, Arcane Gate, Thunder Step)
+    const isTeleportSpell = activeEquippedAsset.targetType === 'teleport' ||
+      activeEquippedAsset.id === 'misty_step' ||
+      activeEquippedAsset.id === 'dimension_door' ||
+      activeEquippedAsset.name.toLowerCase().includes('misty step') ||
+      activeEquippedAsset.name.toLowerCase().includes('dimension door');
+
+    if (isTeleportSpell && claimedToken) {
+      const maxRangeFt = activeEquippedAsset.rangeFt || (activeEquippedAsset.name.toLowerCase().includes('misty step') ? 30 : 500);
+      const distFt = Math.round((dist / gridSize) * 5);
+
+      if (maxRangeFt > 0 && distFt > maxRangeFt + 2) {
+        toast.error(`Out of range! Teleport destination is ${distFt} ft away (Max range: ${maxRangeFt} ft).`);
+        return;
+      }
+
+      // Snap destination to grid tile top-left for token placement
+      const snappedTargetX = Math.round(target.x / gridSize) * gridSize;
+      const snappedTargetY = Math.round(target.y / gridSize) * gridSize;
+
+      // Center coordinates for dual departure and arrival animation bursts
+      const tokenRadius = ((claimedToken.size || 1) * gridSize) / 2;
+      const departCenter = { x: origin.x, y: origin.y };
+      const arriveCenter = { x: snappedTargetX + tokenRadius, y: snappedTargetY + tokenRadius };
+
+      // Departure Poof at Point A (where character vanishes from)
+      const departEffect: VttEffectInstance = {
+        id: `eff_depart_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        name: `${activeEquippedAsset.name} Departure`,
+        label: `${activeEquippedAsset.label || activeEquippedAsset.name} Departure`,
+        assetKey: activeEquippedAsset.id,
+        videoUrl: activeEquippedAsset.webm,
+        thumbUrl: activeEquippedAsset.thumb,
+        paradigm: 'point',
+        x: departCenter.x,
+        y: departCenter.y,
+        sizeFt: activeEquippedAsset.defaultSizeFt || 5,
+        rotation: 0,
+        opacity: 1.0,
+        blendMode: activeEquippedAsset.blendMode,
+        isPersistent: false,
+        loop: false,
+        castTime: Date.now(),
+        durationMs: 3500,
+        soundKey: activeEquippedAsset.soundKey || 'teleport_whoosh',
+        color: activeEquippedAsset.color,
+        ownerId: claimedToken.id,
+        casterName: claimedToken.name
+      };
+
+      // Arrival Poof at Point B (where character appears)
+      const arriveEffect: VttEffectInstance = {
+        id: `eff_arrive_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        name: `${activeEquippedAsset.name} Arrival`,
+        label: `${activeEquippedAsset.label || activeEquippedAsset.name} Arrival`,
+        assetKey: activeEquippedAsset.id,
+        videoUrl: activeEquippedAsset.webm,
+        thumbUrl: activeEquippedAsset.thumb,
+        paradigm: 'point',
+        x: arriveCenter.x,
+        y: arriveCenter.y,
+        sizeFt: activeEquippedAsset.defaultSizeFt || 5,
+        rotation: 0,
+        opacity: 1.0,
+        blendMode: activeEquippedAsset.blendMode,
+        isPersistent: false,
+        loop: false,
+        castTime: Date.now() + 80,
+        durationMs: 3500,
+        soundKey: activeEquippedAsset.soundKey || 'teleport_whoosh',
+        color: activeEquippedAsset.color,
+        ownerId: claimedToken.id,
+        casterName: claimedToken.name
+      };
+
+      // Play sound and broadcast both effects across the network
+      setEffects(prev => [...prev, departEffect, arriveEffect]);
+      if (activeEquippedAsset.soundKey) soundCatalog.play(activeEquippedAsset.soundKey);
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('EFFECT_SPAWN', departEffect);
+        socketRef.current.emit('EFFECT_SPAWN', arriveEffect);
+      }
+
+      // Instantly relocate claimed character token to the destination tile
+      handleMoveToken(claimedToken.id, snappedTargetX, snappedTargetY, distFt);
+
+      toast.success(`${claimedToken.name} cast ${activeEquippedAsset.name}!`, {
+        description: `Teleported ${distFt} ft across the battlefield.`
+      });
+
+      setAimOrigin(null);
+      setAimCurrent(null);
+      setActiveEquippedAsset(null);
+      setActiveTargetingAction(null);
+      return;
+    }
+
     const newEffect: VttEffectInstance = {
       id: `eff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-      name: activeEquippedAsset.name,
-      label: activeEquippedAsset.label,
+      name: hitToken && hitToken.id !== claimedToken?.id ? `${activeEquippedAsset.name} (${hitToken.name})` : activeEquippedAsset.name,
+      label: hitToken && hitToken.id !== claimedToken?.id ? `${activeEquippedAsset.label} on ${hitToken.name}` : activeEquippedAsset.label,
       assetKey: activeEquippedAsset.id,
       videoUrl: (isTrajectory && activeEquippedAsset.projectileWebm)
         ? activeEquippedAsset.projectileWebm
         : activeEquippedAsset.webm,
       loopVideoUrl: activeEquippedAsset.loopWebm,
       thumbUrl: activeEquippedAsset.thumb,
-      paradigm: isTrajectory ? 'projectile' : activeEquippedAsset.paradigm,
+      paradigm: isTrajectory ? 'projectile' : (isAuraOrBuff ? 'aura' : activeEquippedAsset.paradigm),
       x: isTrajectory ? origin.x : (isPointAoe ? target.x : origin.x),
       y: isTrajectory ? origin.y : (isPointAoe ? target.y : origin.y),
       originX: origin.x,
@@ -2851,8 +2951,9 @@ export default function PlayerView() {
       rotation: (activeEquippedAsset.paradigm === 'cone' || activeEquippedAsset.paradigm === 'line') ? rotation : 0,
       opacity: 1.0,
       blendMode: activeEquippedAsset.blendMode,
-      isPersistent: activeEquippedAsset.isPersistent,
-      loop: activeEquippedAsset.isPersistent,
+      isPersistent: isAuraOrBuff || Boolean(activeEquippedAsset.isPersistent),
+      loop: isAuraOrBuff || Boolean(activeEquippedAsset.isPersistent),
+      attachedTokenId: hitToken ? hitToken.id : undefined,
       castTime: Date.now(),
       durationMs: isTrajectory ? 2500 : 5000,
       soundKey: activeEquippedAsset.soundKey,
@@ -2882,7 +2983,7 @@ export default function PlayerView() {
     setAimCurrent(null);
     setActiveEquippedAsset(null);
     setActiveTargetingAction(null);
-  }, [activeEquippedAsset]);
+  }, [activeEquippedAsset, tokens, claimedToken, gridSize]);
 
   const handleEquipAsset = useCallback((asset: Jb2aAssetDefinition) => {
     setActiveEquippedAsset(asset);
@@ -3253,16 +3354,32 @@ export default function PlayerView() {
     // 2. Play JB2A Spell Animation & Sound
     const asset = activeEquippedAsset || (action.jb2aAssetId ? JB2A_REGISTRY.find(a => a.id === action.jb2aAssetId) : undefined) || findJb2aAsset(action.name);
     if (asset) {
-      const isTrajectory = ((asset.paradigm === 'projectile' || asset.paradigm === 'ray') || Boolean(asset.projectileWebm)) && distPx > 25;
+      const isAuraOrBuff = Boolean(
+        asset.paradigm === 'aura' ||
+        asset.shape === 'aura' ||
+        asset.isPersistent ||
+        asset.id === 'shield_of_faith' ||
+        asset.id === 'sanctuary' ||
+        asset.id === 'shield' ||
+        asset.id === 'bless' ||
+        asset.id === 'mage_armor' ||
+        action.name.toLowerCase().includes('shield of faith') ||
+        action.name.toLowerCase().includes('sanctuary') ||
+        action.name.toLowerCase().includes('shield') ||
+        action.name.toLowerCase().includes('bless') ||
+        action.name.toLowerCase().includes('ward')
+      );
+
+      const isTrajectory = !isAuraOrBuff && ((asset.paradigm === 'projectile' || asset.paradigm === 'ray') || Boolean(asset.projectileWebm)) && distPx > 25;
       const newEffect: VttEffectInstance = {
         id: `eff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-        name: asset.name,
-        label: asset.label,
+        name: isSelfTarget ? asset.name : `${asset.name} (${targetToken.name})`,
+        label: isSelfTarget ? asset.label : `${asset.label} on ${targetToken.name}`,
         assetKey: asset.id,
         videoUrl: (isTrajectory && asset.projectileWebm) ? asset.projectileWebm : asset.webm,
         loopVideoUrl: asset.loopWebm,
         thumbUrl: asset.thumb,
-        paradigm: isTrajectory ? 'projectile' : asset.paradigm,
+        paradigm: isTrajectory ? 'projectile' : (isAuraOrBuff ? 'aura' : asset.paradigm),
         x: isTrajectory ? casterCenter.x : targetCenter.x,
         y: isTrajectory ? casterCenter.y : targetCenter.y,
         originX: casterCenter.x,
@@ -3273,8 +3390,9 @@ export default function PlayerView() {
         rotation: isTrajectory ? Math.atan2(targetCenter.y - casterCenter.y, targetCenter.x - casterCenter.x) * (180 / Math.PI) : 0,
         opacity: 1.0,
         blendMode: asset.blendMode,
-        isPersistent: asset.isPersistent,
-        loop: asset.isPersistent,
+        isPersistent: isAuraOrBuff || Boolean(asset.isPersistent),
+        loop: isAuraOrBuff || Boolean(asset.isPersistent),
+        attachedTokenId: isAuraOrBuff ? targetToken.id : undefined,
         castTime: Date.now(),
         durationMs: isTrajectory ? 2500 : 5000,
         soundKey: asset.soundKey,
@@ -5329,7 +5447,8 @@ export default function PlayerView() {
                               auraRadius: preset.radius,
                               auraColor: preset.color,
                               auraName: preset.name,
-                              auraOpacity: preset.opacity || 0.35
+                              auraOpacity: preset.opacity || 0.35,
+                              videoUrl: preset.videoUrl
                             });
                             toast.success(`Equipped ${preset.name} (${preset.radius}ft)`);
                           }}

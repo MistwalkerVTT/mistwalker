@@ -20,6 +20,24 @@ export interface AuraPreset {
 
 export const AURA_PRESETS: AuraPreset[] = [
   {
+    id: 'shield_of_faith',
+    name: 'Shield of Faith',
+    radius: 5,
+    color: 'rgba(250, 204, 21, 0.45)',
+    opacity: 0.5,
+    description: '+2 AC shimmering holy shield ward (5 ft)',
+    videoUrl: '/jb2a/Library/1st_Level/Shield/Shield_01_Regular_Blue_Complete_400x400.webm'
+  },
+  {
+    id: 'sanctuary',
+    name: 'Sanctuary Ward',
+    radius: 5,
+    color: 'rgba(168, 85, 247, 0.45)',
+    opacity: 0.5,
+    description: 'Protective ward redirecting attacks (5 ft)',
+    videoUrl: '/jb2a/Library/Generic/Template/Circle/TemplateRunesCircle_01_Regular_Orange_800x800.webm'
+  },
+  {
     id: 'paladin_prot',
     name: 'Aura of Protection',
     radius: 10,

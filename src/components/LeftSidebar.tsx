@@ -263,12 +263,16 @@ interface LeftSidebarProps {
   onClearEffects?: () => void;
   onDispelEffect?: (effectId: string) => void;
   activeEffects?: any[];
+  onReturnHome?: () => void;
+  isAtHome?: boolean;
 }
 
 type GroupMenuId = 'maps' | 'zones' | 'fog-grid' | 'lighting' | 'combat' | 'fx' | 'spells' | 'tokens' | 'dice' | 'ai' | 'help';
 
 export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   isPlayerView,
+  onReturnHome,
+  isAtHome,
   activeMapId,
   liveMapId,
   onForceSync,
@@ -664,13 +668,19 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
       <div className="flex flex-col items-center py-2.5 border-b border-zinc-800/80 shrink-0">
         <div
           id="mistwalker-brand-icon"
-          className="w-11 h-11 rounded-xl overflow-hidden border border-zinc-700/70 bg-zinc-900 flex items-center justify-center cursor-pointer hover:border-amber-500/60 hover:shadow-[0_0_12px_rgba(245,158,11,0.25)] transition-all shadow-md active:scale-95"
-          title="MistWalker VTT - DM Command Deck"
+          onClick={() => {
+            setActiveMenu(null);
+            setHoveredGroup(null);
+            setPinnedPosition(null);
+            onReturnHome?.();
+          }}
+          className={`w-11 h-11 rounded-xl overflow-hidden border ${isAtHome ? 'border-amber-500 bg-amber-950/30 shadow-[0_0_12px_rgba(245,158,11,0.35)]' : 'border-zinc-700/70 bg-zinc-900 hover:border-amber-500/60 hover:shadow-[0_0_12px_rgba(245,158,11,0.25)]'} flex items-center justify-center cursor-pointer transition-all shadow-md active:scale-95 group`}
+          title={isAtHome ? 'MistWalker Home Hub (Active)' : 'Return to MistWalker Home Screen'}
         >
           <img
             src="https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/blob-c3567a0.png/:/rs=w:1440,h:1440"
             alt="MistWalker"
-            className="w-8 h-8 object-contain"
+            className="w-8 h-8 object-contain transition-transform group-hover:scale-110"
             referrerPolicy="no-referrer"
           />
         </div>

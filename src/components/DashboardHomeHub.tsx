@@ -40,6 +40,9 @@ interface DashboardHomeHubProps {
   onRestoreUnsavedScene: () => void;
   onDiscardUnsavedScene: () => void;
   isFirebaseConnected?: boolean;
+  hasActiveMapSession?: boolean;
+  onResumeActiveMap?: () => void;
+  activeMapSlotName?: string;
 }
 
 export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
@@ -59,7 +62,10 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
   unsavedSceneBackupWasCrash,
   onRestoreUnsavedScene,
   onDiscardUnsavedScene,
-  isFirebaseConnected = true
+  isFirebaseConnected = true,
+  hasActiveMapSession,
+  onResumeActiveMap,
+  activeMapSlotName
 }) => {
   const [isDragOverDropzone, setIsDragOverDropzone] = useState(false);
 
@@ -339,6 +345,18 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
             </div>
 
             <div className="space-y-2 pt-2 border-t border-zinc-850/80">
+              {hasActiveMapSession && onResumeActiveMap && (
+                <button
+                  type="button"
+                  id="btn-return-to-active-map"
+                  onClick={onResumeActiveMap}
+                  className="w-full py-2.5 px-4 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white font-bold rounded-xl transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-amber-950/60 font-mono text-xs flex items-center justify-center gap-2 cursor-pointer border border-amber-300/40"
+                >
+                  <Play className="w-4 h-4 fill-white text-white" />
+                  <span>Resume Open Map ({activeMapSlotName || 'Slot'})</span>
+                </button>
+              )}
+
               <button
                 type="button"
                 id="btn-resume-adventure-primary"

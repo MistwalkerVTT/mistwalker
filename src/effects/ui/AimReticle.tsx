@@ -18,7 +18,7 @@ const SINGLE_TARGET_IDS = new Set([
   'healing_word', 'cure_wounds', 'sacred_flame', 'toll_the_dead', 'guiding_bolt',
   'fire_bolt', 'eldritch_blast', 'ray_of_frost', 'magic_missile', 'scorching_ray',
   'chromatic_orb', 'witch_bolt', 'thorn_whip', 'disintegrate', 'chain_lightning',
-  'blight', 'hold_person', 'sanctuary', 'hunters_mark', 'counterspell', 'hellish_rebuke',
+  'blight', 'hold_person', 'sanctuary', 'shield_of_faith', 'hunters_mark', 'counterspell', 'hellish_rebuke',
   'divine_smite', 'sneak_attack', 'stunning_strike', 'flurry_of_blows',
   'bardic_inspiration', 'cutting_words', 'attack_dagger', 'attack_bow', 'attack_crossbow',
   'attack_spear', 'attack_greatsword', 'attack_slash', 'attack_hammer', 'attack_greataxe',
@@ -45,6 +45,101 @@ export const AimReticle: React.FC<AimReticleProps> = React.memo(({
   const distanceFt = Math.round((distancePx / gridSize) * 5);
   const angleDeg = Math.atan2(dy, dx) * (180 / Math.PI);
   const color = asset.color || '#a855f7';
+
+  // 0. Teleportation Spells (Misty Step, Dimension Door, Arcane Gate, Thunder Step, Fey Step)
+  const isTeleport = asset.targetType === 'teleport' ||
+    asset.id === 'misty_step' ||
+    asset.id === 'dimension_door' ||
+    asset.name.toLowerCase().includes('misty step') ||
+    asset.name.toLowerCase().includes('dimension door') ||
+    asset.name.toLowerCase().includes('thunder step');
+
+  if (isTeleport) {
+    const maxRangeFt = asset.rangeFt || (asset.id === 'misty_step' || asset.name.toLowerCase().includes('misty step') ? 30 : 500);
+    const isOutOfRange = distanceFt > maxRangeFt;
+    const teleportColor = isOutOfRange ? '#ef4444' : (asset.color || '#818cf8');
+    const rangeLimitRadiusPx = (maxRangeFt / 5) * gridSize;
+    const targetRingRadius = gridSize / 2; // 5ft standard creature footprint
+
+    return (
+      <Group listening={false}>
+        {/* Departure Origin Ring at Caster (Point A) */}
+        <Circle
+          x={origin.x}
+          y={origin.y}
+          radius={targetRingRadius}
+          stroke={teleportColor}
+          strokeWidth={2.5 / stageScale}
+          dash={[4, 4]}
+          fill={teleportColor}
+          opacity={0.25}
+        />
+        <Text
+          text="Departure"
+          x={origin.x - (25 / stageScale)}
+          y={origin.y - targetRingRadius - (16 / stageScale)}
+          fill="#cbd5e1"
+          fontSize={10 / stageScale}
+          fontFamily="monospace"
+        />
+
+        {/* Max Teleportation Range Boundary Circle (around Caster) */}
+        {maxRangeFt <= 60 && (
+          <Circle
+            x={origin.x}
+            y={origin.y}
+            radius={rangeLimitRadiusPx}
+            stroke={teleportColor}
+            strokeWidth={1.5 / stageScale}
+            dash={[6, 6]}
+            opacity={0.4}
+          />
+        )}
+
+        {/* Teleport Vector Line from Departure to Arrival */}
+        {distancePx > 10 && (
+          <Line
+            points={[origin.x, origin.y, current.x, current.y]}
+            stroke={teleportColor}
+            strokeWidth={2 / stageScale}
+            dash={[8, 5]}
+            opacity={0.85}
+          />
+        )}
+
+        {/* Arrival Ghost Silhouette / Ring (Point B) */}
+        <Circle
+          x={current.x}
+          y={current.y}
+          radius={targetRingRadius}
+          stroke={teleportColor}
+          strokeWidth={2.5 / stageScale}
+          fill={teleportColor}
+          opacity={isOutOfRange ? 0.15 : 0.35}
+        />
+        <Circle
+          x={current.x}
+          y={current.y}
+          radius={5 / stageScale}
+          fill={teleportColor}
+        />
+
+        {/* Live Distance & Range Readout at Cursor */}
+        <Text
+          text={
+            isOutOfRange
+              ? `${asset.name}: ${distanceFt} ft (Out of Range! Max ${maxRangeFt} ft)`
+              : `${asset.name}: Teleport ${distanceFt} ft / ${maxRangeFt} ft`
+          }
+          x={current.x + (15 / stageScale)}
+          y={current.y - (14 / stageScale)}
+          fill={isOutOfRange ? '#fca5a5' : '#ffffff'}
+          fontSize={12 / stageScale}
+          fontFamily="monospace"
+        />
+      </Group>
+    );
+  }
 
   // 1. Cone (Burning Hands, Cone of Cold, Color Spray, Thunderwave)
   if (asset.targetType === 'cone' || asset.paradigm === 'cone' || asset.shape === 'cone') {

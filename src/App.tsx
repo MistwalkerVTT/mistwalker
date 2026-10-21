@@ -6367,7 +6367,12 @@ export default function App() {
 
 
   const handleMapSwitch = (newMapId: 'DM1' | 'DM2' | 'DM3') => {
-    if (activeMapId === newMapId) return;
+    if (activeMapId === newMapId) {
+      if (!imageFile && mapsDataRef.current[activeMapId]?.imageFile) {
+        handleResumeActiveMap();
+      }
+      return;
+    }
 
     // Prevent any initial auto-restoration from interfering with switching to empty slots
     hasRestoredInitialSessionRef.current = true;
@@ -6518,6 +6523,114 @@ export default function App() {
     }
     toast.info(`Slot ${targetSlot} reset to blank`);
   };
+
+  const handleReturnHome = useCallback(() => {
+    // If a battlemap is active, save its full state into active slot cache so DM can resume anytime
+    if (imageFile) {
+      mapsDataRef.current[activeMapId] = {
+        imageFile,
+        mapType,
+        videoSize,
+        mapRotation,
+        stageScale,
+        stagePos,
+        reveals,
+        polygonReveals,
+        isFogVisible,
+        tokens,
+        gridVisible,
+        gridOpacity,
+        gridSize,
+        gridOffsetX,
+        gridOffsetY,
+        boardAnimatedFeatures,
+        boardAnimatedEnabled,
+        boardWeatherEffect,
+        walls,
+        visionConfig,
+        roomAnnotations,
+        activeSceneInfo,
+        activeDmNotes
+      };
+    }
+
+    // Reset transient interaction and drawing states
+    setCurrentZonePolygonPoints([]);
+    setWallDrawStart(null);
+    setSelectedWallId(null);
+    setSelectedZoneForSidePanel(null);
+    setIsZoneEditorOpen(false);
+    setIsZoneSidePanelOpen(false);
+    setMeasureStart(null);
+    setMeasureEnd(null);
+    setSelectedTokenIds([]);
+    setActiveEquippedAsset(null);
+    setAimOrigin(null);
+    setAimCurrent(null);
+    setActiveMenu(null);
+    setTool('select');
+
+    // Return to Home Hub screen
+    setImageFile(null);
+    toast.info('Returned to MistWalker Home Hub');
+  }, [
+    imageFile,
+    activeMapId,
+    mapType,
+    videoSize,
+    mapRotation,
+    stageScale,
+    stagePos,
+    reveals,
+    polygonReveals,
+    isFogVisible,
+    tokens,
+    gridVisible,
+    gridOpacity,
+    gridSize,
+    gridOffsetX,
+    gridOffsetY,
+    boardAnimatedFeatures,
+    boardAnimatedEnabled,
+    boardWeatherEffect,
+    walls,
+    visionConfig,
+    roomAnnotations,
+    activeSceneInfo,
+    activeDmNotes,
+    setActiveMenu,
+    setTool
+  ]);
+
+  const handleResumeActiveMap = useCallback(() => {
+    const saved = mapsDataRef.current[activeMapId];
+    if (saved && saved.imageFile) {
+      setImageFile(saved.imageFile);
+      setMapType(saved.mapType || 'image');
+      setVideoSize(saved.videoSize || { width: 0, height: 0 });
+      setMapRotation(saved.mapRotation || 0);
+      setStageScale(saved.stageScale || 1);
+      setStagePos(saved.stagePos || { x: 0, y: 0 });
+      setReveals(saved.reveals || []);
+      setPolygonReveals(saved.polygonReveals || []);
+      setIsFogVisible(saved.isFogVisible !== undefined ? saved.isFogVisible : true);
+      setTokens(saved.tokens || []);
+      setGridVisible(saved.gridVisible !== undefined ? saved.gridVisible : true);
+      setGridOpacity(saved.gridOpacity !== undefined ? saved.gridOpacity : 0.3);
+      setGridSize(saved.gridSize || 50);
+      setGridOffsetX(saved.gridOffsetX || 0);
+      setGridOffsetY(saved.gridOffsetY || 0);
+      setBoardAnimatedFeatures(saved.boardAnimatedFeatures || []);
+      setBoardAnimatedEnabled(saved.boardAnimatedEnabled !== undefined ? saved.boardAnimatedEnabled : true);
+      setBoardWeatherEffect(saved.boardWeatherEffect || 'none');
+      setWalls(saved.walls || []);
+      setRoomAnnotations(saved.roomAnnotations || []);
+      if (saved.visionConfig) setVisionConfig(saved.visionConfig);
+      setActiveSceneInfo(saved.activeSceneInfo || null);
+      setActiveDmNotes(saved.activeDmNotes || '');
+      toast.success(`Resumed Battlemap (${activeMapId})`);
+    }
+  }, [activeMapId]);
 
   const handleLoreChatSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -6809,6 +6922,8 @@ export default function App() {
         {/* Consolidated Left-Hand Menu */}
         <LeftSidebar
           isPlayerView={false}
+          onReturnHome={handleReturnHome}
+          isAtHome={!imageFile}
           activeMapId={activeMapId}
           liveMapId={liveMapId}
           onForceSync={handleForceSyncToPlayers}
@@ -7039,6 +7154,9 @@ export default function App() {
             onRestoreUnsavedScene={handleRestoreUnsavedScene}
             onDiscardUnsavedScene={handleDiscardUnsavedScene}
             isFirebaseConnected={isFirebaseConnected}
+            hasActiveMapSession={Boolean(mapsDataRef.current[activeMapId]?.imageFile)}
+            onResumeActiveMap={handleResumeActiveMap}
+            activeMapSlotName={activeMapId}
           />
         ) : (
           <div
