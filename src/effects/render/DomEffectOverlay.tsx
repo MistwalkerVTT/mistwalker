@@ -215,6 +215,35 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
           willChange: 'transform'
         }}
       >
+        {/* 0. Glowing Halos above token heads (toggled per token via token menu) */}
+        {tokens?.map((token) => {
+          if (!token.haloActive) return null;
+          const tokenWidth = gridSize * (token.size || 1);
+          const haloW = tokenWidth * 0.62;
+          const haloH = tokenWidth * 0.2;
+          const centerX = (token.x ?? 0) + tokenWidth / 2;
+          const topY = (token.y ?? 0) - haloH * 0.15;
+          return (
+            <div
+              key={`halo-${token.id}`}
+              className="animate-token-halo"
+              style={{
+                position: 'absolute',
+                left: `${centerX}px`,
+                top: `${topY}px`,
+                width: `${haloW}px`,
+                height: `${haloH}px`,
+                transform: 'translate(-50%, -50%)',
+                borderRadius: '50%',
+                border: `${Math.max(2, tokenWidth * 0.045)}px solid rgba(253, 230, 138, 0.95)`,
+                background: 'radial-gradient(ellipse at center, rgba(254, 243, 199, 0.25) 0%, rgba(251, 191, 36, 0.08) 70%, transparent 100%)',
+                boxShadow: '0 0 14px 4px rgba(251, 191, 36, 0.75), 0 0 34px 10px rgba(253, 224, 71, 0.4), inset 0 0 10px 2px rgba(254, 240, 138, 0.7)',
+                pointerEvents: 'none'
+              }}
+            />
+          );
+        })}
+
         {/* 1. Animated Token Auras (Looping JB2A runes, spirit guardians, cold auras, nature swirls) */}
         {tokens?.map((token) => {
           const tokenSize = token.size || 1;

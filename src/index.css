@@ -167,3 +167,13 @@ html, body {
 .animate-effect-fade-portal {
   animation: effect-fade-in-out 3.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
+
+/* Glowing token halo (pulsing + gentle float) */
+@keyframes token-halo-glow {
+  0%, 100% { opacity: 0.85; filter: brightness(1) drop-shadow(0 0 4px rgba(251, 191, 36, 0.6)); margin-top: 0; }
+  50% { opacity: 1; filter: brightness(1.35) drop-shadow(0 0 10px rgba(253, 224, 71, 0.9)); margin-top: -3px; }
+}
+
+.animate-token-halo {
+  animation: token-halo-glow 2.6s ease-in-out infinite;
+}

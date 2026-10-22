@@ -109,6 +109,7 @@ import { PlayerCharacterSelectModal, PlayerCharacterChoiceItem } from './PlayerC
 import { PlayerDdbPrivacyModal } from './PlayerDdbPrivacyModal';
 import { PlayerHeroDock } from './PlayerHeroDock';
 import { DndRuleInspectionModal } from './DndRuleInspectionModal';
+import { canTokenHaveHalo } from '../effects/db/tokenFxMap';
 import { DndRuleEntry, lookupDndRuleDetails } from '../data/dndRulesCompendium';
 import { HudCharacterData, HudActionItem, computeUpcastFormula } from '../types/hud';
 import { TokenDragRuler, TokenDragState, parseSpeedFt } from './TokenDragRuler';
@@ -166,6 +167,7 @@ interface Token {
   speed?: number;
   elevation?: number;
   isFlying?: boolean;
+  haloActive?: boolean;
   videoUrl?: string;
 }
 
@@ -4683,6 +4685,19 @@ export default function PlayerView() {
         directionDegrees: direction,
         color: t.visionColor || '#ffd166'
       });
+
+      // Glow Light: token radiates 20ft bright + 20ft dim light that reveals the area around it
+      if ((t as any).glowLight) {
+        sources.push({
+          id: `glow-${t.id}`,
+          x: t.x + tokenCenterOffset,
+          y: t.y + tokenCenterOffset,
+          radiusPx: (40 / 5) * gridSize,
+          angleDegrees: 360,
+          directionDegrees: 0,
+          color: '#fde68a'
+        });
+      }
     }
 
     if (boardAnimatedFeatures) {
@@ -5173,6 +5188,46 @@ export default function PlayerView() {
                       <Dices className="w-4 h-4 text-amber-400 group-hover:rotate-12 transition-transform shrink-0" />
                       {isFull && <span>Roll Dice</span>}
                     </button>
+
+                    {/* Glow Light toggle (Stavros) */}
+                    {claimedToken && (/stavros/i.test(claimedToken.name || '') || (claimedToken as any).canGlowLight) && (
+                      <button
+                        id="btn-toggle-glow-light"
+                        onClick={() => {
+                          const on = !(claimedToken as any).glowLight;
+                          const hasOtherAura = (claimedToken.auraRadius || 0) > 0 && claimedToken.auraName !== 'Glow Light';
+                          const updates: Partial<Token> = { glowLight: on } as any;
+                          if (!hasOtherAura) {
+                            if (on) {
+                              Object.assign(updates, {
+                                auraRadius: 20,
+                                auraColor: 'rgba(253, 230, 138, 0.45)',
+                                auraName: 'Glow Light',
+                                auraOpacity: 0.4
+                              });
+                            } else {
+                              Object.assign(updates, {
+                                auraRadius: undefined,
+                                auraColor: undefined,
+                                auraName: undefined,
+                                auraOpacity: undefined
+                              });
+                            }
+                          }
+                          handleUpdateToken(claimedToken.id, updates);
+                          toast.info(on ? `${claimedToken.name} begins to glow` : `${claimedToken.name}'s glow fades`);
+                        }}
+                        className={`w-full flex items-center rounded-xl transition-all cursor-pointer border ${
+                          (claimedToken as any).glowLight
+                            ? 'bg-yellow-400/20 border-yellow-400/70 text-yellow-100 shadow-[0_0_14px_rgba(250,204,21,0.35)]'
+                            : 'bg-zinc-900/80 hover:bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
+                        } ${isFull ? 'px-2.5 py-2 gap-2 text-xs font-medium' : 'p-2.5 justify-center'}`}
+                        title={(claimedToken as any).glowLight ? 'Turn Glow Light off' : 'Turn Glow Light on (20ft bright, 20ft dim)'}
+                      >
+                        <Sun className={`w-4 h-4 shrink-0 ${(claimedToken as any).glowLight ? 'text-yellow-300' : 'text-zinc-500'}`} />
+                        {isFull && <span className="flex-1 text-left">Glow Light: {(claimedToken as any).glowLight ? 'On' : 'Off'}</span>}
+                      </button>
+                    )}
 
                     {/* Toggle HP Display on tokens */}
                     <button
@@ -6261,6 +6316,26 @@ export default function PlayerView() {
                     />
                   </div>
                 </div>
+
+                {/* Special Effects: Glowing Halo (character-specific) */}
+{canTokenHaveHalo(currentToken.name) && (
+                  <div className="bg-zinc-900/90 border border-amber-400/30 rounded-xl p-2.5 flex items-center justify-between">
+                    <span className="text-[9px] text-amber-300 uppercase font-bold tracking-wider font-mono flex items-center gap-1">
+                      <span>✨</span> Special Effects
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateToken(currentToken.id, { haloActive: !currentToken.haloActive })}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold font-mono transition-all cursor-pointer flex items-center gap-1 border ${
+                        currentToken.haloActive
+                          ? 'bg-amber-400/25 text-amber-100 border-amber-300/80 shadow-[0_0_12px_rgba(251,191,36,0.5)]'
+                          : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border-zinc-700'
+                      }`}
+                    >
+                      <span>{currentToken.haloActive ? '😇 Halo Active' : 'Activate Halo'}</span>
+                    </button>
+                  </div>
+                )}
 
                 {/* Flight & Multi-Height Elevation Controls */}
                 <div className="bg-zinc-900/90 border border-sky-500/30 rounded-xl p-2.5 space-y-2">

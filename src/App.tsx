@@ -44,6 +44,7 @@ import { DiceTableOverlay } from './components/DiceTableOverlay';
 import { DdbDiceRollEvent } from './types/dice';
 import { EffectContextMenu, ContextMenuData } from './components/EffectContextMenu';
 import { DndRuleInspectionModal } from './components/DndRuleInspectionModal';
+import { canTokenHaveHalo } from './effects/db/tokenFxMap';
 import { DndRuleEntry, lookupDndRuleDetails } from './data/dndRulesCompendium';
 import { CriticalHitsReferenceModal } from './components/CriticalHitsReferenceModal';
 import {
@@ -215,6 +216,7 @@ interface Token {
   speed?: number;
   elevation?: number; // Height in feet (e.g. 0, 15, 30, 60, -10)
   isFlying?: boolean;
+  haloActive?: boolean;
   monsterState?: TokenMonsterState;
 }
 
@@ -3889,6 +3891,7 @@ export default function App() {
         if (Array.isArray((t as any).auras)) tok.auras = (t as any).auras;
         if (typeof t.elevation === 'number' && !isNaN(t.elevation)) (tok as any).elevation = t.elevation;
         if (typeof t.isFlying === 'boolean') (tok as any).isFlying = t.isFlying;
+        if (typeof (t as any).haloActive === 'boolean') (tok as any).haloActive = (t as any).haloActive;
         return tok;
       });
 
@@ -5083,7 +5086,8 @@ export default function App() {
             isMonster: t.isMonster,
             category: t.category,
             elevation: t.elevation,
-            isFlying: t.isFlying
+            isFlying: t.isFlying,
+            haloActive: (t as any).haloActive
           }))
         };
 
@@ -5856,6 +5860,7 @@ export default function App() {
         if (Array.isArray((t as any).auras)) tok.auras = (t as any).auras;
         if (typeof t.elevation === 'number' && !isNaN(t.elevation)) (tok as any).elevation = t.elevation;
         if (typeof t.isFlying === 'boolean') (tok as any).isFlying = t.isFlying;
+        if (typeof (t as any).haloActive === 'boolean') (tok as any).haloActive = (t as any).haloActive;
         return tok;
       });
 
@@ -10031,7 +10036,27 @@ export default function App() {
                    </div>
                  </div>
 
-                 {/* Flight & Multi-Height Elevation Controls */}
+                 {/* Special Effects: Glowing Halo (character-specific) */}
+{canTokenHaveHalo(currentToken?.name) && (
+                  <div className="bg-zinc-900/90 border border-amber-400/30 rounded-xl p-2.5 flex items-center justify-between">
+                    <span className="text-[9px] text-amber-300 uppercase font-bold tracking-wider font-mono flex items-center gap-1">
+                      <span>✨</span> Special Effects
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateDmToken({ haloActive: !currentToken?.haloActive })}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold font-mono transition-all cursor-pointer flex items-center gap-1 border ${
+                        currentToken?.haloActive
+                          ? 'bg-amber-400/25 text-amber-100 border-amber-300/80 shadow-[0_0_12px_rgba(251,191,36,0.5)]'
+                          : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border-zinc-700'
+                      }`}
+                    >
+                      <span>{currentToken?.haloActive ? '😇 Halo Active' : 'Activate Halo'}</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* Flight & Multi-Height Elevation Controls */}
                  <div className="bg-zinc-900/90 border border-sky-500/30 rounded-xl p-2.5 space-y-2">
                    <div className="flex items-center justify-between">
                      <span className="text-[9px] text-sky-400 uppercase font-bold tracking-wider font-mono flex items-center gap-1">

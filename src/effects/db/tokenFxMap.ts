@@ -262,3 +262,14 @@ export function getAuraVideoUrl(name?: string, color?: string): string | null {
   // Universal Default: Golden Divine Runes Circle
   return '/jb2a/Library/Generic/Template/Circle/TemplateRunesCircle_01_Regular_Orange_800x800.webm';
 }
+
+/**
+ * Characters with a signature toggleable glowing halo special effect.
+ */
+const HALO_CHARACTER_KEYS = ['stavros'];
+
+export function canTokenHaveHalo(tokenName?: string): boolean {
+  if (!tokenName) return false;
+  const n = tokenName.toLowerCase();
+  return HALO_CHARACTER_KEYS.some(k => n.includes(k));
+}
