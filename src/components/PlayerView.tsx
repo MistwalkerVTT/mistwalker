@@ -3209,13 +3209,78 @@ export default function PlayerView() {
     if (socketRef.current?.connected) {
       socketRef.current.emit('EFFECT_SPAWN', newEffect);
     }
-    toast.success(`Cast ${activeEquippedAsset.name}!`);
+
+    // Roll 3D physics damage/healing dice if the cast spell has a damageFormula (including upcasted formulas!)
+    const aimedAction = activeTargetingAction;
+    const rawFormula = aimedAction?.damageFormula;
+    const upcastLabel =
+      aimedAction?.castAtLevel && aimedAction.castAtLevel > (aimedAction.level ?? 0)
+        ? ` (Level ${aimedAction.castAtLevel} Slot)`
+        : '';
+
+    if (rawFormula) {
+      const cleanFormula = rawFormula.replace(/[a-zA-Z]+/g, '').trim();
+      const rollParts = (cleanFormula || rawFormula).match(/(\d+)d(\d+)(?:\s*([+-])\s*(\d+))?/i);
+      let rolledTotal = 0;
+      const diceResults: Array<{ sides: number; result: number; type: string }> = [];
+      if (rollParts) {
+        const numDice = parseInt(rollParts[1], 10) || 1;
+        const sides = parseInt(rollParts[2], 10) || 6;
+        const sign = rollParts[3] === '-' ? -1 : 1;
+        const mod = parseInt(rollParts[4], 10) || 0;
+        let diceSum = 0;
+        for (let i = 0; i < numDice; i++) {
+          const r = Math.floor(Math.random() * sides) + 1;
+          diceSum += r;
+          diceResults.push({ sides, result: r, type: `d${sides}` });
+        }
+        rolledTotal = Math.max(1, diceSum + sign * mod);
+      } else {
+        rolledTotal = parseInt(cleanFormula, 10) || 0;
+      }
+
+      if (rolledTotal > 0) {
+        const diceEvent: DdbDiceRollEvent = {
+          id: `roll-${Date.now()}`,
+          characterId: String(hudCharacterData?.id || claimedToken?.id || ''),
+          characterName: claimedToken?.name || hudCharacterData?.name || 'Hero',
+          avatarUrl: hudCharacterData?.avatarUrl || claimedToken?.avatarUrl || claimedToken?.url,
+          action: `${aimedAction?.name || activeEquippedAsset.name}${upcastLabel} (${aimedAction?.isHeal ? 'Healing' : 'Damage'})`,
+          rollType: aimedAction?.isHeal ? 'heal' : 'damage',
+          formula: rawFormula,
+          diceNotation: rawFormula,
+          dice: diceResults.length > 0 ? diceResults : [{ sides: 6, result: rolledTotal, type: 'd6' }],
+          total: rolledTotal,
+          isCritical: false,
+          isFumble: false,
+          theme: selectedDicePreset.id,
+          themeColor: aimedAction?.isHeal ? '#10b981' : selectedDicePreset.theme.primaryColor,
+          timestamp: Date.now(),
+          source: 'player'
+        };
+
+        if (socketRef.current?.connected) {
+          socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', diceEvent);
+        }
+        if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+          (window as any).__mistwalkerRoll3d(diceEvent);
+        }
+
+        toast.success(`Cast ${aimedAction?.name || activeEquippedAsset.name}${upcastLabel}!`, {
+          description: `Rolled ${rolledTotal} ${aimedAction?.damageType || (aimedAction?.isHeal ? 'HP' : 'damage')} (${rawFormula})`
+        });
+      } else {
+        toast.success(`Cast ${aimedAction?.name || activeEquippedAsset.name}${upcastLabel}!`);
+      }
+    } else {
+      toast.success(`Cast ${aimedAction?.name || activeEquippedAsset.name}${upcastLabel}!`);
+    }
 
     setAimOrigin(null);
     setAimCurrent(null);
     setActiveEquippedAsset(null);
     setActiveTargetingAction(null);
-  }, [activeEquippedAsset, tokens, claimedToken, gridSize]);
+  }, [activeEquippedAsset, activeTargetingAction, tokens, claimedToken, gridSize, hudCharacterData, selectedDicePreset]);
 
   const handleEquipAsset = useCallback((asset: Jb2aAssetDefinition) => {
     setActiveEquippedAsset(asset);
@@ -3363,6 +3428,17 @@ export default function PlayerView() {
 
   const handleSelectHudAction = useCallback((action: HudActionItem) => {
     if (activeTargetingAction?.id === action.id) {
+      const prevSlot = activeTargetingAction.castAtLevel ?? activeTargetingAction.level ?? 0;
+      const nextSlot = action.castAtLevel ?? action.level ?? 0;
+      if (prevSlot !== nextSlot) {
+        setActiveTargetingAction(action);
+        toast.info(
+          nextSlot > (action.level ?? 0)
+            ? `Upcasting ${action.name} at Level ${nextSlot} Slot${action.damageFormula ? ` (${action.damageFormula})` : ''}`
+            : `Targeting ${action.name} (Base Level ${nextSlot})`
+        );
+        return;
+      }
       setActiveTargetingAction(null);
       setActiveEquippedAsset(null);
       setAimOrigin(null);
@@ -3693,12 +3769,17 @@ export default function PlayerView() {
 
       calculatedDeltaHp = action.isHeal ? rolledTotal : -rolledTotal;
 
+      const upcastSuffix =
+        action.castAtLevel && action.castAtLevel > (action.level ?? 0)
+          ? ` [Lvl ${action.castAtLevel} Slot]`
+          : '';
+
       const diceEvent: DdbDiceRollEvent = {
         id: `roll-${Date.now()}`,
         characterId: String(hudCharacterData?.id || caster.id || ''),
         characterName: caster.name || 'Hero',
         avatarUrl: hudCharacterData?.avatarUrl || caster.avatarUrl || caster.url,
-        action: `${action.name} (${action.isHeal ? 'Healing' : 'Damage'})`,
+        action: `${action.name}${upcastSuffix} (${action.isHeal ? 'Healing' : 'Damage'})`,
         rollType: action.isHeal ? 'heal' : 'damage',
         formula,
         diceNotation: formula,
@@ -3726,12 +3807,17 @@ export default function PlayerView() {
     const isTargetOtherPlayer = targetToken.isPlayer && !isSelfTarget && !action.isHeal;
     const requiresApproval = isTargetOtherPlayer || (isTargetMonster && !autoApplyMonsterDamage);
 
+    const upcastActionLabel =
+      action.castAtLevel && action.castAtLevel > (action.level ?? 0)
+        ? `${action.name} (Level ${action.castAtLevel} Slot)`
+        : action.name;
+
     const payload = {
       sourceTokenId: caster.id,
       sourceName: caster.name || 'Hero',
       targetTokenId: targetToken.id,
       targetName: targetToken.name || 'Target',
-      actionName: action.name,
+      actionName: upcastActionLabel,
       deltaHp: calculatedDeltaHp,
       requiresApproval,
       isMonster: isTargetMonster,
@@ -3744,16 +3830,16 @@ export default function PlayerView() {
 
     if (calculatedDeltaHp < 0 && isTargetMonster) {
       if (autoApplyMonsterDamage) {
-        toast.success(`${action.name} hit ${targetToken.name}!`, {
+        toast.success(`${upcastActionLabel} hit ${targetToken.name}!`, {
           description: `Dealt ${Math.abs(calculatedDeltaHp)} damage (${formula || 'damage roll'}). Monster took damage.`
         });
       } else {
-        toast.info(`${action.name} hit ${targetToken.name}!`, {
+        toast.info(`${upcastActionLabel} hit ${targetToken.name}!`, {
           description: `Rolled ${Math.abs(calculatedDeltaHp)} damage (${formula || 'damage roll'}). Broadcast to DM to apply.`
         });
       }
     } else {
-      toast.success(`${action.name} executed on ${targetToken.name}!`, {
+      toast.success(`${upcastActionLabel} executed on ${targetToken.name}!`, {
         description: calculatedDeltaHp !== 0
           ? `${calculatedDeltaHp > 0 ? `Restored +${calculatedDeltaHp} HP (${formula})` : `${calculatedDeltaHp} HP`}`
           : (action.name.toLowerCase().includes('shield') ? 'Shield barrier active (+5 AC)' : 'Action delivered.')
