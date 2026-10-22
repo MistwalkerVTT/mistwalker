@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
 import {
   Shield,
   Heart,
@@ -86,6 +87,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
   const [selectedSpellLevel, setSelectedSpellLevel] = useState<number | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [hoveredAction, setHoveredAction] = useState<HudActionItem | null>(null);
+  const [inspectedAction, setInspectedAction] = useState<HudActionItem | null>(null);
   const [isTrayCollapsed, setIsTrayCollapsed] = useState<boolean>(false);
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState<boolean>(false);
   const [isDockMinimizedWhileAiming, setIsDockMinimizedWhileAiming] = useState<boolean>(false);
@@ -112,16 +114,20 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
     setSearchQuery('');
   }, [characterData?.id, claimedToken?.id]);
 
-  // Close hover/cast description card on Escape key
+  // Close hover/cast description card or inspected modal on Escape key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && hoveredAction) {
-        setHoveredAction(null);
+      if (e.key === 'Escape') {
+        if (inspectedAction) {
+          setInspectedAction(null);
+        } else if (hoveredAction) {
+          setHoveredAction(null);
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [hoveredAction]);
+  }, [hoveredAction, inspectedAction]);
 
   // Dedicated To-Hit Roll Handler
   const handleRollToHit = (action: HudActionItem) => {
@@ -847,6 +853,11 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                     onSelectAction(action);
                     setIsMobileDrawerOpen(false);
                   }}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setInspectedAction(action);
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
@@ -1306,6 +1317,11 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                     role="button"
                     tabIndex={0}
                     onClick={() => onSelectAction(action)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setInspectedAction(action);
+                    }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
@@ -1441,6 +1457,166 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
           </div>
         )}
       </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* FULL D&D BEYOND INSPECTION MODAL (Right-Click Spell / Attack / Action)    */}
+      {/* ========================================================================= */}
+      {inspectedAction && (
+        <div
+          className="fixed inset-0 z-[250] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-150 pointer-events-auto"
+          onClick={() => setInspectedAction(null)}
+        >
+          <div
+            className="relative w-full max-w-xl max-h-[85vh] bg-zinc-950/98 border border-zinc-700/80 rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.95)] flex flex-col overflow-hidden text-left ring-1 ring-white/10"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-zinc-800 bg-zinc-900/60 flex items-start justify-between gap-3 shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-11 h-11 rounded-xl bg-zinc-950 border border-zinc-700 flex items-center justify-center shrink-0 overflow-hidden shadow-inner">
+                  {renderActionGlyph(inspectedAction, 'w-6 h-6')}
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-base sm:text-lg font-bold text-white font-mono truncate">
+                      {inspectedAction.name}
+                    </h3>
+                    {inspectedAction.level !== undefined && (
+                      <span className="px-2 py-0.5 rounded-full bg-blue-950 border border-blue-500/50 text-blue-300 font-mono text-[10px] font-bold">
+                        {inspectedAction.level === 0 ? 'Cantrip' : `${formatSpellLevelLabel(inspectedAction.level)} Level`}
+                      </span>
+                    )}
+                    {inspectedAction.school && (
+                      <span className="px-2 py-0.5 rounded-full bg-purple-950 border border-purple-500/50 text-purple-300 font-mono text-[10px] uppercase font-bold">
+                        {inspectedAction.school}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs font-mono text-zinc-400 mt-0.5">
+                    {inspectedAction.sourceLabel || (inspectedAction.category === 'spells' ? 'D&D Beyond Spell' : 'Action')}
+                  </div>
+                </div>
+              </div>
+
+              {/* Close Button X */}
+              <button
+                type="button"
+                onClick={() => setInspectedAction(null)}
+                className="p-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-700/80 transition-colors cursor-pointer shrink-0"
+                title="Close (Escape)"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Quick Stats Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-3 sm:p-4 bg-zinc-900/30 border-b border-zinc-800/80 text-[11px] font-mono shrink-0">
+              <div className="p-2 rounded-lg bg-zinc-900/80 border border-zinc-800">
+                <div className="text-zinc-500 text-[10px] uppercase font-bold">Casting Time</div>
+                <div className="text-amber-300 font-bold mt-0.5">{inspectedAction.castingTime || '1 Action'}</div>
+              </div>
+              <div className="p-2 rounded-lg bg-zinc-900/80 border border-zinc-800">
+                <div className="text-zinc-500 text-[10px] uppercase font-bold">Range / Area</div>
+                <div className="text-zinc-200 font-bold mt-0.5">
+                  {inspectedAction.rangeFt !== undefined ? (inspectedAction.rangeFt > 0 ? `${inspectedAction.rangeFt} ft.` : 'Self') : 'Self / Touch'}
+                </div>
+              </div>
+              <div className="p-2 rounded-lg bg-zinc-900/80 border border-zinc-800">
+                <div className="text-zinc-500 text-[10px] uppercase font-bold">Components</div>
+                <div className="text-zinc-200 font-bold mt-0.5 truncate" title={inspectedAction.components || 'V, S'}>
+                  {inspectedAction.components || 'V, S'}
+                </div>
+              </div>
+              <div className="p-2 rounded-lg bg-zinc-900/80 border border-zinc-800">
+                <div className="text-zinc-500 text-[10px] uppercase font-bold">Duration</div>
+                <div className="text-zinc-200 font-bold mt-0.5 truncate" title={inspectedAction.duration || 'Instantaneous'}>
+                  {inspectedAction.duration || 'Instantaneous'}
+                </div>
+              </div>
+            </div>
+
+            {/* Attack / Damage / Save Badges Bar */}
+            {(inspectedAction.hitBonus !== undefined || inspectedAction.saveDc || inspectedAction.damageFormula || inspectedAction.uses) && (
+              <div className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900/20 border-b border-zinc-800/60 flex-wrap text-xs font-mono shrink-0">
+                {inspectedAction.hitBonus !== undefined && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleRollToHit(inspectedAction);
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-emerald-950 hover:bg-emerald-900 border border-emerald-500/50 text-emerald-300 hover:text-white font-bold transition-all cursor-pointer active:scale-95 shadow-sm"
+                    title="Roll To Hit"
+                  >
+                    Attack: {String(inspectedAction.hitBonus).startsWith('+') || String(inspectedAction.hitBonus).startsWith('-') ? inspectedAction.hitBonus : `+${inspectedAction.hitBonus}`} to Hit
+                  </button>
+                )}
+                {inspectedAction.saveDc && (
+                  <span className="px-2.5 py-1 rounded-lg bg-amber-950 border border-amber-500/50 text-amber-300 font-bold">
+                    Save DC {inspectedAction.saveDc} {inspectedAction.saveAbility || ''}
+                  </span>
+                )}
+                {inspectedAction.damageFormula && (
+                  <span className={`px-2.5 py-1 rounded-lg font-bold border ${
+                    inspectedAction.isHeal
+                      ? 'bg-emerald-950 border-emerald-500/50 text-emerald-300'
+                      : 'bg-rose-950 border-rose-500/50 text-rose-300'
+                  }`}>
+                    {inspectedAction.isHeal ? 'Heal' : 'Damage'}: {inspectedAction.damageFormula} {inspectedAction.damageType || ''}
+                  </span>
+                )}
+                {inspectedAction.uses && (
+                  <span className="px-2.5 py-1 rounded-lg bg-indigo-950 border border-indigo-500/50 text-indigo-300 font-bold">
+                    Uses: {inspectedAction.uses.available}/{inspectedAction.uses.total} ({inspectedAction.uses.resetType || 'Rest'})
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Scrollable Description Body (Markdown / D&D Beyond formatting) */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 sidebar-scrollbar text-sm leading-relaxed text-zinc-300 font-sans">
+              {inspectedAction.notes && (
+                <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 font-mono text-xs">
+                  <span className="font-bold uppercase tracking-wider">Properties & Notes: </span>
+                  {inspectedAction.notes}
+                </div>
+              )}
+
+              <div className="prose prose-invert prose-sm max-w-none prose-p:my-2 prose-p:leading-relaxed prose-strong:text-amber-300 prose-ul:my-2 prose-li:my-0.5">
+                <ReactMarkdown>
+                  {inspectedAction.description || 'No description available for this spell or attack.'}
+                </ReactMarkdown>
+              </div>
+
+              {inspectedAction.atHigherLevels && (
+                <div className="mt-3 p-3 rounded-xl bg-blue-950/40 border border-blue-500/30 text-xs">
+                  <div className="font-bold text-blue-300 font-mono uppercase mb-1">At Higher Levels</div>
+                  <p className="text-zinc-300 font-sans leading-relaxed">{inspectedAction.atHigherLevels}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3 sm:p-4 border-t border-zinc-800 bg-zinc-900/60 flex items-center justify-between gap-2 shrink-0">
+              <span className="text-[11px] font-mono text-zinc-500">
+                Right-click any HUD action anytime to inspect.
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSelectAction(inspectedAction);
+                    setInspectedAction(null);
+                  }}
+                  className="px-4 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs font-mono transition-all shadow-md active:scale-95 cursor-pointer"
+                >
+                  Cast / Target
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

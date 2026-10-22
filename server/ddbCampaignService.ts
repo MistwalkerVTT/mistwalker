@@ -1211,9 +1211,12 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
       // Special class damage formulas when DDB stores them in scaleValue
       if (!damageFormula) {
         if (lowerName.includes('sneak attack')) {
-          const saDice = Math.max(1, Math.ceil((rogueLevel || 1) / 2));
+          const saDice = Math.max(1, Math.ceil((rogueLevel || computed.totalLevel || 1) / 2));
           damageFormula = `${saDice}d6`;
           damageType = 'piercing';
+        } else if (lowerName.includes('psychic blades') || lowerName.includes('psychic blade')) {
+          damageFormula = '1d6';
+          damageType = 'psychic';
         } else if (lowerName.includes('dreadful strike')) {
           damageFormula = '2d6';
           damageType = 'psychic';
@@ -1553,6 +1556,15 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
     }
 
     const cleanDesc = cleanDdbText(def.description, snippetCtx);
+    const componentsText = Array.isArray(def.components)
+      ? def.components.map((cNum: number) => cNum === 1 ? 'V' : cNum === 2 ? 'S' : cNum === 3 ? (def.componentsDescription ? `M (${def.componentsDescription})` : 'M') : '').filter(Boolean).join(', ')
+      : undefined;
+    const durationText = def.duration
+      ? `${def.duration.durationType === 'Concentration' ? 'Concentration, up to ' : ''}${def.duration.durationInterval ? `${def.duration.durationInterval} ` : ''}${def.duration.durationUnit || def.duration.durationType || 'Instantaneous'}`.trim()
+      : undefined;
+    const higherLevelsText = def.atHigherLevels?.higherLevelDefinitions?.length
+      ? def.atHigherLevels.higherLevelDefinitions.map((h: any) => h.description || h.dice?.diceString).filter(Boolean).join(' ')
+      : undefined;
 
     const hudSpell: any = {
       id: `spell-${idx}-${def.id || idx}`,
@@ -1565,6 +1577,9 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
       school,
       rangeFt,
       castingTime,
+      duration: durationText,
+      components: componentsText,
+      atHigherLevels: higherLevelsText,
       hitBonus,
       saveDc,
       saveAbility,

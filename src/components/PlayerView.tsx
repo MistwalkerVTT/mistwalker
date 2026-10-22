@@ -3518,17 +3518,32 @@ export default function PlayerView() {
     }
 
     // 3. Roll 3D Physics Dice if action has damageFormula or hitBonus or isHeal
-    let formula = action.damageFormula;
+    let formula = action.damageFormula || (action as any).damage;
+    const lowerActionName = action.name.toLowerCase();
+
+    // Auto-resolve Sneak Attack damage formula dynamically if missing
+    if (!formula && lowerActionName.includes('sneak attack')) {
+      const rogueLvl = hudCharacterData?.totalLevel || 1;
+      formula = `${Math.max(1, Math.ceil(rogueLvl / 2))}d6`;
+    }
+
+    // Auto-resolve Rogue Psychic Blades damage formula if missing
+    if (!formula && (lowerActionName.includes('psychic blades') || lowerActionName.includes('psychic blade'))) {
+      formula = '1d6';
+    }
+
     if (!formula && action.isHeal) {
-      const lower = action.name.toLowerCase();
-      if (lower.includes('healing word')) formula = '1d4 + 3';
-      else if (lower.includes('cure wounds')) formula = '1d8 + 3';
+      if (lowerActionName.includes('healing word')) formula = '1d4 + 3';
+      else if (lowerActionName.includes('cure wounds')) formula = '1d8 + 3';
       else formula = '1d8 + 2';
     }
 
+    // Sanitize formula to pure dice math (strip words like "piercing", "slashing", etc.)
+    const cleanFormula = formula ? formula.replace(/[a-zA-Z]+/g, '').trim() : '';
+
     let calculatedDeltaHp = 0;
     if (formula) {
-      const rollParts = formula.match(/(\d+)d(\d+)(?:\s*([+-])\s*(\d+))?/i);
+      const rollParts = (cleanFormula || formula).match(/(\d+)d(\d+)(?:\s*([+-])\s*(\d+))?/i);
       let rolledTotal = 0;
       const diceResults: Array<{ sides: number; result: number; type: string }> = [];
       if (rollParts) {

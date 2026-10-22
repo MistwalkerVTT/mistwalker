@@ -50,6 +50,9 @@ export interface HudActionItem {
   isSelfAction?: boolean;     // True if action targets self or activates immediately (e.g. Rage, Dodge, Dash)
   spellSlotRequired?: number; // Slot level needed if casting with slot
   isHeal?: boolean;           // True if spell/action restores HP
+  duration?: string;          // e.g. "Instantaneous", "Concentration, up to 1 minute"
+  components?: string;        // e.g. "V, S, M (a pinch of sulfur)"
+  atHigherLevels?: string;    // Higher level casting scaling description
 }
 
 export interface HudSpellSlot {
