@@ -5412,8 +5412,30 @@ export default function PlayerView() {
         const displayHp = currentToken.currentHp ?? currentToken.hp ?? matchingChar?.hp ?? matchingChar?.maxHp ?? 10;
         const displayMaxHp = currentToken.maxHp ?? matchingChar?.maxHp ?? matchingChar?.hp ?? 10;
 
-        const menuX = Math.max(16, Math.min(activeTokenMenu.x, window.innerWidth - 300));
-        const menuY = Math.max(16, Math.min(activeTokenMenu.y, window.innerHeight - 440));
+        // Calculate token screen bounds to position menu off to the side so player token and effects remain visible
+        const tokenPixelSize = (currentToken.size || 1) * gridSize * stageScale;
+        const tokenScreenX = (currentToken.x * stageScale) + stagePos.x;
+        const tokenScreenY = (currentToken.y * stageScale) + stagePos.y;
+        const menuWidth = 288; // w-72 = 18rem = 288px
+        const menuEstimatedHeight = 440;
+        const gap = 16;
+
+        // Prefer placing to the right of the token if room, otherwise to the left
+        let calculatedMenuX: number;
+        if (tokenScreenX + tokenPixelSize + gap + menuWidth <= window.innerWidth - 16) {
+          calculatedMenuX = tokenScreenX + tokenPixelSize + gap;
+        } else if (tokenScreenX - gap - menuWidth >= 16) {
+          calculatedMenuX = tokenScreenX - gap - menuWidth;
+        } else {
+          // If neither side fits fully, place where there is more space
+          calculatedMenuX = tokenScreenX > window.innerWidth / 2 ? 16 : window.innerWidth - menuWidth - 16;
+        }
+
+        // Align vertically with token top, bounded within viewport
+        let calculatedMenuY = Math.max(16, Math.min(tokenScreenY, window.innerHeight - menuEstimatedHeight - 16));
+
+        const menuX = Math.max(16, Math.min(calculatedMenuX, window.innerWidth - menuWidth - 16));
+        const menuY = calculatedMenuY;
         const isCurrentClaimed = claimedTokenId === currentToken.id;
 
         return (

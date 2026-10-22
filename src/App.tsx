@@ -9467,8 +9467,27 @@ export default function App() {
         const displayHp = currentToken?.currentHp ?? currentToken?.hp ?? matchingChar?.hp ?? matchingChar?.maxHp ?? 10;
         const displayMaxHp = currentToken?.maxHp ?? matchingChar?.maxHp ?? matchingChar?.hp ?? 10;
 
-        const menuX = Math.max(16, Math.min(activeTokenMenu.x, window.innerWidth - 300));
-        const menuY = Math.max(16, Math.min(activeTokenMenu.y, window.innerHeight - 440));
+        // Calculate token screen bounds to position menu off to the side so token and effects remain visible
+        const tokenPixelSize = ((currentToken?.size || 1) * gridSize * stageScale);
+        const tokenScreenX = ((currentToken?.x ?? 0) * stageScale) + stagePos.x;
+        const tokenScreenY = ((currentToken?.y ?? 0) * stageScale) + stagePos.y;
+        const menuWidth = 288; // w-72 = 18rem = 288px
+        const menuEstimatedHeight = 440;
+        const gap = 16;
+
+        let calculatedMenuX: number;
+        if (tokenScreenX + tokenPixelSize + gap + menuWidth <= window.innerWidth - 16) {
+          calculatedMenuX = tokenScreenX + tokenPixelSize + gap;
+        } else if (tokenScreenX - gap - menuWidth >= 16) {
+          calculatedMenuX = tokenScreenX - gap - menuWidth;
+        } else {
+          calculatedMenuX = tokenScreenX > window.innerWidth / 2 ? 16 : window.innerWidth - menuWidth - 16;
+        }
+
+        let calculatedMenuY = Math.max(16, Math.min(tokenScreenY, window.innerHeight - menuEstimatedHeight - 16));
+
+        const menuX = Math.max(16, Math.min(calculatedMenuX, window.innerWidth - menuWidth - 16));
+        const menuY = calculatedMenuY;
 
         const handleUpdateDmToken = (updates: any) => {
           setTokens(prev => {
