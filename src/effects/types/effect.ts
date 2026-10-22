@@ -45,6 +45,7 @@ export interface VttEffectInstance {
   targetY?: number;
   attachedTokenId?: string;
   sizeFt: number;
+  radiusFeet?: number;
   rotation: number;          // Degrees (0 to 360)
   opacity: number;           // 0.0 to 1.0
   blendMode: BlendMode;

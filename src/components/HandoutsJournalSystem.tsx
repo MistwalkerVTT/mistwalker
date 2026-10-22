@@ -260,7 +260,15 @@ export function useHandoutsJournalSystem(options: {
   );
 
   const presentHandoutToPlayers = useCallback(
-    (handout: HandoutItem, targetCharacterNames?: string[]) => {
+    (handoutOrId: HandoutItem | string | null | undefined, targetCharacterNames?: string[] | any) => {
+      if (!handoutOrId) {
+        dismissActivePresentation();
+        return;
+      }
+      const handout = typeof handoutOrId === 'string'
+        ? (state.handouts.find((h) => h.id === handoutOrId) || null)
+        : handoutOrId;
+      if (!handout) return;
       const updatedHandout: HandoutItem = {
         ...handout,
         isSharedWithParty: true,
@@ -412,11 +420,15 @@ export function useHandoutsJournalSystem(options: {
     hasUnreadUpdate,
     clearUnreadUpdate: useCallback(() => setHasUnreadUpdate(false), []),
     saveHandout,
+    addOrUpdateHandout: saveHandout,
     deleteHandout,
     presentHandoutToPlayers,
+    presentHandoutToTable: presentHandoutToPlayers,
     dismissActivePresentation,
+    dismissPresentation: dismissActivePresentation,
     submitRiddleGuess,
     saveQuest,
+    addOrUpdateQuest: saveQuest,
     deleteQuest,
     addOrUpdateJournalEntry,
     deleteJournalEntry,
@@ -461,22 +473,32 @@ const CATEGORY_META: Record<
  * Fullscreen Interactive Spotlight Viewer for Letters, Riddles, Props & Maps
  */
 export const HandoutSpotlightModal: React.FC<{
-  handout: HandoutItem | null;
+  handout?: HandoutItem | null;
+  presentation?: ActiveHandoutPresentation | null;
+  handouts?: HandoutItem[];
   role: 'dm' | 'player';
-  onClose: () => void;
+  currentCharacterName?: string;
+  onClose?: () => void;
+  onDismiss?: () => void;
+  onUpdatePresentation?: (patch: any) => void;
   onPresentToPlayers?: (handout: HandoutItem) => void;
   onUpdateHandout?: (updated: HandoutItem) => void;
   onSubmitRiddleGuess?: (handout: HandoutItem, guess: string) => boolean;
   onNarrateText?: (text: string) => void;
 }> = ({
-  handout,
+  handout: directHandout,
+  presentation,
+  handouts = [],
   role,
-  onClose,
+  onClose: directOnClose,
+  onDismiss,
   onPresentToPlayers,
   onUpdateHandout,
   onSubmitRiddleGuess,
   onNarrateText
 }) => {
+  const handout = directHandout || (presentation ? (presentation.handout || handouts.find(h => h.id === presentation.handoutId || h.id === (presentation as any).handout?.id)) : null) || null;
+  const onClose = directOnClose || onDismiss || (() => {});
   const [imageZoom, setImageZoom] = useState(1);
   const [guessInput, setGuessInput] = useState('');
 
@@ -845,25 +867,31 @@ export const HandoutsJournalModal: React.FC<{
   isOpen: boolean;
   onClose: () => void;
   role: 'dm' | 'player';
-  currentAuthorName: string;
+  currentAuthorName?: string;
+  currentCharacterName?: string;
   availableCharacterNames?: string[];
+  partyCharacters?: any[];
   handouts: HandoutItem[];
   quests: SharedQuestItem[];
   journalEntries: SharedJournalEntry[];
+  activePresentation?: any;
   onSaveHandout: (item: HandoutItem) => void;
   onDeleteHandout: (id: string) => void;
-  onPresentHandout: (item: HandoutItem, targetCharacterNames?: string[]) => void;
-  onInspectHandout: (item: HandoutItem) => void;
+  onPresentHandout?: (item: HandoutItem, targetCharacterNames?: string[]) => void;
+  onInspectHandout?: (item: HandoutItem) => void;
   onSaveQuest: (quest: SharedQuestItem) => void;
   onDeleteQuest: (id: string) => void;
   onSaveJournalEntry: (entry: SharedJournalEntry) => void;
   onDeleteJournalEntry: (id: string) => void;
+  onSubmitRiddleGuess?: (handout: HandoutItem, guess: string) => boolean;
 }> = ({
   isOpen,
   onClose,
   role,
-  currentAuthorName,
-  availableCharacterNames = [],
+  currentAuthorName: explicitAuthorName,
+  currentCharacterName,
+  availableCharacterNames: explicitCharNames,
+  partyCharacters = [],
   handouts,
   quests,
   journalEntries,
@@ -876,6 +904,8 @@ export const HandoutsJournalModal: React.FC<{
   onSaveJournalEntry,
   onDeleteJournalEntry
 }) => {
+  const currentAuthorName = explicitAuthorName || currentCharacterName || (role === 'dm' ? 'Dungeon Master' : 'Player');
+  const availableCharacterNames = explicitCharNames || (partyCharacters && partyCharacters.length > 0 ? partyCharacters.map((c: any) => c.name) : []);
   const [activeTab, setActiveTab] = useState<'handouts' | 'quests' | 'journal'>('handouts');
   const [categoryFilter, setCategoryFilter] = useState<HandoutCategory | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');

@@ -7659,6 +7659,10 @@ export default function App() {
             onOpenCharacterCompendium={() => setShowCharacterCompendium(true)}
             onOpenAlliesCompendium={() => setShowAlliesCompendium(true)}
             onOpenDdbSync={() => setShowDdbModal(true)}
+            onOpenHandoutsJournal={() => {
+              setShowHandoutsJournalModal(true);
+              clearUnreadHandouts();
+            }}
             onOpenBugReport={() => setIsBugReportModalOpen(true)}
             onLoadSceneFromCampaign={handleLoadSceneFromCampaign}
             campaignsList={campaignsList}
@@ -7714,6 +7718,11 @@ export default function App() {
                 activeMapId={activeMapId}
                 liveMapId={liveMapId}
                 onMapSwitch={handleMapSwitch}
+                onOpenHandoutsJournal={() => {
+                  setShowHandoutsJournalModal(true);
+                  clearUnreadHandouts();
+                }}
+                hasUnreadHandouts={hasUnreadHandouts}
               />
             <input
               ref={relinkMapFileInputRef}
@@ -8488,6 +8497,21 @@ export default function App() {
               aimCurrent={aimCurrent}
               onEffectComplete={handleEffectComplete}
               onDispelEffect={handleDispelEffect}
+              onInspectEffect={(effect) => {
+                const lookedUp = lookupDndRuleDetails(effect.name, 'aura', effect.radiusFeet, effect.castAtLevel);
+                setInspectedRuleEntry({
+                  ...lookedUp,
+                  castAtLevel: effect.castAtLevel ?? lookedUp.castAtLevel,
+                  baseLevel: effect.baseLevel ?? lookedUp.baseLevel,
+                  damageFormula: effect.damageFormula ?? lookedUp.damageFormula,
+                  damageType: effect.damageType ?? lookedUp.damageType,
+                  saveDc: effect.saveDc ?? lookedUp.saveDc,
+                  saveAbility: effect.saveAbility ?? lookedUp.saveAbility,
+                  description: effect.description || lookedUp.description,
+                  atHigherLevels: effect.atHigherLevels ?? lookedUp.atHigherLevels,
+                  radiusFeet: effect.radiusFeet ?? lookedUp.radiusFeet
+                });
+              }}
             />
 
             {/* Environmental & Animated Map FX Overlay (Uploaded & Generated Maps) */}
@@ -10557,6 +10581,8 @@ export default function App() {
         <DndRuleInspectionModal
           entry={inspectedRuleEntry}
           onClose={() => setInspectedRuleEntry(null)}
+          socket={socketRef.current}
+          characterName="Dungeon Master"
         />
       )}
 

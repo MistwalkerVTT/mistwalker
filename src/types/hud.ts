@@ -41,7 +41,7 @@ export interface HudActionItem {
   rangeFt?: number;
   castingTime?: string;       // "1 Action", "1 Bonus Action", "1 Reaction"
   hitBonus?: string | number; // e.g. "+9"
-  saveDc?: number;            // e.g. 15
+  saveDc?: number | string;            // e.g. 15
   saveAbility?: string;       // e.g. "WIS", "DEX", "CON"
   damageFormula?: string;     // e.g. "1d12 + 8"
   damageType?: string;        // e.g. "slashing", "fire", "radiant"

@@ -20,6 +20,9 @@ export interface DndRuleEntry {
   isHeal?: boolean;
   description: string;
   higherLevels?: string;
+  atHigherLevels?: string;
+  baseLevel?: number;
+  radiusFeet?: number;
 }
 
 export const DND_CONDITION_DESCRIPTIONS: Record<string, { subtitle: string; description: string }> = {
@@ -566,7 +569,7 @@ export const DND_COMMON_SPELLS: Record<string, DndRuleEntry> = {
 /**
  * Searches the unified compendium for full text details on a spell, condition, or aura.
  */
-export function lookupDndRuleDetails(rawName: string, categoryHint?: 'spell' | 'condition' | 'aura'): DndRuleEntry | null {
+export function lookupDndRuleDetails(rawName: string, categoryHint?: 'spell' | 'condition' | 'aura', radiusFeet?: number, castAtLevel?: number): DndRuleEntry | null {
   if (!rawName || typeof rawName !== 'string') return null;
   const clean = rawName.trim();
   const lower = clean.toLowerCase();

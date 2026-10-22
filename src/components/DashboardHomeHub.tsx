@@ -17,7 +17,8 @@ import {
   Play,
   FileCode2,
   Bug,
-  Clock
+  Clock,
+  Scroll
 } from 'lucide-react';
 import { Campaign, Scene, ActiveSessionData } from '../lib/firebase';
 import { DEMO_GV_CAMPAIGN, DEMO_GV_SCENE, DEMO_GV_CHAPTER } from '../data/demoCampaignGv';
@@ -31,6 +32,7 @@ interface DashboardHomeHubProps {
   onOpenCharacterCompendium: () => void;
   onOpenAlliesCompendium: () => void;
   onOpenDdbSync: () => void;
+  onOpenHandoutsJournal?: () => void;
   onOpenBugReport?: () => void;
   onLoadSceneFromCampaign: (scene: Scene, campaignId: string, chapterId: string) => void;
   campaignsList: Campaign[];
@@ -54,6 +56,7 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
   onOpenCharacterCompendium,
   onOpenAlliesCompendium,
   onOpenDdbSync,
+  onOpenHandoutsJournal,
   onOpenBugReport,
   onLoadSceneFromCampaign,
   campaignsList,
@@ -548,6 +551,31 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
                   </div>
                 </button>
               </div>
+
+              {/* Handouts, Visual Props & Shared Party Journal Banner Button */}
+              {onOpenHandoutsJournal && (
+                <button
+                  type="button"
+                  id="btn-home-handouts-journal"
+                  onClick={onOpenHandoutsJournal}
+                  className="w-full mt-1 p-3 rounded-2xl bg-gradient-to-r from-amber-950/60 via-zinc-900/90 to-amber-950/40 hover:from-amber-900/50 hover:to-amber-900/30 border border-amber-500/40 hover:border-amber-400 transition-all text-left group/handout flex items-center justify-between cursor-pointer shadow-lg shadow-amber-950/20"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/40 group-hover/handout:scale-105 transition-transform">
+                      <Scroll className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="block text-xs font-mono font-bold text-amber-200 group-hover/handout:text-amber-100">
+                        Handouts, Props & Shared Journal
+                      </span>
+                      <span className="block text-[10px] text-zinc-400 font-sans">
+                        Share letters, maps, riddles, quests & party notes
+                      </span>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-amber-400 group-hover/handout:translate-x-0.5 transition-transform" />
+                </button>
+              )}
             </div>
           </div>
         </div>

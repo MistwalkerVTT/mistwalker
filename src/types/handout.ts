@@ -47,6 +47,7 @@ export interface SharedJournalEntry {
 
 export interface ActiveHandoutPresentation {
   handout: HandoutItem;
+  handoutId?: string;
   targetCharacterNames?: string[]; // Empty = all players
   presentedAt: number;
 }

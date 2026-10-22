@@ -5878,6 +5878,8 @@ export default function PlayerView() {
         aimCurrent={aimCurrent}
         onEffectComplete={handleEffectComplete}
         onDispelEffect={handleDispelEffect}
+        onInspectEffect={handleInspectEffect}
+        onClearTokenAura={handleClearTokenAura}
       />
 
       {/* ========================================================= */}
@@ -6262,20 +6264,46 @@ export default function PlayerView() {
                 {/* Active Aura Status Banner */}
                 {((currentToken.auraRadius && currentToken.auraRadius > 0) || (currentToken.auras && currentToken.auras.length > 0)) ? (
                   <div className="bg-indigo-950/40 border border-indigo-500/40 rounded-xl p-2.5 flex items-center justify-between">
-                    <div className="flex items-center gap-2 overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const auraName = currentToken.auraName || 'Magical Aura';
+                        handleInspectEffect({
+                          id: `token_aura_${currentToken.id}`,
+                          name: auraName,
+                          label: auraName,
+                          assetKey: auraName.toLowerCase().replace(/\s+/g, '_'),
+                          videoUrl: currentToken.videoUrl || '',
+                          paradigm: 'aura',
+                          x: currentToken.x,
+                          y: currentToken.y,
+                          attachedTokenId: currentToken.id,
+                          sizeFt: currentToken.auraRadius || 10,
+                          rotation: 0,
+                          opacity: currentToken.auraOpacity ?? 0.4,
+                          blendMode: 'screen',
+                          isPersistent: true,
+                          loop: true,
+                          castTime: Date.now(),
+                          casterName: currentToken.name
+                        });
+                      }}
+                      className="flex items-center gap-2 overflow-hidden text-left group/auratitle cursor-pointer"
+                      title="Click to open aura description & roll dice"
+                    >
                       <div
                         className="w-4 h-4 rounded-full border border-white/50 shrink-0 shadow-sm"
                         style={{ backgroundColor: currentToken.auraColor || 'rgba(234, 179, 8, 0.5)' }}
                       />
                       <div className="flex flex-col min-w-0">
-                        <span className="text-[11px] font-bold text-indigo-200 truncate">
+                        <span className="text-[11px] font-bold text-indigo-200 group-hover/auratitle:text-amber-300 group-hover/auratitle:underline truncate transition-colors">
                           {currentToken.auraName || 'Magical Aura'}
                         </span>
                         <span className="text-[9px] font-mono text-indigo-400">
                           Radius: {currentToken.auraRadius || 10} ft
                         </span>
                       </div>
-                    </div>
+                    </button>
                     <button
                       type="button"
                       onClick={() => {
@@ -6888,6 +6916,7 @@ export default function PlayerView() {
           claimedToken={claimedToken}
           onSelectAction={handleSelectHudAction}
           onRollToHit={handleRollToHit}
+          onRollDamage={handleRollDamage}
           activeTargetingAction={activeTargetingAction}
           activeEquippedAsset={activeEquippedAsset}
           onCancelTargeting={() => {
@@ -6929,6 +6958,8 @@ export default function PlayerView() {
           isSyncingDdb={isSyncingHudDdb}
           activeEffects={effects}
           onDispelEffect={handleDispelEffect}
+          inspectedAuraRequest={inspectedAuraRequest}
+          onClearInspectedAura={() => setInspectedAuraRequest(null)}
         />
       )}
 

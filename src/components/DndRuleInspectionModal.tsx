@@ -14,6 +14,8 @@ interface DndRuleInspectionModalProps {
   onClose: () => void;
   onActionClick?: (entry: DndRuleEntry) => void;
   actionButtonText?: string;
+  socket?: any;
+  characterName?: string;
 }
 
 export const DndRuleInspectionModal: React.FC<DndRuleInspectionModalProps> = ({

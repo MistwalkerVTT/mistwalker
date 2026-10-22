@@ -86,7 +86,8 @@ import {
   FileCode2,
   Tv,
   Settings,
-  Tag
+  Tag,
+  Scroll
 } from 'lucide-react';
 import { LABEL_GLYPHS } from './RoomHotspotLayer';
 import { isUniversalVttFile } from '../services/universalVttService';
@@ -273,6 +274,8 @@ interface LeftSidebarProps {
   isAtHome?: boolean;
   onPromptRollInitiative?: () => void;
   onOpenCriticalHitsModal?: () => void;
+  onOpenHandoutsJournal?: () => void;
+  hasUnreadHandouts?: boolean;
 }
 
 type GroupMenuId = 'maps' | 'zones' | 'fog-grid' | 'lighting' | 'combat' | 'fx' | 'spells' | 'tokens' | 'dice' | 'ai' | 'help';
@@ -901,32 +904,34 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
             )}
           </button>
         </div>
-      </div>
 
-      {/* Zoom In & Zoom Out Controls */}
-      <div className="flex flex-col items-center py-2 border-t border-zinc-800/80 gap-1.5 shrink-0 w-full px-1.5 mt-auto bg-zinc-950/90">
-        <button
-          id="btn-zoom-in"
-          onClick={zoomIn}
-          disabled={!currentMapImage}
-          className="w-11 h-9 rounded-xl flex items-center justify-center text-zinc-400 hover:text-amber-300 hover:bg-zinc-850 hover:border hover:border-zinc-700/60 transition-all active:scale-95 disabled:opacity-25 disabled:cursor-not-allowed cursor-pointer"
-          title={currentMapImage ? `Zoom In (+)` : "Zoom In (Requires loaded map)"}
-        >
-          <ZoomIn className="w-5 h-5" />
-        </button>
-        <button
-          id="btn-zoom-out"
-          onClick={zoomOut}
-          disabled={!currentMapImage}
-          className="w-11 h-9 rounded-xl flex items-center justify-center text-zinc-400 hover:text-amber-300 hover:bg-zinc-850 hover:border hover:border-zinc-700/60 transition-all active:scale-95 disabled:opacity-25 disabled:cursor-not-allowed cursor-pointer"
-          title={currentMapImage ? `Zoom Out (-)` : "Zoom Out (Requires loaded map)"}
-        >
-          <ZoomOut className="w-5 h-5" />
-        </button>
+        {/* 8. Handouts, Visual Props & Shared Party Journal (1-Click Studio) */}
+        {onOpenHandoutsJournal && (
+          <div className="relative group shrink-0">
+            <button
+              id="group-btn-handouts-journal"
+              onClick={onOpenHandoutsJournal}
+              className={`w-11 h-11 rounded-xl flex flex-col items-center justify-center transition-all relative cursor-pointer ${
+                hasUnreadHandouts
+                  ? 'bg-amber-500/25 text-amber-300 border border-amber-500/60 shadow-[0_0_14px_rgba(245,158,11,0.4)]'
+                  : 'text-amber-300/90 hover:text-amber-200 bg-amber-950/30 hover:bg-amber-900/40 border border-amber-500/40 hover:border-amber-400/70'
+              }`}
+              title="Handouts, Visual Props, Riddles, Quests & Shared Party Journal"
+            >
+              <Scroll className="w-5 h-5" />
+              <span className="text-[6px] font-black font-mono tracking-wider text-amber-400 -mt-0.5 leading-none">
+                PROPS
+              </span>
+              {hasUnreadHandouts && (
+                <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.9)] animate-ping" />
+              )}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Bottom Anchored Tools: Help, Bug Report, Bug Log / Notes, Settings */}
-      <div className="flex flex-col items-center py-2.5 border-t border-zinc-800/80 gap-2 shrink-0 w-full px-1.5 bg-zinc-950/95">
+      <div className="flex flex-col items-center py-2.5 border-t border-zinc-800/80 gap-2 shrink-0 w-full px-1.5 mt-auto bg-zinc-950/95">
         {/* Help & Support Group */}
         <div className="relative group shrink-0">
           <button

@@ -890,8 +890,20 @@ async function startServer() {
     res.status(500).json({ error: "Internal Server Error", details: err.message });
   });
 
-  httpServer.listen(PORT, "0.0.0.0", () => {
+  const server = httpServer.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
+  });
+
+  server.on("error", (err: any) => {
+    if (err.code === "EADDRINUSE") {
+      const nextPort = PORT + 1;
+      console.warn(`[Server] Port ${PORT} is already in use. Retrying on port ${nextPort}...`);
+      httpServer.listen(nextPort, "0.0.0.0", () => {
+        console.log(`Server running on http://localhost:${nextPort}`);
+      });
+    } else {
+      console.error("[Server] Server listen error:", err);
+    }
   });
 }
 
