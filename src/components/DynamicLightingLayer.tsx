@@ -201,6 +201,19 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
         directionDegrees: direction,
         color: t.visionColor || '#ffd166'
       });
+
+      // Glow Light: token radiates 20ft bright + 20ft dim light
+      if ((t as any).glowLight) {
+        sources.push({
+          id: `glow-${t.id}`,
+          x: t.x + tokenCenterOffset,
+          y: t.y + tokenCenterOffset,
+          radiusPx: (40 / 5) * gridSize,
+          angleDegrees: 360,
+          directionDegrees: 0,
+          color: '#fde68a'
+        });
+      }
     }
 
     if (animatedFeatures) {
