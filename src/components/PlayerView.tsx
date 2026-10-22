@@ -129,6 +129,7 @@ import {
   useAudioMixerJukebox,
   MapAudioSourcesLayer
 } from './AudioMixerJukebox';
+import { PlayerArenaMode } from './PlayerArenaMode';
 
 interface Token {
   id: string;
@@ -1845,6 +1846,7 @@ export default function PlayerView() {
 
   // Stand-Alone Player Handouts, Visual Props & Shared Journal System
   const [showHandoutsJournalModal, setShowHandoutsJournalModal] = useState(false);
+  const [showArenaMode, setShowArenaMode] = useState(false);
   const {
     handouts: partyHandouts,
     quests: partyQuests,
@@ -5247,6 +5249,23 @@ export default function PlayerView() {
                       )}
                     </button>
 
+                    {/* Stand-Alone Battle Arena & Skirmish Lobby (1v1 / 2v2 / Random Encounters) */}
+                    <button
+                      onClick={() => {
+                        setShowArenaMode(true);
+                        if (isMobile) setIsMobileSidebarOpen(false);
+                      }}
+                      className={`w-full flex items-center rounded-xl transition-all cursor-pointer border ${
+                        showArenaMode
+                          ? 'bg-rose-500/20 border-rose-500/60 text-rose-200'
+                          : 'bg-zinc-900/80 hover:bg-zinc-900 border-zinc-800 text-zinc-300 hover:text-amber-300 hover:border-amber-500/50'
+                      } ${isFull ? 'px-2.5 py-2 gap-2 text-xs font-medium' : 'p-2.5 justify-center'}`}
+                      title="Battle Arena & Player Combat Lobby (1v1, 2v2, Scaled Random Encounters & vs NPCs)"
+                    >
+                      <Swords className="w-4 h-4 text-rose-400 shrink-0" />
+                      {isFull && <span>Battle Arena</span>}
+                    </button>
+
                     {/* Audio Mute/Unmute */}
                     <button
                       type="button"
@@ -5726,21 +5745,59 @@ export default function PlayerView() {
         </div>
       )}
 
-      {/* Empty State when no map is active */}
+      {/* Interactive Player Waiting Menu when no DM map is active */}
       {!imageFile && !image && (
-        <div className="absolute inset-0 z-30 flex items-center justify-center text-zinc-500 pointer-events-none select-none">
-          <div className="relative z-10 flex flex-col items-center gap-3 text-center max-w-md bg-zinc-950/80 backdrop-blur-xl border border-zinc-800/90 rounded-3xl p-8 shadow-[0_25px_60px_rgba(0,0,0,0.9)] ring-1 ring-white/10 animate-in fade-in">
+        <div className="absolute inset-0 z-30 flex items-center justify-center text-zinc-500 pointer-events-auto select-none p-4">
+          <div className="relative z-10 flex flex-col items-center gap-4 text-center max-w-xl w-full bg-zinc-950/90 backdrop-blur-xl border border-zinc-800/90 rounded-3xl p-7 sm:p-9 shadow-[0_25px_60px_rgba(0,0,0,0.95)] ring-1 ring-white/10 animate-in fade-in">
             <div className="w-16 h-16 rounded-2xl bg-zinc-900/90 border border-emerald-500/30 flex items-center justify-center shadow-lg shadow-emerald-500/10">
               <Radio className="w-8 h-8 text-emerald-400 animate-pulse" />
             </div>
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-              <span className="text-[10px] font-mono text-emerald-400 uppercase tracking-widest font-bold">Player View Online</span>
+              <span className="text-[10px] font-mono text-emerald-400 uppercase tracking-widest font-bold">
+                Player Waiting Lobby Online
+              </span>
             </div>
-            <h3 className="text-xl font-bold text-white font-mono tracking-tight">Waiting for Dungeon Master...</h3>
-            <p className="text-xs text-zinc-400 leading-relaxed font-sans">
-              When the DM loads a battlemap scene, it will immediately project here in real-time.
+            <h3 className="text-2xl font-extrabold text-white font-mono tracking-tight">
+              Waiting for Dungeon Master...
+            </h3>
+            <p className="text-xs text-zinc-400 leading-relaxed font-sans max-w-md">
+              When the DM loads a campaign scene, it will immediately project here in real-time. While you wait, link your active character or jump into the stand-alone Battle Arena!
             </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full pt-2">
+              <button
+                type="button"
+                onClick={() => setShowCharacterSelectModal(true)}
+                className="p-4 rounded-2xl bg-zinc-900/90 hover:bg-zinc-800 border border-amber-500/40 hover:border-amber-400 text-left transition-all cursor-pointer group"
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-mono font-bold text-amber-300">
+                    Link to DM & Choose Hero
+                  </span>
+                  <User className="w-4 h-4 text-amber-400" />
+                </div>
+                <p className="text-[11px] text-zinc-400">
+                  {claimedToken ? `Active Hero: ${claimedToken.name}` : 'Select your D&D Beyond or campaign hero'}
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowArenaMode(true)}
+                className="p-4 rounded-2xl bg-gradient-to-r from-rose-950/60 to-amber-950/60 hover:from-rose-900/60 hover:to-amber-900/60 border border-rose-500/50 hover:border-amber-400 text-left transition-all cursor-pointer group shadow-lg shadow-rose-950/30"
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-mono font-bold text-white group-hover:text-amber-200">
+                    Enter Battle Arena
+                  </span>
+                  <Swords className="w-4 h-4 text-rose-400 group-hover:rotate-12 transition-transform" />
+                </div>
+                <p className="text-[11px] text-zinc-300">
+                  1v1 • 2v2 • Scaled Random Encounters • vs NPCs
+                </p>
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -7067,6 +7124,10 @@ export default function PlayerView() {
       <PlayerStationModal
         isOpen={showStationModal}
         onSelectStation={handleSelectStationMode}
+        onEnterArena={() => {
+          setShowStationModal(false);
+          setShowArenaMode(true);
+        }}
         characterName={claimedToken?.name}
       />
 
@@ -7201,6 +7262,25 @@ export default function PlayerView() {
         onDismiss={dismissHandoutPresentation}
         onUpdatePresentation={() => {}}
         onSubmitRiddleGuess={submitRiddleGuess}
+      />
+
+      {/* Stand-Alone Player Battle Arena & Turn-Based Colosseum */}
+      <PlayerArenaMode
+        isOpen={showArenaMode}
+        onExitArena={() => setShowArenaMode(false)}
+        compendiumCharacters={compendiumCharacters}
+        claimedCharacterName={claimedToken?.name}
+        socketRef={socketRef}
+        hasLiveDmMap={Boolean(imageFile || image)}
+        onTrigger3dDice={(rollEvent) => {
+          if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+            (window as any).__mistwalkerRoll3d({
+              ...rollEvent,
+              theme: selectedDicePreset.id,
+              themeColor: selectedDicePreset.theme.primaryColor
+            });
+          }
+        }}
       />
 
       {/* Toast Notification Container for Player View */}

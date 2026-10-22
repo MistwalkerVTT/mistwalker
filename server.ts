@@ -676,6 +676,12 @@ async function startServer() {
       }
     });
 
+    socket.on("ARENA_LOBBY_ANNOUNCE", (lobbyEntry: any) => {
+      if (lobbyEntry?.clientId) {
+        socket.broadcast.emit("ARENA_LOBBY_ANNOUNCE", lobbyEntry);
+      }
+    });
+
     socket.on("MOVE_TOKEN", (data: any) => {
       console.log(`[Server Socket] MOVE_TOKEN: id=${data?.id}, x=${data?.x}, y=${data?.y}`);
       if (data?.id && Array.isArray(activeVttState.tokens)) {
