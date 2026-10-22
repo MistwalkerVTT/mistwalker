@@ -55,6 +55,7 @@ import {
   soundCatalog
 } from './effects';
 import { JB2A_REGISTRY, findJb2aAsset } from './effects/db/jb2aRegistry';
+import { getAuraVideoUrl } from './effects/db/tokenFxMap';
 import { CampaignBuilderModal } from './components/CampaignBuilderModal';
 import { SaveToCampaignModal } from './components/SaveToCampaignModal';
 import { LoadCampaignModal } from './components/LoadCampaignModal';
@@ -487,13 +488,14 @@ const TokenImage = React.memo(({
       list.push({
         radius: token.auraRadius,
         color: token.auraColor || 'rgba(234, 179, 8, 0.4)',
-        opacity: token.auraOpacity ?? 0.35,
+        opacity: token.auraOpacity ?? 0.9,
         pulse: token.auraPulse,
-        name: token.auraName || 'Magical Aura'
+        name: token.auraName || 'Magical Aura',
+        videoUrl: token.videoUrl || (token as any).auraVideoUrl
       });
     }
     return list;
-  }, [token.auras, token.auraRadius, token.auraColor, token.auraOpacity, token.auraPulse, token.auraName]);
+  }, [token.auras, token.auraRadius, token.auraColor, token.auraOpacity, token.auraPulse, token.auraName, token.videoUrl]);
 
   // Flight & Elevation 3D lift + 60fps animation refs
   const elevationFt = Number(token.elevation) || 0;
@@ -627,12 +629,14 @@ const TokenImage = React.memo(({
         perfectDrawEnabled={false}
       />
 
-      {/* 0. Token Magical Auras (Rendered beneath avatar clip so token stays solid and sharp) */}
+      {/* 0. Token Magical Auras (Replaced by JB2A WebM animation in DomEffectOverlay when video is available) */}
       {activeAuras.map((aura: any, idx: number) => {
+        const hasAnimatedVideo = Boolean(aura.videoUrl || getAuraVideoUrl(aura.name, aura.color));
+        if (hasAnimatedVideo) return null;
+
         const auraFt = aura.radius || 10;
         const auraPixelRadius = radius + (auraFt / 5) * gridSize;
         const col = aura.color || 'rgba(234, 179, 8, 0.4)';
-        // Soften canvas fill when animated video overlay handles the primary animation
         const op = Math.min(0.2, (aura.opacity ?? 0.35) * 0.4);
 
         return (
@@ -2160,7 +2164,37 @@ export default function App() {
   });
 
   const [activeTokenMenu, setActiveTokenMenu] = useState<{ id: string, x: number, y: number } | null>(null);
+  const [tokenMenuPinned, setTokenMenuPinned] = useState<boolean>(false);
+  const [tokenMenuPos, setTokenMenuPos] = useState<{ x: number; y: number } | null>(null);
   const [inspectedRuleEntry, setInspectedRuleEntry] = useState<DndRuleEntry | null>(null);
+
+  const startTokenMenuDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest('button, input, select, textarea, a, [data-no-drag]')) return;
+    const menuEl = document.getElementById('token-context-menu-popup');
+    if (!menuEl) return;
+    const rect = menuEl.getBoundingClientRect();
+    const offX = e.clientX - rect.left;
+    const offY = e.clientY - rect.top;
+    const handleEl = e.currentTarget;
+    try { handleEl.setPointerCapture(e.pointerId); } catch {}
+    const onMove = (ev: PointerEvent) => {
+      const maxX = Math.max(0, window.innerWidth - rect.width);
+      const maxY = Math.max(0, window.innerHeight - 48);
+      setTokenMenuPos({
+        x: Math.max(0, Math.min(ev.clientX - offX, maxX)),
+        y: Math.max(0, Math.min(ev.clientY - offY, maxY))
+      });
+    };
+    const onUp = () => {
+      handleEl.removeEventListener('pointermove', onMove);
+      handleEl.removeEventListener('pointerup', onUp);
+      handleEl.removeEventListener('pointercancel', onUp);
+    };
+    handleEl.addEventListener('pointermove', onMove);
+    handleEl.addEventListener('pointerup', onUp);
+    handleEl.addEventListener('pointercancel', onUp);
+    e.preventDefault();
+  }, []);
 
   // Left-Click Hold Map Ping System
   const {
@@ -9747,8 +9781,10 @@ export default function App() {
 
         let calculatedMenuY = Math.max(16, Math.min(tokenScreenY, window.innerHeight - menuEstimatedHeight - 16));
 
-        const menuX = Math.max(16, Math.min(calculatedMenuX, window.innerWidth - menuWidth - 16));
-        const menuY = calculatedMenuY;
+        const autoMenuX = Math.max(16, Math.min(calculatedMenuX, window.innerWidth - menuWidth - 16));
+        const autoMenuY = calculatedMenuY;
+        const menuX = tokenMenuPos ? tokenMenuPos.x : autoMenuX;
+        const menuY = tokenMenuPos ? tokenMenuPos.y : autoMenuY;
 
         const handleUpdateDmToken = (updates: any) => {
           setTokens(prev => {
@@ -9766,23 +9802,49 @@ export default function App() {
         return (
           <div 
             id="token-context-menu-popup"
-            className="fixed z-[300] bg-zinc-950/95 backdrop-blur-xl border border-zinc-700/80 rounded-xl shadow-2xl p-3.5 w-72 animate-in fade-in zoom-in-95"
+            onPointerDown={startTokenMenuDrag}
+            className={`fixed z-[300] bg-zinc-950/95 backdrop-blur-xl border rounded-xl shadow-2xl p-3.5 w-72 animate-in fade-in zoom-in-95 select-none cursor-move ${tokenMenuPinned ? 'border-amber-500/70' : 'border-zinc-700/80'}`}
             style={{ left: menuX, top: menuY }}
+            onClick={(e) => e.stopPropagation()}
+            onContextMenu={(e) => e.preventDefault()}
           >
-            <div className="flex justify-between items-center mb-2.5 pb-2 border-b border-zinc-800">
+            <div
+              className="flex justify-between items-center mb-2.5 pb-2 border-b border-zinc-800 cursor-move touch-none"
+              title="Click and drag to move menu"
+            >
               <div className="flex items-center gap-1.5 overflow-hidden">
                 <span className={`w-2 h-2 rounded-full ${isCharacter ? 'bg-emerald-400' : 'bg-amber-400'} shrink-0`} />
                 <span className="text-[10px] font-bold text-zinc-300 uppercase tracking-widest truncate font-mono">
                   {currentToken?.name || 'Token Settings'}
                 </span>
               </div>
-              <button 
-                onClick={() => setActiveTokenMenu(null)} 
-                className="text-zinc-500 hover:text-white text-base leading-none p-0.5"
-                title="Close (Escape)"
-              >
-                ×
-              </button>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!tokenMenuPinned && !tokenMenuPos) {
+                      setTokenMenuPos({ x: menuX, y: menuY });
+                    }
+                    setTokenMenuPinned(p => !p);
+                  }}
+                  className={`text-xs leading-none p-0.5 cursor-pointer ${tokenMenuPinned ? 'text-amber-400' : 'text-zinc-500 hover:text-white'}`}
+                  title={tokenMenuPinned ? 'Unpin (menu closes on click-away)' : 'Pin (keep menu open)'}
+                >
+                  {tokenMenuPinned ? '📌' : '📍'}
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setTokenMenuPinned(false);
+                    setTokenMenuPos(null);
+                    setActiveTokenMenu(null);
+                  }} 
+                  className="text-zinc-500 hover:text-white text-base leading-none p-0.5 cursor-pointer"
+                  title="Close (Escape)"
+                >
+                  ×
+                </button>
+              </div>
             </div>
             
             <div className="flex items-center gap-1 mb-2 bg-zinc-900/90 p-1 rounded-lg border border-zinc-800">
@@ -10202,7 +10264,8 @@ export default function App() {
                               auraRadius: preset.radius,
                               auraColor: preset.color,
                               auraName: preset.name,
-                              auraOpacity: preset.opacity || 0.35
+                              auraOpacity: preset.opacity || 0.9,
+                              videoUrl: preset.videoUrl
                             });
                             toast.success(`Equipped ${preset.name} (${preset.radius}ft)`);
                           }}
@@ -10281,8 +10344,9 @@ export default function App() {
                             handleUpdateDmToken({
                               auraColor: pal.color,
                               auraRadius: currentToken?.auraRadius || customAuraRadiusInput || 10,
-                              auraName: currentToken?.auraName || 'Custom Aura',
-                              auraOpacity: currentToken?.auraOpacity ?? customAuraOpacityInput
+                              auraName: currentToken?.auraName || `${pal.name} Aura`,
+                              auraOpacity: currentToken?.auraOpacity ?? 0.9,
+                              videoUrl: (pal as any).videoUrl
                             });
                           }}
                           className={`w-4 h-4 rounded-full border transition-all cursor-pointer ${
@@ -10326,12 +10390,12 @@ export default function App() {
         );
       })()}
 
-      {/* Close menu when clicking away */}
-      {activeTokenMenu && (
+      {/* Close menu when clicking away (unless pinned) */}
+      {activeTokenMenu && !tokenMenuPinned && (
         <div 
           className="fixed inset-0 z-[299]" 
-          onClick={() => setActiveTokenMenu(null)}
-          onContextMenu={(e) => { e.preventDefault(); setActiveTokenMenu(null); }}
+          onClick={() => { setTokenMenuPos(null); setActiveTokenMenu(null); }}
+          onContextMenu={(e) => { e.preventDefault(); setTokenMenuPos(null); setActiveTokenMenu(null); }}
         />
       )}
 
