@@ -286,6 +286,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   isAtHome,
   onPromptRollInitiative,
   onOpenCriticalHitsModal,
+  onOpenHandoutsJournal,
+  hasUnreadHandouts,
   activeMapId,
   liveMapId,
   onForceSync,
