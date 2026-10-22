@@ -2,10 +2,12 @@
 // Rich modal showing full-text descriptions, rules, and stats when right-clicking
 // spells, conditions, or magical auras anywhere in the player or DM interface.
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Sparkles, BookOpen, AlertCircle, ShieldAlert } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import { toast } from 'sonner';
 import { DndRuleEntry } from '../data/dndRulesCompendium';
+import { computeUpcastFormula } from '../types/hud';
 
 interface DndRuleInspectionModalProps {
   entry: DndRuleEntry | null;
@@ -20,11 +22,92 @@ export const DndRuleInspectionModal: React.FC<DndRuleInspectionModalProps> = ({
   onActionClick,
   actionButtonText
 }) => {
+  const [selectedSlotLevel, setSelectedSlotLevel] = useState<number>(
+    entry?.castAtLevel ?? entry?.level ?? 0
+  );
+
+  useEffect(() => {
+    if (entry) {
+      setSelectedSlotLevel(entry.castAtLevel ?? entry.level ?? 0);
+    }
+  }, [entry]);
+
   if (!entry) return null;
 
   const isSpell = entry.category === 'spell';
   const isCondition = entry.category === 'condition';
   const isAura = entry.category === 'aura';
+
+  const baseLevel = entry.level ?? 0;
+  const activeSlotLevel = baseLevel >= 1 ? Math.max(baseLevel, selectedSlotLevel || baseLevel) : 0;
+  const isUpcasted = baseLevel >= 1 && activeSlotLevel > baseLevel;
+
+  const formatSlotLabel = (lvl: number) => {
+    if (lvl === 1) return '1st';
+    if (lvl === 2) return '2nd';
+    if (lvl === 3) return '3rd';
+    return `${lvl}th`;
+  };
+
+  const effectiveDamageFormula = (() => {
+    if (!entry.damageFormula) return undefined;
+    if (isUpcasted && baseLevel >= 1) {
+      const upcasted = computeUpcastFormula(entry.damageFormula, baseLevel, activeSlotLevel, entry.name);
+      return upcasted.damageFormula || entry.damageFormula;
+    }
+    return entry.damageFormula;
+  })();
+
+  const handleRollDice = (formula: string) => {
+    const cleanFormula = formula.replace(/[a-zA-Z]+/g, '').trim();
+    const rollParts = (cleanFormula || formula).match(/(\d+)d(\d+)(?:\s*([+-])\s*(\d+))?/i);
+    let rolledTotal = 0;
+    const diceResults: Array<{ sides: number; result: number; type: string }> = [];
+    if (rollParts) {
+      const numDice = parseInt(rollParts[1], 10) || 1;
+      const sides = parseInt(rollParts[2], 10) || 6;
+      const sign = rollParts[3] === '-' ? -1 : 1;
+      const mod = parseInt(rollParts[4], 10) || 0;
+      let diceSum = 0;
+      for (let i = 0; i < numDice; i++) {
+        const r = Math.floor(Math.random() * sides) + 1;
+        diceSum += r;
+        diceResults.push({ sides, result: r, type: `d${sides}` });
+      }
+      rolledTotal = Math.max(1, diceSum + sign * mod);
+    } else {
+      rolledTotal = parseInt(cleanFormula, 10) || 1;
+    }
+
+    const upcastLabel = isUpcasted ? ` (${formatSlotLabel(activeSlotLevel)} Slot)` : '';
+    const diceEvent: any = {
+      id: `roll-${Date.now()}`,
+      characterName: 'Spell Aura',
+      action: `${entry.name}${upcastLabel} (${entry.isHeal ? 'Healing' : 'Damage'})`,
+      rollType: entry.isHeal ? 'heal' : 'damage',
+      formula,
+      diceNotation: formula,
+      dice: diceResults.length > 0 ? diceResults : [{ sides: 8, result: rolledTotal, type: 'd8' }],
+      total: rolledTotal,
+      isCritical: false,
+      isFumble: false,
+      theme: 'amber_gold',
+      themeColor: entry.isHeal ? '#10b981' : '#f59e0b',
+      timestamp: Date.now(),
+      source: 'player'
+    };
+
+    if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+      (window as any).__mistwalkerRoll3d(diceEvent);
+    }
+    if (typeof window !== 'undefined' && (window as any).__mistwalkerSocket?.connected) {
+      (window as any).__mistwalkerSocket.emit('SYNC_LOCAL_DICE_ROLL', diceEvent);
+    }
+
+    toast.success(`${entry.name}${upcastLabel}: Rolled ${rolledTotal}!`, {
+      description: `${formula} ${entry.damageType || (entry.isHeal ? 'healing' : 'damage')}`
+    });
+  };
 
   return (
     <div
@@ -116,11 +199,94 @@ export const DndRuleInspectionModal: React.FC<DndRuleInspectionModalProps> = ({
 
         {/* Aura Specific Stats */}
         {isAura && entry.range && (
-          <div className="p-2.5 px-4 bg-indigo-950/20 border-b border-indigo-900/40 text-xs font-mono flex items-center justify-between shrink-0">
-            <span className="text-indigo-400 font-bold uppercase text-[10px] tracking-wider">Aura Radius:</span>
-            <span className="px-2 py-0.5 rounded bg-indigo-900/50 text-indigo-200 border border-indigo-500/40 font-bold">
-              {entry.range}
+          <div className="p-2.5 px-4 bg-indigo-950/20 border-b border-indigo-900/40 text-xs font-mono flex items-center justify-between gap-2 flex-wrap shrink-0">
+            <div className="flex items-center gap-2">
+              <span className="text-indigo-400 font-bold uppercase text-[10px] tracking-wider">Aura Radius:</span>
+              <span className="px-2 py-0.5 rounded bg-indigo-900/50 text-indigo-200 border border-indigo-500/40 font-bold">
+                {entry.range}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              {(entry.saveDc || entry.saveAbility) && (
+                <span className="px-2 py-0.5 rounded bg-amber-950 border border-amber-500/50 text-amber-300 font-bold text-[11px]">
+                  Save: {entry.saveDc ? `DC ${entry.saveDc} ` : ''}{entry.saveAbility || ''}
+                </span>
+              )}
+              {effectiveDamageFormula && (
+                <button
+                  type="button"
+                  onClick={() => handleRollDice(effectiveDamageFormula)}
+                  className={`px-2.5 py-0.5 rounded font-bold text-[11px] border transition-all cursor-pointer active:scale-95 shadow-sm ${
+                    isUpcasted
+                      ? 'bg-fuchsia-950 hover:bg-fuchsia-900 border-fuchsia-400/70 text-fuchsia-200 hover:text-white shadow-[0_0_10px_rgba(217,70,239,0.35)]'
+                      : entry.isHeal
+                      ? 'bg-emerald-950 hover:bg-emerald-900 border-emerald-500/50 text-emerald-300 hover:text-white'
+                      : 'bg-rose-950 hover:bg-rose-900 border-rose-500/50 text-rose-300 hover:text-white'
+                  }`}
+                  title={`Click to roll ${effectiveDamageFormula} ${entry.damageType || ''} dice`}
+                >
+                  🎲 {effectiveDamageFormula} {entry.damageType || ''}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Spell Damage / Save Bar when inspecting a spell */}
+        {isSpell && (effectiveDamageFormula || entry.saveDc || entry.saveAbility) && (
+          <div className="px-4 py-2 bg-zinc-900/30 border-b border-zinc-800/80 flex items-center gap-2 flex-wrap text-xs font-mono shrink-0">
+            {(entry.saveDc || entry.saveAbility) && (
+              <span className="px-2 py-0.5 rounded bg-amber-950 border border-amber-500/50 text-amber-300 font-bold">
+                Save: {entry.saveDc ? `DC ${entry.saveDc} ` : ''}{entry.saveAbility || ''}
+              </span>
+            )}
+            {effectiveDamageFormula && (
+              <button
+                type="button"
+                onClick={() => handleRollDice(effectiveDamageFormula)}
+                className={`px-2.5 py-0.5 rounded font-bold border transition-all cursor-pointer active:scale-95 shadow-sm ${
+                  isUpcasted
+                    ? 'bg-fuchsia-950 hover:bg-fuchsia-900 border-fuchsia-400/70 text-fuchsia-200 hover:text-white shadow-[0_0_10px_rgba(217,70,239,0.35)]'
+                    : entry.isHeal
+                    ? 'bg-emerald-950 hover:bg-emerald-900 border-emerald-500/50 text-emerald-300 hover:text-white'
+                    : 'bg-rose-950 hover:bg-rose-900 border-rose-500/50 text-rose-300 hover:text-white'
+                }`}
+                title={`Click to roll ${effectiveDamageFormula} ${entry.damageType || ''} dice`}
+              >
+                🎲 {effectiveDamageFormula} {entry.damageType || ''}
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Upcast Slot Level Selector for Leveled Auras & Spells */}
+        {baseLevel >= 1 && (effectiveDamageFormula || entry.higherLevels) && (
+          <div className="px-4 py-2 bg-fuchsia-950/15 border-b border-zinc-800/80 flex items-center justify-between gap-2 flex-wrap text-[11px] font-mono shrink-0">
+            <span className="text-fuchsia-300 font-bold uppercase text-[10px]">
+              Cast Slot Level:
             </span>
+            <div className="flex items-center gap-1 flex-wrap">
+              {Array.from({ length: 9 - baseLevel + 1 }, (_, i) => baseLevel + i).map(lvl => {
+                const isSelected = activeSlotLevel === lvl;
+                const isHigher = lvl > baseLevel;
+                return (
+                  <button
+                    key={lvl}
+                    type="button"
+                    onClick={() => setSelectedSlotLevel(lvl)}
+                    className={`px-2 py-0.5 rounded border font-bold text-[10px] transition-all cursor-pointer ${
+                      isSelected
+                        ? isHigher
+                          ? 'bg-fuchsia-500/25 border-fuchsia-400 text-fuchsia-200 shadow-[0_0_8px_rgba(217,70,239,0.3)]'
+                          : 'bg-blue-500/25 border-blue-400 text-blue-200'
+                        : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    {formatSlotLabel(lvl)}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
 

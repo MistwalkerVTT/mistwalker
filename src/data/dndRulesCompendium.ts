@@ -7,11 +7,17 @@ export interface DndRuleEntry {
   category: 'spell' | 'condition' | 'aura';
   subtitle?: string;
   level?: number;
+  castAtLevel?: number;
   school?: string;
   castingTime?: string;
   range?: string;
   components?: string;
   duration?: string;
+  damageFormula?: string;
+  damageType?: string;
+  saveDc?: number | string;
+  saveAbility?: string;
+  isHeal?: boolean;
   description: string;
   higherLevels?: string;
 }
@@ -83,13 +89,67 @@ export const DND_CONDITION_DESCRIPTIONS: Record<string, { subtitle: string; desc
   }
 };
 
-export const DND_AURA_DESCRIPTIONS: Record<string, { subtitle: string; radiusFt: number; description: string }> = {
+export const DND_AURA_DESCRIPTIONS: Record<
+  string,
+  {
+    subtitle: string;
+    radiusFt: number;
+    level?: number;
+    school?: string;
+    castingTime?: string;
+    components?: string;
+    duration?: string;
+    damageFormula?: string;
+    damageType?: string;
+    saveAbility?: string;
+    isHeal?: boolean;
+    description: string;
+    higherLevels?: string;
+  }
+> = {
   'Spirit Guardians': {
     subtitle: '3rd-Level Conjuration Aura',
     radiusFt: 15,
-    description: 'You call forth spirits to protect you that flit around you to a distance of 15 feet. An affected creature\'s speed is halved in the area, and when the creature enters the area for the first time on a turn or starts its turn there, it must make a Wisdom saving throw. On a failed save, the creature takes 3d8 radiant damage (if you are good or neutral) or 3d8 necrotic damage (if you are evil). On a successful save, the creature takes half as much damage.'
+    level: 3,
+    school: 'Conjuration',
+    castingTime: '1 Action',
+    components: 'V, S, M (a holy symbol)',
+    duration: 'Concentration, up to 10 minutes',
+    damageFormula: '3d8',
+    damageType: 'radiant',
+    saveAbility: 'WIS',
+    description: 'Protective spirits flit around you in a 15-foot Emanation for the duration. If you are good or neutral, their spectral form appears angelic or fey (your choice). If you are evil, they appear fiendish. When you cast this spell, you can designate creatures to be unaffected by it. Any other creature\'s Speed is halved in the Emanation, and whenever the Emanation enters a creature\'s space and whenever a creature enters the Emanation or ends its turn there, the creature must make a Wisdom saving throw. On a failed save, the creature takes 3d8 Radiant damage (if you are good or neutral) or 3d8 Necrotic damage (if you are evil). On a successful save, the creature takes half as much damage. A creature makes this save only once per turn.',
+    higherLevels: 'When you cast this spell using a spell slot of 4th level or higher, the damage increases by 1d8 for each slot level above 3rd.'
+  },
+  'Aura of Vitality': {
+    subtitle: '3rd-Level Evocation Aura',
+    radiusFt: 30,
+    level: 3,
+    school: 'Evocation',
+    castingTime: '1 Action',
+    components: 'V',
+    duration: 'Concentration, up to 1 minute',
+    damageFormula: '2d6',
+    damageType: 'healing',
+    isHeal: true,
+    description: 'Healing energy radiates from you in an aura with a 30-foot radius. Until the spell ends, the aura moves with you, centered on you. You can use a bonus action to cause one creature in the aura (including you) to regain 2d6 hit points.'
+  },
+  'Aura of Life': {
+    subtitle: '4th-Level Abjuration Aura',
+    radiusFt: 30,
+    level: 4,
+    school: 'Abjuration',
+    castingTime: '1 Action',
+    components: 'V',
+    duration: 'Concentration, up to 10 minutes',
+    description: 'Life-preserving energy radiates from you in an aura with a 30-foot radius. Until the spell ends, the aura moves with you, centered on you. Each nonhostile creature in the aura (including you) has resistance to necrotic damage, and its hit point maximum can\'t be reduced. In addition, a nonhostile, living creature regains 1 hit point when it starts its turn in the aura with 0 hit points.'
   },
   'Paladin Aura of Protection': {
+    subtitle: 'Class Feature • 10-ft Aura',
+    radiusFt: 10,
+    description: 'Whenever you or a friendly creature within 10 feet of you must make a saving throw, the creature gains a bonus to the saving throw equal to your Charisma modifier (with a minimum bonus of +1). You must be conscious to grant this bonus.'
+  },
+  'Aura of Protection': {
     subtitle: 'Class Feature • 10-ft Aura',
     radiusFt: 10,
     description: 'Whenever you or a friendly creature within 10 feet of you must make a saving throw, the creature gains a bonus to the saving throw equal to your Charisma modifier (with a minimum bonus of +1). You must be conscious to grant this bonus.'
@@ -122,11 +182,42 @@ export const DND_AURA_DESCRIPTIONS: Record<string, { subtitle: string; radiusFt:
   "Crusader's Mantle": {
     subtitle: '3rd-Level Evocation Aura',
     radiusFt: 30,
+    level: 3,
+    school: 'Evocation',
+    castingTime: '1 Action',
+    components: 'V',
+    duration: 'Concentration, up to 1 minute',
+    damageFormula: '1d4',
+    damageType: 'radiant',
     description: 'Holy power radiates from you in an aura with a 30-foot radius, awakening boldness in friendly creatures. Until the spell ends, the aura moves with you, centered on you. While in the aura, each nonhostile creature in the aura (including you) deals an extra 1d4 radiant damage when it hits with a weapon attack.'
+  },
+  'Twilight Sanctuary': {
+    subtitle: 'Channel Divinity • 30-ft Aura',
+    radiusFt: 30,
+    castingTime: '1 Action',
+    duration: '1 minute',
+    damageFormula: '1d6 + 5',
+    damageType: 'temp HP',
+    isHeal: true,
+    description: 'A sphere of twilight emanates from you with a 30-foot radius and moves with you. Whenever a creature (including you) ends its turn in the sphere, you can grant that creature one of these benefits: grant it temporary hit points equal to 1d6 plus your cleric level, or end one effect on it causing it to be charmed or frightened.'
+  },
+  'Fire Shield': {
+    subtitle: '4th-Level Evocation Ward',
+    radiusFt: 5,
+    level: 4,
+    school: 'Evocation',
+    castingTime: '1 Action',
+    duration: '10 minutes',
+    damageFormula: '2d8',
+    damageType: 'fire/cold',
+    description: 'Thin and wispy flames wreathe your body for the duration, shedding bright light in a 10-foot radius and dim light for an additional 10 feet. The flames provide you with a warm shield (cold resistance, deals 2d8 fire damage to melee attackers within 5 ft) or a chill shield (fire resistance, deals 2d8 cold damage to melee attackers within 5 ft).'
   },
   'Holy Aura': {
     subtitle: '8th-Level Abjuration Aura',
     radiusFt: 30,
+    level: 8,
+    school: 'Abjuration',
+    saveAbility: 'CON',
     description: 'Divine light emanates from you in a 30-foot radius. Creatures of your choice in that radius shed dim light in a 5-foot radius and have advantage on all saving throws, and other creatures have disadvantage on attack rolls against them. When a fiend or an undead hits an affected creature with a melee attack, the attacker must succeed on a Constitution saving throw or be blinded until the spell ends.'
   },
   'Pass without Trace': {
@@ -464,7 +555,10 @@ export const DND_COMMON_SPELLS: Record<string, DndRuleEntry> = {
     range: 'Self (15-foot radius)',
     components: 'V, S, M (a holy symbol)',
     duration: 'Concentration, up to 10 minutes',
-    description: 'You call forth spirits to protect you that flit around you to a distance of 15 feet. An affected creature\'s speed is halved in the area, and when the creature enters the area for the first time on a turn or starts its turn there, it must make a Wisdom saving throw. On a failed save, the creature takes 3d8 radiant damage (if you are good or neutral) or 3d8 necrotic damage (if you are evil). On a successful save, the creature takes half as much damage.',
+    damageFormula: '3d8',
+    damageType: 'radiant',
+    saveAbility: 'WIS',
+    description: 'Protective spirits flit around you in a 15-foot Emanation for the duration. If you are good or neutral, their spectral form appears angelic or fey (your choice). If you are evil, they appear fiendish. When you cast this spell, you can designate creatures to be unaffected by it. Any other creature\'s Speed is halved in the Emanation, and whenever the Emanation enters a creature\'s space and whenever a creature enters the Emanation or ends its turn there, the creature must make a Wisdom saving throw. On a failed save, the creature takes 3d8 Radiant damage (if you are good or neutral) or 3d8 Necrotic damage (if you are evil). On a successful save, the creature takes half as much damage. A creature makes this save only once per turn.',
     higherLevels: 'When you cast this spell using a spell slot of 4th level or higher, the damage increases by 1d8 for each slot level above 3rd.'
   }
 };
@@ -509,8 +603,18 @@ export function lookupDndRuleDetails(rawName: string, categoryHint?: 'spell' | '
         name: clean,
         category: 'aura',
         subtitle: direct.subtitle,
+        level: direct.level,
+        school: direct.school,
+        castingTime: direct.castingTime,
+        components: direct.components,
+        duration: direct.duration,
+        damageFormula: direct.damageFormula,
+        damageType: direct.damageType,
+        saveAbility: direct.saveAbility,
+        isHeal: direct.isHeal,
         range: `${direct.radiusFt} ft radius`,
-        description: direct.description
+        description: direct.description,
+        higherLevels: direct.higherLevels
       };
     }
     for (const [key, val] of Object.entries(DND_AURA_DESCRIPTIONS)) {
@@ -519,8 +623,18 @@ export function lookupDndRuleDetails(rawName: string, categoryHint?: 'spell' | '
           name: key,
           category: 'aura',
           subtitle: val.subtitle,
+          level: val.level,
+          school: val.school,
+          castingTime: val.castingTime,
+          components: val.components,
+          duration: val.duration,
+          damageFormula: val.damageFormula,
+          damageType: val.damageType,
+          saveAbility: val.saveAbility,
+          isHeal: val.isHeal,
           range: `${val.radiusFt} ft radius`,
-          description: val.description
+          description: val.description,
+          higherLevels: val.higherLevels
         };
       }
     }
@@ -555,8 +669,18 @@ export function lookupDndRuleDetails(rawName: string, categoryHint?: 'spell' | '
         name: key,
         category: 'aura',
         subtitle: val.subtitle,
+        level: val.level,
+        school: val.school,
+        castingTime: val.castingTime,
+        components: val.components,
+        duration: val.duration,
+        damageFormula: val.damageFormula,
+        damageType: val.damageType,
+        saveAbility: val.saveAbility,
+        isHeal: val.isHeal,
         range: `${val.radiusFt} ft radius`,
-        description: val.description
+        description: val.description,
+        higherLevels: val.higherLevels
       };
     }
   }

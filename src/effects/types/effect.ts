@@ -59,6 +59,15 @@ export interface VttEffectInstance {
   ownerId?: string;          // Player or DM userId who cast it
   casterName?: string;       // Character or creature name who cast the effect
   spellId?: string;          // Associated 5e spell ID if cast from Compendium
+  castAtLevel?: number;      // Spell slot level used when cast (e.g. 9 for 9th-level slot)
+  baseLevel?: number;        // Base spell level (e.g. 3 for Spirit Guardians)
+  damageFormula?: string;    // Active dice formula (e.g. "9d8")
+  damageType?: string;       // Active damage/healing type (e.g. "radiant")
+  saveDc?: number | string;  // Save DC if applicable (e.g. 20)
+  saveAbility?: string;      // Save ability if applicable (e.g. "WIS")
+  description?: string;      // Full spell/aura description
+  atHigherLevels?: string;   // At Higher Levels scaling description
+  actionSnapshot?: any;      // Full HudActionItem snapshot when cast from HUD
 }
 
 export interface EffectTrajectoryConfig {

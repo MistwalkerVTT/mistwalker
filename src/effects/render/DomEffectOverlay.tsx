@@ -22,6 +22,8 @@ interface DomEffectOverlayProps {
   aimCurrent?: { x: number; y: number } | null;
   onEffectComplete?: (effectId: string) => void;
   onDispelEffect?: (effectId: string) => void;
+  onInspectEffect?: (effect: VttEffectInstance) => void;
+  onClearTokenAura?: (tokenId: string, auraName?: string) => void;
 }
 
 export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
@@ -36,7 +38,9 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
   aimOrigin,
   aimCurrent,
   onEffectComplete,
-  onDispelEffect
+  onDispelEffect,
+  onInspectEffect,
+  onClearTokenAura
 }) => {
   // Lifetime expiration timer for non-persistent single-shot blasts (e.g. 5s fallback)
   useEffect(() => {
@@ -350,9 +354,9 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
           );
         })}
 
-        {/* 2b. Direct On-Map Dispel Pins for Persistent / Looping Spell Animations */}
+        {/* 2b. Direct On-Map Clickable Title & Dispel Pins for Persistent / Looping Spell Animations */}
         {effects.map((effect) => {
-          if (!onDispelEffect || (!effect.isPersistent && !effect.loop)) return null;
+          if ((!onDispelEffect && !onInspectEffect) || (!effect.isPersistent && !effect.loop)) return null;
 
           const attachedToken = effect.attachedTokenId ? tokens?.find((t: any) => t.id === effect.attachedTokenId) : null;
           const attachedTokenSize = attachedToken ? (attachedToken.size || 1) : 1;
@@ -385,26 +389,158 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                 transform: 'translate(-50%, -100%)',
               }}
             >
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-zinc-950/90 hover:bg-zinc-900 border border-purple-500/50 hover:border-red-500/70 shadow-lg backdrop-blur-md transition-all select-none">
-                <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse shrink-0" />
-                <span className="text-[10px] font-mono font-bold text-purple-200 truncate max-w-[120px]">
-                  {effect.name}
-                </span>
+              <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-950/90 hover:bg-zinc-900 border border-purple-500/50 hover:border-purple-400 shadow-lg backdrop-blur-md transition-all select-none">
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onDispelEffect(effect.id);
+                    onInspectEffect?.(effect);
                   }}
-                  className="p-0.5 rounded-full hover:bg-red-500/30 text-zinc-400 hover:text-red-400 transition-colors cursor-pointer"
-                  title={`Dispel ${effect.name} (Keep other active animations)`}
-                  aria-label={`Dispel ${effect.name}`}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onInspectEffect?.(effect);
+                  }}
+                  className="flex items-center gap-1.5 px-1 py-0.5 rounded-full text-purple-200 hover:text-amber-300 transition-colors cursor-pointer group/title"
+                  title={`Click to open ${effect.name} description & roll dice`}
                 >
-                  <X className="w-3.5 h-3.5" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-purple-400 group-hover/title:bg-amber-400 animate-pulse shrink-0" />
+                  <span className="text-[10px] font-mono font-bold truncate max-w-[140px] group-hover/title:underline underline-offset-2">
+                    {effect.name}
+                  </span>
+                  {effect.castAtLevel && effect.castAtLevel > (effect.baseLevel ?? 0) && (
+                    <span className="px-1 py-0.1 rounded bg-fuchsia-950/90 border border-fuchsia-400/60 text-[8px] font-mono font-bold text-fuchsia-200 shrink-0">
+                      Lvl {effect.castAtLevel}
+                    </span>
+                  )}
                 </button>
+                {onDispelEffect && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDispelEffect(effect.id);
+                    }}
+                    className="p-0.5 rounded-full hover:bg-red-500/30 text-zinc-400 hover:text-red-400 transition-colors cursor-pointer shrink-0"
+                    title={`Dispel ${effect.name} (Keep other active animations)`}
+                    aria-label={`Dispel ${effect.name}`}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
             </div>
           );
+        })}
+
+        {/* 2c. Direct On-Map Clickable Title Pins for Token-Equipped Auras (token.auraRadius / token.auras) */}
+        {tokens?.map((token) => {
+          if (!onInspectEffect && !onClearTokenAura) return null;
+
+          const auras: any[] = [];
+          if (Array.isArray(token.auras) && token.auras.length > 0) {
+            auras.push(...token.auras);
+          } else if (token.auraRadius && token.auraRadius > 0) {
+            auras.push({
+              radius: token.auraRadius,
+              color: token.auraColor,
+              opacity: token.auraOpacity,
+              name: token.auraName || 'Magical Aura',
+              videoUrl: token.videoUrl || (token as any).auraVideoUrl
+            });
+          }
+
+          if (auras.length === 0) return null;
+
+          const tokenSize = token.size || 1;
+          const tokenRadius = (tokenSize * gridSize) / 2;
+          const posX = (token.x ?? 0) + tokenRadius;
+          const posY = (token.y ?? 0) + tokenRadius;
+          const radiusPx = tokenRadius + 12;
+
+          // Count how many persistent effects are already stacked above this token so we don't overlap
+          const attachedEffectsOnToken = effects.filter(
+            e => (e.isPersistent || e.loop) && e.attachedTokenId === token.id
+          );
+
+          return auras.map((aura, idx) => {
+            const auraName = aura.name || 'Magical Aura';
+            // Skip if an attached effect with the same name is already displaying a pill for this token
+            const alreadyShownByEffect = attachedEffectsOnToken.some(
+              e => e.name.toLowerCase().includes(auraName.toLowerCase()) || auraName.toLowerCase().includes(e.name.toLowerCase())
+            );
+            if (alreadyShownByEffect) return null;
+
+            const stackOffset = (attachedEffectsOnToken.length + idx) * 28;
+            const topY = posY - radiusPx - 6 - stackOffset;
+            const syntheticEffect: VttEffectInstance = {
+              id: `token_aura_${token.id}_${idx}`,
+              name: auraName,
+              label: auraName,
+              assetKey: auraName.toLowerCase().replace(/\s+/g, '_'),
+              videoUrl: aura.videoUrl || '',
+              paradigm: 'aura',
+              x: posX,
+              y: posY,
+              attachedTokenId: token.id,
+              sizeFt: aura.radius || 10,
+              rotation: 0,
+              opacity: aura.opacity ?? 0.4,
+              blendMode: 'screen',
+              isPersistent: true,
+              loop: true,
+              castTime: Date.now(),
+              casterName: token.name
+            };
+
+            return (
+              <div
+                key={`token-aura-pill-${token.id}-${idx}`}
+                className="absolute pointer-events-auto group/dispel z-[40]"
+                style={{
+                  left: `${posX}px`,
+                  top: `${topY}px`,
+                  transform: 'translate(-50%, -100%)',
+                }}
+              >
+                <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-950/90 hover:bg-zinc-900 border border-indigo-500/50 hover:border-indigo-400 shadow-lg backdrop-blur-md transition-all select-none">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onInspectEffect?.(syntheticEffect);
+                    }}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onInspectEffect?.(syntheticEffect);
+                    }}
+                    className="flex items-center gap-1.5 px-1 py-0.5 rounded-full text-indigo-200 hover:text-amber-300 transition-colors cursor-pointer group/title"
+                    title={`Click to open ${auraName} description & roll dice`}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 group-hover/title:bg-amber-400 animate-pulse shrink-0" />
+                    <span className="text-[10px] font-mono font-bold truncate max-w-[140px] group-hover/title:underline underline-offset-2">
+                      {auraName}
+                    </span>
+                  </button>
+                  {onClearTokenAura && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onClearTokenAura(token.id, auraName);
+                      }}
+                      className="p-0.5 rounded-full hover:bg-red-500/30 text-zinc-400 hover:text-red-400 transition-colors cursor-pointer shrink-0"
+                      title={`Remove ${auraName}`}
+                      aria-label={`Remove ${auraName}`}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          });
         })}
 
         {/* 3. Animated Token Condition Overlays (Dizzy stars, poison clouds, charm hearts, fear, ice, fire, skulls) */}

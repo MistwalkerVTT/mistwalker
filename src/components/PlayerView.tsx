@@ -1596,6 +1596,53 @@ export default function PlayerView() {
   // Token Context Menu State (Right-Click Menu mirrored from DM View)
   const [activeTokenMenu, setActiveTokenMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const [inspectedRuleEntry, setInspectedRuleEntry] = useState<DndRuleEntry | null>(null);
+  // Movable / pinnable token menu: pinned menus stay open and keep a user-chosen screen position
+  const [tokenMenuPinned, setTokenMenuPinned] = useState<boolean>(false);
+  const [tokenMenuPos, setTokenMenuPos] = useState<{ x: number; y: number } | null>(null);
+  const tokenMenuPinnedRef = useRef<boolean>(false);
+  useEffect(() => {
+    tokenMenuPinnedRef.current = tokenMenuPinned;
+  }, [tokenMenuPinned]);
+  // Closes the menu unless pinned (used for click-away, Escape, claiming, token drags)
+  const softCloseTokenMenu = useCallback(() => {
+    if (tokenMenuPinnedRef.current) return;
+    setActiveTokenMenu(null);
+    setTokenMenuPos(null);
+  }, []);
+  // Always closes the menu and unpins it
+  const forceCloseTokenMenu = useCallback(() => {
+    tokenMenuPinnedRef.current = false;
+    setTokenMenuPinned(false);
+    setActiveTokenMenu(null);
+    setTokenMenuPos(null);
+  }, []);
+  const startTokenMenuDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest('button')) return;
+    const menuEl = document.getElementById('player-token-context-menu');
+    if (!menuEl) return;
+    const rect = menuEl.getBoundingClientRect();
+    const offX = e.clientX - rect.left;
+    const offY = e.clientY - rect.top;
+    const handleEl = e.currentTarget;
+    try { handleEl.setPointerCapture(e.pointerId); } catch {}
+    const onMove = (ev: PointerEvent) => {
+      const maxX = Math.max(0, window.innerWidth - rect.width);
+      const maxY = Math.max(0, window.innerHeight - 48);
+      setTokenMenuPos({
+        x: Math.max(0, Math.min(ev.clientX - offX, maxX)),
+        y: Math.max(0, Math.min(ev.clientY - offY, maxY))
+      });
+    };
+    const onUp = () => {
+      handleEl.removeEventListener('pointermove', onMove);
+      handleEl.removeEventListener('pointerup', onUp);
+      handleEl.removeEventListener('pointercancel', onUp);
+    };
+    handleEl.addEventListener('pointermove', onMove);
+    handleEl.addEventListener('pointerup', onUp);
+    handleEl.addEventListener('pointercancel', onUp);
+    e.preventDefault();
+  }, []);
   const [tokenMenuTab, setTokenMenuTab] = useState<'stats' | 'conditions' | 'auras'>('stats');
   const [customAuraRadiusInput, setCustomAuraRadiusInput] = useState<number>(10);
   const [customAuraColorInput, setCustomAuraColorInput] = useState<string>('rgba(234, 179, 8, 0.4)');
@@ -2554,7 +2601,7 @@ export default function PlayerView() {
     if (typeof window !== 'undefined') {
       localStorage.setItem('mistwalker_player_claimed_token', tokenId);
     }
-    setActiveTokenMenu(null);
+    if (!tokenMenuPinnedRef.current) setActiveTokenMenu(null);
     setShowClaimMenu(false);
   }, []);
 
@@ -2573,7 +2620,7 @@ export default function PlayerView() {
   const handleDragStartToken = useCallback((token: Token, originX: number, originY: number, baseSpeed: number) => {
     activeDraggingTokenIdRef.current = token.id;
     setIsDraggingToken(true);
-    setActiveTokenMenu(null);
+    if (!tokenMenuPinnedRef.current) setActiveTokenMenu(null);
     if (claimedTokenIdRef.current !== token.id) {
       claimedTokenIdRef.current = token.id;
       setClaimedTokenId(token.id);
@@ -2701,6 +2748,8 @@ export default function PlayerView() {
     const isAlly = target.category === 'ally' || !!(target as any).allyId;
     const isMonster = !isAlly && (isMonsterToken(target) || target.isMonster === true || target.category === 'monster' || target.isPlayer === false);
     if (isMonster) return;
+    // Pinned menus keep their position when inspecting another token
+    if (!tokenMenuPinnedRef.current) setTokenMenuPos(null);
     setActiveTokenMenu({ id, x: clientX, y: clientY });
   }, []);
 
@@ -2727,7 +2776,7 @@ export default function PlayerView() {
         localStorage.removeItem('mistwalker_player_claimed_token');
       }
     }
-    setActiveTokenMenu(null);
+    forceCloseTokenMenu();
     if (socketRef.current?.connected) {
       socketRef.current.emit('DELETE_TOKEN', { id });
     }
@@ -2740,7 +2789,7 @@ export default function PlayerView() {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Handle Escape key to close modals/menus
       if (e.key === 'Escape') {
-        setActiveTokenMenu(null);
+        if (!tokenMenuPinnedRef.current) setActiveTokenMenu(null);
         setShowClaimMenu(false);
         setShowEffectsDrawer(false);
         setActiveEquippedAsset(null);
@@ -5608,20 +5657,26 @@ export default function PlayerView() {
         // Align vertically with token top, bounded within viewport
         let calculatedMenuY = Math.max(16, Math.min(tokenScreenY, window.innerHeight - menuEstimatedHeight - 16));
 
-        const menuX = Math.max(16, Math.min(calculatedMenuX, window.innerWidth - menuWidth - 16));
-        const menuY = calculatedMenuY;
+        const autoMenuX = Math.max(16, Math.min(calculatedMenuX, window.innerWidth - menuWidth - 16));
+        const autoMenuY = calculatedMenuY;
+        const menuX = tokenMenuPos ? tokenMenuPos.x : autoMenuX;
+        const menuY = tokenMenuPos ? tokenMenuPos.y : autoMenuY;
         const isCurrentClaimed = claimedTokenId === currentToken.id;
 
         return (
           <div 
             id="player-token-context-menu"
-            className="fixed z-[300] bg-zinc-950/95 backdrop-blur-xl border border-zinc-700/80 rounded-xl shadow-2xl p-3.5 w-72 animate-in fade-in zoom-in-95 select-none"
+            className={`fixed z-[300] bg-zinc-950/95 backdrop-blur-xl border rounded-xl shadow-2xl p-3.5 w-72 animate-in fade-in zoom-in-95 select-none ${tokenMenuPinned ? 'border-amber-500/70' : 'border-zinc-700/80'}`}
             style={{ left: menuX, top: menuY }}
             onClick={(e) => e.stopPropagation()}
             onContextMenu={(e) => e.preventDefault()}
           >
-            {/* Context Menu Header */}
-            <div className="flex justify-between items-center mb-2.5 pb-2 border-b border-zinc-800">
+            {/* Context Menu Header (drag handle) */}
+            <div
+              className="flex justify-between items-center mb-2.5 pb-2 border-b border-zinc-800 cursor-move touch-none"
+              onPointerDown={startTokenMenuDrag}
+              title="Drag to move"
+            >
               <div className="flex items-center gap-2 overflow-hidden">
                 {(() => {
                   const avatarSrc = currentToken.url || currentToken.avatarUrl || getCharacterTokenUrl(currentToken.name);
@@ -5637,14 +5692,30 @@ export default function PlayerView() {
                   {currentToken.name || 'Token Settings'}
                 </span>
               </div>
-              <button 
-                type="button"
-                onClick={() => setActiveTokenMenu(null)} 
-                className="text-zinc-500 hover:text-white text-base leading-none p-0.5 cursor-pointer"
-                title="Close (Escape)"
-              >
-                ×
-              </button>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!tokenMenuPinned && !tokenMenuPos) {
+                      // Freeze at current on-screen spot so the pinned menu stops following the token
+                      setTokenMenuPos({ x: menuX, y: menuY });
+                    }
+                    setTokenMenuPinned(p => !p);
+                  }}
+                  className={`text-xs leading-none p-0.5 cursor-pointer ${tokenMenuPinned ? 'text-amber-400' : 'text-zinc-500 hover:text-white'}`}
+                  title={tokenMenuPinned ? 'Unpin (menu closes on click-away)' : 'Pin (keep menu open)'}
+                >
+                  {tokenMenuPinned ? '📌' : '📍'}
+                </button>
+                <button 
+                  type="button"
+                  onClick={forceCloseTokenMenu} 
+                  className="text-zinc-500 hover:text-white text-base leading-none p-0.5 cursor-pointer"
+                  title="Close (Escape)"
+                >
+                  ×
+                </button>
+              </div>
             </div>
             
             {/* Tab Navigation: Stats & Info vs Conditions vs Auras */}
@@ -6121,11 +6192,11 @@ export default function PlayerView() {
       })()}
 
       {/* Backdrop to close right-click menu when clicking away */}
-      {activeTokenMenu && (
+      {activeTokenMenu && !tokenMenuPinned && (
         <div 
           className="fixed inset-0 z-[299]" 
-          onClick={() => setActiveTokenMenu(null)}
-          onContextMenu={(e) => { e.preventDefault(); setActiveTokenMenu(null); }}
+          onClick={softCloseTokenMenu}
+          onContextMenu={(e) => { e.preventDefault(); softCloseTokenMenu(); }}
         />
       )}
 

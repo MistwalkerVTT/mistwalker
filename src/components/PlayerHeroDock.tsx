@@ -32,6 +32,7 @@ interface PlayerHeroDockProps {
   claimedToken?: any | null;
   onSelectAction: (action: HudActionItem) => void;
   onRollToHit?: (action: HudActionItem) => void;
+  onRollDamage?: (action: HudActionItem) => void;
   activeTargetingAction?: HudActionItem | null;
   selectedAction?: HudActionItem | null;
   activeEquippedAsset?: any | null;
@@ -49,6 +50,8 @@ interface PlayerHeroDockProps {
   onTargetSelf?: () => void;
   activeEffects?: any[];
   onDispelEffect?: (effectId: string) => void;
+  inspectedAuraRequest?: { action: HudActionItem; tick: number } | null;
+  onClearInspectedAura?: () => void;
 }
 
 export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
@@ -56,6 +59,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
   claimedToken,
   onSelectAction,
   onRollToHit,
+  onRollDamage,
   activeTargetingAction,
   selectedAction,
   activeEquippedAsset,
@@ -71,7 +75,9 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
   isSyncingDdb = false,
   onTargetSelf,
   activeEffects = [],
-  onDispelEffect
+  onDispelEffect,
+  inspectedAuraRequest,
+  onClearInspectedAura
 }) => {
   const currentTargetingAction = activeTargetingAction ?? selectedAction ?? (
     activeEquippedAsset ? {
@@ -89,6 +95,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
   const [upcastLevels, setUpcastLevels] = useState<Record<string, number>>({});
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [hoveredAction, setHoveredAction] = useState<HudActionItem | null>(null);
+  const [pinnedAction, setPinnedAction] = useState<HudActionItem | null>(null);
   const [inspectedAction, setInspectedAction] = useState<HudActionItem | null>(null);
   const [isTrayCollapsed, setIsTrayCollapsed] = useState<boolean>(false);
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState<boolean>(false);
@@ -122,14 +129,83 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
       if (e.key === 'Escape') {
         if (inspectedAction) {
           setInspectedAction(null);
-        } else if (hoveredAction) {
+        } else if (hoveredAction || pinnedAction) {
           setHoveredAction(null);
+          setPinnedAction(null);
+          onClearInspectedAura?.();
         }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [hoveredAction, inspectedAction]);
+  }, [hoveredAction, pinnedAction, inspectedAction, onClearInspectedAura]);
+
+  // Dedicated Damage / Healing Dice Roll Handler (e.g. clicking "9d8 radiant")
+  const handleRollDamage = (action: HudActionItem) => {
+    if (onRollDamage) {
+      onRollDamage(action);
+      return;
+    }
+
+    const rawFormula = action.damageFormula;
+    if (!rawFormula) return;
+
+    const cleanFormula = rawFormula.replace(/[a-zA-Z]+/g, '').trim();
+    const rollParts = (cleanFormula || rawFormula).match(/(\d+)d(\d+)(?:\s*([+-])\s*(\d+))?/i);
+    let rolledTotal = 0;
+    const diceResults: Array<{ sides: number; result: number; type: string }> = [];
+    if (rollParts) {
+      const numDice = parseInt(rollParts[1], 10) || 1;
+      const sides = parseInt(rollParts[2], 10) || 6;
+      const sign = rollParts[3] === '-' ? -1 : 1;
+      const mod = parseInt(rollParts[4], 10) || 0;
+      let diceSum = 0;
+      for (let i = 0; i < numDice; i++) {
+        const r = Math.floor(Math.random() * sides) + 1;
+        diceSum += r;
+        diceResults.push({ sides, result: r, type: `d${sides}` });
+      }
+      rolledTotal = Math.max(1, diceSum + sign * mod);
+    } else {
+      rolledTotal = parseInt(cleanFormula, 10) || 1;
+    }
+
+    const charName = characterData?.name || claimedToken?.name || 'Hero';
+    const upcastSuffix =
+      action.castAtLevel && action.castAtLevel > (action.level ?? 0)
+        ? ` [Lvl ${action.castAtLevel} Slot]`
+        : '';
+
+    const diceEvent: any = {
+      id: `roll-${Date.now()}`,
+      characterId: String(characterData?.id || claimedToken?.id || ''),
+      characterName: charName,
+      avatarUrl: characterData?.avatarUrl || claimedToken?.avatarUrl || claimedToken?.url,
+      action: `${action.name}${upcastSuffix} (${action.isHeal ? 'Healing' : 'Damage'})`,
+      rollType: action.isHeal ? 'heal' : 'damage',
+      formula: rawFormula,
+      diceNotation: rawFormula,
+      dice: diceResults.length > 0 ? diceResults : [{ sides: 8, result: rolledTotal, type: 'd8' }],
+      total: rolledTotal,
+      isCritical: false,
+      isFumble: false,
+      theme: 'default',
+      themeColor: action.isHeal ? '#10b981' : '#f59e0b',
+      timestamp: Date.now(),
+      source: 'player'
+    };
+
+    if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+      (window as any).__mistwalkerRoll3d(diceEvent);
+    }
+    if (typeof window !== 'undefined' && (window as any).__mistwalkerSocket?.connected) {
+      (window as any).__mistwalkerSocket.emit('SYNC_LOCAL_DICE_ROLL', diceEvent);
+    }
+
+    toast.success(`${charName}: ${action.name}${upcastSuffix}!`, {
+      description: `Rolled ${rolledTotal} ${action.damageType || (action.isHeal ? 'HP' : 'damage')} (${rawFormula})`
+    });
+  };
 
   // Dedicated To-Hit Roll Handler
   const handleRollToHit = (action: HudActionItem) => {
@@ -355,10 +431,37 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
     if (hoveredAction?.id === action.id) {
       setHoveredAction(updated);
     }
+    if (pinnedAction?.id === action.id) {
+      setPinnedAction(updated);
+    }
     if (currentTargetingAction?.id === action.id) {
       onSelectAction(updated);
     }
   };
+
+  // When a player left-clicks an active aura title above their character token on the map,
+  // re-open the description card populated with the aura's cast slot level & damage button
+  useEffect(() => {
+    if (!inspectedAuraRequest?.action) return;
+    const req = inspectedAuraRequest.action;
+    const cleanReqName = req.name.replace(/\s*\([^)]*\)\s*$/, '').trim().toLowerCase();
+    const matchedBase =
+      spellsList.find(
+        s => s.id === req.id || s.name.trim().toLowerCase() === cleanReqName
+      ) || req;
+
+    const baseLvl = matchedBase.level ?? req.level ?? 0;
+    const chosenSlot =
+      req.castAtLevel && req.castAtLevel >= baseLvl
+        ? req.castAtLevel
+        : upcastLevels[matchedBase.id] ?? matchedBase.castAtLevel ?? baseLvl;
+
+    const effective =
+      baseLvl >= 1 ? buildActionAtSlotLevel(matchedBase, chosenSlot) : matchedBase;
+
+    setPinnedAction(effective);
+    setHoveredAction(effective);
+  }, [inspectedAuraRequest?.tick]);
 
   // Filtered spells when spell level filter is active
   const filteredSpellsList = useMemo<HudActionItem[]>(() => {
@@ -588,15 +691,23 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                 </button>
               )}
               {currentTargetingAction.damageFormula && (
-                <span className={`px-2 py-0.5 rounded text-[10px] border shrink-0 font-bold ${
-                  currentTargetingAction.castAtLevel && currentTargetingAction.castAtLevel > (currentTargetingAction.level ?? 0)
-                    ? 'bg-fuchsia-950 text-fuchsia-200 border-fuchsia-400/70 shadow-[0_0_8px_rgba(217,70,239,0.4)]'
-                    : currentTargetingAction.isHeal
-                    ? 'bg-emerald-950 text-emerald-300 border-emerald-500/40'
-                    : 'bg-rose-950 text-rose-300 border-rose-500/40'
-                }`}>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRollDamage(currentTargetingAction);
+                  }}
+                  className={`px-2 py-0.5 rounded text-[10px] border shrink-0 font-bold transition-all cursor-pointer active:scale-95 ${
+                    currentTargetingAction.castAtLevel && currentTargetingAction.castAtLevel > (currentTargetingAction.level ?? 0)
+                      ? 'bg-fuchsia-950 hover:bg-fuchsia-900 text-fuchsia-200 hover:text-white border-fuchsia-400/70 shadow-[0_0_8px_rgba(217,70,239,0.4)]'
+                      : currentTargetingAction.isHeal
+                      ? 'bg-emerald-950 hover:bg-emerald-900 text-emerald-300 hover:text-white border-emerald-500/40'
+                      : 'bg-rose-950 hover:bg-rose-900 text-rose-300 hover:text-white border-rose-500/40'
+                  }`}
+                  title={`Click to Roll ${currentTargetingAction.damageFormula} ${currentTargetingAction.damageType || ''}`}
+                >
                   {currentTargetingAction.damageFormula}
-                </span>
+                </button>
               )}
               {currentTargetingAction.rangeFt !== undefined && currentTargetingAction.rangeFt > 0 && (
                 <span className="px-2 py-0.5 rounded bg-zinc-900 text-zinc-300 text-[10px] border border-zinc-700 shrink-0">
