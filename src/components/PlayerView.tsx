@@ -1047,7 +1047,8 @@ const PlayerToken = React.memo(({
     prevProps.combatants === nextProps.combatants &&
     prevProps.stageScale === nextProps.stageScale &&
     prevProps.canDrag === nextProps.canDrag &&
-    prevProps.isTargetingActive === nextProps.isTargetingActive
+    prevProps.isTargetingActive === nextProps.isTargetingActive &&
+    prevProps.showHp === nextProps.showHp
   );
 });
 

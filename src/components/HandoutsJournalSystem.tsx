@@ -898,12 +898,20 @@ export const HandoutsJournalModal: React.FC<{
   onSaveHandout,
   onDeleteHandout,
   onPresentHandout,
-  onInspectHandout,
+  onInspectHandout: externalInspectHandout,
   onSaveQuest,
   onDeleteQuest,
   onSaveJournalEntry,
-  onDeleteJournalEntry
+  onDeleteJournalEntry,
+  onSubmitRiddleGuess
 }) => {
+  // Built-in inspect viewer so clicking a handout always opens it (for players and DM)
+  const [inspectedHandoutId, setInspectedHandoutId] = useState<string | null>(null);
+  const onInspectHandout = (item: HandoutItem) => {
+    if (externalInspectHandout) externalInspectHandout(item);
+    else setInspectedHandoutId(item.id);
+  };
+  const inspectedHandout = inspectedHandoutId ? handouts.find((h) => h.id === inspectedHandoutId) || null : null;
   const currentAuthorName = explicitAuthorName || currentCharacterName || (role === 'dm' ? 'Dungeon Master' : 'Player');
   const availableCharacterNames = explicitCharNames || (partyCharacters && partyCharacters.length > 0 ? partyCharacters.map((c: any) => c.name) : []);
   const [activeTab, setActiveTab] = useState<'handouts' | 'quests' | 'journal'>('handouts');
@@ -1537,6 +1545,41 @@ export const HandoutsJournalModal: React.FC<{
                   </div>
                 )}
 
+                {/* Visibility: Secret (DM only) vs Player View */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-mono uppercase text-zinc-400 font-bold block">
+                    Visibility
+                  </label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      type="button"
+                      id="handout-visibility-secret"
+                      onClick={() => setEditingHandout({ ...editingHandout, isSharedWithParty: false })}
+                      className={`py-1.5 rounded-xl text-[11px] font-mono font-bold border flex items-center justify-center gap-1.5 cursor-pointer ${
+                        !editingHandout.isSharedWithParty
+                          ? 'bg-rose-500/20 text-rose-200 border-rose-500/60'
+                          : 'bg-zinc-950 text-zinc-400 border-zinc-800 hover:text-white'
+                      }`}
+                      title="Secret: only the DM can see this handout"
+                    >
+                      <EyeOff className="w-3.5 h-3.5" /> Secret (DM Only)
+                    </button>
+                    <button
+                      type="button"
+                      id="handout-visibility-player"
+                      onClick={() => setEditingHandout({ ...editingHandout, isSharedWithParty: true })}
+                      className={`py-1.5 rounded-xl text-[11px] font-mono font-bold border flex items-center justify-center gap-1.5 cursor-pointer ${
+                        editingHandout.isSharedWithParty
+                          ? 'bg-emerald-500/20 text-emerald-200 border-emerald-500/60'
+                          : 'bg-zinc-950 text-zinc-400 border-zinc-800 hover:text-white'
+                      }`}
+                      title="Player View: players can see this handout in their journal"
+                    >
+                      <Eye className="w-3.5 h-3.5" /> Player View
+                    </button>
+                  </div>
+                </div>
+
                 {/* DM Secret Notes */}
                 <div>
                   <label className="text-[10px] font-mono uppercase text-amber-400 font-bold block mb-1">
@@ -1830,6 +1873,18 @@ export const HandoutsJournalModal: React.FC<{
           </div>
         )}
       </div>
+
+      {inspectedHandout && (
+        <HandoutSpotlightModal
+          handout={inspectedHandout}
+          role={role}
+          currentCharacterName={currentCharacterName}
+          onClose={() => setInspectedHandoutId(null)}
+          onUpdateHandout={role === 'dm' ? onSaveHandout : undefined}
+          onPresentToPlayers={role === 'dm' ? (h) => onPresentHandout?.(h) : undefined}
+          onSubmitRiddleGuess={onSubmitRiddleGuess}
+        />
+      )}
     </div>
   );
 };
