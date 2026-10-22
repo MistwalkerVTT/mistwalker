@@ -106,6 +106,8 @@ import { PlayerStationModal, PlayerStationMode } from './PlayerStationModal';
 import { PlayerCharacterSelectModal, PlayerCharacterChoiceItem } from './PlayerCharacterSelectModal';
 import { PlayerDdbPrivacyModal } from './PlayerDdbPrivacyModal';
 import { PlayerHeroDock } from './PlayerHeroDock';
+import { DndRuleInspectionModal } from './DndRuleInspectionModal';
+import { DndRuleEntry, lookupDndRuleDetails } from '../data/dndRulesCompendium';
 import { HudCharacterData, HudActionItem } from '../types/hud';
 import { TokenDragRuler, TokenDragState, parseSpeedFt } from './TokenDragRuler';
 import { RoomHotspotLayer } from './RoomHotspotLayer';
@@ -1578,6 +1580,7 @@ export default function PlayerView() {
 
   // Token Context Menu State (Right-Click Menu mirrored from DM View)
   const [activeTokenMenu, setActiveTokenMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [inspectedRuleEntry, setInspectedRuleEntry] = useState<DndRuleEntry | null>(null);
   const [tokenMenuTab, setTokenMenuTab] = useState<'stats' | 'conditions' | 'auras'>('stats');
   const [customAuraRadiusInput, setCustomAuraRadiusInput] = useState<number>(10);
   const [customAuraColorInput, setCustomAuraColorInput] = useState<string>('rgba(234, 179, 8, 0.4)');
@@ -5725,6 +5728,12 @@ export default function PlayerView() {
                       <button
                         key={cond}
                         type="button"
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const rule = lookupDndRuleDetails(cond, "condition");
+                          if (rule) setInspectedRuleEntry(rule);
+                        }}
                         onClick={() => {
                           const nextConditions = isActive
                             ? activeConditions.filter(c => c !== cond)
@@ -5807,6 +5816,12 @@ export default function PlayerView() {
                         <button
                           key={preset.id}
                           type="button"
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const rule = lookupDndRuleDetails(preset.name, "aura");
+                            if (rule) setInspectedRuleEntry(rule);
+                          }}
                           onClick={() => {
                             handleUpdateToken(currentToken.id, {
                               auraRadius: preset.radius,
@@ -6353,6 +6368,14 @@ export default function PlayerView() {
           setTimeout(() => setIsShaking(false), 600);
         }}
       />
+
+      {/* Full-Text D&D Rule / Spell / Aura Inspection Modal */}
+      {inspectedRuleEntry && (
+        <DndRuleInspectionModal
+          entry={inspectedRuleEntry}
+          onClose={() => setInspectedRuleEntry(null)}
+        />
+      )}
 
       {/* ========================================================= */}
       {/* D&D Beyond Tactical Character HUD (Synced to DDB)         */}

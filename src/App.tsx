@@ -43,6 +43,8 @@ import { AnimatedMapOverlay, AnimatedFeaturesKonvaImage } from './components/Ani
 import { DiceTableOverlay } from './components/DiceTableOverlay';
 import { DdbDiceRollEvent } from './types/dice';
 import { EffectContextMenu, ContextMenuData } from './components/EffectContextMenu';
+import { DndRuleInspectionModal } from './components/DndRuleInspectionModal';
+import { DndRuleEntry, lookupDndRuleDetails } from './data/dndRulesCompendium';
 import {
   VttEffectInstance,
   Jb2aAssetDefinition,
@@ -2144,6 +2146,7 @@ export default function App() {
   });
 
   const [activeTokenMenu, setActiveTokenMenu] = useState<{ id: string, x: number, y: number } | null>(null);
+  const [inspectedRuleEntry, setInspectedRuleEntry] = useState<DndRuleEntry | null>(null);
 
   // Dice Roller States
   const [diceHistory, setDiceHistory] = useState<RollResult[]>([]);
@@ -9833,6 +9836,12 @@ export default function App() {
                       <button
                         key={cond}
                         type="button"
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const rule = lookupDndRuleDetails(cond, "condition");
+                          if (rule) setInspectedRuleEntry(rule);
+                        }}
                         onClick={() => {
                           const nextConditions = isActive
                             ? activeConditions.filter(c => c !== cond)
@@ -9924,6 +9933,12 @@ export default function App() {
                         <button
                           key={preset.id}
                           type="button"
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const rule = lookupDndRuleDetails(preset.name, "aura");
+                            if (rule) setInspectedRuleEntry(rule);
+                          }}
                           onClick={() => {
                             handleUpdateDmToken({
                               auraRadius: preset.radius,
@@ -10431,6 +10446,13 @@ export default function App() {
       )}
 
       {/* Floating Effect Context Menu (Scalability & Customization for Tactical Features) */}
+      {inspectedRuleEntry && (
+        <DndRuleInspectionModal
+          entry={inspectedRuleEntry}
+          onClose={() => setInspectedRuleEntry(null)}
+        />
+      )}
+
       <EffectContextMenu
         data={effectContextMenu?.data || null}
         position={effectContextMenu?.position || null}
