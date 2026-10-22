@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Users,
   Search,
@@ -15,7 +15,13 @@ import {
   User
 } from 'lucide-react';
 import { Character } from '../types/character';
-import { resolveTokenCharacterStats, getCharacterTokenUrl, isDdbMatch } from '../data/defaultCharacters';
+import {
+  DEFAULT_CHARACTERS,
+  resolveTokenCharacterStats,
+  resolveTokenDdbCharacterId,
+  getCharacterTokenUrl,
+  isDdbMatch
+} from '../data/defaultCharacters';
 import { isMonsterToken } from '../types';
 
 export interface PlayerCharacterChoiceItem {
@@ -62,11 +68,11 @@ export const PlayerCharacterSelectModal: React.FC<PlayerCharacterSelectModalProp
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [checkingCharId, setCheckingCharId] = useState<string | null>(null);
+  const [privacyByDdbId, setPrivacyByDdbId] = useState<Record<string, boolean>>({});
 
-  // Build the list of selectable player characters, filtering out all monsters
+  // Build the list of selectable player characters, filtering out all monsters and deduplicating via isDdbMatch
   const characterChoices = useMemo<PlayerCharacterChoiceItem[]>(() => {
     const list: PlayerCharacterChoiceItem[] = [];
-    const seenNames = new Set<string>();
 
     // 1. First gather all valid player/ally tokens on the current battlemap
     tokens.forEach((t) => {
@@ -75,79 +81,68 @@ export const PlayerCharacterSelectModal: React.FC<PlayerCharacterSelectModalProp
       const isMonster = !isAlly && (isMonsterToken(t) || t.isMonster === true || t.category === 'monster' || t.isPlayer === false);
       if (isMonster) return; // Strict: Monsters never appear to players
 
-      const name = (t.name || '').trim();
-      if (!name) return;
-      const lowerName = name.toLowerCase();
-      seenNames.add(lowerName);
+      const rawName = (t.name || '').trim();
+      if (!rawName) return;
 
       const stats = resolveTokenCharacterStats(t, compendiumCharacters);
+      const ddbId = resolveTokenDdbCharacterId(t, compendiumCharacters) || stats.ddbCharacterId;
+      const canonicalName = stats.isFromCharacterSheet && stats.characterName ? stats.characterName : rawName;
       const isClaimed = claimedTokenId === t.id;
 
-      // Extract D&D Beyond character ID if present on token
-      let ddbId: string | undefined = undefined;
-      if ((t as any).ddbCharacterId) {
-        ddbId = String((t as any).ddbCharacterId).replace(/^char_ddb_/, '').trim();
-      } else if (String(t.id).startsWith('char_ddb_')) {
-        ddbId = String(t.id).replace(/^char_ddb_/, '').trim();
-      }
-
-      // If token didn't have DDB ID directly, try finding match in compendium
-      if (!ddbId) {
-        const compMatch = compendiumCharacters.find(c =>
-          isDdbMatch(name, t.characterId || t.id, undefined, (c as any).ddbCharacterId || c.id, c.name)
-        );
-        if (compMatch) {
-          const raw = (compMatch as any).ddbCharacterId || (String(compMatch.id).startsWith('char_ddb_') ? String(compMatch.id).replace(/^char_ddb_/, '') : undefined);
-          if (raw) ddbId = String(raw).trim();
+      // Avoid adding duplicate if multiple tokens of the same hero exist on map
+      const existingOnMap = list.find(item =>
+        isDdbMatch(item.name, item.id, item.ddbCharacterId, ddbId, canonicalName)
+      );
+      if (existingOnMap) {
+        if (isClaimed) {
+          existingOnMap.isClaimed = true;
+          existingOnMap.tokenId = t.id;
         }
+        return;
       }
 
-      const avatarSrc = t.url || t.avatarUrl || getCharacterTokenUrl(name);
+      const avatarSrc = t.url || t.avatarUrl || getCharacterTokenUrl(canonicalName);
 
       list.push({
         id: t.id,
         tokenId: t.id,
-        name,
+        name: canonicalName,
         race: (t as any).race || stats.race || 'Humanoid',
         classLevel: (t as any).classLevel || stats.classLevel || 'Hero',
         avatarUrl: avatarSrc,
         currentHp: typeof t.hp === 'number' ? t.hp : (stats.currentHp ?? 20),
         maxHp: typeof t.maxHp === 'number' ? t.maxHp : (stats.maxHp ?? 20),
         ac: typeof t.ac === 'number' ? t.ac : (stats.ac ?? 14),
-        speed: (t as any).speed || stats.speed || '30 ft.',
+        speed: String((t as any).speed || stats.speed || '30 ft.'),
         ddbCharacterId: ddbId,
         isOnMap: true,
         isClaimed
       });
     });
 
-    // 2. Add any compendium characters that aren't on the map yet
-    compendiumCharacters.forEach((c) => {
+    // 2. Add any compendium + default characters that aren't on the map yet
+    const allCompendium = [...compendiumCharacters, ...DEFAULT_CHARACTERS];
+    allCompendium.forEach((c) => {
       if (!c || !c.name) return;
-      const lowerName = c.name.trim().toLowerCase();
-      if (seenNames.has(lowerName)) {
-        // If already in list from token, backfill any missing details
-        const existing = list.find(item => item.name.toLowerCase() === lowerName);
-        if (existing) {
-          if (!existing.ddbCharacterId && (c as any).ddbCharacterId) {
-            existing.ddbCharacterId = String((c as any).ddbCharacterId).replace(/^char_ddb_/, '').trim();
-          }
-          if (c.race && existing.race === 'Humanoid') existing.race = c.race;
-          if (c.classLevel && existing.classLevel === 'Hero') existing.classLevel = c.classLevel;
+      const ddbId = resolveTokenDdbCharacterId(c, compendiumCharacters);
+
+      const existing = list.find(item =>
+        isDdbMatch(item.name, item.id, item.ddbCharacterId, ddbId || c.id, c.name)
+      );
+      if (existing) {
+        if (!existing.ddbCharacterId && ddbId) {
+          existing.ddbCharacterId = ddbId;
         }
+        if (c.race && existing.race === 'Humanoid') existing.race = c.race;
+        if (c.classLevel && existing.classLevel === 'Hero') existing.classLevel = c.classLevel;
         return;
       }
-      seenNames.add(lowerName);
 
-      let ddbId: string | undefined = undefined;
-      if ((c as any).ddbCharacterId) {
-        ddbId = String((c as any).ddbCharacterId).replace(/^char_ddb_/, '').trim();
-      } else if (String(c.id).startsWith('char_ddb_')) {
-        ddbId = String(c.id).replace(/^char_ddb_/, '').trim();
-      }
-
-      const isClaimed = typeof window !== 'undefined'
-        ? (localStorage.getItem('mistwalker_player_claimed_name') || '').trim().toLowerCase() === lowerName
+      const savedClaimedName = typeof window !== 'undefined'
+        ? (localStorage.getItem('mistwalker_player_claimed_name') || '').trim()
+        : '';
+      const isClaimed = savedClaimedName
+        ? isDdbMatch(c.name, c.id, ddbId, undefined, savedClaimedName)
         : false;
 
       list.push({
@@ -166,15 +161,74 @@ export const PlayerCharacterSelectModal: React.FC<PlayerCharacterSelectModalProp
       });
     });
 
-    // Sort: Claimed first, then on-map tokens, then alphabetically
+    // Sort: Claimed first, then on-map tokens, then D&D Beyond linked, then alphabetically
     return list.sort((a, b) => {
       if (a.isClaimed && !b.isClaimed) return -1;
       if (!a.isClaimed && b.isClaimed) return 1;
       if (a.isOnMap && !b.isOnMap) return -1;
       if (!a.isOnMap && b.isOnMap) return 1;
+      if (a.ddbCharacterId && !b.ddbCharacterId) return -1;
+      if (!a.ddbCharacterId && b.ddbCharacterId) return 1;
       return a.name.localeCompare(b.name);
     });
   }, [tokens, compendiumCharacters, claimedTokenId]);
+
+  // Automatically inspect D&D Beyond privacy status for all linked characters when modal opens
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    const ddbChoices = characterChoices.filter(c => Boolean(c.ddbCharacterId));
+    if (ddbChoices.length === 0) return;
+
+    (async () => {
+      try {
+        // First check cached sync-status from server
+        const statusRes = await fetch('/api/ddb/campaigns/sync-status');
+        if (statusRes.ok && !cancelled) {
+          const statusData = await statusRes.json();
+          const cached = statusData?.status?.cachedCharacters;
+          if (Array.isArray(cached)) {
+            const initialMap: Record<string, boolean> = {};
+            cached.forEach((ch: any) => {
+              if (ch?.id && typeof ch.isPrivate === 'boolean') {
+                initialMap[String(ch.id)] = ch.isPrivate;
+              }
+            });
+            setPrivacyByDdbId(prev => ({ ...prev, ...initialMap }));
+          }
+        }
+      } catch {
+        // Ignore initial cache lookup error
+      }
+
+      // Verify live privacy status for each D&D Beyond character
+      await Promise.all(
+        ddbChoices.map(async (ch) => {
+          if (!ch.ddbCharacterId || cancelled) return;
+          try {
+            const res = await fetch(`/api/ddb/characters/${ch.ddbCharacterId}/privacy`);
+            if (res.ok && !cancelled) {
+              const data = await res.json();
+              setPrivacyByDdbId(prev => ({
+                ...prev,
+                [String(ch.ddbCharacterId)]: Boolean(data.isPrivate)
+              }));
+            }
+          } catch {
+            // Ignore individual check error
+          }
+        })
+      );
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, characterChoices]);
+
+  const privateChoices = useMemo(() => {
+    return characterChoices.filter(c => c.ddbCharacterId && privacyByDdbId[c.ddbCharacterId] === true);
+  }, [characterChoices, privacyByDdbId]);
 
   // Filter by search query
   const filteredChoices = useMemo(() => {
@@ -194,9 +248,13 @@ export const PlayerCharacterSelectModal: React.FC<PlayerCharacterSelectModalProp
     if (choice.ddbCharacterId) {
       setCheckingCharId(choice.id);
       try {
-        const res = await fetch(`/api/ddb/characters/${choice.ddbCharacterId}/privacy`);
+        const res = await fetch(`/api/ddb/characters/${choice.ddbCharacterId}/privacy?refresh=true`);
         if (res.ok) {
           const privacy = await res.json();
+          setPrivacyByDdbId(prev => ({
+            ...prev,
+            [String(choice.ddbCharacterId)]: Boolean(privacy.isPrivate)
+          }));
           if (privacy.isPrivate) {
             // Sheet is private! Prompt them with the quicklink modal
             onPromptPrivacy({
@@ -274,8 +332,47 @@ export const PlayerCharacterSelectModal: React.FC<PlayerCharacterSelectModalProp
           </div>
         </div>
 
+        {/* Private Profile Alert Banner if any D&D Beyond characters are currently Private */}
+        {privateChoices.length > 0 && (
+          <div className="mt-3 p-3.5 rounded-2xl bg-amber-950/35 border border-amber-500/40 flex flex-col gap-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-xs font-mono font-bold text-amber-300">
+                <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span>
+                  Action Needed: {privateChoices.length} D&D Beyond Character{privateChoices.length > 1 ? 's are' : ' is'} set to Private
+                </span>
+              </div>
+              <span className="text-[10px] font-mono text-amber-400/80 hidden sm:inline">
+                Click your hero below to open D&D Beyond Privacy Settings & set to Public
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {privateChoices.map(pc => (
+                <button
+                  key={pc.id}
+                  type="button"
+                  onClick={() =>
+                    onPromptPrivacy({
+                      characterId: pc.ddbCharacterId!,
+                      characterName: pc.name,
+                      avatarUrl: pc.avatarUrl,
+                      choice: pc
+                    })
+                  }
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-200 text-[11px] font-mono font-semibold transition-all cursor-pointer"
+                >
+                  <Lock className="w-3 h-3 text-amber-400" />
+                  <span>{pc.name}</span>
+                  <span className="text-amber-400 underline ml-0.5">Make Public</span>
+                  <ExternalLink className="w-2.5 h-2.5 text-amber-400" />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Character Card Grid */}
-        <div className="flex-1 overflow-y-auto py-4 pr-1 min-h-[300px]">
+        <div className="flex-1 overflow-y-auto py-4 pr-1 min-h-[280px]">
           {filteredChoices.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-48 text-zinc-500 font-mono text-xs text-center">
               <User className="w-10 h-10 mb-2 text-zinc-600 opacity-60" />
@@ -285,6 +382,8 @@ export const PlayerCharacterSelectModal: React.FC<PlayerCharacterSelectModalProp
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {filteredChoices.map((choice) => {
                 const isCheckingThis = checkingCharId === choice.id;
+                const isPrivateDdb = Boolean(choice.ddbCharacterId && privacyByDdbId[choice.ddbCharacterId] === true);
+                const isPublicDdb = Boolean(choice.ddbCharacterId && privacyByDdbId[choice.ddbCharacterId] === false);
 
                 return (
                   <div
@@ -293,6 +392,8 @@ export const PlayerCharacterSelectModal: React.FC<PlayerCharacterSelectModalProp
                     className={`group relative rounded-2xl p-4 border transition-all text-left flex flex-col justify-between cursor-pointer overflow-hidden transform hover:scale-[1.01] active:scale-[0.99] ${
                       choice.isClaimed
                         ? 'bg-emerald-950/40 border-emerald-500/70 shadow-lg shadow-emerald-950/40 ring-1 ring-emerald-500/30'
+                        : isPrivateDdb
+                        ? 'bg-zinc-900/90 hover:bg-zinc-850 border-amber-500/40 hover:border-amber-400 shadow-md'
                         : 'bg-zinc-900/80 hover:bg-zinc-850 border-zinc-800 hover:border-amber-500/50 shadow-md'
                     }`}
                   >
@@ -301,7 +402,11 @@ export const PlayerCharacterSelectModal: React.FC<PlayerCharacterSelectModalProp
                       <div className="flex items-start gap-3">
                         <div className="relative shrink-0">
                           <div className={`w-12 h-12 rounded-xl overflow-hidden bg-zinc-800 border flex items-center justify-center ${
-                            choice.isClaimed ? 'border-emerald-400' : 'border-zinc-700 group-hover:border-amber-500/50'
+                            choice.isClaimed
+                              ? 'border-emerald-400'
+                              : isPrivateDdb
+                              ? 'border-amber-500/60'
+                              : 'border-zinc-700 group-hover:border-amber-500/50'
                           }`}>
                             {choice.avatarUrl ? (
                               <img src={choice.avatarUrl} alt={choice.name} className="w-full h-full object-cover" />
@@ -309,11 +414,15 @@ export const PlayerCharacterSelectModal: React.FC<PlayerCharacterSelectModalProp
                               <User className="w-6 h-6 text-zinc-500" />
                             )}
                           </div>
-                          {choice.isClaimed && (
+                          {choice.isClaimed ? (
                             <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-md bg-emerald-500 text-zinc-950 flex items-center justify-center font-bold shadow">
                               <Check className="w-3.5 h-3.5 stroke-[3]" />
                             </div>
-                          )}
+                          ) : isPrivateDdb ? (
+                            <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-md bg-amber-500 text-zinc-950 flex items-center justify-center font-bold shadow" title="Private Profile on D&D Beyond">
+                              <Lock className="w-3 h-3 stroke-[2.5]" />
+                            </div>
+                          ) : null}
                         </div>
 
                         <div className="min-w-0 flex-1">
@@ -346,14 +455,26 @@ export const PlayerCharacterSelectModal: React.FC<PlayerCharacterSelectModalProp
                       </div>
                     </div>
 
-                    {/* Bottom Row: Source & D&D Beyond Tag + Action Button */}
-                    <div className="mt-3 pt-2 border-t border-zinc-800/60 flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
+                    {/* Bottom Row: Source & D&D Beyond Privacy Tag + Action Button */}
+                    <div className="mt-3 pt-2 border-t border-zinc-800/60 flex items-center justify-between gap-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         {choice.ddbCharacterId ? (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-500/10 border border-red-500/30 text-red-400 text-[10px] font-mono font-bold">
-                            <Sparkles className="w-2.5 h-2.5" />
-                            D&D Beyond
-                          </span>
+                          isPrivateDdb ? (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/40 text-amber-300 text-[10px] font-mono font-bold">
+                              <Lock className="w-2.5 h-2.5 text-amber-400" />
+                              Private • Make Public
+                            </span>
+                          ) : isPublicDdb ? (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-mono font-bold">
+                              <Globe className="w-2.5 h-2.5" />
+                              DDB Public
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-500/10 border border-red-500/30 text-red-400 text-[10px] font-mono font-bold">
+                              <Sparkles className="w-2.5 h-2.5" />
+                              D&D Beyond
+                            </span>
+                          )
                         ) : (
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-400 text-[10px] font-mono">
                             Local Sheet
@@ -382,6 +503,11 @@ export const PlayerCharacterSelectModal: React.FC<PlayerCharacterSelectModalProp
                           <span className="text-xs font-mono font-bold text-emerald-400 flex items-center gap-1">
                             <span>Claimed</span>
                             <Check className="w-3.5 h-3.5" />
+                          </span>
+                        ) : isPrivateDdb ? (
+                          <span className="text-xs font-mono font-bold text-amber-400 group-hover:text-amber-300 flex items-center gap-1">
+                            <span>Unlock</span>
+                            <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
                           </span>
                         ) : (
                           <span className="text-xs font-mono font-bold text-amber-400 group-hover:text-amber-300 flex items-center gap-1">

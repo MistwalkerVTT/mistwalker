@@ -87,8 +87,8 @@ export const DEFAULT_CHARACTERS: Character[] = [
     alignment: 'Neutral',
     avatarUrl: 'https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/Varrak.png/:/rs=w:1440,h:1440',
     ac: 17,
-    hp: 59,
-    maxHp: 59,
+    hp: 65,
+    maxHp: 65,
     tempHp: 0,
     hitDice: '6d12',
     speed: '45 ft. (Walking)',
@@ -311,7 +311,7 @@ export const DEFAULT_CHARACTERS: Character[] = [
     background: 'Soldier',
     alignment: 'Neutral Good',
     avatarUrl: 'https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/Aziza.png/:/rs=w:1440,h:1440',
-    ac: 18,
+    ac: 21,
     hp: 95,
     maxHp: 109,
     speed: '30 ft.',
@@ -381,7 +381,7 @@ export const DEFAULT_CHARACTERS: Character[] = [
     background: 'Guild Artisan',
     alignment: 'Neutral Good',
     avatarUrl: 'https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/Aggie.png/:/rs=w:1440,h:1440',
-    ac: 16,
+    ac: 22,
     hp: 52,
     maxHp: 52,
     speed: '25 ft.',
@@ -405,7 +405,7 @@ export const DEFAULT_CHARACTERS: Character[] = [
     background: 'Entertainer',
     alignment: 'Neutral Good',
     avatarUrl: 'https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/Rowan.png/:/rs=w:1440,h:1440',
-    ac: 15,
+    ac: 14,
     hp: 45,
     maxHp: 45,
     speed: '30 ft.',
@@ -506,7 +506,7 @@ export const DEFAULT_CHARACTERS: Character[] = [
     background: 'Charlatan',
     alignment: 'Chaotic Neutral',
     avatarUrl: 'https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/Brannoc.png/:/rs=w:1440,h:1440',
-    ac: 15,
+    ac: 14,
     hp: 65,
     maxHp: 65,
     speed: '30 ft.',
@@ -626,6 +626,8 @@ export interface ResolvedTokenStats {
   currentHp: number;
   tempHp?: number;
   characterName: string;
+  characterId?: string;
+  ddbCharacterId?: string;
   isFromCharacterSheet: boolean;
   race?: string;
   classLevel?: string;
@@ -640,9 +642,9 @@ export function isDdbMatch(
   ddbId?: string | number,
   ddbName?: string
 ): boolean {
-  const dId = ddbId ? String(ddbId) : '';
-  const tDdbId = targetDdbId ? String(targetDdbId) : '';
-  const tId = targetId ? String(targetId) : '';
+  const dId = ddbId ? String(ddbId).replace(/^char_ddb_/, '').trim() : '';
+  const tDdbId = targetDdbId ? String(targetDdbId).replace(/^char_ddb_/, '').trim() : '';
+  const tId = targetId ? String(targetId).trim() : '';
 
   if (dId && tDdbId && dId === tDdbId) return true;
   if (dId && tId && (tId === dId || tId === `char_ddb_${dId}` || `char_ddb_${tId}` === dId)) return true;
@@ -652,6 +654,10 @@ export function isDdbMatch(
   if (nA && nB) {
     if (nA === nB) return true;
     if (nA.includes(nB) || nB.includes(nA)) return true;
+
+    const isAggieA = nA.includes('aggie') || nA.includes('aggapanthus');
+    const isAggieB = nB.includes('aggie') || nB.includes('aggapanthus');
+    if (isAggieA && isAggieB) return true;
 
     // Normalize apostrophes, quotes, and punctuation (e.g. "G'aiah" vs "Gaiah" vs "G’aiah")
     const cleanA = nA.replace(/['’"`&#x27;]/g, '');
@@ -663,6 +669,34 @@ export function isDdbMatch(
     if (firstA && firstB && firstA.length >= 3 && firstA === firstB) return true;
   }
   return false;
+}
+
+export function resolveTokenDdbCharacterId(
+  tokenOrChar?: { id?: string | number; name?: string; characterId?: string | number; ddbCharacterId?: string | number } | null,
+  customCharacters?: Character[]
+): string | undefined {
+  if (!tokenOrChar) return undefined;
+  const direct = tokenOrChar.ddbCharacterId
+    ? String(tokenOrChar.ddbCharacterId).replace(/^char_ddb_/, '').trim()
+    : (String(tokenOrChar.id || '').startsWith('char_ddb_')
+        ? String(tokenOrChar.id).replace(/^char_ddb_/, '').trim()
+        : '');
+  if (direct && !isNaN(Number(direct))) return direct;
+
+  const allPools = [
+    ...(customCharacters && customCharacters.length > 0 ? customCharacters : []),
+    ...DEFAULT_CHARACTERS
+  ];
+  for (const c of allPools) {
+    const candidateId = (c as any).ddbCharacterId
+      ? String((c as any).ddbCharacterId).replace(/^char_ddb_/, '').trim()
+      : (String(c.id).startsWith('char_ddb_') ? String(c.id).replace(/^char_ddb_/, '').trim() : '');
+    if (!candidateId || isNaN(Number(candidateId))) continue;
+    if (isDdbMatch(tokenOrChar.name, tokenOrChar.characterId || tokenOrChar.id, tokenOrChar.ddbCharacterId, candidateId, c.name)) {
+      return candidateId;
+    }
+  }
+  return undefined;
 }
 
 export function resolveTokenCharacterStats(
@@ -730,7 +764,9 @@ export function resolveTokenCharacterStats(
   }
 
   if (char) {
-    const isDdbLinked = !!(char as any).ddbCharacterId || char.id.startsWith('char_ddb_') || !!token.ddbCharacterId;
+    const resolvedDdbId = resolveTokenDdbCharacterId(token, customCharacters) ||
+      ((char as any).ddbCharacterId ? String((char as any).ddbCharacterId).replace(/^char_ddb_/, '').trim() : undefined);
+    const isDdbLinked = Boolean(resolvedDdbId || (char as any).ddbCharacterId || char.id.startsWith('char_ddb_') || token.ddbCharacterId);
     const maxHp = char.maxHp || char.hp || 25;
     const currentHp = isDdbLinked && char.hp !== undefined
       ? char.hp
@@ -744,6 +780,8 @@ export function resolveTokenCharacterStats(
       currentHp,
       tempHp,
       characterName: char.name,
+      characterId: char.id,
+      ddbCharacterId: resolvedDdbId,
       isFromCharacterSheet: true,
       race: char.race,
       classLevel: char.classLevel,

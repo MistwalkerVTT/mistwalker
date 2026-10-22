@@ -423,31 +423,47 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
   const buildActionAtSlotLevel = (action: HudActionItem, targetSlotLevel: number): HudActionItem => {
     const baseLevel = action.level ?? 0;
     if (baseLevel < 1) return action;
-    const clampedSlot = Math.max(baseLevel, Math.min(9, targetSlotLevel));
-    if (clampedSlot <= baseLevel) {
+
+    // Book of Exalted Deeds (Enlightened Magic):
+    // "any spell slot you expend to cast a cleric or paladin spell counts as a spell slot of one level higher."
+    const hasBookOfExaltedDeeds = Boolean(
+      characterData?.hasBookOfExaltedDeeds ||
+      characterData?.name?.toLowerCase().includes('stavros')
+    );
+
+    const clampedExpendedSlot = Math.max(baseLevel, Math.min(9, targetSlotLevel));
+    const effectiveCastLevel = hasBookOfExaltedDeeds
+      ? Math.min(9, clampedExpendedSlot + 1)
+      : clampedExpendedSlot;
+
+    if (effectiveCastLevel <= baseLevel) {
       return {
         ...action,
         castAtLevel: baseLevel,
-        spellSlotRequired: baseLevel
+        spellSlotRequired: clampedExpendedSlot
       };
     }
 
-    const precomputed = action.upcastOptions?.find(o => o.slotLevel === clampedSlot);
+    const precomputed = action.upcastOptions?.find(o => o.slotLevel === effectiveCastLevel);
     const computed = precomputed || {
-      slotLevel: clampedSlot,
-      ...computeUpcastFormula(action.damageFormula, baseLevel, clampedSlot, action.name)
+      slotLevel: effectiveCastLevel,
+      ...computeUpcastFormula(action.damageFormula, baseLevel, effectiveCastLevel, action.name)
     };
 
+    const enlightenedNotice = hasBookOfExaltedDeeds
+      ? `✦ Enlightened Magic (Book of Exalted Deeds: Expends Lv ${clampedExpendedSlot} slot → Casts as Lv ${effectiveCastLevel})`
+      : null;
+
     const upcastTag = computed.bonusEffect
-      ? `Upcast (${formatSpellLevelLabel(clampedSlot)} Slot: ${computed.bonusEffect})`
-      : `Upcast (${formatSpellLevelLabel(clampedSlot)} Slot)`;
+      ? `Upcast (${formatSpellLevelLabel(effectiveCastLevel)}: ${computed.bonusEffect})`
+      : `Upcast (${formatSpellLevelLabel(effectiveCastLevel)})`;
 
     return {
       ...action,
-      castAtLevel: clampedSlot,
-      spellSlotRequired: clampedSlot,
+      castAtLevel: effectiveCastLevel,
+      spellSlotRequired: clampedExpendedSlot,
       damageFormula: computed.damageFormula ?? action.damageFormula,
-      notes: [action.notes, upcastTag].filter(Boolean).join(' • ')
+      notes: [action.notes, enlightenedNotice, upcastTag].filter(Boolean).join(' • ')
     };
   };
 
@@ -1717,6 +1733,15 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                     </button>
                   );
                 })}
+                {/* Book of Exalted Deeds badge if character possesses Enlightened Magic */}
+                {(characterData?.hasBookOfExaltedDeeds || characterData?.name?.toLowerCase().includes('stavros')) && (
+                  <div
+                    className="ml-auto px-2 py-0.5 rounded-md border border-amber-500/50 bg-amber-500/10 text-amber-300 font-mono text-[10px] font-bold flex items-center gap-1 shrink-0"
+                    title="Book of Exalted Deeds (Enlightened Magic): Any spell slot expended counts as 1 level higher."
+                  >
+                    <span>✦ Enlightened Magic (+1 Spell Level)</span>
+                  </div>
+                )}
                 {typeof selectedSpellLevel === 'number' && selectedSpellLevel >= 2 && (
                   <button
                     type="button"
