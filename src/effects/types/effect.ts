@@ -52,6 +52,8 @@ export interface VttEffectInstance {
   loop: boolean;
   castTime: number;          // Epoch timestamp when cast
   durationMs?: number;       // For auto-expiring single-shots (e.g. 5000ms)
+  fadeInMs?: number;         // Milliseconds to smoothly fade in
+  fadeOutMs?: number;        // Milliseconds to smoothly fade out before expiration
   soundKey?: string;
   color?: string;            // Secondary tint or outline indicator
   ownerId?: string;          // Player or DM userId who cast it

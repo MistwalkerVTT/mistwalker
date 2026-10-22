@@ -325,6 +325,7 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
               playsInline
               preload="auto"
               loop={Boolean(effect.loop || effect.isPersistent)}
+              className={(effect.fadeInMs || effect.fadeOutMs || effect.assetKey === 'dimension_door' || effect.assetKey === 'arcane_gate' || effect.name?.toLowerCase().includes('dimension door')) ? 'animate-effect-fade-portal' : undefined}
               onLoadedData={(e) => (e.target as HTMLVideoElement).play().catch(() => {})}
               onError={(e) => console.warn('Effect video load failed:', effect.videoUrl, e)}
               onEnded={() => handleEnded(effect)}

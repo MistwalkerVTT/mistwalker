@@ -155,3 +155,15 @@ html, body {
   pointer-events: none !important;
 }
 
+
+/* Smooth fade-in and fade-out animations for teleport gateways & spell effects */
+@keyframes effect-fade-in-out {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.65); }
+  18% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  75% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(0.65); }
+}
+
+.animate-effect-fade-portal {
+  animation: effect-fade-in-out 3.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
