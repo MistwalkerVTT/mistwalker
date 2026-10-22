@@ -233,6 +233,7 @@ export interface HudCharacterData {
   passiveInvestigation: number;
   spellSaveDc?: number;
   spellAttackBonus?: number;
+  hasBookOfExaltedDeeds?: boolean;
   deathSaves: {
     successes: number;
     failures: number;

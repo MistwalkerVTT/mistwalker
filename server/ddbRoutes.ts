@@ -337,7 +337,13 @@ ddbRouter.get('/characters/:id/hud-data', async (req: Request, res: Response) =>
         hudPayload.tempHp || 0
       );
     }
-    res.json({ ...hudPayload, isPrivate: false });
+    const isPrivate = Boolean((hudPayload as any)?.isPrivate);
+    res.json({
+      ...hudPayload,
+      isPrivate,
+      builderPreferencesUrl: `https://www.dndbeyond.com/characters/${charId}/builder#/home/basic`,
+      characterSheetUrl: `https://www.dndbeyond.com/characters/${charId}`
+    });
   } catch (err: any) {
     console.error(`[DdbRoutes] Error generating HUD data for ${req.params.id}:`, err);
     res.status(500).json({ error: err.message });

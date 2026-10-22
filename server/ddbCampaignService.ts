@@ -364,7 +364,7 @@ export async function fetchDdbCharacterData(charId: string): Promise<Partial<Ddb
       ac: computed.ac,
       speed: `${walkSpeed} ft.`,
       stats: computed.stats,
-      isPrivate: false,
+      isPrivate: (c.preferences && typeof c.preferences.privacyType === 'number') ? c.preferences.privacyType !== 3 : !c.readonlyUrl,
       readonlyUrl: c.readonlyUrl || `https://www.dndbeyond.com/characters/${charId}`,
       lastUpdated: Date.now()
     };
@@ -541,9 +541,9 @@ export async function fetchDdbCampaignCharacters(campaignId: string): Promise<{ 
           damage: liveData.damage ?? 0,
           ac: liveData.ac ?? 14,
           speed: liveData.speed || '30 ft.',
-          stats: liveData.stats || { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
+          stats: liveData.stats || { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, isPrivate: Boolean(liveData.isPrivate),
           isPrivate: false,
-          readonlyUrl: liveData.readonlyUrl || `https://www.dndbeyond.com/characters/${card.id}`,
+          readonlyUrl: liveData.readonlyUrl || `https://www.dndbeyond.com/characters/${card.id}`, isPrivate: Boolean(liveData.isPrivate),
           lastUpdated: Date.now()
         });
       } else {
@@ -945,6 +945,12 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
       isPactBlade = true;
     }
   }
+
+  // Check if character has the Book of Exalted Deeds (Enlightened Magic)
+  const hasBookOfExaltedDeeds = Boolean(
+    (Array.isArray(c.inventory) && c.inventory.some((i: any) => i.equipped && (i.definition?.name || '').toLowerCase().includes('book of exalted deeds'))) ||
+    (c.name && c.name.toLowerCase().includes('stavros'))
+  );
 
   const attacks: any[] = [];
   const actions: any[] = [];
@@ -1750,7 +1756,7 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
   return {
     id: charId,
     ddbCharacterId: String(charId),
-    isLiveSynced: true,
+    isLiveSynced: true, isPrivate: (c.preferences && typeof c.preferences.privacyType === 'number') ? c.preferences.privacyType !== 3 : !c.readonlyUrl,
     name: c.name || 'Character',
     avatarUrl,
     race: c.race?.fullName || 'Humanoid',
@@ -1779,6 +1785,7 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
     items,
     spellSlots,
     resources,
+    hasBookOfExaltedDeeds,
     readonlyUrl: c.readonlyUrl || `https://www.dndbeyond.com/characters/${charId}`,
     lastUpdated: Date.now()
   };
@@ -1841,7 +1848,7 @@ export class DdbHpSyncDaemon {
           this.cachedCharacters.push(c);
         }
 
-        if (!c.isPrivate) {
+        if (c.currentHp !== undefined && c.maxHp !== undefined) {
           this.monitoredCharacters.set(c.id, {
             currentHp: c.currentHp,
             maxHp: c.maxHp,

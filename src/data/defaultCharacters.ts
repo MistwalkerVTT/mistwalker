@@ -440,9 +440,37 @@ export const DEFAULT_CHARACTERS: Character[] = [
     defenses: {
       resistances: ['Poison (Dwarven Resilience)']
     },
-    features: ['Channel Divinity', 'Destroy Undead (CR 3)', 'Divine Intervention', 'Dwarven Toughness'],
-    spells: ['Healing Word', 'Spirit Guardians', 'Revivify', 'Mass Cure Wounds', 'Heal'],
-    notes: 'Campaign: An Unspeakable Power (but this time with a vengeance). Player: SWITCH540. Synced from D&D Beyond.',
+    features: [
+      'Channel Divinity',
+      'Destroy Undead (CR 3)',
+      'Divine Intervention',
+      'Dwarven Toughness',
+      'Book of Exalted Deeds (Enlightened Magic: Any spell slot expended counts as 1 level higher; Halo of Protection, +1 AC, Advantage on Good Persuasion)'
+    ],
+    spells: [
+      'Healing Word',
+      'Spirit Guardians',
+      'Revivify',
+      'Mass Cure Wounds',
+      'Heal',
+      'Mass Healing Word',
+      'Holy Weapon',
+      'Stone Shape',
+      'Blade Barrier',
+      'Sunbeam',
+      'Fire Storm',
+      'Holy Aura',
+      'Sanctuary',
+      'Shield of Faith',
+      'Hold Person',
+      'Command',
+      'Warding Bond',
+      "Heroes' Feast",
+      'Divine Word',
+      'Greater Restoration',
+      'Silence'
+    ],
+    notes: 'Campaign: An Unspeakable Power (but this time with a vengeance). Player: SWITCH540. Attuned Artifact: Book of Exalted Deeds (Enlightened Magic grants +1 effective slot level to all cast spells). Synced from D&D Beyond.',
     createdAt: Date.now(),
     updatedAt: Date.now()
   },

@@ -1295,6 +1295,10 @@ const buildFallbackHudData = (token: Token, stats: any, customChars?: Character[
       2: { level: 2, total: 3, used: 0, available: 3 }
     } : {},
     resources: [],
+    hasBookOfExaltedDeeds: Boolean(
+      (token.name && token.name.toLowerCase().includes('stavros')) ||
+      (matchedChar?.name && matchedChar.name.toLowerCase().includes('stavros'))
+    ),
     readonlyUrl: ddbId ? `https://www.dndbeyond.com/characters/${ddbId}` : '',
     lastUpdated: Date.now()
   };

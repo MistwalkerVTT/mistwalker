@@ -544,18 +544,39 @@ const ArenaTokenNode: React.FC<{
   onMove: (id: string, newX: number, newY: number) => void;
   onClickToken: (combatant: ArenaCombatant) => void;
 }> = ({ combatant, isCurrentTurn, isTargetable, canDrag, onMove, onClickToken }) => {
-  const [img] = useImage(combatant.avatarUrl || '', 'anonymous');
-  const animPhase = useTokenFlightAnimation(Boolean(combatant.isFlying || (combatant.elevation || 0) !== 0));
+  const [img] = useImage(combatant.avatarUrl || '');
   const pixelSize = (combatant.size || 1) * ARENA_GRID_SIZE;
   const radius = pixelSize / 2;
   const isDead = combatant.currentHp <= 0;
 
+  const floatingGroupRef = useRef<any>(null);
+  const shadowRef = useRef<any>(null);
+  const leftWingRef = useRef<any>(null);
+  const rightWingRef = useRef<any>(null);
+  const vortexRingRef = useRef<any>(null);
+  const cloudGroupRef = useRef<any>(null);
+  const shockwaveRef = useRef<any>(null);
+
   const flightMetrics = computeFlightLiftMetrics(
     combatant.elevation || 0,
     Boolean(combatant.isFlying),
-    ARENA_GRID_SIZE,
-    animPhase
+    radius
   );
+
+  useTokenFlightAnimation({
+    elevation: combatant.elevation || 0,
+    isFlying: Boolean(combatant.isFlying),
+    liftOffsetPx: flightMetrics.liftOffsetPx,
+    perspectiveScale: flightMetrics.perspectiveScale,
+    radius,
+    floatingGroupRef,
+    shadowRef,
+    leftWingRef,
+    rightWingRef,
+    vortexRingRef,
+    cloudGroupRef,
+    shockwaveRef
+  });
 
   const teamColor = combatant.team === 'gold' ? '#f59e0b' : '#ef4444';
   const hpPct = Math.max(0, Math.min(1, combatant.currentHp / Math.max(1, combatant.maxHp)));
@@ -591,19 +612,19 @@ const ArenaTokenNode: React.FC<{
       }}
     >
       {/* Ground Footprint when Flying */}
-      {flightMetrics.isAirborne && (
+      {flightMetrics.isElevated && (
         <TokenGroundFootprint
-          centerX={radius}
-          centerY={radius}
+          elevation={combatant.elevation || 0}
+          isFlying={Boolean(combatant.isFlying)}
           radius={radius}
-          liftPx={flightMetrics.liftPx}
-          shadowScale={flightMetrics.shadowScale}
-          wingPhase={animPhase}
-          accentColor={teamColor}
+          tierColor={flightMetrics.tierColor}
+          liftOffsetPx={flightMetrics.liftOffsetPx}
+          shadowRef={shadowRef}
+          shockwaveRef={shockwaveRef}
         />
       )}
 
-      <Group y={-flightMetrics.liftPx}>
+      <Group ref={floatingGroupRef} y={-flightMetrics.liftOffsetPx}>
         {/* Active Turn Pulsing Ring */}
         {isCurrentTurn && !isDead && (
           <Circle
@@ -643,8 +664,8 @@ const ArenaTokenNode: React.FC<{
           shadowOpacity={0.7}
         />
 
-        {/* Circular Clipped Avatar */}
-        {img && (
+        {/* Circular Clipped Avatar or Initials Fallback */}
+        {img ? (
           <Group
             clipFunc={(ctx) => {
               ctx.arc(radius, radius, radius - 4, 0, Math.PI * 2, false);
@@ -658,16 +679,35 @@ const ArenaTokenNode: React.FC<{
               height={pixelSize - 4}
             />
           </Group>
+        ) : (
+          <Text
+            width={pixelSize}
+            y={radius - 8}
+            align="center"
+            text={combatant.name.slice(0, 2).toUpperCase()}
+            fontSize={16}
+            fontStyle="bold"
+            fontFamily="monospace"
+            fill={teamColor}
+          />
         )}
 
         {/* Aerial Wings & Badge */}
-        {flightMetrics.isAirborne && (
+        {flightMetrics.isElevated && (
           <TokenAerialOverlay
-            centerX={radius}
-            centerY={radius}
+            elevation={combatant.elevation || 0}
+            isFlying={Boolean(combatant.isFlying)}
             radius={radius}
-            elevationFt={combatant.elevation || 0}
-            wingPhase={animPhase}
+            tokenWidth={pixelSize}
+            isMonster={combatant.team === 'crimson'}
+            tierColor={flightMetrics.tierColor}
+            tierGlow={flightMetrics.tierGlow}
+            tierBg={flightMetrics.tierBg}
+            badgeText={flightMetrics.badgeText}
+            leftWingRef={leftWingRef}
+            rightWingRef={rightWingRef}
+            vortexRingRef={vortexRingRef}
+            cloudGroupRef={cloudGroupRef}
           />
         )}
 
@@ -787,7 +827,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
   const [stageScale, setStageScale] = useState<number>(0.85);
   const [stagePos, setStagePos] = useState<{ x: number; y: number }>({ x: 120, y: 60 });
 
-  const [bgImage] = useImage(selectedMap.url, 'anonymous');
+  const [bgImage] = useImage(selectedMap.url);
 
   useEffect(() => {
     const onResize = () => {
@@ -886,7 +926,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
 
     goldHeroes.forEach((hero, idx) => {
       const d20 = Math.floor(Math.random() * 20) + 1;
-      const initBonus = typeof hero.initiative === 'number' ? hero.initiative : 2;
+      const initBonus = typeof hero.initiativeBonus === 'number' ? hero.initiativeBonus : 2;
       const startRow = Math.min(ARENA_ROWS - 2, Math.max(2, 4 + idx * 2));
       roster.push({
         id: `arena_gold_${idx}_${Date.now()}`,
@@ -924,7 +964,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
 
       crimsonHeroes.forEach((hero, idx) => {
         const d20 = Math.floor(Math.random() * 20) + 1;
-        const initBonus = typeof hero.initiative === 'number' ? hero.initiative : 2;
+        const initBonus = typeof hero.initiativeBonus === 'number' ? hero.initiativeBonus : 2;
         const startRow = Math.min(ARENA_ROWS - 2, Math.max(2, 4 + idx * 3));
         roster.push({
           id: `arena_crimson_hero_${idx}_${Date.now()}`,
@@ -1016,14 +1056,18 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
     ]);
 
     // Center Arena Stage nicely
-    const fitScale = Math.min(
-      0.95,
-      Math.max(0.5, (dimensions.width - 80) / ARENA_WIDTH, (dimensions.height - 260) / ARENA_HEIGHT)
+    const fitScale = Math.max(
+      0.45,
+      Math.min(
+        0.95,
+        (dimensions.width - 80) / ARENA_WIDTH,
+        (dimensions.height - 230) / ARENA_HEIGHT
+      )
     );
     setStageScale(fitScale);
     setStagePos({
       x: Math.round((dimensions.width - ARENA_WIDTH * fitScale) / 2),
-      y: 68
+      y: 56
     });
 
     setPhase('battle');
@@ -1103,23 +1147,32 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
 
       const newFx: VttEffectInstance = {
         id: `arena_fx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-        assetId: asset.id,
+        assetKey: asset.id,
         name: action.name,
-        category: asset.category,
-        url: asset.url,
+        videoUrl: asset.webm,
+        loopVideoUrl: asset.loopWebm,
+        paradigm: asset.paradigm,
+        x: targetCenter.x,
+        y: targetCenter.y,
         originX: casterCenter.x,
         originY: casterCenter.y,
         targetX: targetCenter.x,
         targetY: targetCenter.y,
         sizeFt: asset.defaultSizeFt || 10,
-        durationMs: asset.durationMs || 1600,
+        rotation: 0,
+        opacity: 1,
+        blendMode: asset.blendMode || 'screen',
+        isPersistent: false,
+        durationMs: 1800,
         loop: false,
-        createdAt: Date.now()
+        castTime: Date.now(),
+        soundKey: asset.soundKey,
+        casterName: caster.name
       };
 
       setArenaEffects((prev) => [...prev, newFx]);
-      if (asset.soundEffect) {
-        soundCatalog.play(asset.soundEffect, 0.8);
+      if (asset.soundKey) {
+        soundCatalog.play(asset.soundKey, 0.8);
       } else {
         soundCatalog.play(action.isHeal ? 'radiant_heal' : 'sword_slash', 0.75);
       }
@@ -2032,7 +2085,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             <Rect
               width={ARENA_WIDTH}
               height={ARENA_HEIGHT}
-              fill="#09090b"
+              fill="#1c1917"
               stroke="#f59e0b"
               strokeWidth={4}
               cornerRadius={12}
@@ -2044,16 +2097,18 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                 height={ARENA_HEIGHT}
               />
             )}
-            <GridLayer
-              width={ARENA_WIDTH}
-              height={ARENA_HEIGHT}
-              gridSize={ARENA_GRID_SIZE}
-              gridOffsetX={0}
-              gridOffsetY={0}
-              gridOpacity={0.35}
-              gridVisible={true}
-            />
           </Layer>
+
+          {/* 1-Inch Tactical Grid Layer (Direct child of Stage) */}
+          <GridLayer
+            mapWidth={ARENA_WIDTH}
+            mapHeight={ARENA_HEIGHT}
+            gridSize={ARENA_GRID_SIZE}
+            gridOffsetX={0}
+            gridOffsetY={0}
+            gridOpacity={0.38}
+            stageScale={stageScale}
+          />
 
           {/* Arena Tokens Layer */}
           <Layer>
