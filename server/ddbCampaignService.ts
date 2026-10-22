@@ -3,6 +3,7 @@ import { getDdbHeaders, getDdbAuthHeaders } from './ddbService';
 import { Character } from '../src/types/character';
 import { DdbGameLogDaemon } from './ddbGameLogDaemon';
 import { findJb2aAsset } from '../src/effects/db/jb2aRegistry';
+import { computeUpcastFormula, HudUpcastOption } from '../src/types/hud';
 
 export interface DdbCampaignSummary {
   id: string;
@@ -1498,10 +1499,11 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
     const thisSpellAttack = profBonus + thisSpellMod;
     const thisSpellSaveDc = 8 + profBonus + thisSpellMod;
 
-    // Extract Damage or Healing from def.modifiers
+    // Extract Damage or Healing from def.modifiers + Higher-Level Upcast Scaling
     let damageFormula: string | undefined;
     let damageType: string | undefined;
     let isHeal = lowerName.includes('cure') || lowerName.includes('heal') || lowerName.includes('restoration') || lowerName.includes('revivify') || lowerName.includes('aid');
+    let perSlotDice: { count: number; sides: number; fixed?: number } | null = null;
 
     if (Array.isArray(def.modifiers)) {
       for (const m of def.modifiers) {
@@ -1514,6 +1516,14 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
             damageType = m.subType ? String(m.subType).toLowerCase() : undefined;
             if (m.usePrimaryStat) {
               damageFormula = `${damageFormula}${thisSpellMod >= 0 ? ` + ${thisSpellMod}` : ` - ${Math.abs(thisSpellMod)}`}`;
+            }
+          }
+          if (!perSlotDice && m.atHigherLevels?.higherLevelDefinitions?.length) {
+            const hDef = m.atHigherLevels.higherLevelDefinitions[0];
+            if (hDef?.dice?.diceCount && hDef?.dice?.diceValue) {
+              perSlotDice = { count: hDef.dice.diceCount, sides: hDef.dice.diceValue, fixed: hDef.dice.fixedValue || 0 };
+            } else if (typeof hDef?.value === 'number' && hDef.value > 0) {
+              perSlotDice = { count: 0, sides: 0, fixed: hDef.value };
             }
           }
         } else if (
@@ -1529,14 +1539,28 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
               : rawDice;
             damageType = m.subType === 'temporary-hit-points' ? 'temp hp' : 'healing';
           }
+          if (!perSlotDice && m.atHigherLevels?.higherLevelDefinitions?.length) {
+            const hDef = m.atHigherLevels.higherLevelDefinitions[0];
+            if (hDef?.dice?.diceCount && hDef?.dice?.diceValue) {
+              perSlotDice = { count: hDef.dice.diceCount, sides: hDef.dice.diceValue, fixed: hDef.dice.fixedValue || 0 };
+            } else if (typeof hDef?.value === 'number' && hDef.value > 0) {
+              perSlotDice = { count: 0, sides: 0, fixed: hDef.value };
+            }
+          }
         }
       }
     }
 
-    // Fallback healing formula if not found in modifiers
+    // Fallback healing/damage formula if not found in modifiers
     if (isHeal && !damageFormula) {
       if (lowerName.includes('healing word')) damageFormula = `1d4 + ${thisSpellMod}`;
       else if (lowerName.includes('cure wounds')) damageFormula = `1d8 + ${thisSpellMod}`;
+    } else if (!damageFormula && lowerName.includes('magic missile')) {
+      damageFormula = '3d4 + 3';
+      damageType = 'force';
+    } else if (!damageFormula && lowerName.includes('scorching ray')) {
+      damageFormula = '6d6';
+      damageType = 'fire';
     }
 
     const hitBonus = def.requiresAttackRoll ? `+${thisSpellAttack}` : undefined;
@@ -1563,8 +1587,33 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
       ? `${def.duration.durationType === 'Concentration' ? 'Concentration, up to ' : ''}${def.duration.durationInterval ? `${def.duration.durationInterval} ` : ''}${def.duration.durationUnit || def.duration.durationType || 'Instantaneous'}`.trim()
       : undefined;
     const higherLevelsText = def.atHigherLevels?.higherLevelDefinitions?.length
-      ? def.atHigherLevels.higherLevelDefinitions.map((h: any) => h.description || h.dice?.diceString).filter(Boolean).join(' ')
+      ? def.atHigherLevels.higherLevelDefinitions.map((h: any) => h.description || h.details || h.dice?.diceString).filter(Boolean).join(' ')
       : undefined;
+
+    // Determine if this leveled spell supports upcasting (Level 1..8)
+    const canUpcast = level >= 1 && level <= 8 && Boolean(
+      def.canCastAtHigherLevel ||
+      perSlotDice ||
+      higherLevelsText ||
+      cleanDesc.toLowerCase().includes('at higher levels') ||
+      cleanDesc.toLowerCase().includes('using ahigher-level') ||
+      cleanDesc.toLowerCase().includes('using a spell slot of') ||
+      Boolean(damageFormula)
+    );
+
+    let upcastOptions: HudUpcastOption[] | undefined;
+    if (canUpcast) {
+      upcastOptions = [];
+      for (let sl = level; sl <= 9; sl++) {
+        const scaled = computeUpcastFormula(damageFormula, level, sl, name, perSlotDice);
+        upcastOptions.push({
+          slotLevel: sl,
+          damageFormula: scaled.damageFormula,
+          bonusEffect: scaled.bonusEffect,
+          summaryLabel: scaled.summaryLabel
+        });
+      }
+    }
 
     const hudSpell: any = {
       id: `spell-${idx}-${def.id || idx}`,
@@ -1580,6 +1629,8 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
       duration: durationText,
       components: componentsText,
       atHigherLevels: higherLevelsText,
+      canUpcast,
+      upcastOptions,
       hitBonus,
       saveDc,
       saveAbility,

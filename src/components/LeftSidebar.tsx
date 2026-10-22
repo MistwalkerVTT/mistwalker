@@ -272,6 +272,7 @@ interface LeftSidebarProps {
   onReturnHome?: () => void;
   isAtHome?: boolean;
   onPromptRollInitiative?: () => void;
+  onOpenCriticalHitsModal?: () => void;
 }
 
 type GroupMenuId = 'maps' | 'zones' | 'fog-grid' | 'lighting' | 'combat' | 'fx' | 'spells' | 'tokens' | 'dice' | 'ai' | 'help';
@@ -281,6 +282,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   onReturnHome,
   isAtHome,
   onPromptRollInitiative,
+  onOpenCriticalHitsModal,
   activeMapId,
   liveMapId,
   onForceSync,
@@ -2860,13 +2862,37 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                 </p>
               </div>
 
-              {/* Critical Screen Shake */}
-              <div className="flex flex-col gap-2 pt-1 border-t border-zinc-800">
-                <span className="text-[10px] uppercase font-bold font-mono text-zinc-400">Action FX</span>
+              {/* Critical Hits & Screen Shake FX */}
+              <div className="flex flex-col gap-2 pt-2 border-t border-zinc-800">
+                <span className="text-[10px] uppercase font-bold font-mono text-zinc-400">Critical Hits & FX</span>
+                
+                {/* Critical Hits Table Reference Modal Trigger */}
+                <button
+                  id="btn-open-critical-hits-table"
+                  type="button"
+                  onClick={() => {
+                    if (onOpenCriticalHitsModal) {
+                      onOpenCriticalHitsModal();
+                    }
+                  }}
+                  className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-red-600/25 via-rose-600/20 to-amber-600/20 hover:from-red-600/35 hover:to-amber-600/30 border border-red-500/50 hover:border-red-400 text-red-200 hover:text-white text-xs font-bold transition-all flex items-center justify-between shadow-md shadow-red-950/30 cursor-pointer active:scale-[0.98]"
+                  title="Open Critical Hits Revisited Reference Tables (Damage Types, Injuries, Insanity)"
+                >
+                  <span className="flex items-center gap-2">
+                    <Skull className="w-4 h-4 text-red-400 animate-pulse" />
+                    <span>Critical Hits Table</span>
+                  </span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-mono font-bold bg-red-500/30 text-red-300 border border-red-500/40">
+                    d20 CRIT
+                  </span>
+                </button>
+
+                {/* Critical Screen Shake */}
                 <button
                   id="btn-trigger-shake-flyout"
                   onClick={triggerShake}
-                  className="w-full py-2 px-3 rounded-xl bg-red-500/15 hover:bg-red-500/25 border border-red-500/40 text-red-300 text-xs font-bold transition-all flex items-center justify-between"
+                  className="w-full py-2 px-3 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-300 text-xs font-bold transition-all flex items-center justify-between cursor-pointer"
+                  title="Trigger screen rumble effect across all screens"
                 >
                   <span className="flex items-center gap-2">
                     <Zap className="w-4 h-4 text-red-400" />

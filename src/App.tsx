@@ -45,6 +45,7 @@ import { DdbDiceRollEvent } from './types/dice';
 import { EffectContextMenu, ContextMenuData } from './components/EffectContextMenu';
 import { DndRuleInspectionModal } from './components/DndRuleInspectionModal';
 import { DndRuleEntry, lookupDndRuleDetails } from './data/dndRulesCompendium';
+import { CriticalHitsReferenceModal } from './components/CriticalHitsReferenceModal';
 import {
   VttEffectInstance,
   Jb2aAssetDefinition,
@@ -1764,6 +1765,7 @@ export default function App() {
     });
   }, []);
   const [showCombatTracker, setShowCombatTracker] = useState<boolean>(false);
+  const [showCriticalHitsModal, setShowCriticalHitsModal] = useState<boolean>(false);
   const [autoApplyMonsterDamage, setAutoApplyMonsterDamage] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem('mistwalker_auto_apply_monster_damage');
@@ -7331,6 +7333,7 @@ export default function App() {
           onReturnHome={handleReturnHome}
           isAtHome={!imageFile}
           onPromptRollInitiative={handlePromptRollInitiative}
+          onOpenCriticalHitsModal={() => setShowCriticalHitsModal(true)}
           activeMapId={activeMapId}
           liveMapId={liveMapId}
           onForceSync={handleForceSyncToPlayers}
@@ -9082,6 +9085,7 @@ export default function App() {
           autoApplyMonsterDamage={autoApplyMonsterDamage}
           onToggleAutoApplyMonsterDamage={handleToggleAutoApplyMonsterDamage} 
           onPromptRollInitiative={handlePromptRollInitiative}
+          onOpenCriticalHitsModal={() => setShowCriticalHitsModal(true)}
           combatants={combatTrackerCombatants}
           setCombatants={setCombatTrackerCombatants}
           round={combatTrackerRound}
@@ -10452,6 +10456,20 @@ export default function App() {
           onClose={() => setInspectedRuleEntry(null)}
         />
       )}
+
+      {/* Critical Hits Revisited Table Modal (Damage Types, Injuries, Insanity) */}
+      <CriticalHitsReferenceModal
+        isOpen={showCriticalHitsModal}
+        onClose={() => setShowCriticalHitsModal(false)}
+        onRoll3dDice={(diceEvent) => {
+          if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+            (window as any).__mistwalkerRoll3d(diceEvent);
+          }
+          if (socketRef.current?.connected) {
+            socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', diceEvent);
+          }
+        }}
+      />
 
       <EffectContextMenu
         data={effectContextMenu?.data || null}

@@ -23,7 +23,7 @@ import {
   Lock,
   Users
 } from 'lucide-react';
-import { HudCharacterData, HudActionItem, HudActionCategory } from '../types/hud';
+import { HudCharacterData, HudActionItem, HudActionCategory, computeUpcastFormula } from '../types/hud';
 import { findJb2aAsset } from '../effects/db/jb2aRegistry';
 import { toast } from 'sonner';
 
@@ -952,12 +952,34 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
       {/* DESKTOP D&D BEYOND TACTICAL CHARACTER SHEET HUD (>= 768px)                */}
       {/* ========================================================================= */}
       {!isDockMinimizedWhileAiming && (
-        <div className="hidden md:flex pointer-events-auto flex-col w-full max-w-5xl rounded-2xl bg-zinc-950/95 backdrop-blur-xl border border-zinc-800 shadow-[0_12px_40px_rgba(0,0,0,0.9)] overflow-hidden">
+        <div className="relative hidden md:flex pointer-events-auto flex-col w-full max-w-5xl rounded-2xl bg-zinc-950/95 backdrop-blur-xl border border-zinc-800 shadow-[0_12px_40px_rgba(0,0,0,0.9)] overflow-hidden">
         {/* Top Crimson/Amber D&D Beyond Accent Trim */}
         <div className="h-0.5 w-full bg-gradient-to-r from-red-600 via-amber-500 to-red-600" />
 
+        {/* Top-Right Corner Minimize / Expand Button */}
+        <button
+          type="button"
+          onClick={() => setIsTrayCollapsed(prev => !prev)}
+          className={`absolute top-2.5 right-3 z-20 p-1.5 rounded-xl transition-all cursor-pointer flex items-center justify-center ${
+            isTrayCollapsed
+              ? 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/50 px-2.5 shadow-sm shadow-amber-500/10'
+              : 'bg-zinc-950/90 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 hover:border-zinc-700'
+          }`}
+          title={isTrayCollapsed ? 'Expand Character Action Sheet' : 'Minimize Character Action Sheet'}
+          aria-label={isTrayCollapsed ? 'Expand Character Action Sheet' : 'Minimize Character Action Sheet'}
+        >
+          {isTrayCollapsed ? (
+            <>
+              <ChevronUp className="w-4 h-4 text-amber-400 animate-pulse" />
+              <span className="text-xs font-mono font-bold text-amber-300">Actions</span>
+            </>
+          ) : (
+            <ChevronDown className="w-4 h-4" />
+          )}
+        </button>
+
         {/* 1. HEADER BAR: CHARACTER IDENTITY, DDB STAT BLOCKS, SEARCH & CONTROLS */}
-        <div className="flex items-center justify-between gap-3 px-4 py-2.5 bg-zinc-900/70 border-b border-zinc-800/90 flex-wrap">
+        <div className={`flex items-center justify-between gap-3 px-4 py-2.5 ${isTrayCollapsed ? 'pr-28' : 'pr-14'} bg-zinc-900/70 border-b border-zinc-800/90 flex-wrap`}>
           {/* Left: Portrait + Name + Class/Level */}
           <div className="flex items-center gap-3 min-w-0">
             <div className="relative w-11 h-11 rounded-xl overflow-hidden border border-zinc-700 bg-zinc-900 shrink-0 shadow-md">
@@ -1181,25 +1203,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
               </button>
             )}
 
-            <button
-              type="button"
-              onClick={() => setIsTrayCollapsed(prev => !prev)}
-              className={`p-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
-                isTrayCollapsed
-                  ? 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/50 px-2.5 shadow-sm shadow-amber-500/10'
-                  : 'bg-zinc-950 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800'
-              }`}
-              title={isTrayCollapsed ? 'Expand Character Action Sheet' : 'Minimize Character Action Sheet'}
-            >
-              {isTrayCollapsed ? (
-                <>
-                  <ChevronUp className="w-4 h-4 text-amber-400 animate-pulse" />
-                  <span className="text-xs font-mono font-bold text-amber-300">Actions</span>
-                </>
-              ) : (
-                <ChevronDown className="w-4 h-4" />
-              )}
-            </button>
+
           </div>
         </div>
 

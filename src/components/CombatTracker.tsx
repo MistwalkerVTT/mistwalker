@@ -40,6 +40,7 @@ interface Props {
   autoApplyMonsterDamage?: boolean;
   onToggleAutoApplyMonsterDamage?: (enabled: boolean) => void;
   onPromptRollInitiative?: () => void;
+  onOpenCriticalHitsModal?: () => void;
 }
 
 export const CombatTracker = React.memo(function CombatTracker({
@@ -58,7 +59,8 @@ export const CombatTracker = React.memo(function CombatTracker({
   onOpenConditionReference,
   autoApplyMonsterDamage = true,
   onToggleAutoApplyMonsterDamage,
-  onPromptRollInitiative
+  onPromptRollInitiative,
+  onOpenCriticalHitsModal
 }: Props) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [isConfirmingClear, setIsConfirmingClear] = useState(false);
@@ -348,6 +350,17 @@ export const CombatTracker = React.memo(function CombatTracker({
               >
                 <HeartCrack className={`w-3.5 h-3.5 ${autoApplyMonsterDamage ? 'text-rose-400' : 'text-zinc-500'}`} />
                 <span>Auto Damage: {autoApplyMonsterDamage ? 'ON' : 'OFF'}</span>
+              </button>
+            )}
+            {onOpenCriticalHitsModal && (
+              <button
+                type="button"
+                onClick={onOpenCriticalHitsModal}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-950/40 border border-red-500/40 hover:bg-red-900/50 hover:border-red-400 text-red-200 hover:text-white rounded-xl text-xs font-mono font-bold transition-all cursor-pointer shadow-sm"
+                title="Open Critical Hits Revisited Reference Tables"
+              >
+                <Skull className="w-3.5 h-3.5 text-red-400" />
+                <span>Crit Tables</span>
               </button>
             )}
             {onPromptRollInitiative && (
