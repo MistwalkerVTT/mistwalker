@@ -4158,30 +4158,50 @@ export default function App() {
     const rotation = Math.atan2(dy, dx) * (180 / Math.PI);
     const isTrajectory = (activeEquippedAsset.paradigm === 'projectile' || activeEquippedAsset.paradigm === 'ray') ||
                          (Boolean(activeEquippedAsset.projectileWebm) && dist > 25);
+    const lowerAssetName = activeEquippedAsset.name.toLowerCase();
+    const isCasterSelfAura = Boolean(
+      activeEquippedAsset.targetType === 'aura' ||
+      activeEquippedAsset.targetType === 'self' ||
+      ['spirit_guardians', 'aura_of_vitality', 'aura_of_life', 'aura_of_purity', 'crusaders_mantle', 'holy_aura', 'circle_of_power', 'detect_magic', 'shield', 'armor_of_agathys', 'fire_shield', 'shadow_of_moil', 'ashardalons_stride', 'twilight_sanctuary'].includes(activeEquippedAsset.id) ||
+      ['spirit guardians', 'aura of vitality', 'aura of life', 'aura of purity', 'crusader\'s mantle', 'holy aura', 'circle of power', 'detect magic', 'armor of agathys', 'fire shield', 'shadow of moil', 'ashardalon\'s stride', 'twilight sanctuary'].some(k => lowerAssetName.includes(k))
+    );
+
     const isAuraOrBuff = Boolean(
+      isCasterSelfAura ||
       activeEquippedAsset.paradigm === 'aura' ||
       activeEquippedAsset.shape === 'aura' ||
-      activeEquippedAsset.isPersistent ||
       activeEquippedAsset.id === 'shield_of_faith' ||
       activeEquippedAsset.id === 'sanctuary' ||
       activeEquippedAsset.id === 'shield' ||
       activeEquippedAsset.id === 'bless' ||
       activeEquippedAsset.id === 'mage_armor' ||
-      activeEquippedAsset.name.toLowerCase().includes('shield of faith') ||
-      activeEquippedAsset.name.toLowerCase().includes('sanctuary') ||
-      activeEquippedAsset.name.toLowerCase().includes('bless')
+      ['shield of faith', 'sanctuary', 'bless', 'mage armor', 'barkskin', 'warding bond', 'hunter\'s mark'].some(k => lowerAssetName.includes(k))
     );
 
+    const selectedToken = selectedTokenIds.length > 0 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
     const hitToken = isAuraOrBuff ? (
       tokens.find(t => {
         const tRad = ((t.size || 1) * gridSize) / 2;
         const tcX = (t.x ?? 0) + tRad;
         const tcY = (t.y ?? 0) + tRad;
         return Math.hypot(target.x - tcX, target.y - tcY) <= tRad + 15;
-      }) || null
+      }) ||
+      selectedToken ||
+      tokens.find(t => {
+        const tRad = ((t.size || 1) * gridSize) / 2;
+        const tcX = (t.x ?? 0) + tRad;
+        const tcY = (t.y ?? 0) + tRad;
+        return Math.hypot(origin.x - tcX, origin.y - tcY) <= tRad + 15;
+      }) ||
+      tokens[0] ||
+      null
     ) : null;
 
+    const hitTokenRadius = hitToken ? (((hitToken.size || 1) * gridSize) / 2) : 0;
     const isPointAoe = activeEquippedAsset.paradigm === 'point' || activeEquippedAsset.paradigm === 'aura';
+    const lockedPos = hitToken
+      ? { x: (hitToken.x ?? 0) + hitTokenRadius, y: (hitToken.y ?? 0) + hitTokenRadius }
+      : (isPointAoe ? target : origin);
 
     const newEffect: VttEffectInstance = {
       id: `eff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -4194,12 +4214,12 @@ export default function App() {
       loopVideoUrl: activeEquippedAsset.loopWebm,
       thumbUrl: activeEquippedAsset.thumb,
       paradigm: isTrajectory ? 'projectile' : (isAuraOrBuff ? 'aura' : activeEquippedAsset.paradigm),
-      x: isTrajectory ? origin.x : (isPointAoe ? target.x : origin.x),
-      y: isTrajectory ? origin.y : (isPointAoe ? target.y : origin.y),
+      x: isTrajectory ? origin.x : lockedPos.x,
+      y: isTrajectory ? origin.y : lockedPos.y,
       originX: origin.x,
       originY: origin.y,
-      targetX: target.x,
-      targetY: target.y,
+      targetX: hitToken ? lockedPos.x : target.x,
+      targetY: hitToken ? lockedPos.y : target.y,
       sizeFt: activeEquippedAsset.defaultSizeFt,
       rotation: (activeEquippedAsset.paradigm === 'cone' || activeEquippedAsset.paradigm === 'line') ? rotation : 0,
       opacity: 1.0,
@@ -4207,6 +4227,8 @@ export default function App() {
       isPersistent: isAuraOrBuff || Boolean(activeEquippedAsset.isPersistent),
       loop: isAuraOrBuff || Boolean(activeEquippedAsset.isPersistent),
       attachedTokenId: hitToken ? hitToken.id : undefined,
+      ownerId: hitToken?.id || selectedToken?.id,
+      casterName: selectedToken?.name || hitToken?.name,
       castTime: Date.now(),
       durationMs: isTrajectory ? 2500 : 5000,
       soundKey: activeEquippedAsset.soundKey,
@@ -4321,6 +4343,9 @@ export default function App() {
           blendMode: matchedAsset.blendMode,
           isPersistent: matchedAsset.isPersistent,
           loop: matchedAsset.isPersistent,
+          attachedTokenId: singleToken.id,
+          ownerId: singleToken.id,
+          casterName: singleToken.name,
           castTime: Date.now(),
           durationMs: 4000,
           soundKey: matchedAsset.soundKey,
@@ -4642,8 +4667,23 @@ export default function App() {
 
   const handleQuickPlaceAsset = useCallback((asset: Jb2aAssetDefinition) => {
     const dims = getMapDimensions();
-    const centerX = dims.width / 2;
-    const centerY = dims.height / 2;
+    let centerX = dims.width / 2;
+    let centerY = dims.height / 2;
+
+    const isAuraOrBuff = Boolean(
+      asset.paradigm === 'aura' ||
+      asset.shape === 'aura' ||
+      asset.targetType === 'aura' ||
+      asset.targetType === 'self'
+    );
+    const anchorToken = (selectedTokenIds.length > 0 ? tokens.find(t => t.id === selectedTokenIds[0]) : null) ||
+      (isAuraOrBuff && tokens.length > 0 ? tokens[0] : null);
+
+    if (anchorToken) {
+      const tokenRadius = ((anchorToken.size || 1) * gridSize) / 2;
+      centerX = anchorToken.x + tokenRadius;
+      centerY = anchorToken.y + tokenRadius;
+    }
 
     const newEffect: VttEffectInstance = {
       id: `eff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -4662,6 +4702,9 @@ export default function App() {
       blendMode: asset.blendMode,
       isPersistent: asset.isPersistent,
       loop: asset.isPersistent,
+      attachedTokenId: (isAuraOrBuff && anchorToken) ? anchorToken.id : undefined,
+      ownerId: anchorToken?.id,
+      casterName: anchorToken?.name,
       castTime: Date.now(),
       durationMs: 5000,
       soundKey: asset.soundKey,
@@ -4674,9 +4717,11 @@ export default function App() {
       socketRef.current.emit('EFFECT_SPAWN', newEffect);
     }
     toast.success(`Cast ${asset.name}!`, {
-      description: `${asset.defaultSizeFt}ft ${asset.shape} placed at map center.`
+      description: anchorToken
+        ? `${asset.defaultSizeFt}ft ${asset.shape} locked onto ${anchorToken.name}.`
+        : `${asset.defaultSizeFt}ft ${asset.shape} placed at map center.`
     });
-  }, [getMapDimensions]);
+  }, [getMapDimensions, selectedTokenIds, tokens, gridSize]);
 
   const handleClearEffects = useCallback(() => {
     setEffects([]);
@@ -8367,11 +8412,27 @@ export default function App() {
                     }}
                     onDragMove={(e: any) => {
                       if (e) e.cancelBubble = true;
+                      const rawX = e.target.x();
+                      const rawY = e.target.y();
+                      const startPos = dragStartPositionsRef.current[token.id] || { x: token.x, y: token.y };
+                      const deltaX = rawX - startPos.x;
+                      const deltaY = rawY - startPos.y;
+
+                      if (selectedTokenIds.length > 1 && selectedTokenIds.includes(token.id)) {
+                        setTokens(prev => prev.map(t => {
+                          if (selectedTokenIds.includes(t.id)) {
+                            const init = dragStartPositionsRef.current[t.id] || { x: t.x, y: t.y };
+                            return { ...t, x: init.x + deltaX, y: init.y + deltaY };
+                          }
+                          return t;
+                        }));
+                      } else {
+                        setTokens(prev => prev.map(t => t.id === token.id ? { ...t, x: rawX, y: rawY } : t));
+                      }
+
                       const now = Date.now();
                       if (now - lastTokenMoveEmitTimeRef.current > 35) {
                         lastTokenMoveEmitTimeRef.current = now;
-                        const rawX = e.target.x();
-                        const rawY = e.target.y();
                         if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) {
                           socketRef.current.emit('MOVE_TOKEN', { id: token.id, x: rawX, y: rawY });
                         }

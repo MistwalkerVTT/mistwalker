@@ -3244,29 +3244,45 @@ export default function PlayerView() {
       return;
     }
 
+    const lowerAssetName = activeEquippedAsset.name.toLowerCase();
+    const isCasterSelfAura = Boolean(
+      activeEquippedAsset.targetType === 'aura' ||
+      activeEquippedAsset.targetType === 'self' ||
+      activeTargetingAction?.rangeFt === 0 ||
+      ['spirit_guardians', 'aura_of_vitality', 'aura_of_life', 'aura_of_purity', 'crusaders_mantle', 'holy_aura', 'circle_of_power', 'detect_magic', 'shield', 'armor_of_agathys', 'fire_shield', 'shadow_of_moil', 'ashardalons_stride', 'twilight_sanctuary'].includes(activeEquippedAsset.id) ||
+      ['spirit guardians', 'aura of vitality', 'aura of life', 'aura of purity', 'crusader\'s mantle', 'holy aura', 'circle of power', 'detect magic', 'armor of agathys', 'fire shield', 'shadow of moil', 'ashardalon\'s stride', 'twilight sanctuary'].some(k => lowerAssetName.includes(k))
+    );
+
     const isAuraOrBuff = Boolean(
+      isCasterSelfAura ||
       activeEquippedAsset.paradigm === 'aura' ||
       activeEquippedAsset.shape === 'aura' ||
-      activeEquippedAsset.isPersistent ||
       activeEquippedAsset.id === 'shield_of_faith' ||
       activeEquippedAsset.id === 'sanctuary' ||
       activeEquippedAsset.id === 'shield' ||
       activeEquippedAsset.id === 'bless' ||
       activeEquippedAsset.id === 'mage_armor' ||
-      activeEquippedAsset.name.toLowerCase().includes('shield of faith') ||
-      activeEquippedAsset.name.toLowerCase().includes('sanctuary') ||
-      activeEquippedAsset.name.toLowerCase().includes('bless')
+      ['shield of faith', 'sanctuary', 'bless', 'mage armor', 'barkskin', 'warding bond', 'hunter\'s mark'].some(k => lowerAssetName.includes(k))
     );
 
-    // Find if target point hits any token on the board
+    // Find which token the aura/buff locks onto (caster for self-auras, or clicked/nearest token for targeted buffs)
     const hitToken = isAuraOrBuff ? (
-      tokens.find(t => {
-        const tRad = ((t.size || 1) * gridSize) / 2;
-        const tcX = (t.x ?? 0) + tRad;
-        const tcY = (t.y ?? 0) + tRad;
-        return Math.hypot(target.x - tcX, target.y - tcY) <= tRad + 15;
-      }) || claimedToken || null
+      isCasterSelfAura && claimedToken
+        ? claimedToken
+        : (
+            tokens.find(t => {
+              const tRad = ((t.size || 1) * gridSize) / 2;
+              const tcX = (t.x ?? 0) + tRad;
+              const tcY = (t.y ?? 0) + tRad;
+              return Math.hypot(target.x - tcX, target.y - tcY) <= tRad + 15;
+            }) || claimedToken || tokens[0] || null
+          )
     ) : null;
+
+    const hitTokenRadius = hitToken ? (((hitToken.size || 1) * gridSize) / 2) : 0;
+    const lockedPos = hitToken
+      ? { x: (hitToken.x ?? 0) + hitTokenRadius, y: (hitToken.y ?? 0) + hitTokenRadius }
+      : (isPointAoe ? target : origin);
 
     const aimedAction = activeTargetingAction;
     const newEffect: VttEffectInstance = {
@@ -3280,12 +3296,12 @@ export default function PlayerView() {
       loopVideoUrl: activeEquippedAsset.loopWebm,
       thumbUrl: activeEquippedAsset.thumb,
       paradigm: isTrajectory ? 'projectile' : (isAuraOrBuff ? 'aura' : activeEquippedAsset.paradigm),
-      x: isTrajectory ? origin.x : (isPointAoe ? target.x : origin.x),
-      y: isTrajectory ? origin.y : (isPointAoe ? target.y : origin.y),
+      x: isTrajectory ? origin.x : lockedPos.x,
+      y: isTrajectory ? origin.y : lockedPos.y,
       originX: origin.x,
       originY: origin.y,
-      targetX: target.x,
-      targetY: target.y,
+      targetX: hitToken ? lockedPos.x : target.x,
+      targetY: hitToken ? lockedPos.y : target.y,
       sizeFt: activeEquippedAsset.defaultSizeFt,
       rotation: (activeEquippedAsset.paradigm === 'cone' || activeEquippedAsset.paradigm === 'line') ? rotation : 0,
       opacity: 1.0,
@@ -3431,9 +3447,17 @@ export default function PlayerView() {
     let posY = targetMapH / 2;
 
     if (claimedToken) {
-      posX = claimedToken.x + (gridSize / 2);
-      posY = claimedToken.y + (gridSize / 2);
+      const tokenRadius = ((claimedToken.size || 1) * gridSize) / 2;
+      posX = claimedToken.x + tokenRadius;
+      posY = claimedToken.y + tokenRadius;
     }
+
+    const isAuraOrBuff = Boolean(
+      asset.paradigm === 'aura' ||
+      asset.shape === 'aura' ||
+      asset.targetType === 'aura' ||
+      asset.targetType === 'self'
+    );
 
     const newEffect: VttEffectInstance = {
       id: `eff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -3452,6 +3476,7 @@ export default function PlayerView() {
       blendMode: asset.blendMode,
       isPersistent: asset.isPersistent,
       loop: asset.isPersistent,
+      attachedTokenId: (isAuraOrBuff && claimedToken) ? claimedToken.id : undefined,
       castTime: Date.now(),
       durationMs: 5000,
       soundKey: asset.soundKey,
@@ -3598,10 +3623,13 @@ export default function PlayerView() {
           blendMode: matchedAsset.blendMode,
           isPersistent: matchedAsset.isPersistent,
           loop: matchedAsset.isPersistent,
+          attachedTokenId: claimedToken.id,
           castTime: Date.now(),
           durationMs: 4000,
           soundKey: matchedAsset.soundKey,
-          color: matchedAsset.color
+          color: matchedAsset.color,
+          ownerId: claimedToken.id,
+          casterName: claimedToken.name || 'Hero'
         };
         setEffects(prev => [...prev, newEffect]);
         if (matchedAsset.soundKey) soundCatalog.play(matchedAsset.soundKey);
@@ -3924,45 +3952,58 @@ export default function PlayerView() {
     // 2. Play JB2A Spell Animation & Sound
     const asset = activeEquippedAsset || (action.jb2aAssetId ? JB2A_REGISTRY.find(a => a.id === action.jb2aAssetId) : undefined) || findJb2aAsset(action.name);
     if (asset) {
+      const lowerActName = action.name.toLowerCase();
+      const isCasterSelfAura = Boolean(
+        asset.targetType === 'aura' ||
+        asset.targetType === 'self' ||
+        action.rangeFt === 0 ||
+        ['spirit_guardians', 'aura_of_vitality', 'aura_of_life', 'aura_of_purity', 'crusaders_mantle', 'holy_aura', 'circle_of_power', 'detect_magic', 'shield', 'armor_of_agathys', 'fire_shield', 'shadow_of_moil', 'ashardalons_stride', 'twilight_sanctuary'].includes(asset.id) ||
+        ['spirit guardians', 'aura of vitality', 'aura of life', 'aura of purity', 'crusader\'s mantle', 'holy aura', 'circle of power', 'detect magic', 'armor of agathys', 'fire shield', 'shadow of moil', 'ashardalon\'s stride', 'twilight sanctuary'].some(k => lowerActName.includes(k))
+      );
+
       const isAuraOrBuff = Boolean(
+        isCasterSelfAura ||
         asset.paradigm === 'aura' ||
         asset.shape === 'aura' ||
-        asset.isPersistent ||
         asset.id === 'shield_of_faith' ||
         asset.id === 'sanctuary' ||
         asset.id === 'shield' ||
         asset.id === 'bless' ||
         asset.id === 'mage_armor' ||
-        action.name.toLowerCase().includes('shield of faith') ||
-        action.name.toLowerCase().includes('sanctuary') ||
-        action.name.toLowerCase().includes('shield') ||
-        action.name.toLowerCase().includes('bless') ||
-        action.name.toLowerCase().includes('ward')
+        lowerActName.includes('shield of faith') ||
+        lowerActName.includes('sanctuary') ||
+        lowerActName.includes('shield') ||
+        lowerActName.includes('bless') ||
+        lowerActName.includes('ward')
       );
+
+      const auraLockedToken = isCasterSelfAura ? caster : targetToken;
+      const auraLockedCenter = isCasterSelfAura ? casterCenter : targetCenter;
+      const isAuraSelf = auraLockedToken.id === caster.id;
 
       const isTrajectory = !isAuraOrBuff && ((asset.paradigm === 'projectile' || asset.paradigm === 'ray') || Boolean(asset.projectileWebm)) && distPx > 25;
       const newEffect: VttEffectInstance = {
         id: `eff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-        name: isSelfTarget ? asset.name : `${asset.name} (${targetToken.name})`,
-        label: isSelfTarget ? asset.label : `${asset.label} on ${targetToken.name}`,
+        name: (isAuraOrBuff ? isAuraSelf : isSelfTarget) ? asset.name : `${asset.name} (${auraLockedToken.name})`,
+        label: (isAuraOrBuff ? isAuraSelf : isSelfTarget) ? asset.label : `${asset.label} on ${auraLockedToken.name}`,
         assetKey: asset.id,
         videoUrl: (isTrajectory && asset.projectileWebm) ? asset.projectileWebm : asset.webm,
         loopVideoUrl: asset.loopWebm,
         thumbUrl: asset.thumb,
         paradigm: isTrajectory ? 'projectile' : (isAuraOrBuff ? 'aura' : asset.paradigm),
-        x: isTrajectory ? casterCenter.x : targetCenter.x,
-        y: isTrajectory ? casterCenter.y : targetCenter.y,
+        x: isTrajectory ? casterCenter.x : (isAuraOrBuff ? auraLockedCenter.x : targetCenter.x),
+        y: isTrajectory ? casterCenter.y : (isAuraOrBuff ? auraLockedCenter.y : targetCenter.y),
         originX: casterCenter.x,
         originY: casterCenter.y,
-        targetX: targetCenter.x,
-        targetY: targetCenter.y,
+        targetX: isAuraOrBuff ? auraLockedCenter.x : targetCenter.x,
+        targetY: isAuraOrBuff ? auraLockedCenter.y : targetCenter.y,
         sizeFt: asset.defaultSizeFt,
         rotation: isTrajectory ? Math.atan2(targetCenter.y - casterCenter.y, targetCenter.x - casterCenter.x) * (180 / Math.PI) : 0,
         opacity: 1.0,
         blendMode: asset.blendMode,
         isPersistent: isAuraOrBuff || Boolean(asset.isPersistent),
         loop: isAuraOrBuff || Boolean(asset.isPersistent),
-        attachedTokenId: isAuraOrBuff ? targetToken.id : undefined,
+        attachedTokenId: isAuraOrBuff ? auraLockedToken.id : undefined,
         castTime: Date.now(),
         durationMs: isTrajectory ? 2500 : 5000,
         soundKey: asset.soundKey,

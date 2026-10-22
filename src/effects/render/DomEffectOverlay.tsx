@@ -26,6 +26,100 @@ interface DomEffectOverlayProps {
   onClearTokenAura?: (tokenId: string, auraName?: string) => void;
 }
 
+const AURA_OR_TOKEN_BUFF_KEYWORDS = [
+  'spirit guardians',
+  'aura of vitality',
+  'aura of life',
+  'aura of purity',
+  'crusader\'s mantle',
+  'crusaders mantle',
+  'holy aura',
+  'circle of power',
+  'detect magic',
+  'shield of faith',
+  'sanctuary',
+  'shield',
+  'bless',
+  'mage armor',
+  'armor of agathys',
+  'fire shield',
+  'shadow of moil',
+  'ashardalon\'s stride',
+  'ashardalons stride',
+  'twilight sanctuary',
+  'barkskin',
+  'warding bond',
+  'hunter\'s mark',
+  'hunters mark',
+  'globe of invulnerability',
+  'antilife shell',
+  'antimagic field'
+];
+
+function isAuraOrTokenLockedEffect(effect: VttEffectInstance): boolean {
+  if (effect.attachedTokenId) return true;
+  if (effect.paradigm === 'aura') return true;
+  const lowerName = (effect.name || '').toLowerCase();
+  const lowerKey = (effect.assetKey || '').toLowerCase().replace(/_/g, ' ');
+  return AURA_OR_TOKEN_BUFF_KEYWORDS.some(k => lowerName.includes(k) || lowerKey.includes(k));
+}
+
+function resolveAttachedToken(
+  effect: VttEffectInstance,
+  tokens: any[] | undefined,
+  gridSize: number
+): any | null {
+  if (!tokens || tokens.length === 0) return null;
+
+  if (effect.attachedTokenId) {
+    const byId = tokens.find((t: any) => t.id === effect.attachedTokenId);
+    if (byId) return byId;
+  }
+
+  if (!isAuraOrTokenLockedEffect(effect)) {
+    return null;
+  }
+
+  // Fallback 1: Match by ownerId (token id or token name)
+  if (effect.ownerId) {
+    const ownerLower = String(effect.ownerId).trim().toLowerCase();
+    const byOwner = tokens.find(
+      (t: any) => t.id === effect.ownerId || (t.name && t.name.trim().toLowerCase() === ownerLower)
+    );
+    if (byOwner) return byOwner;
+  }
+
+  // Fallback 2: Match by parenthesized target name in effect.name, e.g. "Shield of Faith (Stavros)"
+  const parenMatch = (effect.name || '').match(/\(([^)]+)\)\s*$/);
+  if (parenMatch && parenMatch[1]) {
+    const targetLower = parenMatch[1].trim().toLowerCase();
+    const byParen = tokens.find((t: any) => t.name && t.name.trim().toLowerCase() === targetLower);
+    if (byParen) return byParen;
+  }
+
+  // Fallback 3: Match by casterName
+  if (effect.casterName) {
+    const casterLower = effect.casterName.trim().toLowerCase();
+    const byCaster = tokens.find((t: any) => t.name && t.name.trim().toLowerCase() === casterLower);
+    if (byCaster) return byCaster;
+  }
+
+  // Fallback 4: Nearest token on the board to the effect's coordinates
+  let nearest: any = null;
+  let bestDist = Infinity;
+  for (const t of tokens) {
+    const tRad = ((t.size || 1) * gridSize) / 2;
+    const cx = (t.x ?? 0) + tRad;
+    const cy = (t.y ?? 0) + tRad;
+    const d = Math.hypot((effect.x ?? 0) - cx, (effect.y ?? 0) - cy);
+    if (d < bestDist) {
+      bestDist = d;
+      nearest = t;
+    }
+  }
+  return nearest;
+}
+
 export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
   effects,
   setEffects,
@@ -309,16 +403,18 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
             );
           }
 
-          // D. Point / Sphere / Circle / Aura (Fireball, Darkness, Fog Cloud, Web, Shield of Faith, Sanctuary)
-          const attachedToken = effect.attachedTokenId ? tokens?.find((t: any) => t.id === effect.attachedTokenId) : null;
+          // D. Point / Sphere / Circle / Aura (Fireball, Darkness, Fog Cloud, Web, Spirit Guardians, Shield of Faith, Sanctuary)
+          const attachedToken = resolveAttachedToken(effect, tokens, gridSize);
           const attachedTokenSize = attachedToken ? (attachedToken.size || 1) : 1;
           const attachedTokenRadius = (attachedTokenSize * gridSize) / 2;
           const posX = attachedToken ? (attachedToken.x ?? 0) + attachedTokenRadius : effect.x;
           const posY = attachedToken ? (attachedToken.y ?? 0) + attachedTokenRadius : effect.y;
-          const effDiameterFt = attachedToken
-            ? Math.max(attachedTokenSize * 5, (effect.sizeFt || 5) * 2)
-            : (sizeFt * 2);
-          const pixelDiameter = (effDiameterFt / 5) * gridSize;
+          const rawSizeFt = effect.sizeFt || 5;
+          const pixelDiameter = attachedToken
+            ? (rawSizeFt >= 10
+                ? (attachedTokenRadius + (rawSizeFt / 5) * gridSize) * 2
+                : Math.max(attachedTokenSize * gridSize * 1.5, ((rawSizeFt * 2) / 5) * gridSize))
+            : ((sizeFt * 2) / 5) * gridSize;
 
           return (
             <video
@@ -358,7 +454,7 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
         {effects.map((effect) => {
           if ((!onDispelEffect && !onInspectEffect) || (!effect.isPersistent && !effect.loop)) return null;
 
-          const attachedToken = effect.attachedTokenId ? tokens?.find((t: any) => t.id === effect.attachedTokenId) : null;
+          const attachedToken = resolveAttachedToken(effect, tokens, gridSize);
           const attachedTokenSize = attachedToken ? (attachedToken.size || 1) : 1;
           const attachedTokenRadius = (attachedTokenSize * gridSize) / 2;
 
@@ -370,10 +466,14 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
             : (effect.sizeFt / 5) * gridSize;
 
           // Vertically stack dispel badges when multiple auras/spells are attached to the same token or position
-          const matchingEffects = effects.filter(e => (e.isPersistent || e.loop) && (
-            (effect.attachedTokenId && e.attachedTokenId === effect.attachedTokenId) ||
-            (!effect.attachedTokenId && !e.attachedTokenId && Math.hypot((e.x ?? 0) - (effect.x ?? 0), (e.y ?? 0) - (effect.y ?? 0)) < 15)
-          ));
+          const matchingEffects = effects.filter(e => {
+            if (!e.isPersistent && !e.loop) return false;
+            const otherAttached = resolveAttachedToken(e, tokens, gridSize);
+            if (attachedToken && otherAttached) {
+              return otherAttached.id === attachedToken.id;
+            }
+            return !attachedToken && !otherAttached && Math.hypot((e.x ?? 0) - (effect.x ?? 0), (e.y ?? 0) - (effect.y ?? 0)) < 15;
+          });
           const stackIdx = matchingEffects.findIndex(e => e.id === effect.id);
           const stackOffset = stackIdx > 0 ? stackIdx * 28 : 0;
 
@@ -460,7 +560,7 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
 
           // Count how many persistent effects are already stacked above this token so we don't overlap
           const attachedEffectsOnToken = effects.filter(
-            e => (e.isPersistent || e.loop) && e.attachedTokenId === token.id
+            e => (e.isPersistent || e.loop) && resolveAttachedToken(e, tokens, gridSize)?.id === token.id
           );
 
           return auras.map((aura, idx) => {
@@ -613,9 +713,52 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
         {hasAimPreview && activeEquippedAsset && aimCurrent && (() => {
           const previewSize = activeEquippedAsset.defaultSizeFt || 20;
 
-          // A. Point / Sphere preview under cursor (Fireball, Fog Cloud, Web, Darkness, etc.)
+          // A. Point / Sphere / Aura preview
           if (activeEquippedAsset.paradigm === 'point' || activeEquippedAsset.shape === 'circle' || activeEquippedAsset.paradigm === 'aura') {
-            const previewDiameter = ((previewSize * 2) / 5) * gridSize;
+            const isAuraAsset = Boolean(
+              activeEquippedAsset.paradigm === 'aura' ||
+              activeEquippedAsset.shape === 'aura' ||
+              activeEquippedAsset.targetType === 'aura' ||
+              activeEquippedAsset.targetType === 'self' ||
+              AURA_OR_TOKEN_BUFF_KEYWORDS.some(k => activeEquippedAsset.name.toLowerCase().includes(k))
+            );
+            const isSelfOrCasterAura = Boolean(
+              activeEquippedAsset.targetType === 'aura' ||
+              activeEquippedAsset.targetType === 'self' ||
+              ['spirit_guardians', 'aura_of_vitality', 'aura_of_life', 'holy_aura', 'detect_magic', 'shield', 'armor_of_agathys'].includes(activeEquippedAsset.id)
+            );
+
+            // For auras, lock the preview to the caster token (or hovered token for targeted buffs) instead of floating on map squares
+            let previewAnchor = isAuraAsset && aimOrigin ? aimOrigin : aimCurrent;
+            let anchorTokenRadius = gridSize / 2;
+            if (isAuraAsset && tokens && tokens.length > 0) {
+              const refPoint = isSelfOrCasterAura && aimOrigin ? aimOrigin : aimCurrent;
+              const matchedTok = tokens.find((t: any) => {
+                const tRad = ((t.size || 1) * gridSize) / 2;
+                const cx = (t.x ?? 0) + tRad;
+                const cy = (t.y ?? 0) + tRad;
+                return Math.hypot(refPoint.x - cx, refPoint.y - cy) <= tRad + 15;
+              }) || (aimOrigin ? tokens.find((t: any) => {
+                const tRad = ((t.size || 1) * gridSize) / 2;
+                const cx = (t.x ?? 0) + tRad;
+                const cy = (t.y ?? 0) + tRad;
+                return Math.hypot(aimOrigin.x - cx, aimOrigin.y - cy) <= tRad + 15;
+              }) : null);
+
+              if (matchedTok) {
+                anchorTokenRadius = ((matchedTok.size || 1) * gridSize) / 2;
+                previewAnchor = {
+                  x: (matchedTok.x ?? 0) + anchorTokenRadius,
+                  y: (matchedTok.y ?? 0) + anchorTokenRadius
+                };
+              }
+            }
+
+            const previewDiameter = isAuraAsset
+              ? (previewSize >= 10
+                  ? (anchorTokenRadius + (previewSize / 5) * gridSize) * 2
+                  : Math.max(anchorTokenRadius * 3, ((previewSize * 2) / 5) * gridSize))
+              : ((previewSize * 2) / 5) * gridSize;
             const previewVideo = activeEquippedAsset.loopWebm || activeEquippedAsset.webm;
             return (
               <video
@@ -628,8 +771,8 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                 preload="auto"
                 style={{
                   position: 'absolute',
-                  left: `${aimCurrent.x}px`,
-                  top: `${aimCurrent.y}px`,
+                  left: `${previewAnchor.x}px`,
+                  top: `${previewAnchor.y}px`,
                   width: `${previewDiameter}px`,
                   height: `${previewDiameter}px`,
                   maxWidth: 'none',

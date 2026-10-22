@@ -27,7 +27,9 @@ const SINGLE_TARGET_IDS = new Set([
 ]);
 
 const CASTER_AURA_IDS = new Set([
-  'spirit_guardians', 'aura_of_vitality', 'aura_of_life', 'holy_aura', 'detect_magic', 'light'
+  'spirit_guardians', 'aura_of_vitality', 'aura_of_life', 'aura_of_purity',
+  'crusaders_mantle', 'holy_aura', 'circle_of_power', 'detect_magic', 'light',
+  'twilight_sanctuary', 'globe_of_invulnerability', 'antilife_shell', 'antimagic_field'
 ]);
 
 export const AimReticle: React.FC<AimReticleProps> = React.memo(({
@@ -234,8 +236,12 @@ export const AimReticle: React.FC<AimReticleProps> = React.memo(({
   }
 
   // 4. Caster-Centered Auras (Spirit Guardians, Aura of Vitality, Aura of Life, Holy Aura, Detect Magic)
-  if (asset.targetType === 'aura' || CASTER_AURA_IDS.has(asset.id)) {
-    const auraRadiusPx = ((asset.defaultSizeFt || 15) / 5) * gridSize;
+  const isCasterAura = asset.targetType === 'aura' ||
+    CASTER_AURA_IDS.has(asset.id) ||
+    ((asset.paradigm === 'aura' || asset.shape === 'aura') && !SINGLE_TARGET_IDS.has(asset.id));
+
+  if (isCasterAura) {
+    const auraRadiusPx = (gridSize / 2) + ((asset.defaultSizeFt || 15) / 5) * gridSize;
     return (
       <Group x={origin.x} y={origin.y} listening={false}>
         <Circle
