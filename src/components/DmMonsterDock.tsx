@@ -44,6 +44,9 @@ interface DmMonsterDockProps {
   onRenameToken?: (newName: string) => void;
   onDuplicateToken?: () => void;
   onDeleteToken?: () => void;
+  elevation?: number;
+  isFlying?: boolean;
+  onUpdateFlight?: (updates: { elevation?: number; isFlying?: boolean }) => void;
 }
 
 export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
@@ -61,7 +64,10 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
   onConsumeSpellSlot,
   onRestoreSpellSlot,
   onUseLegendaryAction,
-  onResetLegendaryActions
+  onResetLegendaryActions,
+  elevation = 0,
+  isFlying = false,
+  onUpdateFlight
 }) => {
   const [activeCategory, setActiveCategory] = useState<DmMonsterActionCategory>('attacks');
   const [selectedSpellLevel, setSelectedSpellLevel] = useState<number | 'all'>('all');
@@ -233,6 +239,63 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
               {hudData.initiativeBonus >= 0 ? `+${hudData.initiativeBonus}` : hudData.initiativeBonus}
             </span>
           </div>
+
+          {/* Flight & Altitude Controls */}
+          {onUpdateFlight && (
+            <div className="flex items-center gap-1 px-2 py-1 rounded-xl bg-zinc-900/90 border border-sky-500/30 text-xs">
+              <button
+                type="button"
+                onClick={() => {
+                  const nextFly = !isFlying;
+                  const nextElev = nextFly && elevation === 0 ? 20 : (!nextFly ? 0 : elevation);
+                  onUpdateFlight({ isFlying: nextFly, elevation: nextElev });
+                }}
+                className={`px-1.5 py-0.5 rounded font-bold text-[10px] transition-all cursor-pointer flex items-center gap-1 ${
+                  isFlying
+                    ? 'bg-sky-500/25 text-sky-300 border border-sky-400/60 shadow-[0_0_8px_rgba(56,189,248,0.35)]'
+                    : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-700'
+                }`}
+                title="Toggle Flying Animation & Spectral Wings"
+              >
+                <span>🪽</span>
+                <span>{isFlying ? 'Flying' : 'Ground'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const nextElev = elevation - 5;
+                  onUpdateFlight({ elevation: nextElev, isFlying: nextElev === 0 ? false : isFlying });
+                }}
+                className="px-1 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] font-bold cursor-pointer"
+                title="Lower Height (-5 ft)"
+              >
+                -5
+              </button>
+              <button
+                type="button"
+                onClick={() => onUpdateFlight({ elevation: 0, isFlying: false })}
+                className={`px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer ${
+                  elevation !== 0
+                    ? 'bg-sky-950/80 text-sky-300 border border-sky-500/40'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+                title="Click to reset height to 0 ft (Grounded)"
+              >
+                {elevation > 0 ? `+${elevation}ft` : `${elevation}ft`}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const nextElev = elevation + 5;
+                  onUpdateFlight({ elevation: nextElev, isFlying: nextElev > 0 ? true : isFlying });
+                }}
+                className="px-1 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-sky-300 text-[10px] font-bold cursor-pointer"
+                title="Raise Height (+5 ft)"
+              >
+                +5
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Right: Collapse & Close */}

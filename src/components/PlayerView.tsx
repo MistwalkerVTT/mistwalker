@@ -109,6 +109,12 @@ import { PlayerHeroDock } from './PlayerHeroDock';
 import { HudCharacterData, HudActionItem } from '../types/hud';
 import { TokenDragRuler, TokenDragState, parseSpeedFt } from './TokenDragRuler';
 import { RoomHotspotLayer } from './RoomHotspotLayer';
+import {
+  computeFlightLiftMetrics,
+  TokenGroundFootprint,
+  TokenAerialOverlay,
+  useTokenFlightAnimation
+} from './TokenFlightElevation';
 
 interface Token {
   id: string;
@@ -143,6 +149,8 @@ interface Token {
   auraPulse?: boolean;
   auras?: TokenAura[];
   speed?: number;
+  elevation?: number;
+  isFlying?: boolean;
   videoUrl?: string;
 }
 
@@ -591,6 +599,37 @@ const PlayerToken = React.memo(({
     return list;
   }, [token.auras, token.auraRadius, token.auraColor, token.auraOpacity, token.auraPulse, token.auraName]);
 
+  // Flight & Elevation 3D lift + 60fps animation refs
+  const elevationFt = Number(token.elevation) || 0;
+  const isFlying = Boolean(token.isFlying);
+  const flightMetrics = useMemo(
+    () => computeFlightLiftMetrics(elevationFt, isFlying, radius),
+    [elevationFt, isFlying, radius]
+  );
+
+  const floatingGroupRef = useRef<any>(null);
+  const shadowRef = useRef<any>(null);
+  const leftWingRef = useRef<any>(null);
+  const rightWingRef = useRef<any>(null);
+  const vortexRingRef = useRef<any>(null);
+  const cloudGroupRef = useRef<any>(null);
+  const shockwaveRef = useRef<any>(null);
+
+  useTokenFlightAnimation({
+    elevation: elevationFt,
+    isFlying,
+    liftOffsetPx: flightMetrics.liftOffsetPx,
+    perspectiveScale: flightMetrics.perspectiveScale,
+    radius,
+    floatingGroupRef,
+    shadowRef,
+    leftWingRef,
+    rightWingRef,
+    vortexRingRef,
+    cloudGroupRef,
+    shockwaveRef
+  });
+
   return (
     <Group
       ref={groupRef}
@@ -748,209 +787,240 @@ const PlayerToken = React.memo(({
         );
       })}
 
-      {/* Halo highlight for claimed token */}
-      <Group visible={isClaimed} listening={false}>
+      {/* 0.5 Ground Shadow, Grid Anchor Ring & 3D Tether Line when Flying / Elevated */}
+      <TokenGroundFootprint
+        elevation={elevationFt}
+        isFlying={isFlying}
+        radius={radius}
+        tierColor={flightMetrics.tierColor}
+        liftOffsetPx={flightMetrics.liftOffsetPx}
+        shadowRef={shadowRef}
+        shockwaveRef={shockwaveRef}
+      />
+
+      {/* Lifted & Animated Token Body Group */}
+      <Group ref={floatingGroupRef}>
+        {/* Halo highlight for claimed token */}
+        <Group visible={isClaimed} listening={false}>
+          <Circle
+            x={radius}
+            y={radius}
+            radius={radius + 6}
+            stroke="#10b981"
+            strokeWidth={3}
+            dash={[6, 4]}
+            shadowColor="#10b981"
+            shadowBlur={10}
+            shadowForStrokeEnabled={false}
+            perfectDrawEnabled={false}
+            listening={false}
+          />
+          <Rect
+            x={radius - 20}
+            y={-18}
+            width={40}
+            height={16}
+            fill="#065f46"
+            cornerRadius={4}
+            stroke="#10b981"
+            strokeWidth={1}
+            perfectDrawEnabled={false}
+            listening={false}
+          />
+          <Text
+            x={radius - 20}
+            y={-16}
+            width={40}
+            align="center"
+            text="YOU"
+            fill="#6ee7b7"
+            fontSize={10}
+            fontStyle="bold"
+            perfectDrawEnabled={false}
+            listening={false}
+          />
+        </Group>
+
+        {/* 1. Circular Avatar Clip */}
+        <Group
+          clipFunc={(ctx) => {
+            ctx.arc(radius, radius, radius, 0, Math.PI * 2, false);
+          }}
+        >
+          {isGif && resolvedUrl ? (
+            <GifImage
+              src={resolvedUrl}
+              width={tokenPx}
+              height={tokenPx}
+            />
+          ) : img && img.width > 0 && img.height > 0 ? (
+            <KonvaImage
+              image={img}
+              width={tokenPx}
+              height={tokenPx}
+            />
+          ) : (
+            <>
+              <Rect
+                width={tokenPx}
+                height={tokenPx}
+                fill={token.isPlayer ? '#1e3a8a' : isAlly ? '#713f12' : '#7f1d1d'}
+                perfectDrawEnabled={false}
+              />
+              <Circle
+                x={radius}
+                y={radius}
+                radius={radius * 0.72}
+                fill={token.isPlayer ? '#1d4ed8' : isAlly ? '#eab308' : '#991b1b'}
+                perfectDrawEnabled={false}
+              />
+              <Text
+                x={0}
+                y={radius - Math.round(tokenPx * 0.22)}
+                width={tokenPx}
+                align="center"
+                text={(token.name || 'P').charAt(0).toUpperCase()}
+                fontSize={Math.round(tokenPx * 0.44)}
+                fontStyle="bold"
+                fontFamily="sans-serif"
+                fill="white"
+                perfectDrawEnabled={false}
+              />
+            </>
+          )}
+        </Group>
+
+        {/* 2. Outer Circular Border Ring (Allies are bright yellow, Players blue, Monsters & Condition markers red) */}
         <Circle
           x={radius}
           y={radius}
-          radius={radius + 6}
-          stroke="#10b981"
-          strokeWidth={3}
-          dash={[6, 4]}
-          shadowColor="#10b981"
-          shadowBlur={10}
+          radius={radius}
+          stroke={isCondition ? '#ef4444' : isClaimed ? '#10b981' : flightMetrics.isElevated ? flightMetrics.tierColor : isAlly ? '#eab308' : token.isPlayer ? '#38bdf8' : '#ef4444'}
+          strokeWidth={isClaimed ? 3.5 : flightMetrics.isElevated ? 3.2 : isAlly ? 3 : 2.5}
+          shadowColor={isClaimed ? '#10b981' : flightMetrics.isElevated ? flightMetrics.tierColor : isAlly ? '#eab308' : undefined}
+          shadowBlur={isClaimed ? 8 : flightMetrics.isElevated ? 10 : isAlly ? 6 : 0}
           shadowForStrokeEnabled={false}
           perfectDrawEnabled={false}
           listening={false}
         />
-        <Rect
-          x={radius - 20}
-          y={-18}
-          width={40}
-          height={16}
-          fill="#065f46"
-          cornerRadius={4}
-          stroke="#10b981"
-          strokeWidth={1}
-          perfectDrawEnabled={false}
-          listening={false}
-        />
-        <Text
-          x={radius - 20}
-          y={-16}
-          width={40}
-          align="center"
-          text="YOU"
-          fill="#6ee7b7"
-          fontSize={10}
-          fontStyle="bold"
-          perfectDrawEnabled={false}
-          listening={false}
-        />
-      </Group>
 
-      {/* 1. Circular Avatar Clip */}
-      <Group
-        clipFunc={(ctx) => {
-          ctx.arc(radius, radius, radius, 0, Math.PI * 2, false);
-        }}
-      >
-        {isGif && resolvedUrl ? (
-          <GifImage
-            src={resolvedUrl}
-            width={tokenPx}
-            height={tokenPx}
-          />
-        ) : img && img.width > 0 && img.height > 0 ? (
-          <KonvaImage
-            image={img}
-            width={tokenPx}
-            height={tokenPx}
-          />
-        ) : (
-          <>
+        {/* 2.5 Animated Spectral Wings, Updraft Wind Vortex, Clouds & Altitude Badge */}
+        <TokenAerialOverlay
+          elevation={elevationFt}
+          isFlying={isFlying}
+          radius={radius}
+          tokenWidth={tokenPx}
+          isMonster={isMonster}
+          tierColor={flightMetrics.tierColor}
+          tierGlow={flightMetrics.tierGlow}
+          tierBg={flightMetrics.tierBg}
+          badgeText={flightMetrics.badgeText}
+          leftWingRef={leftWingRef}
+          rightWingRef={rightWingRef}
+          vortexRingRef={vortexRingRef}
+          cloudGroupRef={cloudGroupRef}
+        />
+
+        {/* 3. AC Shield Badge on Top-Left: REMOVED per user request */}
+
+        {/* 4. Large, High-Contrast HP Pill Badge directly tied to D&D Beyond & Character Sheet (PLAYERS & ALLIES ONLY - Monsters & Condition tokens NEVER show HP in player view) */}
+        {!isCondition && (!isMonster || isAlly) && (
+          <Group x={pillX} y={pillY}>
+            {/* Dark slate container badge */}
             <Rect
-              width={tokenPx}
-              height={tokenPx}
-              fill={token.isPlayer ? '#1e3a8a' : isAlly ? '#713f12' : '#7f1d1d'}
+              width={pillWidth}
+              height={pillHeight}
+              fill="rgba(15, 23, 42, 0.96)"
+              stroke={isAlly ? "#eab308" : (hpRatio <= 0.25 ? "#ef4444" : "#475569")}
+              strokeWidth={isAlly ? 1.5 : (hpRatio <= 0.25 ? 1.5 : 1)}
+              cornerRadius={Math.max(4, Math.round(pillHeight * 0.2))}
+              shadowColor="#000000"
+              shadowBlur={4}
+              shadowOpacity={0.7}
+              shadowOffsetY={2}
               perfectDrawEnabled={false}
             />
-            <Circle
-              x={radius}
-              y={radius}
-              radius={radius * 0.72}
-              fill={token.isPlayer ? '#1d4ed8' : isAlly ? '#eab308' : '#991b1b'}
-              perfectDrawEnabled={false}
-            />
-            <Text
-              x={0}
-              y={radius - Math.round(tokenPx * 0.22)}
-              width={tokenPx}
-              align="center"
-              text={(token.name || 'P').charAt(0).toUpperCase()}
-              fontSize={Math.round(tokenPx * 0.44)}
-              fontStyle="bold"
-              fontFamily="sans-serif"
-              fill="white"
-              perfectDrawEnabled={false}
-            />
-          </>
-        )}
-      </Group>
-
-      {/* 2. Outer Circular Border Ring (Allies are bright yellow, Players blue, Monsters & Condition markers red) */}
-      <Circle
-        x={radius}
-        y={radius}
-        radius={radius}
-        stroke={isCondition ? '#ef4444' : isClaimed ? '#10b981' : isAlly ? '#eab308' : token.isPlayer ? '#38bdf8' : '#ef4444'}
-        strokeWidth={isClaimed ? 3.5 : isAlly ? 3 : 2.5}
-        shadowColor={isClaimed ? '#10b981' : isAlly ? '#eab308' : undefined}
-        shadowBlur={isClaimed ? 8 : isAlly ? 6 : 0}
-        shadowForStrokeEnabled={false}
-        perfectDrawEnabled={false}
-        listening={false}
-      />
-
-      {/* 3. AC Shield Badge on Top-Left: REMOVED per user request */}
-
-      {/* 4. Large, High-Contrast HP Pill Badge directly tied to D&D Beyond & Character Sheet (PLAYERS & ALLIES ONLY - Monsters & Condition tokens NEVER show HP in player view) */}
-      {!isCondition && (!isMonster || isAlly) && (
-        <Group x={pillX} y={pillY}>
-          {/* Dark slate container badge */}
-          <Rect
-            width={pillWidth}
-            height={pillHeight}
-            fill="rgba(15, 23, 42, 0.96)"
-            stroke={isAlly ? "#eab308" : (hpRatio <= 0.25 ? "#ef4444" : "#475569")}
-            strokeWidth={isAlly ? 1.5 : (hpRatio <= 0.25 ? 1.5 : 1)}
-            cornerRadius={Math.max(4, Math.round(pillHeight * 0.2))}
-            shadowColor="#000000"
-            shadowBlur={4}
-            shadowOpacity={0.7}
-            shadowOffsetY={2}
-            perfectDrawEnabled={false}
-          />
-          {/* Background HP Track */}
-          <Rect
-            x={barPadding}
-            y={barY}
-            width={barWidth}
-            height={barHeight}
-            fill="rgba(30, 41, 59, 0.9)"
-            cornerRadius={Math.round(barHeight / 2)}
-            perfectDrawEnabled={false}
-          />
-          {/* Filled HP progress bar */}
-          {hpRatio > 0 && (
+            {/* Background HP Track */}
             <Rect
               x={barPadding}
               y={barY}
-              width={Math.max(2, barWidth * hpRatio)}
+              width={barWidth}
               height={barHeight}
-              fill={hpColor}
+              fill="rgba(30, 41, 59, 0.9)"
               cornerRadius={Math.round(barHeight / 2)}
               perfectDrawEnabled={false}
             />
-          )}
-          {/* Crisp Monospace HP text */}
-          <Text
-            y={Math.max(2, Math.round((barY - hpFontSize) / 2))}
-            width={pillWidth}
-            align="center"
-            text={`${displayCurrentHp}/${displayMaxHp}${displayTempHp > 0 ? ` (+${displayTempHp})` : ''}`}
-            fontSize={hpFontSize}
-            fontStyle="bold"
-            fontFamily="monospace"
-            fill="#ffffff"
-            shadowColor="#000000"
-            shadowBlur={2}
-            perfectDrawEnabled={false}
-          />
-        </Group>
-      )}
-
-      {/* 5. Token Name Label & Conditions (Cleanly spaced below the larger HP badge or token) */}
-      <Group y={nameY} listening={false}>
-        <Text
-          text={token.name}
-          width={tokenPx + 60}
-          x={-30}
-          align="center"
-          fill="white"
-          fontSize={nameFontSize}
-          fontStyle="bold"
-          shadowColor="#000000"
-          shadowBlur={3}
-          perfectDrawEnabled={false}
-        />
-        {mergedConditions.length > 0 && (
-          <Group y={nameFontSize + 4}>
-            <Rect
-              x={-30}
-              y={-1}
-              width={tokenPx + 60}
-              height={Math.max(14, nameFontSize + 2)}
-              fill="rgba(15, 23, 42, 0.88)"
-              stroke="rgba(244, 63, 94, 0.55)"
-              strokeWidth={1}
-              cornerRadius={4}
-              perfectDrawEnabled={false}
-            />
+            {/* Filled HP progress bar */}
+            {hpRatio > 0 && (
+              <Rect
+                x={barPadding}
+                y={barY}
+                width={Math.max(2, barWidth * hpRatio)}
+                height={barHeight}
+                fill={hpColor}
+                cornerRadius={Math.round(barHeight / 2)}
+                perfectDrawEnabled={false}
+              />
+            )}
+            {/* Crisp Monospace HP text */}
             <Text
-              text={mergedConditions.join(', ')}
-              fontSize={Math.max(9.5, nameFontSize - 2)}
+              y={Math.max(2, Math.round((barY - hpFontSize) / 2))}
+              width={pillWidth}
+              align="center"
+              text={`${displayCurrentHp}/${displayMaxHp}${displayTempHp > 0 ? ` (+${displayTempHp})` : ''}`}
+              fontSize={hpFontSize}
               fontStyle="bold"
               fontFamily="monospace"
-              fill="#fb7185"
-              align="center"
-              width={tokenPx + 60}
-              x={-30}
-              y={1}
+              fill="#ffffff"
+              shadowColor="#000000"
+              shadowBlur={2}
               perfectDrawEnabled={false}
             />
           </Group>
         )}
+
+        {/* 5. Token Name Label & Conditions (Cleanly spaced below the larger HP badge or token) */}
+        <Group y={nameY} listening={false}>
+          <Text
+            text={token.name}
+            width={tokenPx + 60}
+            x={-30}
+            align="center"
+            fill="white"
+            fontSize={nameFontSize}
+            fontStyle="bold"
+            shadowColor="#000000"
+            shadowBlur={3}
+            perfectDrawEnabled={false}
+          />
+          {mergedConditions.length > 0 && (
+            <Group y={nameFontSize + 4}>
+              <Rect
+                x={-30}
+                y={-1}
+                width={tokenPx + 60}
+                height={Math.max(14, nameFontSize + 2)}
+                fill="rgba(15, 23, 42, 0.88)"
+                stroke="rgba(244, 63, 94, 0.55)"
+                strokeWidth={1}
+                cornerRadius={4}
+                perfectDrawEnabled={false}
+              />
+              <Text
+                text={mergedConditions.join(', ')}
+                fontSize={Math.max(9.5, nameFontSize - 2)}
+                fontStyle="bold"
+                fontFamily="monospace"
+                fill="#fb7185"
+                align="center"
+                width={tokenPx + 60}
+                x={-30}
+                y={1}
+                perfectDrawEnabled={false}
+              />
+            </Group>
+          )}
+        </Group>
       </Group>
     </Group>
   );
@@ -5503,6 +5573,104 @@ export default function PlayerView() {
                         handleUpdateToken(currentToken.id, { maxHp: num });
                       }}
                     />
+                  </div>
+                </div>
+
+                {/* Flight & Multi-Height Elevation Controls */}
+                <div className="bg-zinc-900/90 border border-sky-500/30 rounded-xl p-2.5 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] text-sky-400 uppercase font-bold tracking-wider font-mono flex items-center gap-1">
+                      <span>🪽</span> Flight & Height
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const curFly = Boolean(currentToken.isFlying);
+                        const curElev = Number(currentToken.elevation) || 0;
+                        const nextFly = !curFly;
+                        const nextElev = nextFly && curElev === 0 ? 15 : (!nextFly ? 0 : curElev);
+                        handleUpdateToken(currentToken.id, { isFlying: nextFly, elevation: nextElev });
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold font-mono transition-all cursor-pointer flex items-center gap-1 border ${
+                        currentToken.isFlying
+                          ? 'bg-sky-500/25 text-sky-200 border-sky-400/70 shadow-[0_0_12px_rgba(56,189,248,0.35)]'
+                          : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border-zinc-700'
+                      }`}
+                    >
+                      <span>{currentToken.isFlying ? '🪽 Flying Active' : 'Grounded (Click to Fly)'}</span>
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextElev = (Number(currentToken.elevation) || 0) - 5;
+                        handleUpdateToken(currentToken.id, {
+                          elevation: nextElev,
+                          isFlying: nextElev === 0 ? false : currentToken.isFlying
+                        });
+                      }}
+                      className="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg text-xs font-bold font-mono border border-zinc-700 cursor-pointer"
+                      title="Lower 5 ft"
+                    >
+                      -5ft
+                    </button>
+                    <div className="relative flex-1">
+                      <input
+                        type="number"
+                        step={5}
+                        value={currentToken.elevation ?? 0}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10);
+                          const nextElev = isNaN(val) ? 0 : val;
+                          handleUpdateToken(currentToken.id, {
+                            elevation: nextElev,
+                            isFlying: nextElev > 0 ? true : (nextElev === 0 ? false : currentToken.isFlying)
+                          });
+                        }}
+                        className="w-full bg-zinc-950 border border-sky-500/40 rounded-lg text-xs text-sky-300 font-bold text-center px-2 py-1 focus:outline-none focus:border-sky-400 font-mono"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextElev = (Number(currentToken.elevation) || 0) + 5;
+                        handleUpdateToken(currentToken.id, {
+                          elevation: nextElev,
+                          isFlying: nextElev > 0 ? true : currentToken.isFlying
+                        });
+                      }}
+                      className="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-sky-300 rounded-lg text-xs font-bold font-mono border border-zinc-700 cursor-pointer"
+                      title="Raise 5 ft"
+                    >
+                      +5ft
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-6 gap-1">
+                    {[-10, 0, 10, 15, 30, 60].map(preset => {
+                      const isCurrent = (currentToken.elevation || 0) === preset;
+                      return (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => {
+                            handleUpdateToken(currentToken.id, {
+                              elevation: preset,
+                              isFlying: preset > 0
+                            });
+                          }}
+                          className={`py-0.5 rounded text-[9px] font-mono font-bold transition-all cursor-pointer border ${
+                            isCurrent
+                              ? 'bg-sky-500/30 text-sky-200 border-sky-400/70'
+                              : 'bg-zinc-950 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border-zinc-800'
+                          }`}
+                        >
+                          {preset > 0 ? `+${preset}` : `${preset}`}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
