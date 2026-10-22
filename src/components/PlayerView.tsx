@@ -3520,7 +3520,7 @@ export default function PlayerView() {
     const distPx = Math.hypot(targetCenter.x - casterCenter.x, targetCenter.y - casterCenter.y);
     const distFt = Math.round((distPx / gridSize) * 5);
 
-    // Range checks
+    // Range advisory (notify player with distance, but never block damage/attack execution)
     const isSelfTarget = targetToken.id === caster.id;
     if (action.rangeFt === 0 && !isSelfTarget && action.isSelfAction) {
       toast.warning(`${action.name} only targets yourself!`);
@@ -3528,8 +3528,7 @@ export default function PlayerView() {
     }
 
     if (action.rangeFt && action.rangeFt > 0 && distFt > action.rangeFt + 2) {
-      toast.error(`Out of range! Target is ${distFt} ft away (Max range: ${action.rangeFt} ft).`);
-      return;
+      toast.info(`Target is ${distFt} ft away (${action.name} base range: ${action.rangeFt} ft). Executing attack.`);
     }
 
     // 2. Play JB2A Spell Animation & Sound
