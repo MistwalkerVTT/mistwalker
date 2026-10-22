@@ -2,8 +2,8 @@
 // Rich modal showing full-text descriptions, rules, and stats when right-clicking
 // spells, conditions, or magical auras anywhere in the player or DM interface.
 
-import React, { useState, useEffect } from 'react';
-import { X, Sparkles, BookOpen, AlertCircle, ShieldAlert } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { X, Sparkles, BookOpen, AlertCircle, ShieldAlert, GripHorizontal } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { toast } from 'sonner';
 import { DndRuleEntry } from '../data/dndRulesCompendium';
@@ -27,12 +27,37 @@ export const DndRuleInspectionModal: React.FC<DndRuleInspectionModalProps> = ({
   const [selectedSlotLevel, setSelectedSlotLevel] = useState<number>(
     entry?.castAtLevel ?? entry?.level ?? 0
   );
+  const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
   useEffect(() => {
     if (entry) {
       setSelectedSlotLevel(entry.castAtLevel ?? entry.level ?? 0);
     }
   }, [entry]);
+
+  const handleStartDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest('button, input, a, [data-no-drag]')) return;
+    const startX = e.clientX - dragOffset.x;
+    const startY = e.clientY - dragOffset.y;
+    const handleEl = e.currentTarget;
+    try { handleEl.setPointerCapture(e.pointerId); } catch {}
+
+    const onMove = (ev: PointerEvent) => {
+      setDragOffset({
+        x: ev.clientX - startX,
+        y: ev.clientY - startY
+      });
+    };
+    const onUp = () => {
+      handleEl.removeEventListener('pointermove', onMove);
+      handleEl.removeEventListener('pointerup', onUp);
+      handleEl.removeEventListener('pointercancel', onUp);
+    };
+    handleEl.addEventListener('pointermove', onMove);
+    handleEl.addEventListener('pointerup', onUp);
+    handleEl.addEventListener('pointercancel', onUp);
+    e.preventDefault();
+  }, [dragOffset]);
 
   if (!entry) return null;
 
@@ -125,11 +150,15 @@ export const DndRuleInspectionModal: React.FC<DndRuleInspectionModalProps> = ({
     >
       <div
         className="w-full max-w-lg bg-zinc-950/95 border border-zinc-700/80 rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden animate-in zoom-in-95 duration-150"
+        style={{ transform: `translate3d(${dragOffset.x}px, ${dragOffset.y}px, 0)` }}
         onClick={(e) => e.stopPropagation()}
         onContextMenu={(e) => e.preventDefault()}
       >
-        {/* Header */}
-        <div className={`p-4 border-b flex items-start justify-between gap-3 ${
+        {/* Header (Click and drag to move) */}
+        <div
+          onPointerDown={handleStartDrag}
+          title="Click and drag to move"
+          className={`p-4 border-b flex items-start justify-between gap-3 cursor-move touch-none ${
           isCondition 
             ? 'border-rose-900/60 bg-rose-950/30' 
             : isAura 
@@ -153,9 +182,12 @@ export const DndRuleInspectionModal: React.FC<DndRuleInspectionModalProps> = ({
               )}
             </div>
             <div className="flex flex-col min-w-0">
-              <h3 id="rule-modal-title" className="text-base sm:text-lg font-bold font-serif text-white tracking-wide truncate">
-                {entry.name}
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 id="rule-modal-title" className="text-base sm:text-lg font-bold font-serif text-white tracking-wide truncate">
+                  {entry.name}
+                </h3>
+                <GripHorizontal className="w-4 h-4 text-zinc-500 shrink-0" />
+              </div>
               <span className={`text-[11px] font-mono font-bold tracking-tight ${
                 isCondition ? 'text-rose-400' : isAura ? 'text-indigo-400' : 'text-amber-400'
               }`}>

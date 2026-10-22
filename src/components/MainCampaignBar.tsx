@@ -17,7 +17,8 @@ import {
   Layers,
   Radio,
   Share2,
-  Scroll
+  Scroll,
+  Music
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Campaign, Scene } from '../lib/firebase';
@@ -47,6 +48,8 @@ interface MainCampaignBarProps {
   onOpenDndChatbot?: () => void;
   onOpenHandoutsJournal?: () => void;
   hasUnreadHandouts?: boolean;
+  onOpenAudioMixer?: () => void;
+  activeAudioLoopCount?: number;
   isFirebaseConnected?: boolean;
   onRelinkMap?: () => void;
   onForceSync?: () => void;
@@ -75,6 +78,8 @@ export const MainCampaignBar: React.FC<MainCampaignBarProps> = React.memo(({
   onOpenDndChatbot,
   onOpenHandoutsJournal,
   hasUnreadHandouts,
+  onOpenAudioMixer,
+  activeAudioLoopCount = 0,
   isFirebaseConnected = true,
   onRelinkMap,
   onForceSync,
@@ -418,6 +423,24 @@ export const MainCampaignBar: React.FC<MainCampaignBarProps> = React.memo(({
             <span>Handouts & Journal</span>
             {hasUnreadHandouts && (
               <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+            )}
+          </button>
+        )}
+
+        {/* Soundboard & Ambient Audio Mixer (Jukebox) */}
+        {onOpenAudioMixer && (
+          <button
+            id="btn-main-open-audio-mixer"
+            onClick={onOpenAudioMixer}
+            className="px-2.5 py-1 rounded-xl bg-emerald-950/50 hover:bg-emerald-900/60 text-emerald-200 border border-emerald-500/40 text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer relative"
+            title="Open DM Soundboard, Layered Ambience Mixer & Positional Map Audio"
+          >
+            <Music className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Jukebox</span>
+            {activeAudioLoopCount > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-emerald-500 text-zinc-950 text-[9px] font-black">
+                {activeAudioLoopCount}
+              </span>
             )}
           </button>
         )}

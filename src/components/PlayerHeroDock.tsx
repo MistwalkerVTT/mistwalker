@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import {
   Shield,
@@ -21,7 +21,8 @@ import {
   Eye,
   Footprints,
   Lock,
-  Users
+  Users,
+  GripHorizontal
 } from 'lucide-react';
 import { HudCharacterData, HudActionItem, HudActionCategory, computeUpcastFormula } from '../types/hud';
 import { findJb2aAsset } from '../effects/db/jb2aRegistry';
@@ -97,9 +98,57 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
   const [hoveredAction, setHoveredAction] = useState<HudActionItem | null>(null);
   const [pinnedAction, setPinnedAction] = useState<HudActionItem | null>(null);
   const [inspectedAction, setInspectedAction] = useState<HudActionItem | null>(null);
+  const [popoverDragOffset, setPopoverDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [modalDragOffset, setModalDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isTrayCollapsed, setIsTrayCollapsed] = useState<boolean>(false);
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState<boolean>(false);
   const [isDockMinimizedWhileAiming, setIsDockMinimizedWhileAiming] = useState<boolean>(false);
+
+  const handleStartPopoverDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest('button, input, a, [data-no-drag]')) return;
+    const startX = e.clientX - popoverDragOffset.x;
+    const startY = e.clientY - popoverDragOffset.y;
+    const handleEl = e.currentTarget;
+    try { handleEl.setPointerCapture(e.pointerId); } catch {}
+    const onMove = (ev: PointerEvent) => {
+      setPopoverDragOffset({
+        x: ev.clientX - startX,
+        y: ev.clientY - startY
+      });
+    };
+    const onUp = () => {
+      handleEl.removeEventListener('pointermove', onMove);
+      handleEl.removeEventListener('pointerup', onUp);
+      handleEl.removeEventListener('pointercancel', onUp);
+    };
+    handleEl.addEventListener('pointermove', onMove);
+    handleEl.addEventListener('pointerup', onUp);
+    handleEl.addEventListener('pointercancel', onUp);
+    e.preventDefault();
+  }, [popoverDragOffset]);
+
+  const handleStartModalDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest('button, input, a, [data-no-drag]')) return;
+    const startX = e.clientX - modalDragOffset.x;
+    const startY = e.clientY - modalDragOffset.y;
+    const handleEl = e.currentTarget;
+    try { handleEl.setPointerCapture(e.pointerId); } catch {}
+    const onMove = (ev: PointerEvent) => {
+      setModalDragOffset({
+        x: ev.clientX - startX,
+        y: ev.clientY - startY
+      });
+    };
+    const onUp = () => {
+      handleEl.removeEventListener('pointermove', onMove);
+      handleEl.removeEventListener('pointerup', onUp);
+      handleEl.removeEventListener('pointercancel', onUp);
+    };
+    handleEl.addEventListener('pointermove', onMove);
+    handleEl.addEventListener('pointerup', onUp);
+    handleEl.addEventListener('pointercancel', onUp);
+    e.preventDefault();
+  }, [modalDragOffset]);
 
   // Auto-minimize the HUD whenever an action/effect is selected to be placed/aimed
   // Keep the HUD minimized after placing so the player can watch the animation unobstructed
@@ -821,13 +870,19 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
         const isUpcasted = baseLvl >= 1 && currentSlot > baseLvl;
 
         return (
-          <div className={`${pinnedAction ? 'block' : 'hidden md:block'} pointer-events-auto relative mb-2 px-4 py-3 rounded-xl bg-zinc-950/98 border border-zinc-700/90 shadow-2xl text-left w-full max-w-2xl animate-in fade-in duration-100`}>
+          <div
+            onPointerDown={handleStartPopoverDrag}
+            style={{ transform: `translate3d(${popoverDragOffset.x}px, ${popoverDragOffset.y}px, 0)` }}
+            title="Click and drag to move menu"
+            className={`${pinnedAction ? 'block' : 'hidden md:block'} pointer-events-auto relative mb-2 px-4 py-3 rounded-xl bg-zinc-950/98 border border-zinc-700/90 shadow-2xl text-left w-full max-w-2xl animate-in fade-in duration-100 cursor-move touch-none select-none`}
+          >
             <div className="flex items-center justify-between gap-3 flex-wrap pr-8">
               <div className="flex items-center gap-2 flex-wrap">
                 <div className="w-6 h-6 rounded-md bg-zinc-950 border border-zinc-800 flex items-center justify-center shrink-0 overflow-hidden relative shadow-inner">
                   {renderActionGlyph(detailAction, 'w-3.5 h-3.5')}
                 </div>
                 <span className="font-bold text-white font-mono text-xs">{detailAction.name}</span>
+                <GripHorizontal className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
                 {detailAction.sourceLabel && (
                   <span className="px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-[10px] font-mono text-zinc-300">
                     {detailAction.sourceLabel}
@@ -1912,11 +1967,16 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
           onClick={() => setInspectedAction(null)}
         >
           <div
+            style={{ transform: `translate3d(${modalDragOffset.x}px, ${modalDragOffset.y}px, 0)` }}
             className="relative w-full max-w-xl max-h-[85vh] bg-zinc-950/98 border border-zinc-700/80 rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.95)] flex flex-col overflow-hidden text-left ring-1 ring-white/10"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Modal Header */}
-            <div className="p-4 sm:p-5 border-b border-zinc-800 bg-zinc-900/60 flex items-start justify-between gap-3 shrink-0">
+            {/* Modal Header (Click and drag to move) */}
+            <div
+              onPointerDown={handleStartModalDrag}
+              title="Click and drag to move"
+              className="p-4 sm:p-5 border-b border-zinc-800 bg-zinc-900/60 flex items-start justify-between gap-3 shrink-0 cursor-move touch-none select-none"
+            >
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-11 h-11 rounded-xl bg-zinc-950 border border-zinc-700 flex items-center justify-center shrink-0 overflow-hidden shadow-inner">
                   {renderActionGlyph(inspectedAction, 'w-6 h-6')}
@@ -1926,6 +1986,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                     <h3 className="text-base sm:text-lg font-bold text-white font-mono truncate">
                       {inspectedAction.name}
                     </h3>
+                    <GripHorizontal className="w-4 h-4 text-zinc-500 shrink-0" />
                     {inspectedAction.level !== undefined && (
                       <span className="px-2 py-0.5 rounded-full bg-blue-950 border border-blue-500/50 text-blue-300 font-mono text-[10px] font-bold">
                         {inspectedAction.level === 0 ? 'Cantrip' : `${formatSpellLevelLabel(inspectedAction.level)} Level`}

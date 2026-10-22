@@ -185,11 +185,32 @@ export function getAuraVideoUrl(name?: string, color?: string): string | null {
     return '/jb2a/Library/Generic/Template/Circle/TemplatePoisonCircle_01_Dark_Green_800x800.webm';
   }
 
-  // 12. Protective Wards, Hut & Glyphs
+  // 12. Protective Wards, Hut, Bless, Mark, Daggers, Tentacles, Whirlwind & Glyphs
+  if (n.includes('bless')) {
+    return '/jb2a/Library/1st_Level/Bless/Bless_01_Regular_Yellow_Loop_200x200.webm';
+  }
+  if (n.includes('hunter') || n.includes('mark')) {
+    return '/jb2a/Library/1st_Level/Hunters_Mark/HuntersMark_01_Regular_Green_Loop_200x200.webm';
+  }
+  if (n.includes('globe') || n.includes('invulnerability') || n.includes('wall of force') || n.includes('force sphere')) {
+    return '/jb2a/Library/5th_Level/Wall_Of_Force/WallOfForce_01_Grey_Sphere_400x400.webm';
+  }
+  if (n.includes('wall of fire')) {
+    return '/jb2a/Library/4th_Level/Wall_Of_Fire/WallOfFire_01_Blue_Ring_400x400.webm';
+  }
+  if (n.includes('cloud of daggers') || n.includes('daggers')) {
+    return '/jb2a/Library/2nd_Level/Cloud_Of_Daggers/CloudOfDaggers_01_Light_Blue_400x400.webm';
+  }
+  if (n.includes('hadar') || n.includes('tentacle')) {
+    return '/jb2a/Library/4th_Level/Black_Tentacles/BlackTentacles_01_Dark_Purple_600x600.webm';
+  }
+  if (n.includes('whirlwind') || n.includes('cyclone')) {
+    return '/jb2a/Library/7th_Level/Whirlwind/Whirlwind_01_BlueGrey_01_400x400.webm';
+  }
   if (n.includes('tiny hut') || n.includes('leomund') || n.includes('hut') || n.includes('dome')) {
     return '/jb2a/Community/JAA/LeomundsTinyHut.0.webm';
   }
-  if (n.includes('glyph') || n.includes('warding') || n.includes('barrier')) {
+  if (n.includes('glyph') || n.includes('warding')) {
     return '/jb2a/Community/JAA/glyphOfWarding.webm';
   }
   if (n.includes('blade barrier') || n.includes('spinning blades')) {
@@ -198,11 +219,44 @@ export function getAuraVideoUrl(name?: string, color?: string): string | null {
   if (n.includes('sanctuary') || n.includes('rune')) {
     return '/jb2a/Community/JackKerouac/runes_CIRCLE_02.webm';
   }
+  if (n.includes('agathys') || n.includes('ice barrier')) {
+    return '/jb2a/Community/JackKerouac/ice_shield_rotating_SQUARE_01.webm';
+  }
   if (n.includes('shield of faith') || n.includes('shield')) {
     return '/jb2a/Library/1st_Level/Shield/Shield_01_Regular_Blue_Complete_400x400.webm';
   }
   if (n.includes('detect magic')) {
     return '/jb2a/Library/1st_Level/Detect_Magic/DetectMagicCircle_01_Regular_Blue_1200x1200.webm';
+  }
+
+  // 13. Custom Aura Color Swatch Mapping -> Themed JB2A Animations
+  const c = (color || '').toLowerCase();
+  if (c.includes('34, 197, 94') || c.includes('16, 185, 129')) {
+    return '/jb2a/Library/Generic/Template/Circle/Aura/AuraThemedOrbitLoopNature01_01_Regular_Green_700x700.webm';
+  }
+  if (c.includes('59, 130, 246') || c.includes('96, 165, 250')) {
+    return '/jb2a/Library/3rd_Level/Spirit_Guardians/SpiritGuardians_01_Light_BlueYellow_600x600.webm';
+  }
+  if (c.includes('168, 85, 247') || c.includes('147, 51, 234')) {
+    return '/jb2a/Community/JackKerouac/runes_CIRCLE_02.webm';
+  }
+  if (c.includes('239, 68, 68')) {
+    return '/jb2a/Community/JAA/circleOfDeath.webm';
+  }
+  if (c.includes('6, 182, 212') || c.includes('56, 189, 248')) {
+    return '/jb2a/Library/Generic/Template/Circle/Aura/AuraThemedOrbitLoopCold01_01_Regular_Blue_700x700.webm';
+  }
+  if (c.includes('249, 115, 22')) {
+    return '/jb2a/Library/Generic/Fire/ShieldFireAbove01_01_Regular_Orange_400x400.webm';
+  }
+  if (c.includes('236, 72, 153')) {
+    return '/jb2a/Library/Generic/Creature/FairiesLoop01_01_Regular_BluePurple_600x600.webm';
+  }
+  if (c.includes('241, 245, 249')) {
+    return '/jb2a/Library/5th_Level/Wall_Of_Force/WallOfForce_01_Grey_Sphere_400x400.webm';
+  }
+  if (c.includes('100, 116, 139') || c.includes('30, 41, 59')) {
+    return '/jb2a/Library/2nd_Level/Darkness/Darkness_01_Black_600x600.webm';
   }
 
   // Universal Default: Golden Divine Runes Circle

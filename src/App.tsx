@@ -156,6 +156,11 @@ import {
   HandoutsJournalModal,
   HandoutSpotlightModal
 } from './components/HandoutsJournalSystem';
+import {
+  useAudioMixerJukebox,
+  AudioMixerJukeboxModal,
+  MapAudioSourcesLayer
+} from './components/AudioMixerJukebox';
 import { BugReportModal } from './components/BugReportModal';
 import { BugReportManagerModal } from './components/BugReportManagerModal';
 import { DEMO_GV_CAMPAIGN, DEMO_GV_SCENE, DEMO_GV_CHAPTER, DEMO_GV_ROOM_ZONES, DEMO_GV_TOKENS } from './data/demoCampaignGv';
@@ -2209,6 +2214,41 @@ export default function App() {
     socketRef
   });
 
+  // Stand-Alone Soundboard & Ambient Audio Mixer (Jukebox & Spatial 2D Audio)
+  const [showAudioMixerModal, setShowAudioMixerModal] = useState(false);
+  const dmListenerPoints = useMemo(() => {
+    const playerTokens = tokens.filter(
+      (t) => !t.isCondition && (t.isPlayer === true || t.category === 'character' || (!t.isMonster && t.category !== 'monster'))
+    );
+    const sourceList = playerTokens.length > 0 ? playerTokens : tokens;
+    return sourceList.map((t) => ({ x: t.x, y: t.y }));
+  }, [tokens]);
+
+  const {
+    jukeboxState,
+    activeLoopCount: activeAudioLoopCount,
+    broadcastPadsToTable,
+    setBroadcastPadsToTable,
+    recentPadId,
+    setTrackVolume: setJukeboxTrackVolume,
+    applyMoodPreset: applyJukeboxMoodPreset,
+    setMasterVolume: setJukeboxMasterVolume,
+    toggleMasterMute: toggleJukeboxMasterMute,
+    triggerSoundboardPad,
+    addOrUpdateMapAudioSource,
+    deleteMapAudioSource,
+    addCustomTrack: addJukeboxCustomTrack,
+    addCustomPad: addJukeboxCustomPad,
+    handleRemoteJukeboxSync,
+    handleRemoteSoundboardTrigger
+  } = useAudioMixerJukebox({
+    role: 'dm',
+    socketRef,
+    listenerPointsWorldPx: dmListenerPoints,
+    gridSize,
+    walls
+  });
+
   // Dice Roller States
   const [diceHistory, setDiceHistory] = useState<RollResult[]>([]);
   const [dicePool, setDicePool] = useState<string[]>([]);
@@ -2859,6 +2899,14 @@ export default function App() {
       if (payload?.handoutId && payload?.guess) {
         handleRemoteHandoutRiddleGuess(payload);
       }
+    });
+
+    socket.on('AUDIO_MIXER_SYNC', (mixerState) => {
+      if (mixerState) handleRemoteJukeboxSync(mixerState);
+    });
+
+    socket.on('SOUNDBOARD_TRIGGER', (padPayload) => {
+      if (padPayload?.padId) handleRemoteSoundboardTrigger(padPayload);
     });
 
     socket.on('SYNC_AUTO_APPLY_MONSTER_DAMAGE', (enabled: boolean) => {
@@ -7634,6 +7682,8 @@ export default function App() {
             clearUnreadHandouts();
           }}
           hasUnreadHandouts={hasUnreadHandouts}
+          onOpenAudioMixer={() => setShowAudioMixerModal(true)}
+          activeAudioLoopCount={activeAudioLoopCount}
         />
 
         {/* Floating Wall & Creator Toolbar (shown when in creator mode or wall/zone tool active) */}
@@ -7708,6 +7758,7 @@ export default function App() {
               setShowHandoutsJournalModal(true);
               clearUnreadHandouts();
             }}
+            onOpenAudioMixer={() => setShowAudioMixerModal(true)}
             onOpenBugReport={() => setIsBugReportModalOpen(true)}
             onLoadSceneFromCampaign={handleLoadSceneFromCampaign}
             campaignsList={campaignsList}
@@ -7768,6 +7819,8 @@ export default function App() {
                   clearUnreadHandouts();
                 }}
                 hasUnreadHandouts={hasUnreadHandouts}
+                onOpenAudioMixer={() => setShowAudioMixerModal(true)}
+                activeAudioLoopCount={activeAudioLoopCount}
               />
             <input
               ref={relinkMapFileInputRef}
@@ -8531,6 +8584,19 @@ export default function App() {
                     stroke="#f59e0b"
                     strokeWidth={1.5 / stageScale}
                     dash={[5 / stageScale, 3 / stageScale]}
+                  />
+                </Layer>
+              )}
+
+              {/* Positional / Map Audio Sources Layer */}
+              {jukeboxState.mapAudioSources.length > 0 && (
+                <Layer>
+                  <MapAudioSourcesLayer
+                    sources={jukeboxState.mapAudioSources}
+                    gridSize={gridSize}
+                    isDM={true}
+                    onUpdateSource={addOrUpdateMapAudioSource}
+                    onSelectSource={() => setShowAudioMixerModal(true)}
                   />
                 </Layer>
               )}
@@ -10693,6 +10759,37 @@ export default function App() {
           presentHandoutToTable(activeHandoutPresentation.handoutId, patch);
         }}
         onSubmitRiddleGuess={submitRiddleGuess}
+      />
+
+      {/* Stand-Alone Soundboard & Ambient Audio Mixer (Jukebox) */}
+      <AudioMixerJukeboxModal
+        isOpen={showAudioMixerModal}
+        onClose={() => setShowAudioMixerModal(false)}
+        jukeboxState={jukeboxState}
+        broadcastPadsToTable={broadcastPadsToTable}
+        setBroadcastPadsToTable={setBroadcastPadsToTable}
+        recentPadId={recentPadId}
+        onSetTrackVolume={setJukeboxTrackVolume}
+        onApplyMoodPreset={applyJukeboxMoodPreset}
+        onSetMasterVolume={setJukeboxMasterVolume}
+        onToggleMasterMute={toggleJukeboxMasterMute}
+        onTriggerPad={triggerSoundboardPad}
+        onSaveMapAudioSource={addOrUpdateMapAudioSource}
+        onDeleteMapAudioSource={deleteMapAudioSource}
+        onAddCustomTrack={addJukeboxCustomTrack}
+        onAddCustomPad={addJukeboxCustomPad}
+        getViewportCenterWorldPx={() => {
+          const dims = getMapDimensions();
+          if (dims.width > 0 && dims.height > 0) {
+            const worldX = (dimensions.width / 2 - stagePos.x) / stageScale;
+            const worldY = (dimensions.height / 2 - stagePos.y) / stageScale;
+            return {
+              x: Math.max(40, Math.min(dims.width - 40, worldX)),
+              y: Math.max(40, Math.min(dims.height - 40, worldY))
+            };
+          }
+          return { x: 400, y: 300 };
+        }}
       />
 
       <EffectContextMenu

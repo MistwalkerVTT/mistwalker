@@ -664,6 +664,18 @@ async function startServer() {
       }
     });
 
+    socket.on("AUDIO_MIXER_SYNC", (mixerState: any) => {
+      if (mixerState) {
+        socket.broadcast.emit("AUDIO_MIXER_SYNC", mixerState);
+      }
+    });
+
+    socket.on("SOUNDBOARD_TRIGGER", (padPayload: any) => {
+      if (padPayload?.padId) {
+        socket.broadcast.emit("SOUNDBOARD_TRIGGER", padPayload);
+      }
+    });
+
     socket.on("MOVE_TOKEN", (data: any) => {
       console.log(`[Server Socket] MOVE_TOKEN: id=${data?.id}, x=${data?.x}, y=${data?.y}`);
       if (data?.id && Array.isArray(activeVttState.tokens)) {

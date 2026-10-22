@@ -87,7 +87,8 @@ import {
   Tv,
   Settings,
   Tag,
-  Scroll
+  Scroll,
+  Music
 } from 'lucide-react';
 import { LABEL_GLYPHS } from './RoomHotspotLayer';
 import { isUniversalVttFile } from '../services/universalVttService';
@@ -276,6 +277,8 @@ interface LeftSidebarProps {
   onOpenCriticalHitsModal?: () => void;
   onOpenHandoutsJournal?: () => void;
   hasUnreadHandouts?: boolean;
+  onOpenAudioMixer?: () => void;
+  activeAudioLoopCount?: number;
 }
 
 type GroupMenuId = 'maps' | 'zones' | 'fog-grid' | 'lighting' | 'combat' | 'fx' | 'spells' | 'tokens' | 'dice' | 'ai' | 'help';
@@ -288,6 +291,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   onOpenCriticalHitsModal,
   onOpenHandoutsJournal,
   hasUnreadHandouts,
+  onOpenAudioMixer,
+  activeAudioLoopCount = 0,
   activeMapId,
   liveMapId,
   onForceSync,
@@ -926,6 +931,32 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
               </span>
               {hasUnreadHandouts && (
                 <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.9)] animate-ping" />
+              )}
+            </button>
+          </div>
+        )}
+
+        {/* 9. Soundboard & Ambient Audio Mixer (Jukebox & Spatial Audio) */}
+        {onOpenAudioMixer && (
+          <div className="relative group shrink-0">
+            <button
+              id="group-btn-audio-jukebox"
+              onClick={onOpenAudioMixer}
+              className={`w-11 h-11 rounded-xl flex flex-col items-center justify-center transition-all relative cursor-pointer ${
+                activeAudioLoopCount > 0
+                  ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-500/60 shadow-[0_0_14px_rgba(16,185,129,0.4)]'
+                  : 'text-emerald-300/90 hover:text-emerald-200 bg-emerald-950/30 hover:bg-emerald-900/40 border border-emerald-500/40 hover:border-emerald-400/70'
+              }`}
+              title="Soundboard & Ambient Audio Mixer (Layered Loops, One-Click SFX & Spatial Map Audio)"
+            >
+              <Music className="w-5 h-5" />
+              <span className="text-[6px] font-black font-mono tracking-wider text-emerald-400 -mt-0.5 leading-none">
+                AUDIO
+              </span>
+              {activeAudioLoopCount > 0 && (
+                <span className="absolute -top-1 -right-1 px-1 min-w-[14px] h-[14px] rounded-full bg-emerald-500 text-[8px] font-bold font-mono text-zinc-950 flex items-center justify-center shadow animate-pulse">
+                  {activeAudioLoopCount}
+                </span>
               )}
             </button>
           </div>

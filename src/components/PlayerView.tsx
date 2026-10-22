@@ -69,6 +69,7 @@ import { PlayerDiceRollerModal } from './PlayerDiceRollerModal';
 import { DdbDiceRollEvent } from '../types/dice';
 import { DICE_COLOR_PRESETS, DiceColorPreset } from '../graphics/dice/diceTextures';
 import { WallSegment, VisionConfig, RoomAnnotation, normalizeRoomAnnotations, Combatant, isMonsterToken, AURA_PRESETS, AURA_COLOR_PALETTE, TokenAura, AuraPreset } from '../types';
+import { getAuraVideoUrl } from '../effects/db/tokenFxMap';
 import homeBackgroundImage from '../assets/images/home_background.jpg';
 import sceneBackdropImage from '../assets/images/scene_backdrop.jpg';
 import { base64AudioToBlob, getNarrationVoice } from '../services/audioNarrationService';
@@ -124,6 +125,10 @@ import {
   HandoutsJournalModal,
   HandoutSpotlightModal
 } from './HandoutsJournalSystem';
+import {
+  useAudioMixerJukebox,
+  MapAudioSourcesLayer
+} from './AudioMixerJukebox';
 
 interface Token {
   id: string;
@@ -602,13 +607,14 @@ const PlayerToken = React.memo(({
       list.push({
         radius: token.auraRadius,
         color: token.auraColor || 'rgba(234, 179, 8, 0.4)',
-        opacity: token.auraOpacity ?? 0.35,
+        opacity: token.auraOpacity ?? 0.9,
         pulse: token.auraPulse,
-        name: token.auraName || 'Magical Aura'
+        name: token.auraName || 'Magical Aura',
+        videoUrl: token.videoUrl || (token as any).auraVideoUrl
       });
     }
     return list;
-  }, [token.auras, token.auraRadius, token.auraColor, token.auraOpacity, token.auraPulse, token.auraName]);
+  }, [token.auras, token.auraRadius, token.auraColor, token.auraOpacity, token.auraPulse, token.auraName, token.videoUrl]);
 
   // Flight & Elevation 3D lift + 60fps animation refs
   const elevationFt = Number(token.elevation) || 0;
@@ -727,12 +733,14 @@ const PlayerToken = React.memo(({
         perfectDrawEnabled={false}
       />
 
-      {/* 0. Token Magical Auras (Rendered beneath avatar so token stays solid and sharp) */}
+      {/* 0. Token Magical Auras (Replaced by JB2A WebM animation in DomEffectOverlay when video is available) */}
       {activeAuras.map((aura, idx) => {
+        const hasAnimatedVideo = Boolean(aura.videoUrl || getAuraVideoUrl(aura.name, aura.color));
+        if (hasAnimatedVideo) return null;
+
         const auraFt = aura.radius || 10;
         const auraPixelRadius = radius + (auraFt / 5) * gridSize;
         const col = aura.color || 'rgba(234, 179, 8, 0.4)';
-        // Soften canvas fill when animated video overlay handles the primary animation
         const op = Math.min(0.2, (aura.opacity ?? 0.35) * 0.4);
 
         return (
@@ -1627,7 +1635,7 @@ export default function PlayerView() {
     setTokenMenuPos(null);
   }, []);
   const startTokenMenuDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if ((e.target as HTMLElement).closest('button')) return;
+    if ((e.target as HTMLElement).closest('button, input, select, textarea, a, [data-no-drag]')) return;
     const menuEl = document.getElementById('player-token-context-menu');
     if (!menuEl) return;
     const rect = menuEl.getBoundingClientRect();
@@ -1862,6 +1870,32 @@ export default function PlayerView() {
     socketRef
   });
 
+  // Stand-Alone Soundboard, Layered Ambience & Spatial 2D Audio Listener
+  const playerListenerPoints = useMemo(() => {
+    if (claimedTokenId) {
+      const myToken = tokens.find((t) => t.id === claimedTokenId);
+      if (myToken) return [{ x: myToken.x, y: myToken.y }];
+    }
+    const partyTokens = tokens.filter(
+      (t) => !t.isCondition && (t.isPlayer === true || t.category === 'character' || (!t.isMonster && t.category !== 'monster'))
+    );
+    return partyTokens.map((t) => ({ x: t.x, y: t.y }));
+  }, [tokens, claimedTokenId]);
+
+  const {
+    jukeboxState: playerJukeboxState,
+    handleRemoteJukeboxSync,
+    handleRemoteSoundboardTrigger
+  } = useAudioMixerJukebox({
+    role: 'player',
+    socketRef,
+    listenerPointsWorldPx: playerListenerPoints,
+    gridSize,
+    walls,
+    localMuted: isAudioMuted,
+    localVolume: 0.9
+  });
+
   // ==========================================
   // Socket.io Pure Consumer Setup
   // ==========================================
@@ -2033,6 +2067,15 @@ export default function PlayerView() {
       if (payload?.handoutId && payload?.guess) {
         handleRemoteHandoutRiddleGuess(payload);
       }
+    });
+
+    // 3e. Stand-Alone Soundboard, Layered Ambience & Spatial Audio Sync
+    socket.on('AUDIO_MIXER_SYNC', (mixerState) => {
+      if (mixerState) handleRemoteJukeboxSync(mixerState);
+    });
+
+    socket.on('SOUNDBOARD_TRIGGER', (padPayload) => {
+      if (padPayload?.padId) handleRemoteSoundboardTrigger(padPayload);
     });
 
     // 4. SYNC_AUDIO
@@ -5897,6 +5940,17 @@ export default function PlayerView() {
           </Layer>
         )}
 
+        {/* Positional / Map Audio Sources Layer (only renders if visibleToPlayers is enabled) */}
+        {playerJukeboxState.mapAudioSources.length > 0 && (
+          <Layer listening={false}>
+            <MapAudioSourcesLayer
+              sources={playerJukeboxState.mapAudioSources}
+              gridSize={gridSize}
+              isDM={false}
+            />
+          </Layer>
+        )}
+
         {/* Left-Click Hold Map Ping Radar Layer */}
         <MapPingLayer
           pings={mapPings}
@@ -5973,7 +6027,8 @@ export default function PlayerView() {
         return (
           <div 
             id="player-token-context-menu"
-            className={`fixed z-[300] bg-zinc-950/95 backdrop-blur-xl border rounded-xl shadow-2xl p-3.5 w-72 animate-in fade-in zoom-in-95 select-none ${tokenMenuPinned ? 'border-amber-500/70' : 'border-zinc-700/80'}`}
+            onPointerDown={startTokenMenuDrag}
+            className={`fixed z-[300] bg-zinc-950/95 backdrop-blur-xl border rounded-xl shadow-2xl p-3.5 w-72 animate-in fade-in zoom-in-95 select-none cursor-move ${tokenMenuPinned ? 'border-amber-500/70' : 'border-zinc-700/80'}`}
             style={{ left: menuX, top: menuY }}
             onClick={(e) => e.stopPropagation()}
             onContextMenu={(e) => e.preventDefault()}
@@ -5981,8 +6036,7 @@ export default function PlayerView() {
             {/* Context Menu Header (drag handle) */}
             <div
               className="flex justify-between items-center mb-2.5 pb-2 border-b border-zinc-800 cursor-move touch-none"
-              onPointerDown={startTokenMenuDrag}
-              title="Drag to move"
+              title="Click and drag to move menu"
             >
               <div className="flex items-center gap-2 overflow-hidden">
                 {(() => {
@@ -5998,6 +6052,7 @@ export default function PlayerView() {
                 <span className="text-[10px] font-bold text-zinc-300 uppercase tracking-widest truncate font-mono">
                   {currentToken.name || 'Token Settings'}
                 </span>
+                <GripHorizontal className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
               </div>
               <div className="flex items-center gap-1 shrink-0">
                 <button
@@ -6479,8 +6534,9 @@ export default function PlayerView() {
                             handleUpdateToken(currentToken.id, {
                               auraColor: pal.color,
                               auraRadius: currentToken.auraRadius || customAuraRadiusInput || 10,
-                              auraName: currentToken.auraName || 'Custom Aura',
-                              auraOpacity: currentToken.auraOpacity ?? customAuraOpacityInput
+                              auraName: currentToken.auraName || `${pal.name} Aura`,
+                              auraOpacity: currentToken.auraOpacity ?? 0.9,
+                              videoUrl: (pal as any).videoUrl
                             });
                           }}
                           className={`w-4 h-4 rounded-full border transition-all cursor-pointer ${

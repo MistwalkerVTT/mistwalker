@@ -238,18 +238,34 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
 
           if (auras.length === 0) return null;
 
+          // Avoid duplicating the video if an active HUD-cast effect for the same aura is already attached to this token
+          const attachedEffectsOnToken = effects.filter(
+            e => (e.isPersistent || e.loop) && resolveAttachedToken(e, tokens, gridSize)?.id === token.id
+          );
+
           return auras.map((aura, idx) => {
             const auraFt = aura.radius || 10;
+            const auraName = (aura.name || '').toLowerCase();
             const auraVideo = aura.videoUrl || getAuraVideoUrl(aura.name, aura.color);
             if (!auraVideo) return null;
 
-            const auraPixelRadius = tokenRadius + (auraFt / 5) * gridSize;
+            const alreadyRenderedByEffect = attachedEffectsOnToken.some(
+              e => e.videoUrl === auraVideo ||
+                   (auraName && (e.name.toLowerCase().includes(auraName) || auraName.includes(e.name.toLowerCase())))
+            );
+            if (alreadyRenderedByEffect) return null;
+
+            const auraPixelRadius = auraFt >= 10
+              ? tokenRadius + (auraFt / 5) * gridSize
+              : Math.max(tokenRadius * 1.5, ((auraFt * 2) / 5) * gridSize / 2);
             const auraDiameter = auraPixelRadius * 2;
-            const auraOpacity = aura.opacity ?? 0.35;
+            const rawOp = aura.opacity ?? 0.9;
+            // Upgrade legacy static-circle default opacities (0.35 - 0.5) to vibrant video opacity (0.9)
+            const auraOpacity = (rawOp >= 0.34 && rawOp <= 0.5) ? 0.9 : rawOp;
 
             return (
               <video
-                key={`aura-${token.id}-${idx}`}
+                key={`aura-${token.id}-${idx}-${auraVideo}`}
                 src={auraVideo}
                 autoPlay
                 muted
@@ -270,10 +286,10 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                   minHeight: `${auraDiameter}px`,
                   transform: 'translate(-50%, -50%) translateZ(0)',
                   transformOrigin: '50% 50%',
-                  objectFit: 'contain',
+                  objectFit: 'fill',
                   opacity: auraOpacity,
                   pointerEvents: 'none',
-                  filter: 'drop-shadow(0 0 16px rgba(255, 255, 255, 0.2))'
+                  filter: 'drop-shadow(0 0 12px rgba(255, 255, 255, 0.25))'
                 }}
               />
             );

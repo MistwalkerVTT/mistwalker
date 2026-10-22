@@ -18,7 +18,8 @@ import {
   FileCode2,
   Bug,
   Clock,
-  Scroll
+  Scroll,
+  Music
 } from 'lucide-react';
 import { Campaign, Scene, ActiveSessionData } from '../lib/firebase';
 import { DEMO_GV_CAMPAIGN, DEMO_GV_SCENE, DEMO_GV_CHAPTER } from '../data/demoCampaignGv';
@@ -33,6 +34,7 @@ interface DashboardHomeHubProps {
   onOpenAlliesCompendium: () => void;
   onOpenDdbSync: () => void;
   onOpenHandoutsJournal?: () => void;
+  onOpenAudioMixer?: () => void;
   onOpenBugReport?: () => void;
   onLoadSceneFromCampaign: (scene: Scene, campaignId: string, chapterId: string) => void;
   campaignsList: Campaign[];
@@ -57,6 +59,7 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
   onOpenAlliesCompendium,
   onOpenDdbSync,
   onOpenHandoutsJournal,
+  onOpenAudioMixer,
   onOpenBugReport,
   onLoadSceneFromCampaign,
   campaignsList,
@@ -574,6 +577,31 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
                     </div>
                   </div>
                   <ChevronRight className="w-4 h-4 text-amber-400 group-hover/handout:translate-x-0.5 transition-transform" />
+                </button>
+              )}
+
+              {/* Soundboard & Ambient Audio Mixer Banner Button */}
+              {onOpenAudioMixer && (
+                <button
+                  type="button"
+                  id="btn-home-audio-mixer"
+                  onClick={onOpenAudioMixer}
+                  className="w-full mt-2 p-3 rounded-2xl bg-gradient-to-r from-emerald-950/60 via-zinc-900/90 to-emerald-950/40 hover:from-emerald-900/50 hover:to-emerald-900/30 border border-emerald-500/40 hover:border-emerald-400 transition-all text-left group/audio flex items-center justify-between cursor-pointer shadow-lg shadow-emerald-950/20"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 group-hover/audio:scale-105 transition-transform">
+                      <Music className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="block text-xs font-mono font-bold text-emerald-200 group-hover/audio:text-emerald-100">
+                        Soundboard & Ambient Audio Mixer
+                      </span>
+                      <span className="block text-[10px] text-zinc-400 font-sans">
+                        Layered loops, 1-click SFX pads & spatial map audio
+                      </span>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-emerald-400 group-hover/audio:translate-x-0.5 transition-transform" />
                 </button>
               )}
             </div>
