@@ -2876,7 +2876,7 @@ export default function PlayerView() {
                          (Boolean(activeEquippedAsset.projectileWebm) && dist > 25);
     const isPointAoe = activeEquippedAsset.paradigm === 'point' || activeEquippedAsset.paradigm === 'aura';
 
-    // Teleportation Spells (Misty Step, Dimension Door, Arcane Gate, Thunder Step)
+    // Teleportation Spells (Misty Step, Dimension Door, Arcane Gate, Thunder Step, etc.)
     const isTeleportSpell = activeEquippedAsset.targetType === 'teleport' ||
       activeEquippedAsset.id === 'misty_step' ||
       activeEquippedAsset.id === 'dimension_door' ||
@@ -2885,21 +2885,26 @@ export default function PlayerView() {
 
     if (isTeleportSpell && claimedToken) {
       const maxRangeFt = activeEquippedAsset.rangeFt || (activeEquippedAsset.name.toLowerCase().includes('misty step') ? 30 : 500);
-      const distFt = Math.round((dist / gridSize) * 5);
+
+      // Snapped destination to grid tile top-left for token placement
+      const snappedTargetX = Math.round(target.x / gridSize) * gridSize;
+      const snappedTargetY = Math.round(target.y / gridSize) * gridSize;
+
+      // Always guarantee departure center is strictly the claimedToken's center
+      const tokenRadius = ((claimedToken.size || 1) * gridSize) / 2;
+      const tokenCenterX = claimedToken.x + tokenRadius;
+      const tokenCenterY = claimedToken.y + tokenRadius;
+      const departCenter = { x: tokenCenterX, y: tokenCenterY };
+      const arriveCenter = { x: snappedTargetX + tokenRadius, y: snappedTargetY + tokenRadius };
+
+      // Calculate distance from token center to destination
+      const trueTeleportDist = Math.hypot(arriveCenter.x - departCenter.x, arriveCenter.y - departCenter.y);
+      const distFt = Math.round((trueTeleportDist / gridSize) * 5);
 
       if (maxRangeFt > 0 && distFt > maxRangeFt + 2) {
         toast.error(`Out of range! Teleport destination is ${distFt} ft away (Max range: ${maxRangeFt} ft).`);
         return;
       }
-
-      // Snap destination to grid tile top-left for token placement
-      const snappedTargetX = Math.round(target.x / gridSize) * gridSize;
-      const snappedTargetY = Math.round(target.y / gridSize) * gridSize;
-
-      // Center coordinates for dual departure and arrival animation bursts
-      const tokenRadius = ((claimedToken.size || 1) * gridSize) / 2;
-      const departCenter = { x: origin.x, y: origin.y };
-      const arriveCenter = { x: snappedTargetX + tokenRadius, y: snappedTargetY + tokenRadius };
 
       // Departure Poof at Point A (where character vanishes from)
       const departEffect: VttEffectInstance = {
@@ -3704,6 +3709,23 @@ export default function PlayerView() {
         toast.info(`Click on a token to target ${activeTargetingAction.name}${claimedToken ? ' (or click Target Self in the dock)' : ''}.`);
         return;
       }
+    }
+
+    // Teleportation Spells (Dimension Door, Misty Step, etc.) must NEVER drop point-blank on click!
+    const isTeleportAim = activeEquippedAsset.targetType === 'teleport' ||
+      activeEquippedAsset.id === 'misty_step' ||
+      activeEquippedAsset.id === 'dimension_door' ||
+      activeEquippedAsset.name.toLowerCase().includes('misty step') ||
+      activeEquippedAsset.name.toLowerCase().includes('dimension door');
+
+    if (isTeleportAim) {
+      hasCastOnMouseDownRef.current = true;
+      const casterCenter = claimedToken ? {
+        x: claimedToken.x + (((claimedToken.size || 1) * gridSize) / 2),
+        y: claimedToken.y + (((claimedToken.size || 1) * gridSize) / 2)
+      } : (aimOrigin || point);
+      castSpellAt(casterCenter, point);
+      return;
     }
 
     // Point AoE spells (Fireball, Fog Cloud, Web, Darkness, etc.) drop immediately on click!
