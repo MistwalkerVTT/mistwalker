@@ -57,7 +57,8 @@ import {
   Palette,
   Menu,
   Maximize,
-  Minimize
+  Minimize,
+  Scroll
 } from 'lucide-react';
 import { toast, Toaster } from 'sonner';
 import { DynamicLightingLayer } from './DynamicLightingLayer';
@@ -118,6 +119,11 @@ import {
   useTokenFlightAnimation
 } from './TokenFlightElevation';
 import { MapPingLayer, useLeftClickHoldPing, MapPingItem } from './MapPingOverlay';
+import {
+  useHandoutsJournalSystem,
+  HandoutsJournalModal,
+  HandoutSpotlightModal
+} from './HandoutsJournalSystem';
 
 interface Token {
   id: string;
@@ -400,8 +406,10 @@ const PlayerToken = React.memo(({
   onDragMoveToken,
   onDragStartToken,
   onClaimToken,
-  onContextMenu
+  onContextMenu,
+  showHp = true
 }: {
+  showHp?: boolean;
   token: Token;
   gridSize: number;
   gridOffsetX?: number;
@@ -928,7 +936,7 @@ const PlayerToken = React.memo(({
         {/* 3. AC Shield Badge on Top-Left: REMOVED per user request */}
 
         {/* 4. Large, High-Contrast HP Pill Badge directly tied to D&D Beyond & Character Sheet (PLAYERS & ALLIES ONLY - Monsters & Condition tokens NEVER show HP in player view) */}
-        {!isCondition && (!isMonster || isAlly) && (
+        {showHp && !isCondition && (!isMonster || isAlly) && (
           <Group x={pillX} y={pillY}>
             {/* Dark slate container badge */}
             <Rect
@@ -1596,6 +1604,7 @@ export default function PlayerView() {
   // Token Context Menu State (Right-Click Menu mirrored from DM View)
   const [activeTokenMenu, setActiveTokenMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const [inspectedRuleEntry, setInspectedRuleEntry] = useState<DndRuleEntry | null>(null);
+  const [inspectedAuraRequest, setInspectedAuraRequest] = useState<{ action: HudActionItem; tick: number } | null>(null);
   // Movable / pinnable token menu: pinned menus stay open and keep a user-chosen screen position
   const [tokenMenuPinned, setTokenMenuPinned] = useState<boolean>(false);
   const [tokenMenuPos, setTokenMenuPos] = useState<{ x: number; y: number } | null>(null);
@@ -1717,6 +1726,12 @@ export default function PlayerView() {
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth < 768 : false);
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(() => typeof window !== 'undefined' ? window.innerWidth >= 768 : true);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [showHpDisplay, setShowHpDisplay] = useState<boolean>(() => {
+    try { return localStorage.getItem('mistwalker_player_show_hp') !== 'false'; } catch { return true; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('mistwalker_player_show_hp', String(showHpDisplay)); } catch {}
+  }, [showHpDisplay]);
   const [showCharacterFlyout, setShowCharacterFlyout] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -1817,6 +1832,33 @@ export default function PlayerView() {
       };
       setStagePos(nextPos);
     }
+  });
+
+  // Stand-Alone Player Handouts, Visual Props & Shared Journal System
+  const [showHandoutsJournalModal, setShowHandoutsJournalModal] = useState(false);
+  const {
+    handouts: partyHandouts,
+    quests: partyQuests,
+    journalEntries: partyJournalEntries,
+    activePresentation: activeHandoutPresentation,
+    hasUnreadUpdate: hasUnreadHandouts,
+    clearUnreadUpdate: clearUnreadHandouts,
+    addOrUpdateHandout,
+    deleteHandout,
+    presentHandoutToTable,
+    dismissPresentation: dismissHandoutPresentation,
+    submitRiddleGuess,
+    addOrUpdateQuest,
+    deleteQuest,
+    addOrUpdateJournalEntry,
+    deleteJournalEntry,
+    handleRemoteSync: handleRemoteHandoutsSync,
+    handleRemotePresent: handleRemoteHandoutPresent,
+    handleRemoteRiddleGuess: handleRemoteHandoutRiddleGuess
+  } = useHandoutsJournalSystem({
+    role: 'player',
+    currentCharacterName: activeClaimedName,
+    socketRef
   });
 
   // ==========================================
@@ -1974,6 +2016,21 @@ export default function PlayerView() {
     socket.on('MAP_PING', (ping: MapPingItem) => {
       if (ping && typeof ping.x === 'number' && typeof ping.y === 'number') {
         receiveRemotePing(ping);
+      }
+    });
+
+    // 3d. Stand-Alone Handouts, Visual Props & Shared Journal Sync
+    socket.on('HANDOUTS_SYNC', (payload) => {
+      if (payload) handleRemoteHandoutsSync(payload);
+    });
+
+    socket.on('HANDOUT_PRESENT', (presentation) => {
+      handleRemoteHandoutPresent(presentation || null);
+    });
+
+    socket.on('HANDOUT_RIDDLE_GUESS', (payload) => {
+      if (payload?.handoutId && payload?.guess) {
+        handleRemoteHandoutRiddleGuess(payload);
       }
     });
 
@@ -3211,6 +3268,7 @@ export default function PlayerView() {
       }) || claimedToken || null
     ) : null;
 
+    const aimedAction = activeTargetingAction;
     const newEffect: VttEffectInstance = {
       id: `eff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       name: hitToken && hitToken.id !== claimedToken?.id ? `${activeEquippedAsset.name} (${hitToken.name})` : activeEquippedAsset.name,
@@ -3250,7 +3308,17 @@ export default function PlayerView() {
         burstSoundKey: activeEquippedAsset.soundKey
       } : undefined,
       ownerId: claimedToken?.id || claimedToken?.name || 'player',
-      casterName: claimedToken?.name || 'Hero'
+      casterName: claimedToken?.name || 'Hero',
+      spellId: aimedAction?.id,
+      castAtLevel: aimedAction?.castAtLevel ?? aimedAction?.level ?? activeEquippedAsset.level,
+      baseLevel: aimedAction?.level ?? activeEquippedAsset.level,
+      damageFormula: aimedAction?.damageFormula,
+      damageType: aimedAction?.damageType,
+      saveDc: aimedAction?.saveDc ?? hudCharacterData?.spellSaveDc,
+      saveAbility: aimedAction?.saveAbility,
+      description: aimedAction?.description,
+      atHigherLevels: aimedAction?.atHigherLevels,
+      actionSnapshot: aimedAction ? { ...aimedAction } : undefined
     };
 
     setEffects(prev => [...prev, newEffect]);
@@ -3260,7 +3328,6 @@ export default function PlayerView() {
     }
 
     // Roll 3D physics damage/healing dice if the cast spell has a damageFormula (including upcasted formulas!)
-    const aimedAction = activeTargetingAction;
     const rawFormula = aimedAction?.damageFormula;
     const upcastLabel =
       aimedAction?.castAtLevel && aimedAction.castAtLevel > (aimedAction.level ?? 0)
@@ -3676,6 +3743,153 @@ export default function PlayerView() {
     });
   }, [hudCharacterData, claimedToken, selectedDicePreset]);
 
+  const handleRollDamage = useCallback((action: HudActionItem) => {
+    const rawFormula = action.damageFormula;
+    if (!rawFormula) return;
+
+    const cleanFormula = rawFormula.replace(/[a-zA-Z]+/g, '').trim();
+    const rollParts = (cleanFormula || rawFormula).match(/(\d+)d(\d+)(?:\s*([+-])\s*(\d+))?/i);
+    let rolledTotal = 0;
+    const diceResults: Array<{ sides: number; result: number; type: string }> = [];
+    if (rollParts) {
+      const numDice = parseInt(rollParts[1], 10) || 1;
+      const sides = parseInt(rollParts[2], 10) || 6;
+      const sign = rollParts[3] === '-' ? -1 : 1;
+      const mod = parseInt(rollParts[4], 10) || 0;
+      let diceSum = 0;
+      for (let i = 0; i < numDice; i++) {
+        const r = Math.floor(Math.random() * sides) + 1;
+        diceSum += r;
+        diceResults.push({ sides, result: r, type: `d${sides}` });
+      }
+      rolledTotal = Math.max(1, diceSum + sign * mod);
+    } else {
+      rolledTotal = parseInt(cleanFormula, 10) || 1;
+    }
+
+    const charName = hudCharacterData?.name || claimedToken?.name || 'Hero';
+    const upcastSuffix =
+      action.castAtLevel && action.castAtLevel > (action.level ?? 0)
+        ? ` [Lvl ${action.castAtLevel} Slot]`
+        : '';
+
+    const diceEvent: DdbDiceRollEvent = {
+      id: `roll-${Date.now()}`,
+      characterId: String(hudCharacterData?.id || claimedToken?.id || ''),
+      characterName: charName,
+      avatarUrl: hudCharacterData?.avatarUrl || claimedToken?.avatarUrl || claimedToken?.url,
+      action: `${action.name}${upcastSuffix} (${action.isHeal ? 'Healing' : 'Damage'})`,
+      rollType: action.isHeal ? 'heal' : 'damage',
+      formula: rawFormula,
+      diceNotation: rawFormula,
+      dice: diceResults.length > 0 ? diceResults : [{ sides: 8, result: rolledTotal, type: 'd8' }],
+      total: rolledTotal,
+      isCritical: false,
+      isFumble: false,
+      theme: selectedDicePreset.id,
+      themeColor: action.isHeal ? '#10b981' : selectedDicePreset.theme.primaryColor,
+      timestamp: Date.now(),
+      source: 'player'
+    };
+
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', diceEvent);
+    }
+    if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+      (window as any).__mistwalkerRoll3d(diceEvent);
+    }
+
+    toast.success(`${charName}: ${action.name}${upcastSuffix}!`, {
+      description: `Rolled ${rolledTotal} ${action.damageType || (action.isHeal ? 'HP' : 'damage')} (${rawFormula})`
+    });
+  }, [hudCharacterData, claimedToken, selectedDicePreset]);
+
+  const handleInspectEffect = useCallback((effect: VttEffectInstance) => {
+    const cleanName = (effect.name || '').replace(/\s*\([^)]*\)\s*$/, '').trim();
+    const lowerClean = cleanName.toLowerCase();
+
+    // 1. Check if the effect has a saved actionSnapshot or matches a spell/action in the character's HUD
+    const allHudActions: HudActionItem[] = [
+      ...(hudCharacterData?.spells || []),
+      ...(hudCharacterData?.actions || []),
+      ...(hudCharacterData?.bonusActions || []),
+      ...(hudCharacterData?.reactions || [])
+    ];
+    const matchedHudAction = allHudActions.find(
+      a => a.id === effect.spellId || a.name.trim().toLowerCase() === lowerClean
+    );
+
+    const rule = lookupDndRuleDetails(cleanName, 'aura') || lookupDndRuleDetails(cleanName, 'spell');
+
+    const baseAction: HudActionItem = effect.actionSnapshot || matchedHudAction || {
+      id: effect.spellId || effect.assetKey || effect.id,
+      name: cleanName || effect.name,
+      category: 'spells',
+      type: 'action',
+      subCategory: 'spell',
+      level: effect.baseLevel ?? rule?.level ?? 3,
+      school: rule?.school,
+      sourceLabel: rule?.subtitle || 'Active Magical Aura',
+      castingTime: rule?.castingTime || '1 Action',
+      rangeFt: effect.sizeFt || 15,
+      components: rule?.components || 'V, S',
+      duration: rule?.duration || 'Concentration, up to 10 minutes',
+      saveDc: effect.saveDc ?? hudCharacterData?.spellSaveDc,
+      saveAbility: effect.saveAbility ?? rule?.saveAbility,
+      damageFormula: effect.damageFormula ?? rule?.damageFormula,
+      damageType: effect.damageType ?? rule?.damageType,
+      isHeal: rule?.isHeal,
+      description: effect.description || rule?.description || `${cleanName} active aura (${effect.sizeFt || 15} ft radius).`,
+      atHigherLevels: effect.atHigherLevels || rule?.higherLevels
+    };
+
+    const resolvedAction: HudActionItem = {
+      ...baseAction,
+      castAtLevel: effect.castAtLevel ?? baseAction.castAtLevel ?? baseAction.level,
+      damageFormula: effect.damageFormula ?? baseAction.damageFormula,
+      damageType: effect.damageType ?? baseAction.damageType,
+      saveDc: effect.saveDc ?? baseAction.saveDc ?? hudCharacterData?.spellSaveDc,
+      saveAbility: effect.saveAbility ?? baseAction.saveAbility
+    };
+
+    const isDockVisible = (stationMode === 'remote_player' || Boolean(claimedToken)) && !isUiMinimized;
+    if (isDockVisible) {
+      setInspectedAuraRequest({ action: resolvedAction, tick: Date.now() });
+    } else {
+      setInspectedRuleEntry({
+        name: resolvedAction.name,
+        category: 'aura',
+        subtitle: resolvedAction.sourceLabel || 'Active Magical Aura',
+        level: resolvedAction.level,
+        castAtLevel: resolvedAction.castAtLevel,
+        school: resolvedAction.school,
+        castingTime: resolvedAction.castingTime,
+        range: `${effect.sizeFt || resolvedAction.rangeFt || 15} ft radius`,
+        components: resolvedAction.components,
+        duration: resolvedAction.duration,
+        damageFormula: resolvedAction.damageFormula,
+        damageType: resolvedAction.damageType,
+        saveDc: resolvedAction.saveDc,
+        saveAbility: resolvedAction.saveAbility,
+        isHeal: resolvedAction.isHeal,
+        description: resolvedAction.description,
+        higherLevels: resolvedAction.atHigherLevels
+      });
+    }
+  }, [hudCharacterData, stationMode, claimedToken, isUiMinimized]);
+
+  const handleClearTokenAura = useCallback((tokenId: string, auraName?: string) => {
+    const targetTok = tokensRef.current.find(t => t.id === tokenId);
+    handleUpdateToken(tokenId, {
+      auraRadius: undefined,
+      auraColor: undefined,
+      auraName: undefined,
+      auraOpacity: undefined,
+      auras: []
+    });
+    toast.info(`Removed ${auraName || 'aura'} from ${targetTok?.name || 'token'}`);
+  }, [handleUpdateToken]);
+
   const handleTargetToken = useCallback((targetToken: Token) => {
     if (!activeTargetingAction) return;
     const now = Date.now();
@@ -3762,7 +3976,19 @@ export default function PlayerView() {
           burstOnImpact: Boolean(asset.burstWebm && asset.burstWebm !== (asset.projectileWebm || asset.webm)),
           burstVideoUrl: (asset.burstWebm && asset.burstWebm !== (asset.projectileWebm || asset.webm)) ? asset.burstWebm : undefined,
           burstSoundKey: asset.soundKey
-        } : undefined
+        } : undefined,
+        ownerId: caster.id,
+        casterName: caster.name || 'Hero',
+        spellId: action.id,
+        castAtLevel: action.castAtLevel ?? action.level ?? asset.level,
+        baseLevel: action.level ?? asset.level,
+        damageFormula: action.damageFormula,
+        damageType: action.damageType,
+        saveDc: action.saveDc ?? hudCharacterData?.spellSaveDc,
+        saveAbility: action.saveAbility,
+        description: action.description,
+        atHigherLevels: action.atHigherLevels,
+        actionSnapshot: { ...action }
       };
       setEffects(prev => [...prev, newEffect]);
       if (asset.soundKey) soundCatalog.play(asset.soundKey);
@@ -4861,6 +5087,21 @@ export default function PlayerView() {
                       {isFull && <span>Roll Dice</span>}
                     </button>
 
+                    {/* Toggle HP Display on tokens */}
+                    <button
+                      id="btn-toggle-hp-display"
+                      onClick={() => setShowHpDisplay(prev => !prev)}
+                      className={`w-full flex items-center rounded-xl transition-all cursor-pointer border ${
+                        showHpDisplay
+                          ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-200'
+                          : 'bg-zinc-900/80 hover:bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
+                      } ${isFull ? 'px-2.5 py-2 gap-2 text-xs font-medium' : 'p-2.5 justify-center'}`}
+                      title={showHpDisplay ? 'Hide HP bars on tokens' : 'Show HP bars on tokens'}
+                    >
+                      <Heart className={`w-4 h-4 shrink-0 ${showHpDisplay ? 'text-emerald-400' : 'text-zinc-500'}`} />
+                      {isFull && <span className="flex-1 text-left">HP Display: {showHpDisplay ? 'On' : 'Off'}</span>}
+                    </button>
+
                     {/* 3D Dice Style & Material Palette */}
                     <button
                       onClick={() => setShowDicePaletteModal(prev => !prev)}
@@ -4898,6 +5139,27 @@ export default function PlayerView() {
                     >
                       <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
                       {isFull && <span>Spell Effects</span>}
+                    </button>
+
+                    {/* Player Handouts, Visual Props & Shared Party Journal */}
+                    <button
+                      onClick={() => {
+                        setShowHandoutsJournalModal(true);
+                        clearUnreadHandouts();
+                        if (isMobile) setIsMobileSidebarOpen(false);
+                      }}
+                      className={`relative w-full flex items-center rounded-xl transition-all cursor-pointer border ${
+                        showHandoutsJournalModal || hasUnreadHandouts
+                          ? 'bg-amber-500/20 border-amber-500/60 text-amber-200'
+                          : 'bg-zinc-900/80 hover:bg-zinc-900 border-zinc-800 text-zinc-300 hover:text-amber-200'
+                      } ${isFull ? 'px-2.5 py-2 gap-2 text-xs font-medium' : 'p-2.5 justify-center'}`}
+                      title="Handouts, Props, Quests & Shared Party Journal"
+                    >
+                      <Scroll className="w-4 h-4 text-amber-400 shrink-0" />
+                      {isFull && <span>Handouts & Journal</span>}
+                      {hasUnreadHandouts && (
+                        <span className="ml-auto w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                      )}
                     </button>
 
                     {/* Audio Mute/Unmute */}
@@ -5547,6 +5809,7 @@ export default function PlayerView() {
             .filter(isTokenVisibleToPlayer)
             .map((token) => (
               <PlayerToken
+                showHp={showHpDisplay}
                 key={token.id}
                 token={token}
                 gridSize={gridSize}
@@ -6779,6 +7042,37 @@ export default function PlayerView() {
           </div>
         </div>
       )}
+
+      {/* Stand-Alone Player Handouts, Visual Props & Shared Journal System */}
+      <HandoutsJournalModal
+        isOpen={showHandoutsJournalModal}
+        onClose={() => setShowHandoutsJournalModal(false)}
+        role="player"
+        currentCharacterName={activeClaimedName}
+        partyCharacters={compendiumCharacters}
+        handouts={partyHandouts}
+        quests={partyQuests}
+        journalEntries={partyJournalEntries}
+        activePresentation={activeHandoutPresentation}
+        onSaveHandout={addOrUpdateHandout}
+        onDeleteHandout={deleteHandout}
+        onPresentHandout={presentHandoutToTable}
+        onSaveQuest={addOrUpdateQuest}
+        onDeleteQuest={deleteQuest}
+        onSaveJournalEntry={addOrUpdateJournalEntry}
+        onDeleteJournalEntry={deleteJournalEntry}
+        onSubmitRiddleGuess={submitRiddleGuess}
+      />
+
+      <HandoutSpotlightModal
+        presentation={activeHandoutPresentation}
+        handouts={partyHandouts}
+        role="player"
+        currentCharacterName={activeClaimedName}
+        onDismiss={dismissHandoutPresentation}
+        onUpdatePresentation={() => {}}
+        onSubmitRiddleGuess={submitRiddleGuess}
+      />
 
       {/* Toast Notification Container for Player View */}
       <Toaster position="bottom-right" theme="dark" richColors />

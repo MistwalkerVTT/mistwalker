@@ -16,7 +16,8 @@ import {
   Pentagon,
   Layers,
   Radio,
-  Share2
+  Share2,
+  Scroll
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Campaign, Scene } from '../lib/firebase';
@@ -44,6 +45,8 @@ interface MainCampaignBarProps {
   onOpenAlliesCompendium?: () => void;
   onOpenDdbSync?: () => void;
   onOpenDndChatbot?: () => void;
+  onOpenHandoutsJournal?: () => void;
+  hasUnreadHandouts?: boolean;
   isFirebaseConnected?: boolean;
   onRelinkMap?: () => void;
   onForceSync?: () => void;
@@ -70,6 +73,8 @@ export const MainCampaignBar: React.FC<MainCampaignBarProps> = React.memo(({
   onOpenAlliesCompendium,
   onOpenDdbSync,
   onOpenDndChatbot,
+  onOpenHandoutsJournal,
+  hasUnreadHandouts,
   isFirebaseConnected = true,
   onRelinkMap,
   onForceSync,
@@ -398,6 +403,22 @@ export const MainCampaignBar: React.FC<MainCampaignBarProps> = React.memo(({
           >
             <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
             <span>D&D Beyond</span>
+          </button>
+        )}
+
+        {/* Handouts, Visual Props & Shared Party Journal */}
+        {onOpenHandoutsJournal && (
+          <button
+            id="btn-main-open-handouts-journal"
+            onClick={onOpenHandoutsJournal}
+            className="px-2.5 py-1 rounded-xl bg-amber-950/50 hover:bg-amber-900/60 text-amber-200 border border-amber-500/40 text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer relative"
+            title="Open Player Handouts, Visual Props, Letters, Riddles & Shared Party Journal"
+          >
+            <Scroll className="w-3.5 h-3.5 text-amber-400" />
+            <span>Handouts & Journal</span>
+            {hasUnreadHandouts && (
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+            )}
           </button>
         )}
 

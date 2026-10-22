@@ -151,6 +151,11 @@ import {
   useTokenFlightAnimation
 } from './components/TokenFlightElevation';
 import { MapPingLayer, useLeftClickHoldPing, MapPingItem } from './components/MapPingOverlay';
+import {
+  useHandoutsJournalSystem,
+  HandoutsJournalModal,
+  HandoutSpotlightModal
+} from './components/HandoutsJournalSystem';
 import { BugReportModal } from './components/BugReportModal';
 import { BugReportManagerModal } from './components/BugReportManagerModal';
 import { DEMO_GV_CAMPAIGN, DEMO_GV_SCENE, DEMO_GV_CHAPTER, DEMO_GV_ROOM_ZONES, DEMO_GV_TOKENS } from './data/demoCampaignGv';
@@ -2177,6 +2182,33 @@ export default function App() {
     }
   });
 
+  // Stand-Alone Player Handouts, Visual Props & Shared Journal System
+  const [showHandoutsJournalModal, setShowHandoutsJournalModal] = useState(false);
+  const {
+    handouts: partyHandouts,
+    quests: partyQuests,
+    journalEntries: partyJournalEntries,
+    activePresentation: activeHandoutPresentation,
+    hasUnreadUpdate: hasUnreadHandouts,
+    clearUnreadUpdate: clearUnreadHandouts,
+    addOrUpdateHandout,
+    deleteHandout,
+    presentHandoutToTable,
+    dismissPresentation: dismissHandoutPresentation,
+    submitRiddleGuess,
+    addOrUpdateQuest,
+    deleteQuest,
+    addOrUpdateJournalEntry,
+    deleteJournalEntry,
+    handleRemoteSync: handleRemoteHandoutsSync,
+    handleRemotePresent: handleRemoteHandoutPresent,
+    handleRemoteRiddleGuess: handleRemoteHandoutRiddleGuess
+  } = useHandoutsJournalSystem({
+    role: 'dm',
+    currentCharacterName: 'Dungeon Master',
+    socketRef
+  });
+
   // Dice Roller States
   const [diceHistory, setDiceHistory] = useState<RollResult[]>([]);
   const [dicePool, setDicePool] = useState<string[]>([]);
@@ -2812,6 +2844,20 @@ export default function App() {
     socket.on('MAP_PING', (ping: MapPingItem) => {
       if (ping && typeof ping.x === 'number' && typeof ping.y === 'number') {
         receiveRemotePing(ping);
+      }
+    });
+
+    socket.on('HANDOUTS_SYNC', (payload) => {
+      if (payload) handleRemoteHandoutsSync(payload);
+    });
+
+    socket.on('HANDOUT_PRESENT', (presentation) => {
+      handleRemoteHandoutPresent(presentation || null);
+    });
+
+    socket.on('HANDOUT_RIDDLE_GUESS', (payload) => {
+      if (payload?.handoutId && payload?.guess) {
+        handleRemoteHandoutRiddleGuess(payload);
       }
     });
 
@@ -7538,6 +7584,11 @@ export default function App() {
           onImportUniversalVtt={handleUniversalVttImport}
           onOpenBugReport={() => setIsBugReportModalOpen(true)}
           onOpenBugManager={() => setIsBugManagerModalOpen(true)}
+          onOpenHandoutsJournal={() => {
+            setShowHandoutsJournalModal(true);
+            clearUnreadHandouts();
+          }}
+          hasUnreadHandouts={hasUnreadHandouts}
         />
 
         {/* Floating Wall & Creator Toolbar (shown when in creator mode or wall/zone tool active) */}
@@ -10521,6 +10572,40 @@ export default function App() {
             socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', diceEvent);
           }
         }}
+      />
+
+      {/* Stand-Alone Player Handouts, Visual Props & Shared Journal System */}
+      <HandoutsJournalModal
+        isOpen={showHandoutsJournalModal}
+        onClose={() => setShowHandoutsJournalModal(false)}
+        role="dm"
+        currentCharacterName="Dungeon Master"
+        partyCharacters={compendiumCharacters}
+        handouts={partyHandouts}
+        quests={partyQuests}
+        journalEntries={partyJournalEntries}
+        activePresentation={activeHandoutPresentation}
+        onSaveHandout={addOrUpdateHandout}
+        onDeleteHandout={deleteHandout}
+        onPresentHandout={presentHandoutToTable}
+        onSaveQuest={addOrUpdateQuest}
+        onDeleteQuest={deleteQuest}
+        onSaveJournalEntry={addOrUpdateJournalEntry}
+        onDeleteJournalEntry={deleteJournalEntry}
+        onSubmitRiddleGuess={submitRiddleGuess}
+      />
+
+      <HandoutSpotlightModal
+        presentation={activeHandoutPresentation}
+        handouts={partyHandouts}
+        role="dm"
+        currentCharacterName="Dungeon Master"
+        onDismiss={() => presentHandoutToTable(null)}
+        onUpdatePresentation={(patch) => {
+          if (!activeHandoutPresentation) return;
+          presentHandoutToTable(activeHandoutPresentation.handoutId, patch);
+        }}
+        onSubmitRiddleGuess={submitRiddleGuess}
       />
 
       <EffectContextMenu

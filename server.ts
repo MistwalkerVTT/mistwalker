@@ -648,6 +648,22 @@ async function startServer() {
       }
     });
 
+    socket.on("HANDOUTS_SYNC", (data: any) => {
+      if (data) {
+        socket.broadcast.emit("HANDOUTS_SYNC", data);
+      }
+    });
+
+    socket.on("HANDOUT_PRESENT", (presentation: any) => {
+      socket.broadcast.emit("HANDOUT_PRESENT", presentation);
+    });
+
+    socket.on("HANDOUT_RIDDLE_GUESS", (guessData: any) => {
+      if (guessData) {
+        socket.broadcast.emit("HANDOUT_RIDDLE_GUESS", guessData);
+      }
+    });
+
     socket.on("MOVE_TOKEN", (data: any) => {
       console.log(`[Server Socket] MOVE_TOKEN: id=${data?.id}, x=${data?.x}, y=${data?.y}`);
       if (data?.id && Array.isArray(activeVttState.tokens)) {

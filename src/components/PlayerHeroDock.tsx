@@ -810,108 +810,163 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* DESKTOP HOVER DETAIL POPOVER                                              */}
+      {/* DESKTOP HOVER & CLICKED AURA DETAIL POPOVER                               */}
       {/* ========================================================================= */}
-      {hoveredAction && !currentTargetingAction && (
-        <div className="hidden md:block pointer-events-auto relative mb-2 px-4 py-3 rounded-xl bg-zinc-950/98 border border-zinc-700/90 shadow-2xl text-left w-full max-w-2xl animate-in fade-in duration-100">
-          <div className="flex items-center justify-between gap-3 flex-wrap pr-8">
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-md bg-zinc-950 border border-zinc-800 flex items-center justify-center shrink-0 overflow-hidden relative shadow-inner">
-                {renderActionGlyph(hoveredAction, 'w-3.5 h-3.5')}
+      {(() => {
+        const detailAction = hoveredAction || pinnedAction;
+        if (!detailAction || currentTargetingAction) return null;
+        const baseSpell = spellsList.find(s => s.id === detailAction.id) || detailAction;
+        const baseLvl = baseSpell.level ?? detailAction.level ?? 0;
+        const currentSlot = detailAction.castAtLevel ?? baseLvl;
+        const isUpcasted = baseLvl >= 1 && currentSlot > baseLvl;
+
+        return (
+          <div className={`${pinnedAction ? 'block' : 'hidden md:block'} pointer-events-auto relative mb-2 px-4 py-3 rounded-xl bg-zinc-950/98 border border-zinc-700/90 shadow-2xl text-left w-full max-w-2xl animate-in fade-in duration-100`}>
+            <div className="flex items-center justify-between gap-3 flex-wrap pr-8">
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="w-6 h-6 rounded-md bg-zinc-950 border border-zinc-800 flex items-center justify-center shrink-0 overflow-hidden relative shadow-inner">
+                  {renderActionGlyph(detailAction, 'w-3.5 h-3.5')}
+                </div>
+                <span className="font-bold text-white font-mono text-xs">{detailAction.name}</span>
+                {detailAction.sourceLabel && (
+                  <span className="px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-[10px] font-mono text-zinc-300">
+                    {detailAction.sourceLabel}
+                  </span>
+                )}
+                {detailAction.level !== undefined && (
+                  <span className="px-1.5 py-0.5 rounded bg-blue-950 border border-blue-500/40 text-[10px] font-mono text-blue-300 font-bold">
+                    {detailAction.level === 0 ? 'Cantrip' : `${formatSpellLevelLabel(detailAction.level)} Level`}
+                  </span>
+                )}
+                {baseLvl >= 1 && (
+                  <div className="inline-flex items-center rounded border border-fuchsia-500/50 bg-fuchsia-950 overflow-hidden text-[10px] font-mono font-bold">
+                    {isUpcasted && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActionUpcastLevel(baseSpell, currentSlot - 1);
+                        }}
+                        className="px-1.5 py-0.5 bg-zinc-950/70 hover:bg-zinc-800 text-fuchsia-200 hover:text-white cursor-pointer transition-colors"
+                        title={`Decrease Slot Level (Currently ${formatSpellLevelLabel(currentSlot)} Slot)`}
+                      >
+                        −
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActionUpcastLevel(baseSpell, currentSlot >= 9 ? baseLvl : currentSlot + 1);
+                      }}
+                      className="px-1.5 py-0.5 text-fuchsia-300 hover:text-white cursor-pointer transition-colors"
+                      title="Click to cycle Spell Slot Level"
+                    >
+                      {isUpcasted
+                        ? `▲ Upcast: ${formatSpellLevelLabel(currentSlot)} Slot`
+                        : `▲ Upcast Slot`}
+                    </button>
+                    {currentSlot < 9 && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActionUpcastLevel(baseSpell, currentSlot + 1);
+                        }}
+                        className="px-1.5 py-0.5 bg-zinc-950/70 hover:bg-fuchsia-800/80 text-fuchsia-200 hover:text-white border-l border-fuchsia-500/30 cursor-pointer transition-colors"
+                        title={`Upcast to ${formatSpellLevelLabel(currentSlot + 1)} Level Slot`}
+                      >
+                        +
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
-              <span className="font-bold text-white font-mono text-xs">{hoveredAction.name}</span>
-              {hoveredAction.sourceLabel && (
-                <span className="px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-[10px] font-mono text-zinc-300">
-                  {hoveredAction.sourceLabel}
-                </span>
-              )}
-              {hoveredAction.level !== undefined && (
-                <span className="px-1.5 py-0.5 rounded bg-blue-950 border border-blue-500/40 text-[10px] font-mono text-blue-300 font-bold">
-                  {hoveredAction.level === 0 ? 'Cantrip' : `${formatSpellLevelLabel(hoveredAction.level)} Level`}
-                </span>
-              )}
-              {hoveredAction.castAtLevel && hoveredAction.castAtLevel > (hoveredAction.level ?? 0) && (
-                <span className="px-1.5 py-0.5 rounded bg-fuchsia-950 border border-fuchsia-500/50 text-[10px] font-mono text-fuchsia-300 font-bold">
-                  ▲ Upcast: {formatSpellLevelLabel(hoveredAction.castAtLevel)} Slot
-                </span>
-              )}
+              <div className="flex items-center gap-2 text-[10px] font-mono text-zinc-300 flex-wrap">
+                {detailAction.castingTime && (
+                  <span className="text-amber-300 font-semibold">{detailAction.castingTime}</span>
+                )}
+                {detailAction.rangeFt !== undefined && (
+                  <span>• {detailAction.rangeFt > 0 ? `${detailAction.rangeFt} ft.` : 'Self'}</span>
+                )}
+                {detailAction.hitBonus !== undefined && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRollToHit(detailAction);
+                    }}
+                    className="px-2 py-0.5 rounded bg-emerald-950 hover:bg-emerald-900 border border-emerald-500/50 hover:border-emerald-400 text-emerald-300 hover:text-white font-bold transition-all cursor-pointer active:scale-95 shadow-sm"
+                    title={`Click to Roll to Hit: 1d20 ${String(detailAction.hitBonus).startsWith('+') || String(detailAction.hitBonus).startsWith('-') ? detailAction.hitBonus : `+${detailAction.hitBonus}`}`}
+                  >
+                    To Hit: {String(detailAction.hitBonus).startsWith('+') || String(detailAction.hitBonus).startsWith('-') ? detailAction.hitBonus : `+${detailAction.hitBonus}`}
+                  </button>
+                )}
+                {detailAction.saveDc && (
+                  <span className="px-1.5 py-0.5 rounded bg-amber-950 border border-amber-500/50 text-amber-300 font-bold">
+                    Save: DC {detailAction.saveDc} {detailAction.saveAbility || ''}
+                  </span>
+                )}
+                {detailAction.damageFormula && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRollDamage(detailAction);
+                    }}
+                    className={`px-2 py-0.5 rounded font-bold border transition-all cursor-pointer active:scale-95 shadow-sm ${
+                      isUpcasted
+                        ? 'bg-fuchsia-950 hover:bg-fuchsia-900 border-fuchsia-400/70 hover:border-fuchsia-300 text-fuchsia-200 hover:text-white shadow-[0_0_10px_rgba(217,70,239,0.35)]'
+                        : detailAction.isHeal
+                        ? 'bg-emerald-950 hover:bg-emerald-900 border-emerald-500/50 hover:border-emerald-400 text-emerald-300 hover:text-white'
+                        : 'bg-rose-950 hover:bg-rose-900 border-rose-500/50 hover:border-rose-400 text-rose-300 hover:text-white'
+                    }`}
+                    title={`Click to Roll Dice: ${detailAction.damageFormula} ${detailAction.damageType || ''}`}
+                  >
+                    {detailAction.damageFormula} {detailAction.damageType || ''}
+                  </button>
+                )}
+                {detailAction.uses && (
+                  <span className="px-1.5 py-0.5 rounded bg-indigo-950 border border-indigo-500/50 text-indigo-300 font-bold">
+                    {detailAction.uses.available}/{detailAction.uses.total} Uses
+                  </span>
+                )}
+              </div>
             </div>
-            <div className="flex items-center gap-2 text-[10px] font-mono text-zinc-300">
-              {hoveredAction.castingTime && (
-                <span className="text-amber-300 font-semibold">{hoveredAction.castingTime}</span>
-              )}
-              {hoveredAction.rangeFt !== undefined && (
-                <span>• {hoveredAction.rangeFt > 0 ? `${hoveredAction.rangeFt} ft.` : 'Self'}</span>
-              )}
-              {hoveredAction.hitBonus !== undefined && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleRollToHit(hoveredAction);
-                  }}
-                  className="px-2 py-0.5 rounded bg-emerald-950 hover:bg-emerald-900 border border-emerald-500/50 hover:border-emerald-400 text-emerald-300 hover:text-white font-bold transition-all cursor-pointer active:scale-95 shadow-sm"
-                  title={`Click to Roll to Hit: 1d20 ${String(hoveredAction.hitBonus).startsWith('+') || String(hoveredAction.hitBonus).startsWith('-') ? hoveredAction.hitBonus : `+${hoveredAction.hitBonus}`}`}
-                >
-                  To Hit: {String(hoveredAction.hitBonus).startsWith('+') || String(hoveredAction.hitBonus).startsWith('-') ? hoveredAction.hitBonus : `+${hoveredAction.hitBonus}`}
-                </button>
-              )}
-              {hoveredAction.saveDc && (
-                <span className="px-1.5 py-0.5 rounded bg-amber-950 border border-amber-500/50 text-amber-300 font-bold">
-                  Save: DC {hoveredAction.saveDc} {hoveredAction.saveAbility || ''}
-                </span>
-              )}
-              {hoveredAction.damageFormula && (
-                <span
-                  className={`px-1.5 py-0.5 rounded font-bold border ${
-                    hoveredAction.castAtLevel && hoveredAction.castAtLevel > (hoveredAction.level ?? 0)
-                      ? 'bg-fuchsia-950 border-fuchsia-400/60 text-fuchsia-200'
-                      : hoveredAction.isHeal
-                      ? 'bg-emerald-950 border-emerald-500/50 text-emerald-300'
-                      : 'bg-rose-950 border-rose-500/50 text-rose-300'
-                  }`}
-                >
-                  {hoveredAction.damageFormula} {hoveredAction.damageType || ''}
-                </span>
-              )}
-              {hoveredAction.uses && (
-                <span className="px-1.5 py-0.5 rounded bg-indigo-950 border border-indigo-500/50 text-indigo-300 font-bold">
-                  {hoveredAction.uses.available}/{hoveredAction.uses.total} Uses
-                </span>
-              )}
+
+            {/* Top-right X Close Button */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setHoveredAction(null);
+                setPinnedAction(null);
+                onClearInspectedAura?.();
+              }}
+              className="absolute top-2.5 right-2.5 p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
+              title="Close Description (Escape)"
+              aria-label="Close Description"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+
+            {detailAction.notes && (
+              <div className="text-[10px] font-mono text-amber-400/90 mt-1">
+                Properties & Mastery: {detailAction.notes}
+              </div>
+            )}
+            <div className={`text-[11px] text-zinc-300 mt-1.5 font-sans leading-relaxed ${pinnedAction ? 'max-h-36 overflow-y-auto pr-1 sidebar-scrollbar' : 'line-clamp-3'}`}>
+              {detailAction.description}
             </div>
+            {detailAction.atHigherLevels && (
+              <div className="text-[10px] font-sans text-fuchsia-300/90 mt-1 line-clamp-2">
+                <strong className="font-mono uppercase text-fuchsia-400">At Higher Levels: </strong>
+                {detailAction.atHigherLevels}
+              </div>
+            )}
           </div>
-
-          {/* Top-right X Close Button */}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setHoveredAction(null);
-            }}
-            className="absolute top-2.5 right-2.5 p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
-            title="Close Description (Escape)"
-            aria-label="Close Description"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-
-          {hoveredAction.notes && (
-            <div className="text-[10px] font-mono text-amber-400/90 mt-1">
-              Properties & Mastery: {hoveredAction.notes}
-            </div>
-          )}
-          <p className="text-[11px] text-zinc-300 mt-1.5 line-clamp-3 font-sans leading-relaxed">
-            {hoveredAction.description}
-          </p>
-          {hoveredAction.atHigherLevels && (
-            <div className="text-[10px] font-sans text-fuchsia-300/90 mt-1 line-clamp-2">
-              <strong className="font-mono uppercase text-fuchsia-400">At Higher Levels: </strong>
-              {hoveredAction.atHigherLevels}
-            </div>
-          )}
-        </div>
-      )}
+        );
+      })()}
 
       {/* ========================================================================= */}
       {/* MOBILE COMPACT BAR (< 768px)                                              */}
@@ -1952,15 +2007,22 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                   </span>
                 )}
                 {inspectedAction.damageFormula && (
-                  <span className={`px-2.5 py-1 rounded-lg font-bold border ${
-                    inspectedAction.castAtLevel && inspectedAction.castAtLevel > (inspectedAction.level ?? 0)
-                      ? 'bg-fuchsia-950 border-fuchsia-400/60 text-fuchsia-200'
-                      : inspectedAction.isHeal
-                      ? 'bg-emerald-950 border-emerald-500/50 text-emerald-300'
-                      : 'bg-rose-950 border-rose-500/50 text-rose-300'
-                  }`}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleRollDamage(inspectedAction);
+                    }}
+                    className={`px-2.5 py-1 rounded-lg font-bold border transition-all cursor-pointer active:scale-95 shadow-sm ${
+                      inspectedAction.castAtLevel && inspectedAction.castAtLevel > (inspectedAction.level ?? 0)
+                        ? 'bg-fuchsia-950 hover:bg-fuchsia-900 border-fuchsia-400/60 hover:border-fuchsia-300 text-fuchsia-200 hover:text-white shadow-[0_0_10px_rgba(217,70,239,0.3)]'
+                        : inspectedAction.isHeal
+                        ? 'bg-emerald-950 hover:bg-emerald-900 border-emerald-500/50 hover:border-emerald-400 text-emerald-300 hover:text-white'
+                        : 'bg-rose-950 hover:bg-rose-900 border-rose-500/50 hover:border-rose-400 text-rose-300 hover:text-white'
+                    }`}
+                    title={`Click to Roll Dice: ${inspectedAction.damageFormula} ${inspectedAction.damageType || ''}`}
+                  >
                     {inspectedAction.isHeal ? 'Heal' : 'Damage'}: {inspectedAction.damageFormula} {inspectedAction.damageType || ''}
-                  </span>
+                  </button>
                 )}
                 {inspectedAction.uses && (
                   <span className="px-2.5 py-1 rounded-lg bg-indigo-950 border border-indigo-500/50 text-indigo-300 font-bold">
