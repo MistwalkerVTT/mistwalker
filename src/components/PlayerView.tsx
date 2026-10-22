@@ -2951,20 +2951,55 @@ export default function PlayerView() {
         casterName: claimedToken.name
       };
 
-      // Play sound and broadcast both effects across the network
-      setEffects(prev => [...prev, departEffect, arriveEffect]);
-      if (activeEquippedAsset.soundKey) soundCatalog.play(activeEquippedAsset.soundKey);
-      if (socketRef.current?.connected) {
-        socketRef.current.emit('EFFECT_SPAWN', departEffect);
-        socketRef.current.emit('EFFECT_SPAWN', arriveEffect);
+      const isSequentialPortal = activeEquippedAsset.id === 'dimension_door' ||
+        activeEquippedAsset.id === 'arcane_gate' ||
+        activeEquippedAsset.name.toLowerCase().includes('dimension door');
+
+      if (isSequentialPortal) {
+        // Step 1: Open departure portal on player token FIRST
+        setEffects(prev => [...prev, departEffect]);
+        if (activeEquippedAsset.soundKey) soundCatalog.play(activeEquippedAsset.soundKey);
+        if (socketRef.current?.connected) {
+          socketRef.current.emit('EFFECT_SPAWN', departEffect);
+        }
+
+        toast.info(`${claimedToken.name} opened ${activeEquippedAsset.name}...`, {
+          description: `Dimensional gateway opening at departure...`
+        });
+
+        // Step 2: Open arrival portal at destination spot
+        setTimeout(() => {
+          setEffects(prev => [...prev, arriveEffect]);
+          soundCatalog.play('portal_open');
+          if (socketRef.current?.connected) {
+            socketRef.current.emit('EFFECT_SPAWN', arriveEffect);
+          }
+        }, 750);
+
+        // Step 3: Step through the portal - relocate character token to the destination
+        setTimeout(() => {
+          handleMoveToken(claimedToken.id, snappedTargetX, snappedTargetY, distFt);
+          soundCatalog.play('teleport_whoosh');
+          toast.success(`${claimedToken.name} stepped through ${activeEquippedAsset.name}!`, {
+            description: `Teleported ${distFt} ft across the battlefield.`
+          });
+        }, 1300);
+      } else {
+        // Standard rapid teleportation (Misty Step, Fey Step, Shadow Step)
+        setEffects(prev => [...prev, departEffect, arriveEffect]);
+        if (activeEquippedAsset.soundKey) soundCatalog.play(activeEquippedAsset.soundKey);
+        if (socketRef.current?.connected) {
+          socketRef.current.emit('EFFECT_SPAWN', departEffect);
+          socketRef.current.emit('EFFECT_SPAWN', arriveEffect);
+        }
+
+        // Relocate claimed character token to destination tile
+        handleMoveToken(claimedToken.id, snappedTargetX, snappedTargetY, distFt);
+
+        toast.success(`${claimedToken.name} cast ${activeEquippedAsset.name}!`, {
+          description: `Teleported ${distFt} ft across the battlefield.`
+        });
       }
-
-      // Instantly relocate claimed character token to the destination tile
-      handleMoveToken(claimedToken.id, snappedTargetX, snappedTargetY, distFt);
-
-      toast.success(`${claimedToken.name} cast ${activeEquippedAsset.name}!`, {
-        description: `Teleported ${distFt} ft across the battlefield.`
-      });
 
       setAimOrigin(null);
       setAimCurrent(null);
