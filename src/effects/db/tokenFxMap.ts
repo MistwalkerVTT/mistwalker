@@ -8,6 +8,10 @@ export interface ConditionFxMapping {
   soundKey?: string;
   blendMode?: 'normal' | 'screen' | 'lighten' | 'multiply';
   color?: string;
+  sizeMultiplier?: number;
+  yOffset?: number;
+  condition?: string;
+  opacity?: number;
 }
 
 export const CONDITION_FX_MAP: Record<string, ConditionFxMapping> = {
@@ -89,7 +93,9 @@ export const CONDITION_FX_MAP: Record<string, ConditionFxMapping> = {
 export function getConditionFx(conditionName: string): ConditionFxMapping | null {
   if (!conditionName) return null;
   const key = conditionName.toLowerCase().trim();
-  return CONDITION_FX_MAP[key] || null;
+  const found = CONDITION_FX_MAP[key];
+  if (!found) return null;
+  return { condition: key, ...found };
 }
 
 /**

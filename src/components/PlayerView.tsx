@@ -108,7 +108,7 @@ import { PlayerDdbPrivacyModal } from './PlayerDdbPrivacyModal';
 import { PlayerHeroDock } from './PlayerHeroDock';
 import { DndRuleInspectionModal } from './DndRuleInspectionModal';
 import { DndRuleEntry, lookupDndRuleDetails } from '../data/dndRulesCompendium';
-import { HudCharacterData, HudActionItem } from '../types/hud';
+import { HudCharacterData, HudActionItem, computeUpcastFormula } from '../types/hud';
 import { TokenDragRuler, TokenDragState, parseSpeedFt } from './TokenDragRuler';
 import { RoomHotspotLayer } from './RoomHotspotLayer';
 import {
@@ -117,6 +117,7 @@ import {
   TokenAerialOverlay,
   useTokenFlightAnimation
 } from './TokenFlightElevation';
+import { MapPingLayer, useLeftClickHoldPing, MapPingItem } from './MapPingOverlay';
 
 interface Token {
   id: string;
@@ -1182,16 +1183,29 @@ const buildFallbackHudData = (token: Token, stats: any, customChars?: Character[
       const isHeal = lower.includes('cure') || lower.includes('heal');
       const isCantrip = lower.includes('blast') || lower.includes('bolt') || lower.includes('mockery') || lower.includes('flame');
       const matchedAsset = findJb2aAsset(spName);
+      const baseLvl = isCantrip ? 0 : 1;
+      const baseFormula = isHeal ? '1d8 + 3' : isCantrip ? '1d10' : undefined;
+      const upcastOptions = baseLvl >= 1
+        ? Array.from({ length: 9 - baseLvl + 1 }, (_, i) => {
+            const slotLvl = baseLvl + i;
+            return {
+              slotLevel: slotLvl,
+              ...computeUpcastFormula(baseFormula, baseLvl, slotLvl, spName)
+            };
+          })
+        : undefined;
       spells.push({
         id: `char-spell-${idx}`,
         name: spName,
         category: 'spells',
         type: 'action',
         subCategory: 'spell',
-        level: isCantrip ? 0 : 1,
+        level: baseLvl,
+        canUpcast: baseLvl >= 1,
+        upcastOptions,
         school: (matchedAsset?.school as any) || 'evocation',
         castingTime: lower.includes('healing word') || lower.includes('mark') || lower.includes('hex') || lower.includes('misty step') ? '1 Bonus Action' : '1 Action',
-        damageFormula: isHeal ? '1d8 + 3' : isCantrip ? '1d10' : undefined,
+        damageFormula: baseFormula,
         isHeal,
         description: `Cast ${spName}.`,
         rangeFt: matchedAsset?.defaultSizeFt || (isHeal ? 30 : 60),
@@ -1732,6 +1746,32 @@ export default function PlayerView() {
     return () => cancelAnimationFrame(animId);
   }, [videoElement]);
 
+  // Left-Click Hold Map Ping System
+  const activeClaimedName = useMemo(() => {
+    const found = tokens.find(t => t.id === claimedTokenId);
+    return found?.name || 'Player';
+  }, [tokens, claimedTokenId]);
+
+  const {
+    pings: mapPings,
+    chargeState: pingChargeState,
+    startHoldPing,
+    cancelHoldPing,
+    receiveRemotePing
+  } = useLeftClickHoldPing({
+    senderName: activeClaimedName,
+    senderRole: 'player',
+    color: '#38bdf8',
+    socketRef,
+    onPullCamera: (worldX, worldY) => {
+      const nextPos = {
+        x: dimensions.width / 2 - worldX * stageScale,
+        y: dimensions.height / 2 - worldY * stageScale
+      };
+      setStagePos(nextPos);
+    }
+  });
+
   // ==========================================
   // Socket.io Pure Consumer Setup
   // ==========================================
@@ -1881,6 +1921,13 @@ export default function PlayerView() {
       setIsShaking(true);
       playCriticalHitSound();
       setTimeout(() => setIsShaking(false), 600);
+    });
+
+    // 3c. MAP_PING (Left-Click Hold Tactical Ping from DM or other Players)
+    socket.on('MAP_PING', (ping: MapPingItem) => {
+      if (ping && typeof ping.x === 'number' && typeof ping.y === 'number') {
+        receiveRemotePing(ping);
+      }
     });
 
     // 4. SYNC_AUDIO
@@ -3749,6 +3796,21 @@ export default function PlayerView() {
   };
 
   const handleStageMouseDown = (e: any) => {
+    const stage = e.target.getStage();
+    const point = stage ? getStageRelativePointerPosition(stage) : null;
+
+    // Left-click hold map ping (Hold left-click for ~0.38s without dragging to ping the map)
+    if (e.evt?.button === 0 && point && !activeEquippedAsset) {
+      const pointer = stage.getPointerPosition();
+      startHoldPing(
+        point.x,
+        point.y,
+        e.evt.clientX ?? pointer?.x ?? 0,
+        e.evt.clientY ?? pointer?.y ?? 0,
+        false
+      );
+    }
+
     if (!activeEquippedAsset) return;
     if (e.evt?.button === 2) {
       setActiveEquippedAsset(null);
@@ -3765,10 +3827,7 @@ export default function PlayerView() {
       return;
     }
 
-    const stage = e.target.getStage();
-    if (!stage) return;
-    const point = getStageRelativePointerPosition(stage);
-    if (!point) return;
+    if (!stage || !point) return;
 
     // If aiming a creature-targeted spell / action (heal, attack, or self-only), do not drop on empty ground!
     if (activeTargetingAction) {
@@ -3884,10 +3943,24 @@ export default function PlayerView() {
       return;
     }
 
-    if (activeEquippedAsset && touches && touches.length === 1) {
-      handleStageMouseDown(e);
+    if (touches && touches.length === 1) {
+      if (activeEquippedAsset) {
+        handleStageMouseDown(e);
+      } else {
+        const stage = e.target.getStage();
+        const point = stage ? getStageRelativePointerPosition(stage) : null;
+        if (point) {
+          startHoldPing(
+            point.x,
+            point.y,
+            touches[0].clientX,
+            touches[0].clientY,
+            false
+          );
+        }
+      }
     }
-  }, [activeEquippedAsset]);
+  }, [activeEquippedAsset, startHoldPing]);
 
   const handleStageTouchMove = useCallback((e: any) => {
     const touches = e.evt?.touches;
@@ -5383,6 +5456,14 @@ export default function PlayerView() {
             />
           </Layer>
         )}
+
+        {/* Left-Click Hold Map Ping Radar Layer */}
+        <MapPingLayer
+          pings={mapPings}
+          chargeState={pingChargeState}
+          stageScale={stageScale}
+          gridSize={gridSize}
+        />
       </Stage>
 
       {/* Native GPU-Accelerated JB2A DOM Video Overlay Layer */}

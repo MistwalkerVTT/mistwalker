@@ -559,86 +559,142 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
       {/* ACTIVE TARGETING BANNER                                                   */}
       {/* ========================================================================= */}
       {currentTargetingAction && (
-        <div className="pointer-events-auto mb-2 fixed top-3 inset-x-3 sm:static sm:inset-x-auto sm:top-auto z-[140] flex items-center justify-between sm:justify-center gap-3 px-4 py-2 rounded-xl bg-zinc-950/95 border border-amber-500/80 shadow-[0_8px_30px_rgba(0,0,0,0.85)] text-amber-200 font-mono text-xs animate-in fade-in duration-150 max-w-xl mx-auto">
-          <div className="flex items-center gap-2 truncate">
-            <Crosshair className="w-4 h-4 text-amber-400 animate-pulse shrink-0" />
-            <span className="truncate">
-              Aiming <strong className="text-white">{currentTargetingAction.name}</strong>
-              <span className="hidden sm:inline text-zinc-400"> — Click target on battlemap</span>
-            </span>
-            {currentTargetingAction.hitBonus !== undefined && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleRollToHit(currentTargetingAction);
-                }}
-                className="px-2 py-0.5 rounded bg-emerald-950 hover:bg-emerald-900 text-emerald-300 hover:text-white text-[10px] border border-emerald-500/40 hover:border-emerald-400 shrink-0 font-bold transition-all cursor-pointer active:scale-95 shadow-sm"
-                title={`Click to Roll to Hit: 1d20 ${String(currentTargetingAction.hitBonus).startsWith('+') || String(currentTargetingAction.hitBonus).startsWith('-') ? currentTargetingAction.hitBonus : `+${currentTargetingAction.hitBonus}`}`}
-              >
-                Hit {String(currentTargetingAction.hitBonus).startsWith('+') || String(currentTargetingAction.hitBonus).startsWith('-')
-                  ? currentTargetingAction.hitBonus
-                  : `+${currentTargetingAction.hitBonus}`}
-              </button>
-            )}
-            {currentTargetingAction.damageFormula && (
-              <span className="px-2 py-0.5 rounded bg-rose-950 text-rose-300 text-[10px] border border-rose-500/40 shrink-0 font-bold">
-                {currentTargetingAction.damageFormula}
+        <div className="pointer-events-auto mb-2 fixed top-3 inset-x-3 sm:static sm:inset-x-auto sm:top-auto z-[140] flex flex-col gap-1.5 px-4 py-2 rounded-xl bg-zinc-950/95 border border-amber-500/80 shadow-[0_8px_30px_rgba(0,0,0,0.85)] text-amber-200 font-mono text-xs animate-in fade-in duration-150 max-w-2xl mx-auto">
+          <div className="flex items-center justify-between sm:justify-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2 truncate">
+              <Crosshair className="w-4 h-4 text-amber-400 animate-pulse shrink-0" />
+              <span className="truncate">
+                Aiming <strong className="text-white">{currentTargetingAction.name}</strong>
+                {currentTargetingAction.castAtLevel && currentTargetingAction.castAtLevel > (currentTargetingAction.level ?? 0) && (
+                  <span className="ml-1.5 px-1.5 py-0.5 rounded bg-fuchsia-950 text-fuchsia-300 border border-fuchsia-500/60 text-[10px] font-bold">
+                    ▲ {formatSpellLevelLabel(currentTargetingAction.castAtLevel)} Slot
+                  </span>
+                )}
+                <span className="hidden sm:inline text-zinc-400"> — Click target on battlemap</span>
               </span>
-            )}
-            {currentTargetingAction.rangeFt !== undefined && currentTargetingAction.rangeFt > 0 && (
-              <span className="px-2 py-0.5 rounded bg-zinc-900 text-zinc-300 text-[10px] border border-zinc-700 shrink-0">
-                {currentTargetingAction.rangeFt} ft.
+              {currentTargetingAction.hitBonus !== undefined && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRollToHit(currentTargetingAction);
+                  }}
+                  className="px-2 py-0.5 rounded bg-emerald-950 hover:bg-emerald-900 text-emerald-300 hover:text-white text-[10px] border border-emerald-500/40 hover:border-emerald-400 shrink-0 font-bold transition-all cursor-pointer active:scale-95 shadow-sm"
+                  title={`Click to Roll to Hit: 1d20 ${String(currentTargetingAction.hitBonus).startsWith('+') || String(currentTargetingAction.hitBonus).startsWith('-') ? currentTargetingAction.hitBonus : `+${currentTargetingAction.hitBonus}`}`}
+                >
+                  Hit {String(currentTargetingAction.hitBonus).startsWith('+') || String(currentTargetingAction.hitBonus).startsWith('-')
+                    ? currentTargetingAction.hitBonus
+                    : `+${currentTargetingAction.hitBonus}`}
+                </button>
+              )}
+              {currentTargetingAction.damageFormula && (
+                <span className={`px-2 py-0.5 rounded text-[10px] border shrink-0 font-bold ${
+                  currentTargetingAction.castAtLevel && currentTargetingAction.castAtLevel > (currentTargetingAction.level ?? 0)
+                    ? 'bg-fuchsia-950 text-fuchsia-200 border-fuchsia-400/70 shadow-[0_0_8px_rgba(217,70,239,0.4)]'
+                    : currentTargetingAction.isHeal
+                    ? 'bg-emerald-950 text-emerald-300 border-emerald-500/40'
+                    : 'bg-rose-950 text-rose-300 border-rose-500/40'
+                }`}>
+                  {currentTargetingAction.damageFormula}
+                </span>
+              )}
+              {currentTargetingAction.rangeFt !== undefined && currentTargetingAction.rangeFt > 0 && (
+                <span className="px-2 py-0.5 rounded bg-zinc-900 text-zinc-300 text-[10px] border border-zinc-700 shrink-0">
+                  {currentTargetingAction.rangeFt} ft.
+                </span>
+              )}
+              {claimedToken && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onTargetSelf) onTargetSelf();
+                  }}
+                  className="px-2 py-0.5 rounded bg-emerald-950/90 hover:bg-emerald-900 text-emerald-300 hover:text-white text-[10px] border border-emerald-500/50 hover:border-emerald-400 shrink-0 font-bold transition-all cursor-pointer active:scale-95 shadow-sm flex items-center gap-1"
+                  title={`Cast on self (${claimedToken.name || 'Hero'})`}
+                >
+                  <span>Target Self</span>
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {onEndTurn && (
+                <button
+                  type="button"
+                  onClick={onEndTurn}
+                  className={`px-2.5 py-1 rounded-lg font-mono text-[11px] font-bold transition-all cursor-pointer active:scale-95 flex items-center gap-1 shrink-0 ${
+                    isMyTurn
+                      ? 'bg-amber-500 hover:bg-amber-400 text-zinc-950 shadow-md shadow-amber-500/30 animate-pulse'
+                      : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700'
+                  }`}
+                  title={isMyTurn ? "Your Turn: Click to Pass Turn" : "Pass Turn"}
+                >
+                  Pass Turn
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setIsDockMinimizedWhileAiming(prev => !prev)}
+                className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-700 hover:bg-zinc-800 text-zinc-300 hover:text-white transition-colors cursor-pointer text-[11px] font-bold flex items-center gap-1 shrink-0"
+                title={isDockMinimizedWhileAiming ? "Expand Character Dock" : "Minimize Character Dock"}
+              >
+                {isDockMinimizedWhileAiming ? <ChevronUp className="w-3.5 h-3.5 text-amber-400" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                <span>{isDockMinimizedWhileAiming ? "Show HUD" : "Minimize"}</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleCancelActiveTargeting}
+                className="px-2.5 py-1 rounded-lg bg-rose-950/60 border border-rose-500/40 hover:bg-rose-900/80 text-rose-200 hover:text-white transition-colors cursor-pointer text-[11px] font-bold flex items-center gap-1 shrink-0"
+                title="Cancel Targeting (Esc)"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>Cancel</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Inline Upcast Slot Selector while Aiming Leveled Spells */}
+          {(currentTargetingAction.level ?? 0) >= 1 && (
+            <div className="flex items-center justify-center gap-1.5 pt-1 border-t border-zinc-800/80 flex-wrap text-[10px]">
+              <span className="text-zinc-400 font-bold uppercase tracking-wider mr-1">
+                Cast Slot Level:
               </span>
-            )}
-            {claimedToken && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (onTargetSelf) onTargetSelf();
-                }}
-                className="px-2 py-0.5 rounded bg-emerald-950/90 hover:bg-emerald-900 text-emerald-300 hover:text-white text-[10px] border border-emerald-500/50 hover:border-emerald-400 shrink-0 font-bold transition-all cursor-pointer active:scale-95 shadow-sm flex items-center gap-1"
-                title={`Cast on self (${claimedToken.name || 'Hero'})`}
-              >
-                <span>Target Self</span>
-              </button>
-            )}
-          </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            {onEndTurn && (
-              <button
-                type="button"
-                onClick={onEndTurn}
-                className={`px-2.5 py-1 rounded-lg font-mono text-[11px] font-bold transition-all cursor-pointer active:scale-95 flex items-center gap-1 shrink-0 ${
-                  isMyTurn
-                    ? 'bg-amber-500 hover:bg-amber-400 text-zinc-950 shadow-md shadow-amber-500/30 animate-pulse'
-                    : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700'
-                }`}
-                title={isMyTurn ? "Your Turn: Click to Pass Turn" : "Pass Turn"}
-              >
-                Pass Turn
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => setIsDockMinimizedWhileAiming(prev => !prev)}
-              className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-700 hover:bg-zinc-800 text-zinc-300 hover:text-white transition-colors cursor-pointer text-[11px] font-bold flex items-center gap-1 shrink-0"
-              title={isDockMinimizedWhileAiming ? "Expand Character Dock" : "Minimize Character Dock"}
-            >
-              {isDockMinimizedWhileAiming ? <ChevronUp className="w-3.5 h-3.5 text-amber-400" /> : <ChevronDown className="w-3.5 h-3.5" />}
-              <span>{isDockMinimizedWhileAiming ? "Show HUD" : "Minimize"}</span>
-            </button>
-            <button
-              type="button"
-              onClick={handleCancelActiveTargeting}
-              className="px-2.5 py-1 rounded-lg bg-rose-950/60 border border-rose-500/40 hover:bg-rose-900/80 text-rose-200 hover:text-white transition-colors cursor-pointer text-[11px] font-bold flex items-center gap-1 shrink-0"
-              title="Cancel Targeting (Esc)"
-            >
-              <X className="w-3.5 h-3.5" />
-              <span>Cancel</span>
-            </button>
-          </div>
+              {Array.from(
+                { length: 9 - (currentTargetingAction.level ?? 1) + 1 },
+                (_, i) => (currentTargetingAction.level ?? 1) + i
+              ).map(slotLvl => {
+                const baseSpell = spellsList.find(s => s.id === currentTargetingAction.id) || currentTargetingAction;
+                const activeSlot = currentTargetingAction.castAtLevel ?? currentTargetingAction.level ?? 1;
+                const isSelected = activeSlot === slotLvl;
+                const isUpcast = slotLvl > (baseSpell.level ?? 1);
+                const slotInfo = characterData?.spellSlots?.[slotLvl];
+                const previewAction = buildActionAtSlotLevel(baseSpell, slotLvl);
+                return (
+                  <button
+                    key={slotLvl}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActionUpcastLevel(baseSpell, slotLvl);
+                    }}
+                    className={`px-2 py-0.5 rounded-md font-mono font-bold border transition-all cursor-pointer flex items-center gap-1 ${
+                      isSelected
+                        ? isUpcast
+                          ? 'bg-fuchsia-500/25 border-fuchsia-400 text-fuchsia-200 shadow-[0_0_8px_rgba(217,70,239,0.35)]'
+                          : 'bg-blue-500/25 border-blue-400 text-blue-200'
+                        : 'bg-zinc-900/80 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600'
+                    }`}
+                    title={`Cast ${baseSpell.name} using a ${formatSpellLevelLabel(slotLvl)} Level Slot${previewAction.damageFormula ? ` (${previewAction.damageFormula})` : ''}${slotInfo ? ` — ${slotInfo.available}/${slotInfo.total} slots` : ''}`}
+                  >
+                    <span>{formatSpellLevelLabel(slotLvl)}</span>
+                    {isSelected && previewAction.damageFormula && (
+                      <span className="text-[9px] opacity-90">({previewAction.damageFormula.replace(/\s+/g, '')})</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -661,6 +717,11 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
               {hoveredAction.level !== undefined && (
                 <span className="px-1.5 py-0.5 rounded bg-blue-950 border border-blue-500/40 text-[10px] font-mono text-blue-300 font-bold">
                   {hoveredAction.level === 0 ? 'Cantrip' : `${formatSpellLevelLabel(hoveredAction.level)} Level`}
+                </span>
+              )}
+              {hoveredAction.castAtLevel && hoveredAction.castAtLevel > (hoveredAction.level ?? 0) && (
+                <span className="px-1.5 py-0.5 rounded bg-fuchsia-950 border border-fuchsia-500/50 text-[10px] font-mono text-fuchsia-300 font-bold">
+                  ▲ Upcast: {formatSpellLevelLabel(hoveredAction.castAtLevel)} Slot
                 </span>
               )}
             </div>
@@ -692,7 +753,9 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
               {hoveredAction.damageFormula && (
                 <span
                   className={`px-1.5 py-0.5 rounded font-bold border ${
-                    hoveredAction.isHeal
+                    hoveredAction.castAtLevel && hoveredAction.castAtLevel > (hoveredAction.level ?? 0)
+                      ? 'bg-fuchsia-950 border-fuchsia-400/60 text-fuchsia-200'
+                      : hoveredAction.isHeal
                       ? 'bg-emerald-950 border-emerald-500/50 text-emerald-300'
                       : 'bg-rose-950 border-rose-500/50 text-rose-300'
                   }`}
@@ -730,6 +793,12 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
           <p className="text-[11px] text-zinc-300 mt-1.5 line-clamp-3 font-sans leading-relaxed">
             {hoveredAction.description}
           </p>
+          {hoveredAction.atHigherLevels && (
+            <div className="text-[10px] font-sans text-fuchsia-300/90 mt-1 line-clamp-2">
+              <strong className="font-mono uppercase text-fuchsia-400">At Higher Levels: </strong>
+              {hoveredAction.atHigherLevels}
+            </div>
+          )}
         </div>
       )}
 
@@ -924,7 +993,11 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
 
           {/* Action Rows */}
           <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 min-h-[140px] max-h-[46dvh] sidebar-scrollbar">
-            {currentCategoryList.map((action, idx) => {
+            {currentCategoryList.map((rawAction, idx) => {
+              const action = getEffectiveAction(rawAction);
+              const baseLevel = rawAction.level ?? 0;
+              const currentSlot = action.castAtLevel ?? baseLevel;
+              const isUpcasted = baseLevel >= 1 && currentSlot > baseLevel;
               const isTargetingThis = currentTargetingAction?.id === action.id;
               return (
                 <div
@@ -950,6 +1023,8 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                   className={`w-full p-2.5 rounded-xl border text-left transition-all flex items-center justify-between gap-2.5 cursor-pointer select-none ${
                     isTargetingThis
                       ? 'border-amber-400 bg-amber-500/20 ring-1 ring-amber-400'
+                      : isUpcasted
+                      ? 'border-fuchsia-500/50 bg-fuchsia-950/20 hover:bg-zinc-850'
                       : 'border-zinc-800 bg-zinc-900/70 hover:bg-zinc-850'
                   }`}
                 >
@@ -958,12 +1033,48 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                       {renderActionGlyph(action, 'w-4 h-4')}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-xs font-bold text-white font-mono truncate">{action.name}</span>
-                        {action.level !== undefined && (
-                          <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-blue-950 border border-blue-500/40 text-blue-300 font-bold shrink-0">
-                            {action.level === 0 ? 'Cantrip' : formatSpellLevelLabel(action.level)}
-                          </span>
+                        {rawAction.level !== undefined && (
+                          rawAction.level === 0 ? (
+                            <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-blue-950 border border-blue-500/40 text-blue-300 font-bold shrink-0">
+                              Cantrip
+                            </span>
+                          ) : (
+                            <div
+                              className="inline-flex items-center rounded bg-zinc-950 border border-blue-500/40 overflow-hidden shrink-0"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {isUpcasted && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActionUpcastLevel(rawAction, currentSlot - 1);
+                                  }}
+                                  className="px-1 py-0.2 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white text-[9px] font-mono font-bold cursor-pointer"
+                                  title="Decrease Spell Slot Level"
+                                >
+                                  −
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActionUpcastLevel(rawAction, currentSlot >= 9 ? baseLevel : currentSlot + 1);
+                                }}
+                                className={`px-1.5 py-0.2 text-[9px] font-mono font-bold cursor-pointer ${
+                                  isUpcasted
+                                    ? 'bg-fuchsia-950 text-fuchsia-200'
+                                    : 'bg-blue-950 text-blue-300 hover:text-white'
+                                }`}
+                                title="Tap to Upcast at a Higher Spell Slot Level"
+                              >
+                                {isUpcasted ? `▲ ${formatSpellLevelLabel(currentSlot)} Slot` : `${formatSpellLevelLabel(baseLevel)} ▲`}
+                              </button>
+                            </div>
+                          )
                         )}
                       </div>
                       <div className="text-[10px] font-mono text-zinc-400 truncate">
@@ -1001,7 +1112,9 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                           setIsMobileDrawerOpen(false);
                         }}
                         className={`px-2 py-1 rounded-lg font-bold border transition-all cursor-pointer active:scale-95 ${
-                          action.isHeal
+                          isUpcasted
+                            ? 'bg-fuchsia-950/90 hover:bg-fuchsia-900 border-fuchsia-400/60 text-fuchsia-200'
+                            : action.isHeal
                             ? 'bg-emerald-950/90 hover:bg-emerald-900 border-emerald-500/50 text-emerald-300'
                             : 'bg-rose-950/90 hover:bg-rose-900 border-rose-500/50 text-rose-300'
                         }`}
@@ -1383,12 +1496,30 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                     </button>
                   );
                 })}
+                {typeof selectedSpellLevel === 'number' && selectedSpellLevel >= 2 && (
+                  <button
+                    type="button"
+                    onClick={() => setIncludeUpcastInFilter(prev => !prev)}
+                    className={`ml-auto px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold border transition-all cursor-pointer shrink-0 flex items-center gap-1 ${
+                      includeUpcastInFilter
+                        ? 'bg-fuchsia-500/25 border-fuchsia-400 text-fuchsia-200 shadow-[0_0_8px_rgba(217,70,239,0.3)]'
+                        : 'bg-zinc-900/70 border-zinc-800 text-zinc-400 hover:text-fuchsia-300 hover:border-fuchsia-500/50'
+                    }`}
+                    title={`Include lower-level spells upcasted to ${formatSpellLevelLabel(selectedSpellLevel)} Level Slot`}
+                  >
+                    <span>▲ Show Upcastable at {formatSpellLevelLabel(selectedSpellLevel)}</span>
+                  </button>
+                )}
               </div>
             )}
 
             {/* D&D Beyond Tactical Action Cards Grid */}
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 max-h-[185px] overflow-y-auto pr-1 sidebar-scrollbar">
-              {currentCategoryList.map((action, idx) => {
+              {currentCategoryList.map((rawAction, idx) => {
+                const action = getEffectiveAction(rawAction);
+                const baseLevel = rawAction.level ?? 0;
+                const currentSlot = action.castAtLevel ?? baseLevel;
+                const isUpcasted = baseLevel >= 1 && currentSlot > baseLevel;
                 const isTargetingThis = currentTargetingAction?.id === action.id;
                 const formattedHit =
                   action.hitBonus !== undefined
@@ -1419,23 +1550,78 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                     className={`group p-2.5 rounded-xl border text-left transition-all flex items-center justify-between gap-2.5 cursor-pointer select-none ${
                       isTargetingThis
                         ? 'border-amber-400 bg-amber-500/20 shadow-[0_0_15px_rgba(245,158,11,0.35)] ring-1 ring-amber-400'
+                        : isUpcasted
+                        ? 'border-fuchsia-500/60 bg-fuchsia-950/20 hover:bg-zinc-900 shadow-[0_0_10px_rgba(217,70,239,0.18)]'
                         : 'border-zinc-800/90 hover:border-amber-500/50 bg-zinc-900/75 hover:bg-zinc-900'
                     }`}
                   >
-                    {/* Left: Action Icon + Name + Range/Source Subtitle */}
+                    {/* Left: Action Icon + Name + Upcast Stepper + Range/Source Subtitle */}
                     <div className="flex items-center gap-2.5 min-w-0 flex-1">
                       <div className="w-9 h-9 rounded-lg bg-zinc-950 border border-zinc-800 group-hover:border-zinc-700 flex items-center justify-center shrink-0 overflow-hidden relative shadow-inner">
                         {renderActionGlyph(action, 'w-4 h-4')}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="text-xs font-bold text-zinc-100 group-hover:text-amber-200 font-mono truncate">
                             {action.name}
                           </span>
-                          {action.level !== undefined && (
-                            <span className="px-1.5 py-0.2 rounded bg-blue-950/90 border border-blue-500/40 text-blue-300 font-mono text-[9px] font-bold shrink-0">
-                              {action.level === 0 ? 'Cantrip' : formatSpellLevelLabel(action.level)}
-                            </span>
+                          {rawAction.level !== undefined && (
+                            rawAction.level === 0 ? (
+                              <span className="px-1.5 py-0.2 rounded bg-blue-950/90 border border-blue-500/40 text-blue-300 font-mono text-[9px] font-bold shrink-0">
+                                Cantrip
+                              </span>
+                            ) : (
+                              <div
+                                className={`inline-flex items-center rounded border overflow-hidden shrink-0 transition-all ${
+                                  isUpcasted
+                                    ? 'border-fuchsia-400/70 bg-fuchsia-950/90 shadow-[0_0_8px_rgba(217,70,239,0.35)]'
+                                    : 'border-blue-500/40 bg-blue-950/90'
+                                }`}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {isUpcasted && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setActionUpcastLevel(rawAction, currentSlot - 1);
+                                    }}
+                                    className="px-1 py-0.2 bg-zinc-950/80 hover:bg-zinc-800 text-fuchsia-200 hover:text-white font-mono text-[9px] font-bold cursor-pointer transition-colors"
+                                    title={`Decrease Spell Slot Level (Currently ${formatSpellLevelLabel(currentSlot)} Level)`}
+                                  >
+                                    −
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActionUpcastLevel(rawAction, currentSlot >= 9 ? baseLevel : currentSlot + 1);
+                                  }}
+                                  className={`px-1.5 py-0.2 font-mono text-[9px] font-bold cursor-pointer transition-colors ${
+                                    isUpcasted
+                                      ? 'text-fuchsia-200 hover:text-white'
+                                      : 'text-blue-300 hover:text-white'
+                                  }`}
+                                  title={`Click to Upcast ${rawAction.name} at a higher Spell Slot Level (Base: ${formatSpellLevelLabel(baseLevel)} Level)`}
+                                >
+                                  {isUpcasted ? `▲ ${formatSpellLevelLabel(currentSlot)} Slot` : `${formatSpellLevelLabel(baseLevel)} ▲`}
+                                </button>
+                                {currentSlot < 9 && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setActionUpcastLevel(rawAction, currentSlot + 1);
+                                    }}
+                                    className="px-1 py-0.2 bg-zinc-950/60 hover:bg-fuchsia-800/80 text-blue-200 hover:text-white font-mono text-[9px] font-bold cursor-pointer transition-colors border-l border-white/10"
+                                    title={`Upcast to ${formatSpellLevelLabel(currentSlot + 1)} Level Slot`}
+                                  >
+                                    +
+                                  </button>
+                                )}
+                              </div>
+                            )
                           )}
                         </div>
                         <div className="flex items-center gap-1.5 text-[10px] font-mono text-zinc-400 truncate mt-0.5">
@@ -1449,7 +1635,9 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                           {action.notes && (
                             <>
                               <span>•</span>
-                              <span className="text-amber-400/80 truncate">{action.notes}</span>
+                              <span className={`${isUpcasted ? 'text-fuchsia-300 font-semibold' : 'text-amber-400/80'} truncate`}>
+                                {action.notes}
+                              </span>
                             </>
                           )}
                         </div>
@@ -1499,15 +1687,19 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                             onSelectAction(action);
                           }}
                           className={`flex flex-col items-center px-2 py-1 rounded-lg border transition-all cursor-pointer active:scale-95 shrink-0 ${
-                            action.isHeal
+                            isUpcasted
+                              ? 'bg-fuchsia-950/90 hover:bg-fuchsia-900 border-fuchsia-400/70 hover:border-fuchsia-300 text-fuchsia-200 hover:text-white shadow-sm hover:shadow-[0_0_12px_rgba(217,70,239,0.5)]'
+                              : action.isHeal
                               ? 'bg-emerald-950/90 hover:bg-emerald-900 border-emerald-500/40 hover:border-emerald-400 text-emerald-300 hover:text-white shadow-sm hover:shadow-[0_0_12px_rgba(16,185,129,0.5)]'
                               : 'bg-rose-950/90 hover:bg-rose-900 border-rose-500/40 hover:border-rose-400 text-rose-300 hover:text-white shadow-sm hover:shadow-[0_0_12px_rgba(244,63,94,0.5)]'
                           }`}
-                          title={`Cast & Fire: ${action.name} (${action.damageFormula})`}
+                          title={`Cast & Fire: ${action.name}${isUpcasted ? ` at ${formatSpellLevelLabel(currentSlot)} Level` : ''} (${action.damageFormula})`}
                           aria-label={`Fire ${action.name}: ${action.damageFormula}`}
                         >
                           <span className="text-[8px] uppercase opacity-75 leading-none truncate max-w-[56px]">
-                            {action.damageType || (action.isHeal ? 'Heal' : 'Dmg')}
+                            {isUpcasted
+                              ? `▲ ${formatSpellLevelLabel(currentSlot)}`
+                              : action.damageType || (action.isHeal ? 'Heal' : 'Dmg')}
                           </span>
                           <span className="font-bold text-xs leading-tight">
                             {action.damageFormula.replace(/\s+/g, '')}
@@ -1571,6 +1763,11 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                     {inspectedAction.level !== undefined && (
                       <span className="px-2 py-0.5 rounded-full bg-blue-950 border border-blue-500/50 text-blue-300 font-mono text-[10px] font-bold">
                         {inspectedAction.level === 0 ? 'Cantrip' : `${formatSpellLevelLabel(inspectedAction.level)} Level`}
+                      </span>
+                    )}
+                    {inspectedAction.castAtLevel && inspectedAction.castAtLevel > (inspectedAction.level ?? 0) && (
+                      <span className="px-2 py-0.5 rounded-full bg-fuchsia-950 border border-fuchsia-500/60 text-fuchsia-300 font-mono text-[10px] font-bold">
+                        ▲ Upcast: {formatSpellLevelLabel(inspectedAction.castAtLevel)} Slot
                       </span>
                     )}
                     {inspectedAction.school && (
@@ -1645,7 +1842,9 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                 )}
                 {inspectedAction.damageFormula && (
                   <span className={`px-2.5 py-1 rounded-lg font-bold border ${
-                    inspectedAction.isHeal
+                    inspectedAction.castAtLevel && inspectedAction.castAtLevel > (inspectedAction.level ?? 0)
+                      ? 'bg-fuchsia-950 border-fuchsia-400/60 text-fuchsia-200'
+                      : inspectedAction.isHeal
                       ? 'bg-emerald-950 border-emerald-500/50 text-emerald-300'
                       : 'bg-rose-950 border-rose-500/50 text-rose-300'
                   }`}>
@@ -1657,6 +1856,57 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                     Uses: {inspectedAction.uses.available}/{inspectedAction.uses.total} ({inspectedAction.uses.resetType || 'Rest'})
                   </span>
                 )}
+              </div>
+            )}
+
+            {/* Interactive Upcast Slot Level Selector (for Leveled Spells) */}
+            {(inspectedAction.level ?? 0) >= 1 && (
+              <div className="px-4 py-3 bg-fuchsia-950/15 border-b border-zinc-800/80 shrink-0">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className="text-[10px] font-mono uppercase tracking-wider font-bold text-fuchsia-300">
+                    ▲ Cast at Higher Spell Slot Level (Upcast)
+                  </span>
+                  <span className="text-[10px] font-mono text-zinc-400">
+                    Base: {formatSpellLevelLabel(inspectedAction.level!)} Level
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
+                  {Array.from({ length: 9 - (inspectedAction.level ?? 1) + 1 }, (_, i) => (inspectedAction.level ?? 1) + i).map(slotLvl => {
+                    const baseSpell = spellsList.find(s => s.id === inspectedAction.id) || inspectedAction;
+                    const activeSlot = inspectedAction.castAtLevel ?? inspectedAction.level ?? 1;
+                    const isSelected = activeSlot === slotLvl;
+                    const isUpcast = slotLvl > (baseSpell.level ?? 1);
+                    const preview = buildActionAtSlotLevel(baseSpell, slotLvl);
+                    const upcastOpt = baseSpell.upcastOptions?.find(o => o.slotLevel === slotLvl);
+                    const slotInfo = characterData?.spellSlots?.[slotLvl];
+                    return (
+                      <button
+                        key={slotLvl}
+                        type="button"
+                        onClick={() => setActionUpcastLevel(baseSpell, slotLvl)}
+                        className={`p-1.5 rounded-lg border text-left font-mono transition-all cursor-pointer flex flex-col justify-between ${
+                          isSelected
+                            ? isUpcast
+                              ? 'bg-fuchsia-500/25 border-fuchsia-400 text-fuchsia-100 shadow-[0_0_10px_rgba(217,70,239,0.3)]'
+                              : 'bg-blue-500/25 border-blue-400 text-blue-100'
+                            : 'bg-zinc-900/80 border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-1 text-[10px] font-bold">
+                          <span>{formatSpellLevelLabel(slotLvl)} Slot</span>
+                          {slotInfo && (
+                            <span className="text-[9px] text-blue-300 opacity-80">
+                              {slotInfo.available}/{slotInfo.total}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[10px] font-bold mt-0.5 truncate text-amber-300">
+                          {preview.damageFormula || upcastOpt?.bonusEffect || (isUpcast ? `+${slotLvl - (baseSpell.level ?? 1)} Slot` : 'Base Effect')}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
@@ -1695,9 +1945,15 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                     onSelectAction(inspectedAction);
                     setInspectedAction(null);
                   }}
-                  className="px-4 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs font-mono transition-all shadow-md active:scale-95 cursor-pointer"
+                  className={`px-4 py-1.5 rounded-xl font-bold text-xs font-mono transition-all shadow-md active:scale-95 cursor-pointer ${
+                    inspectedAction.castAtLevel && inspectedAction.castAtLevel > (inspectedAction.level ?? 0)
+                      ? 'bg-fuchsia-500 hover:bg-fuchsia-400 text-zinc-950 shadow-fuchsia-500/30'
+                      : 'bg-amber-500 hover:bg-amber-400 text-zinc-950'
+                  }`}
                 >
-                  Cast / Target
+                  {inspectedAction.castAtLevel && inspectedAction.castAtLevel > (inspectedAction.level ?? 0)
+                    ? `Cast at ${formatSpellLevelLabel(inspectedAction.castAtLevel)} Level${inspectedAction.damageFormula ? ` (${inspectedAction.damageFormula})` : ''}`
+                    : 'Cast / Target'}
                 </button>
               </div>
             </div>

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Layer, Group, Circle, Line, Ring, Text, Rect } from 'react-konva';
 import Konva from 'konva';
 
@@ -352,3 +352,139 @@ export const MapPingLayer: React.FC<{
     </Layer>
   );
 };
+
+export function useLeftClickHoldPing(options: {
+  senderName: string;
+  senderRole: 'dm' | 'player';
+  color: string;
+  socketRef: React.MutableRefObject<any>;
+  onPullCamera?: (x: number, y: number) => void;
+}) {
+  const { senderName, senderRole, color, socketRef, onPullCamera } = options;
+  const [pings, setPings] = useState<MapPingItem[]>([]);
+  const [chargeState, setChargeState] = useState<PingChargeState | null>(null);
+
+  const holdTimerRef = useRef<any>(null);
+  const cleanupListenersRef = useRef<(() => void) | null>(null);
+  const latestOptionsRef = useRef({ senderName, senderRole, color, onPullCamera });
+  useEffect(() => {
+    latestOptionsRef.current = { senderName, senderRole, color, onPullCamera };
+  }, [senderName, senderRole, color, onPullCamera]);
+
+  const spawnLocalOrRemotePing = useCallback((ping: MapPingItem, isRemote = false) => {
+    setPings((prev) => [...prev.filter((p) => p.id !== ping.id).slice(-7), ping]);
+    playMapPingSound(ping.senderRole, Boolean(ping.pullCamera));
+    if (isRemote && ping.pullCamera && latestOptionsRef.current.onPullCamera) {
+      latestOptionsRef.current.onPullCamera(ping.x, ping.y);
+    }
+    setTimeout(() => {
+      setPings((prev) => prev.filter((p) => p.id !== ping.id));
+    }, 3450);
+  }, []);
+
+  const cancelHoldPing = useCallback(() => {
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+    if (cleanupListenersRef.current) {
+      cleanupListenersRef.current();
+      cleanupListenersRef.current = null;
+    }
+    setChargeState(null);
+  }, []);
+
+  const startHoldPing = useCallback(
+    (worldX: number, worldY: number, clientX: number, clientY: number, pullCamera = false) => {
+      cancelHoldPing();
+
+      const activeColor = pullCamera ? '#ef4444' : latestOptionsRef.current.color;
+      setChargeState({
+        x: worldX,
+        y: worldY,
+        startTime: Date.now(),
+        color: activeColor,
+      });
+
+      const handleWinMove = (ev: MouseEvent) => {
+        if (Math.hypot(ev.clientX - clientX, ev.clientY - clientY) > 8) {
+          cancelHoldPing();
+        }
+      };
+
+      const handleWinTouchMove = (ev: TouchEvent) => {
+        if (ev.touches && ev.touches.length > 0) {
+          const t = ev.touches[0];
+          if (Math.hypot(t.clientX - clientX, t.clientY - clientY) > 10 || ev.touches.length > 1) {
+            cancelHoldPing();
+          }
+        }
+      };
+
+      const handleWinCancel = () => {
+        cancelHoldPing();
+      };
+
+      window.addEventListener('mousemove', handleWinMove, { passive: true });
+      window.addEventListener('mouseup', handleWinCancel, { passive: true });
+      window.addEventListener('touchmove', handleWinTouchMove, { passive: true });
+      window.addEventListener('touchend', handleWinCancel, { passive: true });
+      window.addEventListener('touchcancel', handleWinCancel, { passive: true });
+      window.addEventListener('wheel', handleWinCancel, { passive: true });
+      window.addEventListener('contextmenu', handleWinCancel, { passive: true });
+      window.addEventListener('dragstart', handleWinCancel, { passive: true });
+
+      cleanupListenersRef.current = () => {
+        window.removeEventListener('mousemove', handleWinMove);
+        window.removeEventListener('mouseup', handleWinCancel);
+        window.removeEventListener('touchmove', handleWinTouchMove);
+        window.removeEventListener('touchend', handleWinCancel);
+        window.removeEventListener('touchcancel', handleWinCancel);
+        window.removeEventListener('wheel', handleWinCancel);
+        window.removeEventListener('contextmenu', handleWinCancel);
+        window.removeEventListener('dragstart', handleWinCancel);
+      };
+
+      holdTimerRef.current = setTimeout(() => {
+        holdTimerRef.current = null;
+        if (cleanupListenersRef.current) {
+          cleanupListenersRef.current();
+          cleanupListenersRef.current = null;
+        }
+        setChargeState(null);
+
+        const newPing: MapPingItem = {
+          id: `ping_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          x: Math.round(worldX),
+          y: Math.round(worldY),
+          senderName: latestOptionsRef.current.senderName || (latestOptionsRef.current.senderRole === 'dm' ? 'Dungeon Master' : 'Player'),
+          senderRole: latestOptionsRef.current.senderRole,
+          color: activeColor,
+          pullCamera,
+          createdAt: Date.now(),
+        };
+
+        spawnLocalOrRemotePing(newPing, false);
+        if (socketRef.current?.connected) {
+          socketRef.current.emit('MAP_PING', newPing);
+        }
+      }, 380);
+    },
+    [cancelHoldPing, socketRef, spawnLocalOrRemotePing]
+  );
+
+  useEffect(() => {
+    return () => {
+      cancelHoldPing();
+    };
+  }, [cancelHoldPing]);
+
+  return {
+    pings,
+    chargeState,
+    startHoldPing,
+    cancelHoldPing,
+    receiveRemotePing: useCallback((ping: MapPingItem) => spawnLocalOrRemotePing(ping, true), [spawnLocalOrRemotePing]),
+  };
+}
+

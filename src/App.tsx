@@ -150,6 +150,7 @@ import {
   TokenAerialOverlay,
   useTokenFlightAnimation
 } from './components/TokenFlightElevation';
+import { MapPingLayer, useLeftClickHoldPing, MapPingItem } from './components/MapPingOverlay';
 import { BugReportModal } from './components/BugReportModal';
 import { BugReportManagerModal } from './components/BugReportManagerModal';
 import { DEMO_GV_CAMPAIGN, DEMO_GV_SCENE, DEMO_GV_CHAPTER, DEMO_GV_ROOM_ZONES, DEMO_GV_TOKENS } from './data/demoCampaignGv';
@@ -2151,6 +2152,31 @@ export default function App() {
   const [activeTokenMenu, setActiveTokenMenu] = useState<{ id: string, x: number, y: number } | null>(null);
   const [inspectedRuleEntry, setInspectedRuleEntry] = useState<DndRuleEntry | null>(null);
 
+  // Left-Click Hold Map Ping System
+  const {
+    pings: mapPings,
+    chargeState: pingChargeState,
+    startHoldPing,
+    cancelHoldPing,
+    receiveRemotePing
+  } = useLeftClickHoldPing({
+    senderName: 'Dungeon Master',
+    senderRole: 'dm',
+    color: '#f59e0b',
+    socketRef,
+    onPullCamera: (worldX, worldY) => {
+      const nextPos = {
+        x: dimensions.width / 2 - worldX * stageScale,
+        y: dimensions.height / 2 - worldY * stageScale
+      };
+      setStagePos(nextPos);
+      if (stageRef.current) {
+        stageRef.current.position(nextPos);
+        stageRef.current.batchDraw();
+      }
+    }
+  });
+
   // Dice Roller States
   const [diceHistory, setDiceHistory] = useState<RollResult[]>([]);
   const [dicePool, setDicePool] = useState<string[]>([]);
@@ -2781,6 +2807,12 @@ export default function App() {
 
     socket.on('SYNC_SHAKE', () => {
       triggerShake(false);
+    });
+
+    socket.on('MAP_PING', (ping: MapPingItem) => {
+      if (ping && typeof ping.x === 'number' && typeof ping.y === 'number') {
+        receiveRemotePing(ping);
+      }
     });
 
     socket.on('SYNC_AUTO_APPLY_MONSTER_DAMAGE', (enabled: boolean) => {
@@ -5765,6 +5797,17 @@ export default function App() {
       y: (pointer.y - stage.y()) / scale
     };
 
+    // Left-click hold map ping (Hold left-click for ~0.38s without dragging to ping; Alt+Hold pulls players' camera)
+    if (e.evt?.button === 0 && (tool === 'select' || tool === 'pan')) {
+      startHoldPing(
+        point.x,
+        point.y,
+        e.evt.clientX ?? pointer.x,
+        e.evt.clientY ?? pointer.y,
+        Boolean(e.evt.altKey)
+      );
+    }
+
     // Right click handling
     if (e.evt.button === 2) {
       if (tool === 'spell_aim') {
@@ -8370,6 +8413,14 @@ export default function App() {
                   />
                 </Layer>
               )}
+
+              {/* Left-Click Hold Map Ping Radar Layer */}
+              <MapPingLayer
+                pings={mapPings}
+                chargeState={pingChargeState}
+                stageScale={stageScale}
+                gridSize={gridSize}
+              />
             </Stage>
 
             {/* Native GPU-Accelerated JB2A DOM Video Overlay Layer */}
