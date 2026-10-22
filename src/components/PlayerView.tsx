@@ -723,7 +723,8 @@ const PlayerToken = React.memo(({
         const auraFt = aura.radius || 10;
         const auraPixelRadius = radius + (auraFt / 5) * gridSize;
         const col = aura.color || 'rgba(234, 179, 8, 0.4)';
-        const op = aura.opacity ?? 0.35;
+        // Soften canvas fill when animated video overlay handles the primary animation
+        const op = Math.min(0.2, (aura.opacity ?? 0.35) * 0.4);
 
         return (
           <Group key={`token-aura-${idx}`} listening={false}>

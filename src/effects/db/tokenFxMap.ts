@@ -1,162 +1,204 @@
 // src/effects/db/tokenFxMap.ts
-// Direct animated visual effects mapping for D&D 5e Conditions and Token Auras
-// Features authentic Jules and Ben's Animated Assets (JB2A) transparent WebM loops
+// Maps D&D 5e Status Conditions and Token Auras directly to high-fidelity JB2A WebM animations.
 
-export interface TokenConditionFx {
-  condition: string;
+export interface ConditionFxMapping {
   videoUrl: string;
-  sizeMultiplier: number; // multiplier against token width
-  yOffset: number; // normalized Y offset from token center (-0.2 for floating above head)
-  opacity?: number;
+  thumbUrl?: string;
+  defaultSizeFt: number;
+  soundKey?: string;
+  blendMode?: 'normal' | 'screen' | 'lighten' | 'multiply';
+  color?: string;
 }
 
-export const CONDITION_FX_MAP: Record<string, TokenConditionFx> = {
-  stunned: {
-    condition: 'stunned',
-    videoUrl: '/jb2a/Library/Generic/Conditions/Dizzy_Stars/DizzyStars_01_BlueOrange_400x400.webm',
-    sizeMultiplier: 1.1,
-    yOffset: -0.3,
-    opacity: 0.95
-  },
-  incapacitated: {
-    condition: 'incapacitated',
-    videoUrl: '/jb2a/Library/Generic/Conditions/Dizzy_Stars/DizzyStars_01_BlueOrange_400x400.webm',
-    sizeMultiplier: 1.1,
-    yOffset: -0.3,
-    opacity: 0.95
-  },
-  poisoned: {
-    condition: 'poisoned',
-    videoUrl: '/jb2a/Library/Generic/Template/Circle/TemplatePoisonCircle_01_Dark_Green_800x800.webm',
-    sizeMultiplier: 1.35,
-    yOffset: 0,
-    opacity: 0.85
+export const CONDITION_FX_MAP: Record<string, ConditionFxMapping> = {
+  blinded: {
+    videoUrl: '/jb2a/Library/Generic/Template/Circle/TemplateFearCircle_01_Dark_Purple_800x800.webm',
+    defaultSizeFt: 5,
+    soundKey: 'curse',
+    color: '#a855f7'
   },
   charmed: {
-    condition: 'charmed',
     videoUrl: '/jb2a/Library/Generic/Template/Circle/TemplateHeartCircle_01_Regular_Pink_800x800.webm',
-    sizeMultiplier: 1.25,
-    yOffset: -0.15,
-    opacity: 0.9
+    defaultSizeFt: 5,
+    soundKey: 'magic_chime',
+    color: '#ec4899'
   },
   frightened: {
-    condition: 'frightened',
     videoUrl: '/jb2a/Library/Generic/Template/Circle/TemplateFearCircle_01_Dark_Purple_800x800.webm',
-    sizeMultiplier: 1.4,
-    yOffset: 0,
-    opacity: 0.85
+    defaultSizeFt: 5,
+    soundKey: 'curse',
+    color: '#7c3aed'
+  },
+  poisoned: {
+    videoUrl: '/jb2a/Library/Generic/Template/Circle/TemplatePoisonCircle_01_Dark_Green_800x800.webm',
+    defaultSizeFt: 5,
+    soundKey: 'acid_burn',
+    color: '#22c55e'
   },
   paralyzed: {
-    condition: 'paralyzed',
-    videoUrl: '/jb2a/Library/Generic/Template/Circle/TemplateSnowflakeCircle_01_Regular_Blue_800x800.webm',
-    sizeMultiplier: 1.35,
-    yOffset: 0,
-    opacity: 0.85
-  },
-  restrained: {
-    condition: 'restrained',
-    videoUrl: '/jb2a/Library/Generic/Template/Circle/TemplateSnowflakeCircle_01_Regular_Blue_800x800.webm',
-    sizeMultiplier: 1.35,
-    yOffset: 0,
-    opacity: 0.85
+    videoUrl: '/jb2a/Library/Generic/Template/Circle/TemplateStunCircle_01_Regular_Purple_800x800.webm',
+    defaultSizeFt: 5,
+    soundKey: 'magic_shatter',
+    color: '#c084fc'
   },
   petrified: {
-    condition: 'petrified',
-    videoUrl: '/jb2a/Library/Generic/Template/Circle/TemplateSnowflakeCircle_01_Regular_Blue_800x800.webm',
-    sizeMultiplier: 1.35,
-    yOffset: 0,
-    opacity: 0.85
+    videoUrl: '/jb2a/Library/Generic/Template/Circle/TemplateSkullCircle_01_Regular_Purple_800x800.webm',
+    defaultSizeFt: 5,
+    soundKey: 'magic_shatter',
+    color: '#78716c'
   },
-  burning: {
-    condition: 'burning',
-    videoUrl: '/jb2a/Library/Generic/Fire/ShieldFireAbove01_01_Regular_Orange_400x400.webm',
-    sizeMultiplier: 1.3,
-    yOffset: 0,
-    opacity: 0.9
-  },
-  fire: {
-    condition: 'fire',
-    videoUrl: '/jb2a/Library/Generic/Fire/ShieldFireAbove01_01_Regular_Orange_400x400.webm',
-    sizeMultiplier: 1.3,
-    yOffset: 0,
-    opacity: 0.9
+  stunned: {
+    videoUrl: '/jb2a/Library/Generic/Template/Circle/TemplateStunCircle_01_Regular_Purple_800x800.webm',
+    defaultSizeFt: 5,
+    soundKey: 'magic_chime',
+    color: '#facc15'
   },
   unconscious: {
-    condition: 'unconscious',
     videoUrl: '/jb2a/Library/Generic/Template/Circle/TemplateSkullCircle_01_Regular_Purple_800x800.webm',
-    sizeMultiplier: 1.3,
-    yOffset: 0,
-    opacity: 0.85
+    defaultSizeFt: 5,
+    soundKey: 'curse',
+    color: '#ef4444'
   },
-  dead: {
-    condition: 'dead',
+  invisible: {
+    videoUrl: '/jb2a/Library/Generic/Template/Circle/TemplateSnowflakeCircle_01_Regular_Blue_800x800.webm',
+    defaultSizeFt: 5,
+    color: '#38bdf8'
+  },
+  restrained: {
+    videoUrl: '/jb2a/Library/Generic/Template/Circle/Web/002/Template_Circle_WebLoop_002_001_White_5x5_1000.webm',
+    defaultSizeFt: 5,
+    color: '#e2e8f0'
+  },
+  grappled: {
+    videoUrl: '/jb2a/Library/Generic/Template/Circle/Web/002/Template_Circle_WebLoop_002_001_White_5x5_1000.webm',
+    defaultSizeFt: 5,
+    color: '#f97316'
+  },
+  prone: {
     videoUrl: '/jb2a/Library/Generic/Template/Circle/TemplateSkullCircle_01_Regular_Purple_800x800.webm',
-    sizeMultiplier: 1.3,
-    yOffset: 0,
-    opacity: 0.85
+    defaultSizeFt: 5,
+    color: '#71717a'
   },
-  faerie_fire: {
-    condition: 'faerie_fire',
-    videoUrl: '/jb2a/Library/Generic/Butterflies/ButterfliesComplete01_01_Regular_BluePurple_600x600.webm',
-    sizeMultiplier: 1.35,
-    yOffset: 0,
-    opacity: 0.9
-  },
-  faeriefire: {
-    condition: 'faeriefire',
-    videoUrl: '/jb2a/Library/Generic/Butterflies/ButterfliesComplete01_01_Regular_BluePurple_600x600.webm',
-    sizeMultiplier: 1.35,
-    yOffset: 0,
-    opacity: 0.9
-  },
-  barkskin: {
-    condition: 'barkskin',
-    videoUrl: '/jb2a/Library/Generic/Nature/SwirlingLeavesComplete01_01_Regular_Green_400x400.webm',
-    sizeMultiplier: 1.3,
-    yOffset: 0,
-    opacity: 0.9
-  },
-  light: {
-    condition: 'light',
-    videoUrl: '/jb2a/Library/Generic/Cast/GenericCast01_01_Regular_Yellow_400x400.webm',
-    sizeMultiplier: 1.4,
-    yOffset: 0,
-    opacity: 0.95
+  bloodied: {
+    videoUrl: '/jb2a/Library/Generic/Template/Circle/TemplateSkullCircle_01_Regular_Purple_800x800.webm',
+    defaultSizeFt: 5,
+    color: '#ef4444'
   }
 };
 
-export function getConditionFx(conditionName: string): TokenConditionFx | null {
+export function getConditionFx(conditionName: string): ConditionFxMapping | null {
   if (!conditionName) return null;
   const key = conditionName.toLowerCase().trim();
   return CONDITION_FX_MAP[key] || null;
 }
 
+/**
+ * Resolves high-fidelity JB2A transparent video loops for any token aura name or theme.
+ * Gives first-class priority to official JB2A animated assets over static canvas rings.
+ */
 export function getAuraVideoUrl(name?: string, color?: string): string | null {
   if (!name && !color) return null;
-  const n = (name || '').toLowerCase();
+  const n = (name || '').toLowerCase().trim();
 
+  // 1. Spirit Guardians
   if (n.includes('spirit') || n.includes('guardian')) {
-    return '/jb2a/Library/3rd_Level/Spirit_Guardians/SpiritGuardians_01_Regular_Blue_600x600.webm';
+    return '/jb2a/Library/3rd_Level/Spirit_Guardians/SpiritGuardians_01_Light_BlueYellow_600x600.webm';
   }
-  if (n.includes('fire') || n.includes('flame')) {
-    return '/jb2a/Library/Generic/Fire/ShieldFireAbove01_01_Regular_Orange_400x400.webm';
+
+  // 2. Aura of Life / Vitality
+  if (n.includes('life')) {
+    return '/jb2a/Community/JAA/auraOfLife.webm';
   }
-  if (n.includes('frost') || n.includes('cold') || n.includes('rime')) {
+  if (n.includes('vitality') || n.includes('healing')) {
+    return '/jb2a/Community/JAA/AuraofVitality.webm';
+  }
+
+  // 3. Antilife Shell
+  if (n.includes('antilife') || n.includes('anti-life') || n.includes('shell')) {
+    return '/jb2a/Library/5th_Level/Antilife_Shell/AntilifeShell_01_Blue_Circle_400x400.webm';
+  }
+
+  // 4. Paladin Auras (Protection, Courage, Devotion)
+  if (n.includes('protection') || n.includes('lathander') || n.includes('holy')) {
+    return '/jb2a/Community/JackKerouac/lathander_symbol_CIRCLE_01.webm';
+  }
+  if (n.includes('courage') || n.includes('devotion') || n.includes('magic circle')) {
+    return '/jb2a/Community/JackKerouac/magic_circle_CIRCLE_01.webm';
+  }
+  if (n.includes('crusader') || n.includes('mantle')) {
+    return '/jb2a/Library/Generic/Template/Circle/TemplateRunesCircle_01_Regular_Orange_800x800.webm';
+  }
+
+  // 5. Frost & Cold
+  if (n.includes('ice shield') || n.includes('rotating') || n.includes('glacier')) {
+    return '/jb2a/Community/JackKerouac/ice_shield_rotating_SQUARE_01.webm';
+  }
+  if (n.includes('frost') || n.includes('cold') || n.includes('rime') || n.includes('blizzard') || n.includes('snow')) {
     return '/jb2a/Library/Generic/Template/Circle/Aura/AuraThemedOrbitLoopCold01_01_Regular_Blue_700x700.webm';
   }
-  if (n.includes('life') || n.includes('heal') || n.includes('nature')) {
+
+  // 6. Nature, Plants & Entanglement
+  if (n.includes('entangle') || n.includes('overgrowth') || n.includes('briar') || n.includes('vine') || n.includes('root')) {
+    return '/jb2a/Library/1st_Level/Entangle/EntangleLoop02_02_Regular_Green_500x500.webm';
+  }
+  if (n.includes('nature') || n.includes('bloom') || n.includes('druid') || n.includes('flora')) {
     return '/jb2a/Library/Generic/Template/Circle/Aura/AuraThemedOrbitLoopNature01_01_Regular_Green_700x700.webm';
   }
-  if (n.includes('darkness') || n.includes('void') || n.includes('shadow') || n.includes('dread')) {
-    return '/jb2a/Library/2nd_Level/Darkness/Darkness_01_Regular_Black_600x600.webm';
+
+  // 7. Fire & Flames
+  if (n.includes('fire') || n.includes('flame') || n.includes('blaze') || n.includes('burn')) {
+    return '/jb2a/Library/Generic/Fire/ShieldFireAbove01_01_Regular_Orange_400x400.webm';
   }
-  if (n.includes('fey') || n.includes('faerie') || n.includes('twilight')) {
+
+  // 8. Darkness, Void & Necrotic
+  if (n.includes('darkness') || n.includes('void') || n.includes('shadow') || n.includes('dread') || n.includes('hate')) {
+    return '/jb2a/Library/2nd_Level/Darkness/Darkness_01_Black_600x600.webm';
+  }
+  if (n.includes('death') || n.includes('necrotic') || n.includes('skull')) {
+    return '/jb2a/Community/JAA/circleOfDeath.webm';
+  }
+
+  // 9. Fey, Twilight & Illumination
+  if (n.includes('fey') || n.includes('faerie') || n.includes('twilight') || n.includes('pixie')) {
     return '/jb2a/Library/Generic/Creature/FairiesLoop01_01_Regular_BluePurple_600x600.webm';
   }
-  if (n.includes('poison') || n.includes('flies')) {
+
+  // 10. Fog, Mist & Clouds
+  if (n.includes('fog') || n.includes('mist') || n.includes('cloud')) {
+    return '/jb2a/Library/1st_Level/Fog_Cloud/FogCloud_01_White_800x800.webm';
+  }
+  if (n.includes('cloudkill') || n.includes('poison cloud')) {
+    return '/jb2a/Community/JAA/cloudKill.webm';
+  }
+
+  // 11. Poison & Flies
+  if (n.includes('flies') || n.includes('swarm') || n.includes('insect')) {
+    return '/jb2a/Community/JAA/InsectPlague.0.webm';
+  }
+  if (n.includes('poison') || n.includes('toxic') || n.includes('venom')) {
     return '/jb2a/Library/Generic/Template/Circle/TemplatePoisonCircle_01_Dark_Green_800x800.webm';
   }
 
-  // Fallback to Holy / Protection Runes
+  // 12. Protective Wards, Hut & Glyphs
+  if (n.includes('tiny hut') || n.includes('leomund') || n.includes('hut') || n.includes('dome')) {
+    return '/jb2a/Community/JAA/LeomundsTinyHut.0.webm';
+  }
+  if (n.includes('glyph') || n.includes('warding') || n.includes('barrier')) {
+    return '/jb2a/Community/JAA/glyphOfWarding.webm';
+  }
+  if (n.includes('blade barrier') || n.includes('spinning blades')) {
+    return '/jb2a/Community/JAA/bladeBarrier.webm';
+  }
+  if (n.includes('sanctuary') || n.includes('rune')) {
+    return '/jb2a/Community/JackKerouac/runes_CIRCLE_02.webm';
+  }
+  if (n.includes('shield of faith') || n.includes('shield')) {
+    return '/jb2a/Library/1st_Level/Shield/Shield_01_Regular_Blue_Complete_400x400.webm';
+  }
+  if (n.includes('detect magic')) {
+    return '/jb2a/Library/1st_Level/Detect_Magic/DetectMagicCircle_01_Regular_Blue_1200x1200.webm';
+  }
+
+  // Universal Default: Golden Divine Runes Circle
   return '/jb2a/Library/Generic/Template/Circle/TemplateRunesCircle_01_Regular_Orange_800x800.webm';
 }

@@ -85,6 +85,8 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
 
   const [activeCategory, setActiveCategory] = useState<HudActionCategory>('attacks');
   const [selectedSpellLevel, setSelectedSpellLevel] = useState<number | 'all'>('all');
+  const [includeUpcastInFilter, setIncludeUpcastInFilter] = useState<boolean>(false);
+  const [upcastLevels, setUpcastLevels] = useState<Record<string, number>>({});
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [hoveredAction, setHoveredAction] = useState<HudActionItem | null>(null);
   const [inspectedAction, setInspectedAction] = useState<HudActionItem | null>(null);
@@ -284,11 +286,99 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
     return Array.from(lvlSet).sort((a, b) => a - b);
   }, [spellsList, characterData?.spellSlots]);
 
+  const formatSpellLevelLabel = (lvl: number) => {
+    if (lvl === 0) return 'Cantrip';
+    if (lvl === 1) return '1st';
+    if (lvl === 2) return '2nd';
+    if (lvl === 3) return '3rd';
+    return `${lvl}th`;
+  };
+
+  // Build an upcasted (or base-level) copy of a spell action at a chosen slot level
+  const buildActionAtSlotLevel = (action: HudActionItem, targetSlotLevel: number): HudActionItem => {
+    const baseLevel = action.level ?? 0;
+    if (baseLevel < 1) return action;
+    const clampedSlot = Math.max(baseLevel, Math.min(9, targetSlotLevel));
+    if (clampedSlot <= baseLevel) {
+      return {
+        ...action,
+        castAtLevel: baseLevel,
+        spellSlotRequired: baseLevel
+      };
+    }
+
+    const precomputed = action.upcastOptions?.find(o => o.slotLevel === clampedSlot);
+    const computed = precomputed || {
+      slotLevel: clampedSlot,
+      ...computeUpcastFormula(action.damageFormula, baseLevel, clampedSlot, action.name)
+    };
+
+    const upcastTag = computed.bonusEffect
+      ? `Upcast (${formatSpellLevelLabel(clampedSlot)} Slot: ${computed.bonusEffect})`
+      : `Upcast (${formatSpellLevelLabel(clampedSlot)} Slot)`;
+
+    return {
+      ...action,
+      castAtLevel: clampedSlot,
+      spellSlotRequired: clampedSlot,
+      damageFormula: computed.damageFormula ?? action.damageFormula,
+      notes: [action.notes, upcastTag].filter(Boolean).join(' • ')
+    };
+  };
+
+  // Resolve the effective action (with any active upcast slot level applied)
+  const getEffectiveAction = (action: HudActionItem): HudActionItem => {
+    const baseLevel = action.level ?? 0;
+    if (baseLevel < 1) return action;
+    const filterSlot =
+      typeof selectedSpellLevel === 'number' &&
+      selectedSpellLevel > baseLevel &&
+      includeUpcastInFilter
+        ? selectedSpellLevel
+        : undefined;
+    const chosenSlot = upcastLevels[action.id] ?? filterSlot ?? action.castAtLevel ?? baseLevel;
+    return buildActionAtSlotLevel(action, chosenSlot);
+  };
+
+  const setActionUpcastLevel = (action: HudActionItem, nextSlotLevel: number) => {
+    const baseLevel = action.level ?? 0;
+    if (baseLevel < 1) return;
+    const clamped = Math.max(baseLevel, Math.min(9, nextSlotLevel));
+    setUpcastLevels(prev => ({
+      ...prev,
+      [action.id]: clamped
+    }));
+    const updated = buildActionAtSlotLevel(action, clamped);
+    if (inspectedAction?.id === action.id) {
+      setInspectedAction(updated);
+    }
+    if (hoveredAction?.id === action.id) {
+      setHoveredAction(updated);
+    }
+    if (currentTargetingAction?.id === action.id) {
+      onSelectAction(updated);
+    }
+  };
+
   // Filtered spells when spell level filter is active
   const filteredSpellsList = useMemo<HudActionItem[]>(() => {
     if (selectedSpellLevel === 'all') return spellsList;
-    return spellsList.filter(sp => (sp.level ?? 0) === selectedSpellLevel);
-  }, [spellsList, selectedSpellLevel]);
+    return spellsList.filter(sp => {
+      const lvl = sp.level ?? 0;
+      if (lvl === selectedSpellLevel) return true;
+      if (
+        includeUpcastInFilter &&
+        typeof selectedSpellLevel === 'number' &&
+        selectedSpellLevel >= 2 &&
+        lvl >= 1 &&
+        lvl < selectedSpellLevel &&
+        (sp.canUpcast || Boolean(sp.damageFormula) || Boolean(sp.atHigherLevels))
+      ) {
+        return true;
+      }
+      return false;
+    });
+  }, [spellsList, selectedSpellLevel, includeUpcastInFilter]);
 
   const currentCategoryList = useMemo<HudActionItem[]>(() => {
     let base: HudActionItem[];
@@ -335,14 +425,6 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
     itemsList,
     searchQuery
   ]);
-
-  const formatSpellLevelLabel = (lvl: number) => {
-    if (lvl === 0) return 'Cantrip';
-    if (lvl === 1) return '1st';
-    if (lvl === 2) return '2nd';
-    if (lvl === 3) return '3rd';
-    return `${lvl}th`;
-  };
 
   const renderActionGlyph = (action: HudActionItem, sizeClass = 'w-4 h-4') => {
     const isSpell = action.category === 'spells' || action.subCategory === 'spell';

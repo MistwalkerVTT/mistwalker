@@ -642,6 +642,12 @@ async function startServer() {
       socket.broadcast.emit("BROADCAST_ROOM_TEXT", val);
     });
 
+    socket.on("MAP_PING", (pingData: any) => {
+      if (pingData && typeof pingData.x === 'number' && typeof pingData.y === 'number') {
+        socket.broadcast.emit("MAP_PING", pingData);
+      }
+    });
+
     socket.on("MOVE_TOKEN", (data: any) => {
       console.log(`[Server Socket] MOVE_TOKEN: id=${data?.id}, x=${data?.x}, y=${data?.y}`);
       if (data?.id && Array.isArray(activeVttState.tokens)) {
