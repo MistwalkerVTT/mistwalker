@@ -222,11 +222,11 @@ export const TokenAerialOverlay: React.FC<{
   const wingGlow = isMonster ? '#fda4af' : tierGlow;
   const wingSpan = Math.max(22, radius * 0.72);
 
-  // Badge dimensions on Top-Right of token
-  const badgeW = Math.max(54, Math.min(82, Math.round(tokenWidth * 0.68)));
-  const badgeH = 19;
-  const badgeX = tokenWidth - badgeW + 10;
-  const badgeY = -6;
+  // Small Circle Badge on Top-Right of token (mirrors Top-Left AC circle)
+  const circleRadius = 12;
+  const circleX = tokenWidth - circleRadius;
+  const circleY = circleRadius;
+  const displayFeet = elevation !== 0 ? `${elevation}` : '15';
 
   return (
     <Group listening={false}>
@@ -310,30 +310,40 @@ export const TokenAerialOverlay: React.FC<{
         </Group>
       )}
 
-      {/* High-Contrast Top-Right Altitude Pill Badge */}
-      <Group x={badgeX} y={badgeY}>
-        <Rect
-          width={badgeW}
-          height={badgeH}
+      {/* Small Top-Right Flying Elevation Circle Badge */}
+      <Group x={circleX} y={circleY}>
+        <Circle
+          radius={circleRadius}
           fill={tierBg}
           stroke={tierGlow}
           strokeWidth={1.5}
-          cornerRadius={9}
           shadowColor="#000000"
-          shadowBlur={5}
+          shadowBlur={4}
           shadowOpacity={0.85}
           perfectDrawEnabled={false}
         />
         <Text
-          width={badgeW}
-          height={badgeH}
-          y={3.5}
+          x={-circleRadius}
+          y={-8.5}
+          width={circleRadius * 2}
           align="center"
-          text={badgeText}
-          fontSize={10.5}
+          text={displayFeet}
+          fontSize={9.5}
           fontStyle="bold"
           fontFamily="monospace"
           fill="#ffffff"
+          perfectDrawEnabled={false}
+        />
+        <Text
+          x={-circleRadius}
+          y={1.5}
+          width={circleRadius * 2}
+          align="center"
+          text="ft"
+          fontSize={6.5}
+          fontStyle="bold"
+          fontFamily="monospace"
+          fill={tierGlow}
           perfectDrawEnabled={false}
         />
       </Group>

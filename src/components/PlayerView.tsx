@@ -75,7 +75,7 @@ import {
   DEFAULT_CHARACTERS,
   resolveTokenCharacterStats,
   getCharacterTokenUrl,
-  CHARACTER_TOKEN_IMAGES,
+  CHARACTER_TOKEN_IMAGES, getCharacterTokenDisplayName,
   isDdbMatch
 } from '../data/defaultCharacters';
 import { repairMonsterToken } from '../data/srdMonstersCatalog';
@@ -982,7 +982,7 @@ const PlayerToken = React.memo(({
         {/* 5. Token Name Label & Conditions (Cleanly spaced below the larger HP badge or token) */}
         <Group y={nameY} listening={false}>
           <Text
-            text={token.name}
+            text={getCharacterTokenDisplayName(token.name, !isMonster && !isAlly && !isCondition)}
             width={tokenPx + 60}
             x={-30}
             align="center"

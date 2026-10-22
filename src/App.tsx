@@ -70,7 +70,7 @@ import {
 } from './services/universalVttService';
 import { DEFAULT_MONSTERS } from './data/defaultMonsters';
 import { repairMonsterToken } from './data/srdMonstersCatalog';
-import { DEFAULT_CHARACTERS, getCharacterTokenUrl, resolveTokenCharacterStats, isDdbMatch } from './data/defaultCharacters';
+import { DEFAULT_CHARACTERS, getCharacterTokenUrl, getCharacterTokenDisplayName, resolveTokenCharacterStats, isDdbMatch } from './data/defaultCharacters';
 import { DEFAULT_ALLIES } from './data/defaultAllies';
 import { Monster, getSizeMultiplier } from './types/monster';
 import { Character } from './types/character';
@@ -892,7 +892,7 @@ const TokenImage = React.memo(({
         {/* 5. Token Name Label & Conditions (Cleanly spaced below the larger HP badge or token) */}
         <Group y={nameY} listening={false}>
           <Text
-            text={token.name}
+            text={getCharacterTokenDisplayName(token.name, !isMonster && !isAlly && !token.isCondition)}
             fontSize={nameFontSize}
             fontStyle={isSelected ? "bold" : "normal"}
             fill={isSelected ? "#fbbf24" : "white"}

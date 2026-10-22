@@ -53,6 +53,29 @@ export function getCharacterTokenUrl(name: string, customAvatarUrl?: string): st
   return customAvatarUrl || CHARACTER_TOKEN_IMAGES['varrak'];
 }
 
+/**
+ * Formats a character token's display name so only the character's first name
+ * is shown beneath their token (and always displays "Aggie" for Aggapanthus/Aggie).
+ * Non-character tokens (monsters, allies, conditions) keep their full name.
+ */
+export function getCharacterTokenDisplayName(rawName?: string, isCharacter: boolean = true): string {
+  if (!rawName || typeof rawName !== 'string') return 'Token';
+  const trimmed = rawName.trim();
+  if (!trimmed) return 'Token';
+
+  const lower = trimmed.toLowerCase();
+  if (lower.includes('aggie') || lower.includes('aggapanthus')) {
+    return 'Aggie';
+  }
+
+  if (!isCharacter) {
+    return trimmed;
+  }
+
+  const first = trimmed.split(/[\s"(]+/)[0];
+  return first || trimmed;
+}
+
 export const DEFAULT_CHARACTERS: Character[] = [
   {
     id: 'char_varrak',
