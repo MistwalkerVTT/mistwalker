@@ -77,7 +77,7 @@ import {
   DEFAULT_CHARACTERS,
   resolveTokenCharacterStats,
   getCharacterTokenUrl,
-  CHARACTER_TOKEN_IMAGES, getCharacterTokenDisplayName,
+  CHARACTER_TOKEN_IMAGES, getCharacterTokenDisplayName, resolveTokenDdbCharacterId,
   isDdbMatch
 } from '../data/defaultCharacters';
 import { repairMonsterToken } from '../data/srdMonstersCatalog';
@@ -1456,7 +1456,10 @@ export default function PlayerView() {
         const isAlly = t.category === 'ally' || !!(t as any).allyId;
         const isMonster = !isAlly && (isMonsterToken(t) || t.isMonster === true || t.category === 'monster' || t.isPlayer === false);
         if (isMonster) return false;
-        return (t.name || '').trim().toLowerCase() === savedName;
+        return (
+          (t.name || '').trim().toLowerCase() === savedName ||
+          isDdbMatch(t.name, (t as any).characterId || t.id, (t as any).ddbCharacterId, undefined, savedName)
+        );
       });
       if (nameMatch) {
         setClaimedTokenId(nameMatch.id);
@@ -1489,6 +1492,8 @@ export default function PlayerView() {
   // Resolve D&D Beyond Character ID for the currently claimed/selected token
   const resolvedClaimedDdbId = useMemo<string | null>(() => {
     if (!claimedToken) return null;
+    const directResolved = resolveTokenDdbCharacterId(claimedToken, compendiumCharacters);
+    if (directResolved) return directResolved;
     if ((claimedToken as any).ddbCharacterId) {
       return String((claimedToken as any).ddbCharacterId).replace(/^char_ddb_/, '').trim();
     }
@@ -1510,6 +1515,8 @@ export default function PlayerView() {
     }
     return null;
   }, [claimedToken, compendiumCharacters]);
+
+  const promptedPrivateCharIdRef = useRef<string | null>(null);
 
   const syncHudFromDdb = useCallback(async (forceRefresh = false) => {
     if (!claimedToken) {
@@ -1548,7 +1555,19 @@ export default function PlayerView() {
         if (res.ok) {
           const data = await res.json();
           if (data && data.name) {
-            setIsCurrentCharacterPrivate(false);
+            const isPriv = Boolean(data.isPrivate);
+            setIsCurrentCharacterPrivate(isPriv);
+            if (isPriv && promptedPrivateCharIdRef.current !== String(targetDdbId)) {
+              promptedPrivateCharIdRef.current = String(targetDdbId);
+              setPrivacyModalState({
+                isOpen: true,
+                characterId: String(targetDdbId),
+                characterName: data.name || claimedToken.name || 'Your Character',
+                avatarUrl: claimedToken.url || claimedToken.avatarUrl || data.avatarUrl || getCharacterTokenUrl(data.name || claimedToken.name)
+              });
+            } else if (!isPriv && privacyModalState.isOpen && privacyModalState.characterId === String(targetDdbId)) {
+              setPrivacyModalState(prev => ({ ...prev, isOpen: false }));
+            }
             setHudCharacterData({
               ...data,
               avatarUrl: claimedToken.url || claimedToken.avatarUrl || data.avatarUrl || getCharacterTokenUrl(data.name)
@@ -1562,6 +1581,15 @@ export default function PlayerView() {
           }
         } else if (res.status === 403) {
           setIsCurrentCharacterPrivate(true);
+          if (promptedPrivateCharIdRef.current !== String(targetDdbId) || forceRefresh) {
+            promptedPrivateCharIdRef.current = String(targetDdbId);
+            setPrivacyModalState({
+              isOpen: true,
+              characterId: String(targetDdbId),
+              characterName: claimedToken.name || 'Your Character',
+              avatarUrl: claimedToken.url || claimedToken.avatarUrl || getCharacterTokenUrl(claimedToken.name)
+            });
+          }
         }
       }
 
@@ -3600,7 +3628,10 @@ export default function PlayerView() {
         localStorage.setItem('mistwalker_player_claimed_token', choice.tokenId);
       }
     } else {
-      const match = tokens.find(t => (t.name || '').trim().toLowerCase() === choice.name.trim().toLowerCase());
+      const match = tokens.find(t =>
+        (t.name || '').trim().toLowerCase() === choice.name.trim().toLowerCase() ||
+        isDdbMatch(t.name, (t as any).characterId || t.id, (t as any).ddbCharacterId, choice.ddbCharacterId, choice.name)
+      );
       if (match) {
         claimedTokenIdRef.current = match.id;
         setClaimedTokenId(match.id);
@@ -7251,6 +7282,7 @@ export default function PlayerView() {
             toast.success(`${privacyModalState.characterName}'s sheet is now Public and fully synced!`);
           }}
           onContinueLimited={() => {
+            promptedPrivateCharIdRef.current = String(privacyModalState.characterId);
             if (privacyModalState.pendingChoice) {
               handleSelectCharacterChoice(privacyModalState.pendingChoice);
             }

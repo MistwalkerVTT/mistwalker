@@ -541,9 +541,9 @@ export async function fetchDdbCampaignCharacters(campaignId: string): Promise<{ 
           damage: liveData.damage ?? 0,
           ac: liveData.ac ?? 14,
           speed: liveData.speed || '30 ft.',
-          stats: liveData.stats || { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, isPrivate: Boolean(liveData.isPrivate),
-          isPrivate: false,
-          readonlyUrl: liveData.readonlyUrl || `https://www.dndbeyond.com/characters/${card.id}`, isPrivate: Boolean(liveData.isPrivate),
+          stats: liveData.stats || { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
+          isPrivate: Boolean(liveData.isPrivate),
+          readonlyUrl: liveData.readonlyUrl || `https://www.dndbeyond.com/characters/${card.id}`,
           lastUpdated: Date.now()
         });
       } else {

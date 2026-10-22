@@ -3096,6 +3096,14 @@ export default function App() {
     }) => {
       if (!data.characters || data.characters.length === 0) return;
       console.log(`[DM Socket] ⚡ D&D Beyond Initial Sync for ${data.characters.length} characters`);
+      const privateChars = data.characters.filter((c: any) => c.isPrivate);
+      if (privateChars.length > 0 && !(window as any).__ddbPrivateNoticeShown) {
+        (window as any).__ddbPrivateNoticeShown = true;
+        toast.warning(`${privateChars.length} D&D Beyond character${privateChars.length > 1 ? 's have' : ' has'} Private profiles: ${privateChars.map((c: any) => c.name).join(', ')}`, {
+          description: 'Have players set Character Privacy to Public on D&D Beyond for full player sheet access.',
+          duration: 8000
+        });
+      }
 
       // 1. Update compendium characters and persist to Firestore
       setCompendiumCharacters(prev => {

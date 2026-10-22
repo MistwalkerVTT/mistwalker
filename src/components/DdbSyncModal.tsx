@@ -1057,7 +1057,18 @@ export const DdbSyncModal: React.FC<DdbSyncModalProps> = ({
                           {/* Private Sheet Notice if applicable */}
                           {char.isPrivate && (
                             <div className="bg-amber-950/40 border border-amber-600/40 rounded-lg p-2 text-[10px] text-amber-300 mb-3">
-                              <strong>Private Sheet:</strong> Set character privacy to Public on D&D Beyond to enable automatic live HP polling.
+                              <strong>Private Sheet:</strong> Set character privacy to Public on D&D Beyond to enable automatic live player sheet sync.
+                              <div className="mt-1.5">
+                                <a
+                                  href={`https://www.dndbeyond.com/characters/${char.id}/builder#/home/basic`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-600/30 hover:bg-amber-500/40 border border-amber-500/60 text-amber-100 rounded font-bold transition-colors"
+                                >
+                                  <ExternalLink className="w-2.5 h-2.5" />
+                                  Open Privacy Settings (Make Public)
+                                </a>
+                              </div>
                             </div>
                           )}
                         </div>
