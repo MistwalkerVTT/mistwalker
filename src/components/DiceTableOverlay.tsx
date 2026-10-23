@@ -181,11 +181,11 @@ export const DiceTableOverlay: React.FC<Props> = ({
 
   return (
     <>
-      {/* 3D Transparent Full-Viewport Overlay directly above Konva stage */}
+      {/* 3D Transparent Full-Viewport Overlay directly above Konva stage and Arena Mode */}
       <div
         id="mistwalker-3d-dice-overlay"
         ref={containerRef}
-        className="fixed inset-0 pointer-events-none z-40 overflow-hidden"
+        className="fixed inset-0 pointer-events-none z-[280] overflow-hidden"
         style={{ width: '100vw', height: '100vh' }}
       />
 

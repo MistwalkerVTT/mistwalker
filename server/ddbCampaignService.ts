@@ -1858,6 +1858,8 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
     // Fallback healing/damage formula if not found in modifiers
     if (isHeal && !damageFormula) {
       if (lowerName.includes('healing word')) damageFormula = `1d4 + ${thisSpellMod}`;
+      else if (lowerName.includes('mass cure wounds')) damageFormula = `3d8 + ${thisSpellMod}`;
+      else if (lowerName.includes('prayer of healing')) damageFormula = `2d8 + ${thisSpellMod}`;
       else if (lowerName.includes('cure wounds')) damageFormula = `1d8 + ${thisSpellMod}`;
       else if (compendiumRule?.damageFormula) damageFormula = compendiumRule.damageFormula;
     } else if (!damageFormula && lowerName.includes('magic missile')) {

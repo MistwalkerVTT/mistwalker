@@ -43,7 +43,7 @@ import { Monster } from '../types/monster';
 import { DEFAULT_CHARACTERS, getCharacterTokenUrl, isDdbMatch } from '../data/defaultCharacters';
 import { DEFAULT_MONSTERS } from '../data/defaultMonsters';
 import { PRESET_BATTLEMAPS, PresetBattlemap } from '../data/presetBattlemaps';
-import { HudCharacterData, HudActionItem, computeUpcastFormula } from '../types/hud';
+import { HudCharacterData, HudActionItem, computeUpcastFormula, evaluateDiceFormula } from '../types/hud';
 import { WallSegment, DoorState } from '../types';
 import { PlayerHeroDock } from './PlayerHeroDock';
 import { GridLayer } from './GridLayer';
@@ -161,57 +161,19 @@ const ARENA_HEIGHT = ARENA_ROWS * ARENA_GRID_SIZE; // 840
 function rollDiceFormula(formula: string | undefined, isCrit = false): {
   total: number;
   rolls: number[];
+  dice: Array<{ sides: number; result: number; type: string }>;
   sides: number;
   bonus: number;
   breakdown: string;
 } {
-  if (!formula) {
-    const r = Math.floor(Math.random() * 8) + 1;
-    return { total: r + 3, rolls: [r], sides: 8, bonus: 3, breakdown: `[${r}] + 3` };
-  }
-  const clean = String(formula).trim();
-  // Pure flat number (e.g. "70" for Heal)
-  if (/^\d+$/.test(clean)) {
-    const val = parseInt(clean, 10);
-    return { total: val, rolls: [val], sides: 6, bonus: 0, breakdown: `${val}` };
-  }
-
-  const regex = /(\d+)d(\d+)/gi;
-  let match: RegExpExecArray | null;
-  const rolls: number[] = [];
-  let primarySides = 6;
-  let diceSum = 0;
-
-  while ((match = regex.exec(clean)) !== null) {
-    const rawCount = parseInt(match[1], 10) || 1;
-    const count = isCrit ? rawCount * 2 : rawCount;
-    const sides = parseInt(match[2], 10) || 6;
-    primarySides = sides;
-    for (let i = 0; i < count; i++) {
-      const r = Math.floor(Math.random() * sides) + 1;
-      rolls.push(r);
-      diceSum += r;
-    }
-  }
-
-  // Extract flat modifier (e.g., "+ 4" or "- 2")
-  const withoutDice = clean.replace(/\d+d\d+/gi, '');
-  const modMatch = withoutDice.match(/([+-]\s*\d+)/);
-  const bonus = modMatch ? parseInt(modMatch[1].replace(/\s+/g, ''), 10) : 0;
-
-  if (rolls.length === 0) {
-    const r = Math.floor(Math.random() * 8) + 1;
-    return { total: Math.max(1, r + bonus), rolls: [r], sides: 8, bonus, breakdown: `[${r}]` };
-  }
-
-  const total = Math.max(1, diceSum + bonus);
-  const signStr = bonus > 0 ? ` + ${bonus}` : bonus < 0 ? ` - ${Math.abs(bonus)}` : '';
+  const evaluated = evaluateDiceFormula(formula, isCrit);
   return {
-    total,
-    rolls,
-    sides: primarySides,
-    bonus,
-    breakdown: `[${rolls.join(', ')}]${signStr}${isCrit ? ' (CRIT 2x DICE!)' : ''}`
+    total: evaluated.total,
+    rolls: evaluated.rolls,
+    dice: evaluated.dice,
+    sides: evaluated.sides,
+    bonus: evaluated.bonus,
+    breakdown: evaluated.breakdown
   };
 }
 
@@ -433,7 +395,7 @@ function buildArenaCombatantHudData(
         } else if (
           baseFormula &&
           isHeal &&
-          (lower.includes('cure wounds') || lower.includes('healing word'))
+          (lower.includes('cure wounds') || lower.includes('healing word') || lower.includes('prayer of healing'))
         ) {
           baseFormula = `${baseFormula} + ${Math.max(1, spellMod)}`;
         } else if (baseFormula && lower.includes('spiritual weapon')) {
@@ -1950,12 +1912,13 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           lowerName.includes('fog cloud')
       );
 
-      const attachToTokenId =
-        isPersistentAura && !targetPointPx
-          ? action.isSelfAction
-            ? caster.id
-            : target.id
-          : undefined;
+      const attachToTokenId = isPersistentAura
+        ? action.isSelfAction
+          ? caster.id
+          : !targetPointPx
+          ? target.id
+          : undefined
+        : undefined;
 
       const dx = targetCenter.x - casterCenter.x;
       const dy = targetCenter.y - casterCenter.y;
@@ -2191,29 +2154,54 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
 
       // 3. Healing Action / Spell
       if (action.isHeal) {
-        const healRoll = rollDiceFormula(action.damageFormula || '2d8 + 4', false);
-        if (onTrigger3dDice && action.damageFormula) {
+        const healFormula = action.damageFormula || '2d8 + 4';
+        const healRoll = rollDiceFormula(healFormula, false);
+        const upcastSuffix =
+          action.castAtLevel && action.castAtLevel > (action.level ?? 0)
+            ? ` (L${action.castAtLevel})`
+            : '';
+
+        if (onTrigger3dDice && healRoll.dice.length > 0) {
           onTrigger3dDice({
             id: `arena-heal-${Date.now()}`,
             characterName: actor.name,
-            action: `${action.name} (Heal)`,
+            action: `${action.name}${upcastSuffix} (Healing)`,
             rollType: 'heal',
-            formula: `${action.damageFormula} = ${healRoll.total}`,
-            diceNotation: action.damageFormula || '2d8',
-            dice: healRoll.rolls.map((r) => ({
-              sides: healRoll.sides,
-              result: r,
-              type: `d${healRoll.sides}`
-            })),
+            formula: `${healFormula} → ${healRoll.breakdown}`,
+            diceNotation: healFormula,
+            dice: healRoll.dice,
+            modifier: healRoll.bonus,
             total: healRoll.total,
             timestamp: Date.now(),
             source: 'player'
           });
         }
 
+        const isMultiAllyHeal =
+          lowerName.includes('mass ') ||
+          lowerName.includes('prayer of healing') ||
+          lowerName === 'aid' ||
+          lowerName.includes('preserve life') ||
+          lowerName.includes('aura of vitality');
+
+        const healedNames: string[] = [];
         setCombatants((prev) =>
           prev.map((c) => {
+            if (isMultiAllyHeal && c.team === actor.team && c.currentHp > 0) {
+              const cx = c.x + ((c.size || 1) * ARENA_GRID_SIZE) / 2;
+              const cy = c.y + ((c.size || 1) * ARENA_GRID_SIZE) / 2;
+              const dFt = Math.round((Math.hypot(cx - targetCx, cy - targetCy) / ARENA_GRID_SIZE) * 5);
+              if (dFt <= 30 || c.id === target.id || c.id === actor.id) {
+                healedNames.push(c.name);
+                return {
+                  ...c,
+                  currentHp: Math.min(c.maxHp, c.currentHp + healRoll.total),
+                  ...(c.id === actor.id ? markActorUsed(c) : {})
+                };
+              }
+            }
             if (c.id === target.id) {
+              healedNames.push(c.name);
               return {
                 ...c,
                 currentHp: Math.min(c.maxHp, c.currentHp + healRoll.total),
@@ -2230,7 +2218,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         addCombatLog(
           actor.name,
           actor.team,
-          `healed ${target.name} with ${action.name} for +${healRoll.total} HP!`,
+          `healed ${healedNames.length > 1 ? healedNames.join(', ') : target.name} with ${action.name}${upcastSuffix} for +${healRoll.total} HP!`,
           healRoll.breakdown
         );
         return true;
@@ -2238,20 +2226,18 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
 
       // 4. Auto-Hit Spells (Magic Missile)
       if (lowerName.includes('magic missile')) {
-        const dmgRoll = rollDiceFormula(action.damageFormula || '3d4 + 3', false);
-        if (onTrigger3dDice) {
+        const mmFormula = action.damageFormula || '3d4 + 3';
+        const dmgRoll = rollDiceFormula(mmFormula, false);
+        if (onTrigger3dDice && dmgRoll.dice.length > 0) {
           onTrigger3dDice({
             id: `arena-mm-${Date.now()}`,
             characterName: actor.name,
-            action: `${action.name} (Force Darts)`,
+            action: `${action.name}${action.castAtLevel ? ` (L${action.castAtLevel})` : ''} (Force Darts)`,
             rollType: 'damage',
-            formula: `${action.damageFormula || '3d4 + 3'} = ${dmgRoll.total}`,
-            diceNotation: action.damageFormula || '3d4+3',
-            dice: dmgRoll.rolls.map((r) => ({
-              sides: dmgRoll.sides,
-              result: r,
-              type: `d${dmgRoll.sides}`
-            })),
+            formula: `${mmFormula} → ${dmgRoll.breakdown}`,
+            diceNotation: mmFormula,
+            dice: dmgRoll.dice,
+            modifier: dmgRoll.bonus,
             total: dmgRoll.total,
             timestamp: Date.now(),
             source: 'player'
@@ -2277,21 +2263,19 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
 
       // 5. Persistent Damaging Auras cast on Self (e.g., Spirit Guardians)
       if (lowerName.includes('spirit guardians')) {
-        const dmgRoll = rollDiceFormula(action.damageFormula || '3d8', false);
+        const sgFormula = action.damageFormula || '3d8';
+        const dmgRoll = rollDiceFormula(sgFormula, false);
         const dc = Number(action.saveDc) || 16;
-        if (onTrigger3dDice) {
+        if (onTrigger3dDice && dmgRoll.dice.length > 0) {
           onTrigger3dDice({
             id: `arena-sg-${Date.now()}`,
             characterName: actor.name,
             action: `${action.name}${action.castAtLevel ? ` (L${action.castAtLevel})` : ''}`,
             rollType: 'damage',
-            formula: `${action.damageFormula || '3d8'} = ${dmgRoll.total}`,
-            diceNotation: action.damageFormula || '3d8',
-            dice: dmgRoll.rolls.map((r) => ({
-              sides: dmgRoll.sides,
-              result: r,
-              type: `d${dmgRoll.sides}`
-            })),
+            formula: `${sgFormula} → ${dmgRoll.breakdown}`,
+            diceNotation: sgFormula,
+            dice: dmgRoll.dice,
+            modifier: dmgRoll.bonus,
             total: dmgRoll.total,
             timestamp: Date.now(),
             source: 'player'
@@ -2323,7 +2307,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         addCombatLog(
           actor.name,
           actor.team,
-          `activated ${action.name}${action.castAtLevel ? ` (Slot Level ${action.castAtLevel})` : ''} — 15ft Radiant Aura (${action.damageFormula || '3d8'})!`,
+          `activated ${action.name}${action.castAtLevel ? ` (Slot Level ${action.castAtLevel})` : ''} — 15ft Radiant Aura (${sgFormula})!`,
           hitSummaries.length > 0
             ? `${hitSummaries.join(' • ')} • Roll: ${dmgRoll.breakdown}`
             : `Rolled ${dmgRoll.total} (${dmgRoll.breakdown}) radiant aura damage • Click aura title on token to inspect!`
@@ -2343,19 +2327,16 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           ? rollDiceFormula(action.damageFormula, false)
           : null;
 
-        if (dmgRoll && onTrigger3dDice) {
+        if (dmgRoll && dmgRoll.dice.length > 0 && onTrigger3dDice) {
           onTrigger3dDice({
             id: `arena-save-dmg-${Date.now()}`,
             characterName: actor.name,
-            action: `${action.name} (${saveAbil} DC ${dc})`,
+            action: `${action.name}${action.castAtLevel ? ` (L${action.castAtLevel})` : ''} (${saveAbil} DC ${dc})`,
             rollType: 'damage',
-            formula: `${action.damageFormula} = ${dmgRoll.total}`,
+            formula: `${action.damageFormula} → ${dmgRoll.breakdown}`,
             diceNotation: action.damageFormula || '3d8',
-            dice: dmgRoll.rolls.map((r) => ({
-              sides: dmgRoll.sides,
-              result: r,
-              type: `d${dmgRoll.sides}`
-            })),
+            dice: dmgRoll.dice,
+            modifier: dmgRoll.bonus,
             total: dmgRoll.total,
             timestamp: Date.now(),
             source: 'player'
@@ -2523,31 +2504,31 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         ? `1d20 Disadvantage [${d20Roll1}, ${d20Roll2}] (${d20}) + ${rawHitBonus} = ${attackTotal}`
         : `1d20 (${d20}) + ${rawHitBonus} = ${attackTotal}`;
 
-      if (onTrigger3dDice) {
-        onTrigger3dDice({
-          id: `arena-atk-${Date.now()}`,
-          characterName: actor.name,
-          action: isThreatened ? `${action.name} (Disadvantage)` : action.name,
-          rollType: 'attack',
-          formula: rollFormula,
-          diceNotation: isThreatened ? '2d20kl1' : '1d20',
-          dice: isThreatened
-            ? [
-                { sides: 20, result: d20Roll1, type: 'd20' },
-                { sides: 20, result: d20Roll2, type: 'd20' }
-              ]
-            : [{ sides: 20, result: d20, type: 'd20' }],
-          total: attackTotal,
-          isCritical: isCrit,
-          isFumble,
-          timestamp: Date.now(),
-          source: 'player'
-        });
-      }
-
       const hitsTarget = isCrit || (!isFumble && attackTotal >= target.ac);
 
       if (!hitsTarget) {
+        if (onTrigger3dDice) {
+          onTrigger3dDice({
+            id: `arena-atk-${Date.now()}`,
+            characterName: actor.name,
+            action: `${action.name}${isThreatened ? ' (Disadvantage)' : ''} — MISS (vs AC ${target.ac})`,
+            rollType: 'attack',
+            formula: rollFormula,
+            diceNotation: isThreatened ? '2d20kl1' : '1d20',
+            dice: isThreatened
+              ? [
+                  { sides: 20, result: d20Roll1, type: 'd20' },
+                  { sides: 20, result: d20Roll2, type: 'd20' }
+                ]
+              : [{ sides: 20, result: d20, type: 'd20' }],
+            modifier: rawHitBonus,
+            total: attackTotal,
+            isCritical: isCrit,
+            isFumble,
+            timestamp: Date.now(),
+            source: 'player'
+          });
+        }
         setCombatants((prev) => prev.map((c) => (c.id === actor.id ? markActorUsed(c) : c)));
         addCombatLog(
           actor.name,
@@ -2560,10 +2541,30 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       }
 
       // Roll Damage (applying DM Monster Damage Multiplier for AI monsters)
-      const dmgRoll = rollDiceFormula(action.damageFormula || '1d10 + 4', isCrit);
+      const atkDamageFormula = action.damageFormula || '1d10 + 4';
+      const dmgRoll = rollDiceFormula(atkDamageFormula, isCrit);
       const dmgMult =
         actor.team === 'crimson' && actor.isAI ? arenaConfig.monsterDamageMultiplier || 1 : 1;
       const finalDamage = Math.max(1, Math.round(dmgRoll.total * dmgMult));
+
+      // Trigger 3D physics roll with all the spell/weapon damage dice so the exact dice count tumbles and adds up!
+      if (onTrigger3dDice && dmgRoll.dice.length > 0) {
+        onTrigger3dDice({
+          id: `arena-hit-dmg-${Date.now()}`,
+          characterName: actor.name,
+          action: `${action.name}${action.castAtLevel ? ` (L${action.castAtLevel})` : ''} — ${isCrit ? 'CRIT HIT!' : `HIT (${attackTotal} vs AC ${target.ac})`}`,
+          rollType: 'damage',
+          formula: `${atkDamageFormula} → ${dmgRoll.breakdown}`,
+          diceNotation: atkDamageFormula,
+          dice: dmgRoll.dice,
+          modifier: dmgRoll.bonus,
+          total: finalDamage,
+          isCritical: isCrit,
+          isFumble: false,
+          timestamp: Date.now(),
+          source: 'player'
+        });
+      }
 
       setCombatants((prev) =>
         prev.map((c) => {
@@ -4040,19 +4041,16 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           onRollDamage={(action) => {
             const formula = action.damageFormula || '2d8';
             const dmgRoll = rollDiceFormula(formula, false);
-            if (onTrigger3dDice) {
+            if (onTrigger3dDice && dmgRoll.dice.length > 0) {
               onTrigger3dDice({
                 id: `arena-dmg-${Date.now()}`,
                 characterName: activeCombatant.name,
                 action: `${action.name}${action.castAtLevel ? ` (L${action.castAtLevel})` : ''} (${action.isHeal ? 'Heal' : action.damageType || 'Damage'})`,
                 rollType: action.isHeal ? 'heal' : 'damage',
-                formula: `${formula} = ${dmgRoll.total}`,
+                formula: `${formula} → ${dmgRoll.breakdown}`,
                 diceNotation: formula,
-                dice: dmgRoll.rolls.map((r) => ({
-                  sides: dmgRoll.sides,
-                  result: r,
-                  type: `d${dmgRoll.sides}`
-                })),
+                dice: dmgRoll.dice,
+                modifier: dmgRoll.bonus,
                 total: dmgRoll.total,
                 timestamp: Date.now(),
                 source: 'player'

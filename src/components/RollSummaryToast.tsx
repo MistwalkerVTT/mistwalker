@@ -29,8 +29,8 @@ export const RollSummaryToast: React.FC<Props> = ({ roll, onDismiss }) => {
   const isFumble = roll.isFumble || (roll.dice?.some(d => d.sides === 20 && d.result === 1) ?? false);
 
   return (
-    <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[90] pointer-events-auto select-none animate-in fade-in slide-in-from-top-4 duration-300">
-      <div className={`relative px-4 py-3 rounded-2xl shadow-2xl backdrop-blur-xl border transition-all max-w-md w-full flex items-center gap-3.5 ${
+    <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[290] pointer-events-auto select-none animate-in fade-in slide-in-from-top-4 duration-300">
+      <div className={`relative px-4 py-3 rounded-2xl shadow-2xl backdrop-blur-xl border transition-all max-w-lg w-full flex items-center gap-3.5 ${
         isCrit
           ? 'bg-amber-950/90 border-amber-500/80 shadow-amber-950/70 ring-1 ring-amber-400/50'
           : isFumble
@@ -90,11 +90,17 @@ export const RollSummaryToast: React.FC<Props> = ({ roll, onDismiss }) => {
             {roll.action || 'Dice Roll'}
           </div>
 
-          <div className="text-[10px] font-mono text-zinc-400 flex items-center gap-1.5 mt-0.5">
-            <span>Formula: {roll.formula}</span>
-            {roll.dice && roll.dice.length > 0 && (
-              <span className="text-zinc-500">
-                ({roll.dice.map(d => d.result).join(', ')})
+          <div className="text-[10px] font-mono text-zinc-400 flex items-center gap-1.5 mt-0.5 flex-wrap">
+            <span>{roll.formula}</span>
+            {roll.dice && roll.dice.length > 0 && !String(roll.formula || '').includes('[') && (
+              <span className="text-zinc-300 font-semibold">
+                [{roll.dice.map(d => d.result).join(' + ')}]
+                {typeof roll.modifier === 'number' && roll.modifier !== 0
+                  ? roll.modifier > 0
+                    ? ` + ${roll.modifier}`
+                    : ` - ${Math.abs(roll.modifier)}`
+                  : ''}
+                {` = ${roll.total}`}
               </span>
             )}
           </div>
