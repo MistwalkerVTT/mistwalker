@@ -1,4 +1,4 @@
-import { StrictMode, lazy, Suspense } from 'react';
+import { StrictMode, lazy, Suspense, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
 import { CrashRecoveryBoundary } from './components/CrashRecoveryBoundary';
@@ -45,6 +45,42 @@ if (typeof window !== 'undefined' && window.CanvasRenderingContext2D) {
 const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
 const isPlayerView = searchParams ? (searchParams.get('view') === 'player' || searchParams.get('player') === 'true') : false;
 
+const IntroScreen = lazy(() => import('./components/IntroScreen.tsx'));
+const INTRO_SEEN_KEY = 'mistwalker_intro_seen_session';
+
+// The cinematic intro shows on a fresh DM-side load. Direct player links (?view=player) and
+// reloads within the same session go straight to the app.
+const shouldShowIntro = (): boolean => {
+  if (typeof window === 'undefined' || isPlayerView) return false;
+  if (searchParams?.get('skipIntro') === '1' || searchParams?.get('view') === 'dm') return false;
+  try {
+    return sessionStorage.getItem(INTRO_SEEN_KEY) !== '1';
+  } catch {
+    return true;
+  }
+};
+
+function Root() {
+  const [showIntro, setShowIntro] = useState<boolean>(shouldShowIntro);
+
+  if (showIntro) {
+    return (
+      <IntroScreen
+        onSelectDm={() => {
+          try { sessionStorage.setItem(INTRO_SEEN_KEY, '1'); } catch { /* ignore */ }
+          setShowIntro(false);
+        }}
+        onSelectPlayer={() => {
+          const url = new URL(window.location.href);
+          url.searchParams.set('view', 'player');
+          window.location.assign(url.toString());
+        }}
+      />
+    );
+  }
+  return isPlayerView ? <PlayerView /> : <App />;
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <CrashRecoveryBoundary fallbackTitle={isPlayerView ? "MistWalker Player View Interrupted" : "MistWalker DM View Interrupted"}>
@@ -56,10 +92,11 @@ createRoot(document.getElementById('root')!).render(
           </div>
         </div>
       }>
-        {isPlayerView ? <PlayerView /> : <App />}
+        <Root />
       </Suspense>
     </CrashRecoveryBoundary>
   </StrictMode>,
 );
+
 
 
