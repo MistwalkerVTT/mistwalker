@@ -1502,7 +1502,7 @@ const buildFallbackHudData = (token: Token, stats: any, customChars?: Character[
     spells,
     reactions,
     items,
-    special,
+    special: special.filter(sp => !spells.some(s => s.name.trim().toLowerCase() === sp.name.trim().toLowerCase())),
     spellSlots: spells.length > 0 ? {
       1: { level: 1, total: 4, used: 0, available: 4 },
       2: { level: 2, total: 3, used: 0, available: 3 }
@@ -1778,7 +1778,7 @@ export default function PlayerView() {
                 characterName: data.name || claimedToken.name || 'Your Character',
                 avatarUrl: claimedToken.url || claimedToken.avatarUrl || data.avatarUrl || getCharacterTokenUrl(data.name || claimedToken.name)
               });
-            } else if (!isPriv && privacyModalState.isOpen && privacyModalState.characterId === String(targetDdbId)) {
+            } else if (!isPriv && privacyModalState?.isOpen && privacyModalState?.characterId === String(targetDdbId)) {
               setPrivacyModalState(prev => ({ ...prev, isOpen: false }));
             }
             setHudCharacterData({
@@ -3637,10 +3637,26 @@ export default function PlayerView() {
     }
 
     // Roll 3D physics damage/healing dice if the cast spell has a damageFormula (including upcasted formulas!)
+    const expendedAimedSlot = aimedAction?.spellSlotRequired ?? aimedAction?.level ?? 0;
+    if (expendedAimedSlot >= 1) {
+      setHudCharacterData(prev => {
+        if (!prev?.spellSlots?.[expendedAimedSlot]) return prev;
+        const cur = prev.spellSlots[expendedAimedSlot];
+        return {
+          ...prev,
+          spellSlots: {
+            ...prev.spellSlots,
+            [expendedAimedSlot]: { ...cur, available: Math.max(0, cur.available - 1) }
+          }
+        };
+      });
+    }
     const rawFormula = aimedAction?.damageFormula;
     const upcastLabel =
       aimedAction?.castAtLevel && aimedAction.castAtLevel > (aimedAction.level ?? 0)
-        ? ` (Level ${aimedAction.castAtLevel} Slot)`
+        ? expendedAimedSlot >= 1 && aimedAction.castAtLevel > expendedAimedSlot
+          ? ` (Level ${aimedAction.castAtLevel} • Uses Lvl ${expendedAimedSlot} Slot)`
+          : ` (Level ${aimedAction.castAtLevel} Slot)`
         : '';
 
     if (rawFormula) {
@@ -4390,6 +4406,20 @@ export default function PlayerView() {
     }
 
     // 3. Roll 3D Physics Dice if action has damageFormula or hitBonus or isHeal
+    const expendedActionSlot = action.spellSlotRequired ?? action.level ?? 0;
+    if (expendedActionSlot >= 1) {
+      setHudCharacterData(prev => {
+        if (!prev?.spellSlots?.[expendedActionSlot]) return prev;
+        const cur = prev.spellSlots[expendedActionSlot];
+        return {
+          ...prev,
+          spellSlots: {
+            ...prev.spellSlots,
+            [expendedActionSlot]: { ...cur, available: Math.max(0, cur.available - 1) }
+          }
+        };
+      });
+    }
     let formula = action.damageFormula || (action as any).damage;
     const lowerActionName = action.name.toLowerCase();
 
@@ -4438,7 +4468,9 @@ export default function PlayerView() {
 
       const upcastSuffix =
         action.castAtLevel && action.castAtLevel > (action.level ?? 0)
-          ? ` [Lvl ${action.castAtLevel} Slot]`
+          ? expendedActionSlot >= 1 && action.castAtLevel > expendedActionSlot
+            ? ` [Lvl ${action.castAtLevel} • Uses Lvl ${expendedActionSlot} Slot]`
+            : ` [Lvl ${action.castAtLevel} Slot]`
           : '';
 
       const diceEvent: DdbDiceRollEvent = {
@@ -4476,7 +4508,9 @@ export default function PlayerView() {
 
     const upcastActionLabel =
       action.castAtLevel && action.castAtLevel > (action.level ?? 0)
-        ? `${action.name} (Level ${action.castAtLevel} Slot)`
+        ? expendedActionSlot >= 1 && action.castAtLevel > expendedActionSlot
+          ? `${action.name} (Level ${action.castAtLevel} • Uses Lvl ${expendedActionSlot} Slot)`
+          : `${action.name} (Level ${action.castAtLevel} Slot)`
         : action.name;
 
     const payload = {

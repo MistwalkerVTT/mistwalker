@@ -70,7 +70,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/1st_Level/Burning_Hands/BurningHands_01_Regular_Orange_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "fire_whoosh",
+    "soundKey": "burning_hands",
     "tags": [
       "fire",
       "cone",
@@ -92,7 +92,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/5th_Level/Cone_Of_Cold/ConeOfCold_01_Regular_Blue_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "cold_freeze",
+    "soundKey": "cold_blast",
     "tags": [
       "cone of cold",
       "frost cone",
@@ -160,7 +160,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/3rd_Level/Call_Lightning/CallLightning_01_Blue_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "lightning_strike",
+    "soundKey": "call_lightning",
     "tags": [
       "call lightning",
       "storm strike",
@@ -183,7 +183,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "burstWebm": "/jb2a/Library/6th_Level/Chain_Lightning/ChainLightning_01_Regular_Blue_05ft_Primary_600x400.webm",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "lightning_strike",
+    "soundKey": "lightning_blast",
     "tags": [
       "lightning",
       "evocation",
@@ -205,7 +205,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "projectileWebm": "/jb2a/Library/1st_Level/Witch_Bolt/WitchBolt_01_Regular_Blue_05ft_600x400.webm",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "lightning_strike",
+    "soundKey": "witch_bolt",
     "tags": [
       "witch bolt",
       "continuous lightning"
@@ -250,7 +250,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "burstWebm": "/jb2a/Library/1st_Level/Magic_Missile/MagicMissile_01_Regular_Purple_05ft_01_600x400.webm",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "arcane_cast",
+    "soundKey": "magic_whoosh",
     "tags": [
       "force",
       "dart",
@@ -299,7 +299,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "loopWebm": "/jb2a/Library/1st_Level/Shield/Shield_01_Regular_Blue_Complete_400x400.webm",
     "isPersistent": true,
     "blendMode": "screen",
-    "soundKey": "shield_barrier",
+    "soundKey": "divine_chime",
     "tags": [
       "shield of faith",
       "shield offaith",
@@ -348,7 +348,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "loopWebm": "/jb2a/Library/1st_Level/Bless/Bless_01_Regular_Yellow_Loop_200x200.webm",
     "isPersistent": true,
     "blendMode": "screen",
-    "soundKey": "radiant_heal",
+    "soundKey": "divine_chime",
     "tags": [
       "bless",
       "divine bless",
@@ -371,7 +371,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/Cantrip/Sacred_Flame/SacredFlameSource_01_Regular_Yellow_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "radiant_heal",
+    "soundKey": "sacred_flame",
     "tags": [
       "radiant",
       "sacred flame",
@@ -395,7 +395,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "burstWebm": "/jb2a/Library/1st_Level/Guiding_Bolt/GuidingBolt_01_Regular_BlueYellow_05ft_600x400.webm",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "radiant_heal",
+    "soundKey": "guiding_bolt",
     "tags": [
       "radiant",
       "guiding bolt",
@@ -419,7 +419,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "burstWebm": "/jb2a/Library/2nd_Level/Scorching_Ray/ScorchingRay_01_Regular_Orange_05ft_600x400.webm",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "fire_whoosh",
+    "soundKey": "scorching_ray",
     "tags": [
       "fire",
       "ray",
@@ -488,7 +488,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/2nd_Level/Misty_Step/MistyStep_01_Regular_Blue_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "teleport_whoosh",
+    "soundKey": "fey_shimmer",
     "tags": ["fey step", "eladrin", "fey", "teleport", "blink"]
   },
   {
@@ -507,7 +507,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/2nd_Level/Darkness/Darkness_01_Black_600x600.webm",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "teleport_whoosh",
+    "soundKey": "shadow_step",
     "tags": ["shadow step", "monk", "shadow", "teleport", "ninja"]
   },
   {
@@ -526,7 +526,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/Generic/Portals/Portal_Bright_Yellow_H_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "teleport_whoosh",
+    "soundKey": "dimension_door",
     "tags": ["vortex warp", "teleport", "warp", "transmutation", "spatial"]
   },
   {
@@ -545,7 +545,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/1st_Level/Thunderwave/Thunderwave_01_Bright_Blue_BLeft_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "thunder_boom",
+    "soundKey": "thunder_blast",
     "tags": [
       "thunder",
       "cube",
@@ -567,7 +567,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/2nd_Level/Shatter/Shatter_01_Blue_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "fire_explosion",
+    "soundKey": "magic_shatter",
     "tags": [
       "thunder",
       "shatter",
@@ -590,7 +590,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "loopWebm": "/jb2a/Library/3rd_Level/Spirit_Guardians/SpiritGuardians_01_Light_BlueYellow_600x600.webm",
     "isPersistent": true,
     "blendMode": "screen",
-    "soundKey": "radiant_heal",
+    "soundKey": "holy_radiance",
     "tags": [
       "radiant",
       "aura",
@@ -612,7 +612,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/2nd_Level/Spiritual_Weapon/SpiritualWeapon_Club01_02_Spectral_Green_Thumb.webp",
     "isPersistent": true,
     "blendMode": "screen",
-    "soundKey": "radiant_heal",
+    "soundKey": "spiritual_weapon",
     "tags": [
       "force",
       "weapon",
@@ -634,7 +634,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/2nd_Level/Cloud_Of_Daggers/CloudOfDaggers_01_Light_Blue_Thumb.webp",
     "isPersistent": true,
     "blendMode": "screen",
-    "soundKey": "arcane_cast",
+    "soundKey": "cloud_of_daggers",
     "tags": [
       "slashing",
       "daggers",
@@ -656,7 +656,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/1st_Level/Arms_Of_Hadar/ArmsOfHadar_01_Dark_Purple_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "necrotic_drain",
+    "soundKey": "eldritch_tentacles",
     "tags": [
       "necrotic",
       "tentacles",
@@ -679,7 +679,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "projectileWebm": "/jb2a/Library/6th_Level/Disintegrate/Disintegrate_01_Regular_Green01_05ft_600x400.webm",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "arcane_cast",
+    "soundKey": "disintegrate",
     "tags": [
       "force",
       "disintegrate",
@@ -701,7 +701,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/2nd_Level/Darkness/Darkness_01_Black_Thumb.webp",
     "isPersistent": true,
     "blendMode": "screen",
-    "soundKey": "necrotic_drain",
+    "soundKey": "shadow_step",
     "tags": [
       "darkness",
       "void",
@@ -723,7 +723,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/1st_Level/Fog_Cloud/FogCloud_01_White_Thumb.webp",
     "isPersistent": true,
     "blendMode": "screen",
-    "soundKey": "arcane_cast",
+    "soundKey": "fog_cloud",
     "tags": [
       "fog",
       "cloud",
@@ -746,7 +746,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "loopWebm": "/jb2a/Library/Generic/Template/Circle/Web/002/Template_Circle_WebLoop_002_001_White_5x5_1000.webm",
     "isPersistent": true,
     "blendMode": "screen",
-    "soundKey": "arcane_cast",
+    "soundKey": "spider_web",
     "tags": [
       "web",
       "restraint",
@@ -767,7 +767,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/2nd_Level/Moonbeam/MoonbeamIntro_01_Regular_Blue_Thumb.webp",
     "isPersistent": true,
     "blendMode": "screen",
-    "soundKey": "radiant_heal",
+    "soundKey": "moonbeam",
     "tags": [
       "radiant",
       "moonbeam",
@@ -789,7 +789,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/7th_Level/Whirlwind/Whirlwind_01_BlueGrey_01_Thumb.webp",
     "isPersistent": true,
     "blendMode": "screen",
-    "soundKey": "teleport_whoosh",
+    "soundKey": "wind_whoosh",
     "tags": [
       "whirlwind",
       "cyclone",
@@ -811,7 +811,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "loopWebm": "/jb2a/Library/4th_Level/Wall_Of_Fire/WallOfFire_01_Blue_Ring_400x400.webm",
     "isPersistent": true,
     "blendMode": "screen",
-    "soundKey": "fire_whoosh",
+    "soundKey": "wall_of_fire",
     "tags": [
       "fire",
       "wall",
@@ -854,7 +854,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/5th_Level/Cone_Of_Cold/ConeOfCold_01_Regular_Blue_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "cold_freeze",
+    "soundKey": "cold_frost",
     "tags": [
       "template",
       "cold",
@@ -875,7 +875,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/3rd_Level/Spirit_Guardians/SpiritGuardians_01_Light_BlueYellow_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "radiant_heal",
+    "soundKey": "holy_radiance",
     "tags": [
       "template",
       "radiant",
@@ -896,7 +896,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/1st_Level/Arms_Of_Hadar/ArmsOfHadar_01_Dark_Purple_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "necrotic_drain",
+    "soundKey": "necrotic_pulse",
     "tags": [
       "template",
       "necrotic",
@@ -917,7 +917,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/1st_Level/Burning_Hands/BurningHands_01_Regular_Orange_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "fire_whoosh",
+    "soundKey": "burning_hands",
     "tags": [
       "template",
       "fire",
@@ -959,7 +959,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/Generic/Weapon_Attacks/Melee/GreatSword01_01_Regular_White_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "fire_whoosh",
+    "soundKey": "greatsword_cleave",
     "tags": ["martial", "weapon", "melee", "slashing", "sword"]
   },
   {
@@ -976,7 +976,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/Generic/Weapon_Attacks/Melee/GenericSlash01_01_Regular_Orange_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "fire_whoosh",
+    "soundKey": "sword_slash",
     "tags": ["martial", "weapon", "melee", "slashing", "sword"]
   },
   {
@@ -994,7 +994,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "projectileWebm": "/jb2a/Library/Generic/Weapon_Attacks/Ranged/Dagger01_01_Regular_White_30ft_1600x400.webm",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "fire_whoosh",
+    "soundKey": "dagger_stab",
     "tags": ["martial", "weapon", "melee", "ranged", "piercing", "dagger"]
   },
   {
@@ -1011,7 +1011,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/Generic/Weapon_Attacks/Melee/Hammer01_01_Regular_White_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "thunder_crack",
+    "soundKey": "metal_clang",
     "tags": ["martial", "weapon", "melee", "bludgeoning", "hammer"]
   },
   {
@@ -1029,7 +1029,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "projectileWebm": "/jb2a/Library/Generic/Weapon_Attacks/Ranged/Arrow01_01_Regular_White_30ft_1600x400.webm",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "fire_whoosh",
+    "soundKey": "bow_arrow",
     "tags": ["martial", "weapon", "ranged", "bow", "arrow", "piercing"]
   },
   {
@@ -1047,7 +1047,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "projectileWebm": "/jb2a/Library/Generic/Weapon_Attacks/Ranged/Bolt01_01_Regular_Orange_Physical_30ft_1600x400.webm",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "fire_whoosh",
+    "soundKey": "crossbow_shot",
     "tags": ["martial", "weapon", "ranged", "crossbow", "bolt", "piercing"]
   },
   {
@@ -1064,7 +1064,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/Generic/Creature/Claws_01_Regular_Red_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "fire_whoosh",
+    "soundKey": "claw_rip",
     "tags": ["claw", "claws", "claw swipe", "slashing"]
   },
   {
@@ -1081,7 +1081,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/Generic/Creature/Bite_01_Regular_Red_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "fire_whoosh",
+    "soundKey": "beast_bite",
     "tags": ["martial", "monster", "melee", "piercing", "bite"]
   },
   {
@@ -1098,7 +1098,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/Generic/Unarmed_Attacks/Unarmed_Strike/UnarmedStrike_01_Regular_Blue_Physical01_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "fire_whoosh",
+    "soundKey": "unarmed_punch",
     "tags": ["martial", "unarmed", "melee", "bludgeoning", "punch"]
   },
   {
@@ -1132,7 +1132,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/1st_Level/Sneak_Attack/Sneak_Attack_Dark_Green_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "fire_whoosh",
+    "soundKey": "sneak_attack",
     "tags": ["sneak attack", "rogue", "piercing", "dreadful strike", "crit", "precision"]
   },
   {
@@ -1149,7 +1149,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/Generic/Unarmed_Attacks/Flurry_Of_Blows/FlurryOfBlows_01_Regular_Blue_Physical01_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "fire_whoosh",
+    "soundKey": "flurry_of_blows",
     "tags": ["monk", "flurry of blows", "unarmed", "punch", "martial", "barrage"]
   },
   {
@@ -1166,7 +1166,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/Generic/Template/Circle/TemplateStunCircle_01_Regular_Purple_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "thunder_boom",
+    "soundKey": "thunder_crack",
     "tags": ["stunning strike", "stun strike", "ki stun"]
   },
   {
@@ -1183,7 +1183,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/1st_Level/Bardic_Inspiration/BardicInspiration_01_Regular_GreenOrange_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "radiant_burst",
+    "soundKey": "bardic_lute",
     "tags": ["bard", "inspiration", "bardic inspiration", "buff", "dice", "song"]
   },
   {
@@ -1200,7 +1200,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/Generic/Music_Notation/BeamedQuavers_01_Regular_Blue_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "magic_chime",
+    "soundKey": "vicious_mockery",
     "tags": ["bard", "mockery", "vicious mockery", "cutting words", "music", "notes", "dissonant whispers"]
   },
   {
@@ -1220,7 +1220,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "loopWebm": "/jb2a/Library/1st_Level/Hunters_Mark/HuntersMark_01_Regular_Green_Loop_200x200.webm",
     "isPersistent": true,
     "blendMode": "screen",
-    "soundKey": "magic_chime",
+    "soundKey": "hunters_mark",
     "tags": ["ranger", "warlock", "hunters mark", "hex", "quarry", "target"]
   },
   {
@@ -1239,7 +1239,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/Cantrip/Toll_The_Dead/TollTheDead_01_Regular_Green_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "necrotic_drain",
+    "soundKey": "magic_bell",
     "tags": ["cleric", "toll the dead", "bell", "necrotic", "cantrip"]
   },
   {
@@ -1257,7 +1257,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "loopWebm": "/jb2a/Library/2nd_Level/Flaming_Sphere/FlamingSphere_01_Orange_200x200.webm",
     "isPersistent": true,
     "blendMode": "screen",
-    "soundKey": "fire_whoosh",
+    "soundKey": "wall_of_fire",
     "tags": ["flaming sphere", "flame sphere", "fire sphere"]
   },
   {
@@ -1293,7 +1293,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "loopWebm": "/jb2a/Library/5th_Level/Wall_Of_Force/WallOfForce_01_Grey_Sphere_400x400.webm",
     "isPersistent": true,
     "blendMode": "screen",
-    "soundKey": "shield_clash",
+    "soundKey": "shield_barrier",
     "tags": ["wall of force", "forcecage", "barrier", "force", "sphere"]
   },
   {
@@ -1349,7 +1349,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/Generic/Healing/HealingAbility_01_Blue_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "radiant_burst",
+    "soundKey": "divine_chime",
     "tags": ["aid", "heal", "mass cure", "cleric", "paladin", "fortitude", "mass healing word"]
   },
   {
@@ -1369,7 +1369,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "loopWebm": "/jb2a/Library/5th_Level/Antilife_Shell/AntilifeShell_01_Blue_Circle_400x400.webm",
     "isPersistent": true,
     "blendMode": "screen",
-    "soundKey": "shield_clash",
+    "soundKey": "shield_barrier",
     "tags": ["sanctuary", "antilife shell", "sanctuary aura", "aegis"]
   },
   {
@@ -1387,7 +1387,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "loopWebm": "/jb2a/Library/1st_Level/Grease/Grease_Dark_Brown_600x600.webm",
     "isPersistent": true,
     "blendMode": "normal",
-    "soundKey": "fire_whoosh",
+    "soundKey": "grease_splat",
     "tags": ["grease", "artificer", "wizard", "hazard", "slick"]
   },
   {
@@ -1405,7 +1405,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "loopWebm": "/jb2a/Library/1st_Level/Sleep/Cloud01_01_Regular_Pink_400x400.webm",
     "isPersistent": true,
     "blendMode": "screen",
-    "soundKey": "magic_chime",
+    "soundKey": "sleep_lullaby",
     "tags": ["sleep", "slumber", "cloud", "pink", "enchantment"]
   },
   {
@@ -1423,7 +1423,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "loopWebm": "/jb2a/Library/1st_Level/Entangle/EntangleLoop02_02_Regular_Green_500x500.webm",
     "isPersistent": true,
     "blendMode": "normal",
-    "soundKey": "fire_whoosh",
+    "soundKey": "nature_rustle",
     "tags": ["entangle", "druid", "vines", "roots", "nature", "restrained"]
   },
   {
@@ -1459,7 +1459,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "loopWebm": "/jb2a/Library/4th_Level/Black_Tentacles/BlackTentacles_01_Dark_Purple_600x600.webm",
     "isPersistent": true,
     "blendMode": "normal",
-    "soundKey": "necrotic_drain",
+    "soundKey": "eldritch_tentacles",
     "tags": ["black tentacles", "arms of hadar", "tentacles", "void", "restrained"]
   },
   {
@@ -1476,7 +1476,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/2nd_Level/Gust_Of_Wind/GustOfWind_01_White_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "thunder_boom",
+    "soundKey": "wind_gust",
     "tags": ["gust of wind", "zephyr strike", "wind", "line", "push"]
   },
   {
@@ -1493,7 +1493,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/Generic/Template/Line/Breath_Weapon/BreathWeapon_Acid01_Regular_Green_30ft_Line_Burst_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "fire_whoosh",
+    "soundKey": "acid_burn",
     "tags": ["caustic brew", "acid", "line", "artificer", "corrosive"]
   },
   {
@@ -1510,7 +1510,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/Generic/Template/Cone/Breath_Weapon/BreathWeapon_Fire01_Regular_Orange_30ft_Cone_Burst_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "fire_whoosh",
+    "soundKey": "burning_hands",
     "tags": ["hellish rebuke", "fire", "retribution", "reaction", "tiefling", "warlock"]
   },
   {
@@ -1529,7 +1529,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/Generic/Portals/Portal_Bright_Yellow_H_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "magic_chime",
+    "soundKey": "dimension_door",
     "tags": ["dimension door", "vortex warp", "banishment", "portal", "teleport"]
   },
   {
@@ -1546,7 +1546,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/Generic/Energy/EnergyAttack_01_01_Regular_Blue_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "lightning_strike",
+    "soundKey": "magic_explosion",
     "tags": ["chromatic orb", "chromatic blast", "elemental orb", "energy beam"]
   },
   {
@@ -1563,7 +1563,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/Generic/Weapon_Attacks/Melee/GreatAxe01_01_Regular_White_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "fire_whoosh",
+    "soundKey": "axe_cleave",
     "tags": ["greataxe", "axe", "cleave", "barbarian", "martial", "heavy"]
   },
   {
@@ -1580,7 +1580,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/Generic/Weapon_Attacks/Melee/Group02/MeleeAttack02_BattleAxe01_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "fire_whoosh",
+    "soundKey": "axe_cleave",
     "tags": ["battleaxe", "handaxe", "axe", "chop", "martial", "melee"]
   },
   {
@@ -1597,7 +1597,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/Generic/Weapon_Attacks/Melee/Spear01_01_Regular_White_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "fire_whoosh",
+    "soundKey": "spear_thrust",
     "tags": ["spear", "trident", "javelin", "thrust", "piercing", "martial"]
   },
   {
@@ -1614,7 +1614,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/Generic/Weapon_Attacks/Melee/Quarterstaff01_01_Regular_White_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "fire_whoosh",
+    "soundKey": "staff_strike",
     "tags": ["quarterstaff", "staff", "bludgeoning", "staff strike"]
   },
   {
@@ -1631,7 +1631,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/Generic/Weapon_Attacks/Melee/Glaive01_01_Regular_White_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "fire_whoosh",
+    "soundKey": "axe_cleave",
     "tags": ["glaive", "halberd", "reach", "polearm", "heavy"]
   },
   {
@@ -1648,7 +1648,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/Generic/Nature/PlantGrowthRing02_01_Regular_GreenRed_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "magic_whisper",
+    "soundKey": "druid_bloom",
     "tags": ["druidcraft", "plant growth", "nature bloom", "botany"]
   },
   {
@@ -1665,7 +1665,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/Generic/Cast/CastWater02_01_Regular_Blue_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "magic_whisper",
+    "soundKey": "water_splash",
     "tags": ["elementalism", "elemental spark", "elemental cantrip"]
   },
   {
@@ -1682,7 +1682,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/Generic/Butterflies/ButterfliesComplete01_01_Regular_BluePurple_Thumb.webp",
     "isPersistent": true,
     "blendMode": "screen",
-    "soundKey": "magic_whisper",
+    "soundKey": "fey_shimmer",
     "tags": ["faerie fire", "faerie", "butterflies", "glitter outline"]
   },
   {
@@ -1699,7 +1699,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/Generic/Cast/GenericCast01_01_Regular_Yellow_Thumb.webp",
     "isPersistent": true,
     "blendMode": "screen",
-    "soundKey": "magic_whisper",
+    "soundKey": "divine_chime",
     "tags": ["light", "daylight", "guidance", "illumination", "radiance"]
   },
   {
@@ -1716,7 +1716,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/Generic/Energy/EnergyBeam_01_Regular_Blue_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "lightning_blast",
+    "soundKey": "sunbeam_laser",
     "tags": ["sunbeam", "solar ray", "sunlight beam", "radiant ray"]
   },
   {
@@ -1733,7 +1733,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/Generic/Fire/Campfire/Bonfire_01_Regular_Orange_Thumb.webp",
     "isPersistent": true,
     "blendMode": "screen",
-    "soundKey": "fire_explosion",
+    "soundKey": "wall_of_fire",
     "tags": ["create bonfire", "bonfire", "campfire", "pyre"]
   },
   {
@@ -1752,7 +1752,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/Generic/Energy/Teleport/Teleport01_01_Regular_Blue_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "magic_whisper",
+    "soundKey": "teleport",
     "tags": ["teleportation circle", "teleport", "teleportation", "vortex warp"]
   },
   {
@@ -1769,7 +1769,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/Generic/Nature/SwirlingLeavesComplete01_01_Regular_Green_Thumb.webp",
     "isPersistent": true,
     "blendMode": "screen",
-    "soundKey": "magic_whisper",
+    "soundKey": "druid_bloom",
     "tags": ["barkskin", "swirling leaves", "foliage", "nature armor"]
   },
   {
@@ -1786,7 +1786,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Library/1st_Level/Detect_Magic/DetectMagicCircle_01_Regular_Blue_Thumb.webp",
     "isPersistent": true,
     "blendMode": "screen",
-    "soundKey": "magic_whisper",
+    "soundKey": "detect_magic",
     "tags": ["detect magic", "detect", "divination pulse", "arcane sensor"]
   },
   {
@@ -1820,7 +1820,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Community/JAA/MordenkainensMagnificentMansion.webp",
     "isPersistent": true,
     "blendMode": "screen",
-    "soundKey": "magic_whisper",
+    "soundKey": "dimension_door",
     "tags": ["mordenkainens magnificent mansion", "magnificent mansion", "mansion", "extradimensional portal"]
   },
   {
@@ -1854,7 +1854,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Community/JAA/glyphOfWarding.webp",
     "isPersistent": true,
     "blendMode": "screen",
-    "soundKey": "magic_whisper",
+    "soundKey": "glyph_ward",
     "tags": ["glyph of warding", "glyph", "warding rune", "arcane trap"]
   },
   {
@@ -1890,7 +1890,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Community/JAA/chain1.webm",
     "isPersistent": true,
     "blendMode": "screen",
-    "soundKey": "metal_clang",
+    "soundKey": "binding_chains",
     "tags": ["hold person", "hold monster", "spectral chains", "binding chains", "paralyze"]
   },
   {
@@ -1907,7 +1907,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Community/JAA/arcaneEye.webp",
     "isPersistent": true,
     "blendMode": "screen",
-    "soundKey": "magic_whisper",
+    "soundKey": "detect_magic",
     "tags": ["arcane eye", "scrying", "the third eye", "floating eye", "sensor"]
   },
   {
@@ -1924,7 +1924,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Community/JAA/colorSpray.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "magic_whoosh",
+    "soundKey": "color_spray",
     "tags": ["color spray", "colour spray", "prismatic cone", "dazzling light"]
   },
   {
@@ -1941,7 +1941,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Community/JAA/circleOfDeath.webp",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "magic_explosion",
+    "soundKey": "circle_of_death",
     "tags": ["circle of death", "necrotic sphere", "death sphere"]
   },
   {
@@ -1975,7 +1975,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Community/JAA/IncendiaryCloud.webp",
     "isPersistent": true,
     "blendMode": "screen",
-    "soundKey": "fire_explosion",
+    "soundKey": "wall_of_fire",
     "tags": ["incendiary cloud", "burning fog", "fire cloud", "smoke and embers"]
   },
   {
@@ -1992,7 +1992,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Community/JAA/AuraofVitality.webp",
     "isPersistent": true,
     "blendMode": "screen",
-    "soundKey": "magic_whisper",
+    "soundKey": "radiant_heal",
     "tags": ["aura of vitality", "vitality aura", "healing radiance"]
   },
   {
@@ -2009,7 +2009,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Community/JAA/auraOfLife.webp",
     "isPersistent": true,
     "blendMode": "screen",
-    "soundKey": "magic_whisper",
+    "soundKey": "divine_chime",
     "tags": ["aura of life", "life aura", "preservation ward"]
   },
   {
@@ -2094,7 +2094,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Community/JAA/LeomundsTinyHut.0.webp",
     "isPersistent": true,
     "blendMode": "screen",
-    "soundKey": "magic_whisper",
+    "soundKey": "glyph_ward",
     "tags": ["leomunds tiny hut", "tiny hut", "protective dome", "force dome"]
   },
   {
@@ -2162,7 +2162,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Community/JackKerouac/wings_RECTANGLE_01.webm",
     "isPersistent": true,
     "blendMode": "screen",
-    "soundKey": "magic_whisper",
+    "soundKey": "angelic_wings",
     "tags": ["fly", "wings", "flight", "aerial wings"]
   },
   {
@@ -2181,7 +2181,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Community/JackKerouac/skull_blast_CIRCLE_01.webm",
     "isPersistent": false,
     "blendMode": "screen",
-    "soundKey": "necrotic_drain",
+    "soundKey": "necrotic_pulse",
     "tags": ["blight", "bestow curse", "wither", "skull blast", "necrotic skull"]
   },
   {
@@ -2198,7 +2198,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Community/JackKerouac/runes_CIRCLE_02.webm",
     "isPersistent": true,
     "blendMode": "screen",
-    "soundKey": "magic_whisper",
+    "soundKey": "glyph_ward",
     "tags": ["warding bond", "runic ward", "protective runes", "abjuration seal"]
   },
   {

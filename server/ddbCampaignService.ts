@@ -1788,6 +1788,9 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
   if (Array.isArray(c.spells?.item)) {
     c.spells.item.forEach((sp: any) => rawSpellsList.push({ sp, sourceTag: 'Magic Item Spell' }));
   }
+  if (Array.isArray(c.spells?.background)) {
+    c.spells.background.forEach((sp: any) => rawSpellsList.push({ sp, sourceTag: 'Background Spell' }));
+  }
 
   const seenSpellNames = new Set<string>();
   rawSpellsList.forEach(({ sp, classAbilityKey, sourceTag }, idx: number) => {
@@ -2002,6 +2005,14 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
     if (lvlA !== lvlB) return lvlA - lvlB;
     return a.name.localeCompare(b.name);
   });
+
+  // Remove any entry from `special` if it is already in the character's `spells` list or is a spell-table header
+  for (let i = special.length - 1; i >= 0; i--) {
+    const specKey = canonicalActionKey(special[i].name);
+    if (seenSpellNames.has(specKey) || /\bspells$/.test(specKey)) {
+      special.splice(i, 1);
+    }
+  }
 
   // Spell Slots calculation
   const spellSlots: Record<number, any> = {};

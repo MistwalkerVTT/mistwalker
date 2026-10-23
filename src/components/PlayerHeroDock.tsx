@@ -482,7 +482,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
       includeUpcastInFilter
         ? selectedSpellLevel
         : undefined;
-    const chosenSlot = upcastLevels[action.id] ?? filterSlot ?? action.castAtLevel ?? baseLevel;
+    const chosenSlot = upcastLevels[action.id] ?? filterSlot ?? action.spellSlotRequired ?? baseLevel;
     return buildActionAtSlotLevel(action, chosenSlot);
   };
 
@@ -522,9 +522,11 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
 
     const baseLvl = matchedBase.level ?? req.level ?? 0;
     const chosenSlot =
-      req.castAtLevel && req.castAtLevel >= baseLvl
+      req.spellSlotRequired && req.spellSlotRequired >= baseLvl
+        ? req.spellSlotRequired
+        : req.castAtLevel && req.castAtLevel >= baseLvl
         ? req.castAtLevel
-        : upcastLevels[matchedBase.id] ?? matchedBase.castAtLevel ?? baseLvl;
+        : upcastLevels[matchedBase.id] ?? matchedBase.spellSlotRequired ?? baseLvl;
 
     const effective =
       baseLvl >= 1 ? buildActionAtSlotLevel(matchedBase, chosenSlot) : matchedBase;
@@ -863,11 +865,12 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                 (_, i) => (currentTargetingAction.level ?? 1) + i
               ).map(slotLvl => {
                 const baseSpell = spellsList.find(s => s.id === currentTargetingAction.id) || currentTargetingAction;
-                const activeSlot = currentTargetingAction.castAtLevel ?? currentTargetingAction.level ?? 1;
+                const activeSlot = currentTargetingAction.spellSlotRequired ?? currentTargetingAction.castAtLevel ?? currentTargetingAction.level ?? 1;
                 const isSelected = activeSlot === slotLvl;
-                const isUpcast = slotLvl > (baseSpell.level ?? 1);
                 const slotInfo = characterData?.spellSlots?.[slotLvl];
                 const previewAction = buildActionAtSlotLevel(baseSpell, slotLvl);
+                const effectiveCastLvl = previewAction.castAtLevel ?? slotLvl;
+                const isUpcast = effectiveCastLvl > (baseSpell.level ?? 1);
                 return (
                   <button
                     key={slotLvl}
@@ -883,9 +886,13 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                           : 'bg-blue-500/25 border-blue-400 text-blue-200'
                         : 'bg-zinc-900/80 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600'
                     }`}
-                    title={`Cast ${baseSpell.name} using a ${formatSpellLevelLabel(slotLvl)} Level Slot${previewAction.damageFormula ? ` (${previewAction.damageFormula})` : ''}${slotInfo ? ` — ${slotInfo.available}/${slotInfo.total} slots` : ''}`}
+                    title={`Cast ${baseSpell.name} at ${formatSpellLevelLabel(effectiveCastLvl)} Level (Uses ${formatSpellLevelLabel(slotLvl)} Level Slot)${previewAction.damageFormula ? ` (${previewAction.damageFormula})` : ''}${slotInfo ? ` — ${slotInfo.available}/${slotInfo.total} slots` : ''}`}
                   >
-                    <span>{formatSpellLevelLabel(slotLvl)}</span>
+                    <span>
+                      {effectiveCastLvl > slotLvl
+                        ? `Lv ${effectiveCastLvl} (${formatSpellLevelLabel(slotLvl)} Slot)`
+                        : formatSpellLevelLabel(slotLvl)}
+                    </span>
                     {isSelected && previewAction.damageFormula && (
                       <span className="text-[9px] opacity-90">({previewAction.damageFormula.replace(/\s+/g, '')})</span>
                     )}
@@ -905,8 +912,11 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
         if (!detailAction || currentTargetingAction) return null;
         const baseSpell = spellsList.find(s => s.id === detailAction.id) || detailAction;
         const baseLvl = baseSpell.level ?? detailAction.level ?? 0;
+        const expendedSlot = detailAction.spellSlotRequired ?? baseLvl;
         const currentSlot = detailAction.castAtLevel ?? baseLvl;
         const isUpcasted = baseLvl >= 1 && currentSlot > baseLvl;
+        const canDecrementSlot = baseLvl >= 1 && expendedSlot > baseLvl;
+        const canIncrementSlot = baseLvl >= 1 && expendedSlot < 9 && currentSlot < 9;
 
         return (
           <div
@@ -934,15 +944,15 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                 )}
                 {baseLvl >= 1 && (
                   <div className="inline-flex items-center rounded border border-fuchsia-500/50 bg-fuchsia-950 overflow-hidden text-[10px] font-mono font-bold">
-                    {isUpcasted && (
+                    {canDecrementSlot && (
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setActionUpcastLevel(baseSpell, currentSlot - 1);
+                          setActionUpcastLevel(baseSpell, expendedSlot - 1);
                         }}
                         className="px-1.5 py-0.5 bg-zinc-950/70 hover:bg-zinc-800 text-fuchsia-200 hover:text-white cursor-pointer transition-colors"
-                        title={`Decrease Slot Level (Currently ${formatSpellLevelLabel(currentSlot)} Slot)`}
+                        title={`Decrease Slot Level (Currently casts at ${formatSpellLevelLabel(currentSlot)} Level, uses ${formatSpellLevelLabel(expendedSlot)} Slot)`}
                       >
                         −
                       </button>
@@ -951,24 +961,26 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setActionUpcastLevel(baseSpell, currentSlot >= 9 ? baseLvl : currentSlot + 1);
+                        setActionUpcastLevel(baseSpell, !canIncrementSlot ? baseLvl : expendedSlot + 1);
                       }}
                       className="px-1.5 py-0.5 text-fuchsia-300 hover:text-white cursor-pointer transition-colors"
                       title="Click to cycle Spell Slot Level"
                     >
                       {isUpcasted
-                        ? `▲ Upcast: ${formatSpellLevelLabel(currentSlot)} Slot`
+                        ? currentSlot > expendedSlot
+                          ? `▲ Casts ${formatSpellLevelLabel(currentSlot)} (${formatSpellLevelLabel(expendedSlot)} Slot)`
+                          : `▲ Upcast: ${formatSpellLevelLabel(currentSlot)} Slot`
                         : `▲ Upcast Slot`}
                     </button>
-                    {currentSlot < 9 && (
+                    {canIncrementSlot && (
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setActionUpcastLevel(baseSpell, currentSlot + 1);
+                          setActionUpcastLevel(baseSpell, expendedSlot + 1);
                         }}
                         className="px-1.5 py-0.5 bg-zinc-950/70 hover:bg-fuchsia-800/80 text-fuchsia-200 hover:text-white border-l border-fuchsia-500/30 cursor-pointer transition-colors"
-                        title={`Upcast to ${formatSpellLevelLabel(currentSlot + 1)} Level Slot`}
+                        title={`Upcast to ${formatSpellLevelLabel(Math.min(9, currentSlot + 1))} Level (Uses ${formatSpellLevelLabel(expendedSlot + 1)} Level Slot)`}
                       >
                         +
                       </button>
@@ -1256,8 +1268,11 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
             {currentCategoryList.map((rawAction, idx) => {
               const action = getEffectiveAction(rawAction);
               const baseLevel = rawAction.level ?? 0;
+              const expendedSlot = action.spellSlotRequired ?? baseLevel;
               const currentSlot = action.castAtLevel ?? baseLevel;
               const isUpcasted = baseLevel >= 1 && currentSlot > baseLevel;
+              const canDecrementSlot = baseLevel >= 1 && expendedSlot > baseLevel;
+              const canIncrementSlot = baseLevel >= 1 && expendedSlot < 9 && currentSlot < 9;
               const isTargetingThis = currentTargetingAction?.id === action.id;
               return (
                 <div
@@ -1305,12 +1320,12 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                               className="inline-flex items-center rounded bg-zinc-950 border border-blue-500/40 overflow-hidden shrink-0"
                               onClick={(e) => e.stopPropagation()}
                             >
-                              {isUpcasted && (
+                              {canDecrementSlot && (
                                 <button
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    setActionUpcastLevel(rawAction, currentSlot - 1);
+                                    setActionUpcastLevel(rawAction, expendedSlot - 1);
                                   }}
                                   className="px-1 py-0.2 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white text-[9px] font-mono font-bold cursor-pointer"
                                   title="Decrease Spell Slot Level"
@@ -1322,7 +1337,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setActionUpcastLevel(rawAction, currentSlot >= 9 ? baseLevel : currentSlot + 1);
+                                  setActionUpcastLevel(rawAction, !canIncrementSlot ? baseLevel : expendedSlot + 1);
                                 }}
                                 className={`px-1.5 py-0.2 text-[9px] font-mono font-bold cursor-pointer ${
                                   isUpcasted
@@ -1331,7 +1346,11 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                                 }`}
                                 title="Tap to Upcast at a Higher Spell Slot Level"
                               >
-                                {isUpcasted ? `▲ ${formatSpellLevelLabel(currentSlot)} Slot` : `${formatSpellLevelLabel(baseLevel)} ▲`}
+                                {isUpcasted
+                                  ? currentSlot > expendedSlot
+                                    ? `▲ ${formatSpellLevelLabel(currentSlot)} (${formatSpellLevelLabel(expendedSlot)} Slot)`
+                                    : `▲ ${formatSpellLevelLabel(currentSlot)} Slot`
+                                  : `${formatSpellLevelLabel(baseLevel)} ▲`}
                               </button>
                             </div>
                           )
@@ -1787,8 +1806,11 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
               {currentCategoryList.map((rawAction, idx) => {
                 const action = getEffectiveAction(rawAction);
                 const baseLevel = rawAction.level ?? 0;
+                const expendedSlot = action.spellSlotRequired ?? baseLevel;
                 const currentSlot = action.castAtLevel ?? baseLevel;
                 const isUpcasted = baseLevel >= 1 && currentSlot > baseLevel;
+                const canDecrementSlot = baseLevel >= 1 && expendedSlot > baseLevel;
+                const canIncrementSlot = baseLevel >= 1 && expendedSlot < 9 && currentSlot < 9;
                 const isTargetingThis = currentTargetingAction?.id === action.id;
                 const formattedHit =
                   action.hitBonus !== undefined
@@ -1848,15 +1870,15 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                                 }`}
                                 onClick={(e) => e.stopPropagation()}
                               >
-                                {isUpcasted && (
+                                {canDecrementSlot && (
                                   <button
                                     type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      setActionUpcastLevel(rawAction, currentSlot - 1);
+                                      setActionUpcastLevel(rawAction, expendedSlot - 1);
                                     }}
                                     className="px-1 py-0.2 bg-zinc-950/80 hover:bg-zinc-800 text-fuchsia-200 hover:text-white font-mono text-[9px] font-bold cursor-pointer transition-colors"
-                                    title={`Decrease Spell Slot Level (Currently ${formatSpellLevelLabel(currentSlot)} Level)`}
+                                    title={`Decrease Spell Slot Level (Currently casts at ${formatSpellLevelLabel(currentSlot)} Level, uses ${formatSpellLevelLabel(expendedSlot)} Slot)`}
                                   >
                                     −
                                   </button>
@@ -1865,26 +1887,30 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    setActionUpcastLevel(rawAction, currentSlot >= 9 ? baseLevel : currentSlot + 1);
+                                    setActionUpcastLevel(rawAction, !canIncrementSlot ? baseLevel : expendedSlot + 1);
                                   }}
                                   className={`px-1.5 py-0.2 font-mono text-[9px] font-bold cursor-pointer transition-colors ${
                                     isUpcasted
                                       ? 'text-fuchsia-200 hover:text-white'
                                       : 'text-blue-300 hover:text-white'
                                   }`}
-                                  title={`Click to Upcast ${rawAction.name} at a higher Spell Slot Level (Base: ${formatSpellLevelLabel(baseLevel)} Level)`}
+                                  title={`Click to Upcast ${rawAction.name} at a higher Spell Slot Level (Base: ${formatSpellLevelLabel(baseLevel)} Level, currently casts as ${formatSpellLevelLabel(currentSlot)} using ${formatSpellLevelLabel(expendedSlot)} Slot)`}
                                 >
-                                  {isUpcasted ? `▲ ${formatSpellLevelLabel(currentSlot)} Slot` : `${formatSpellLevelLabel(baseLevel)} ▲`}
+                                  {isUpcasted
+                                    ? currentSlot > expendedSlot
+                                      ? `▲ ${formatSpellLevelLabel(currentSlot)} (${formatSpellLevelLabel(expendedSlot)} Slot)`
+                                      : `▲ ${formatSpellLevelLabel(currentSlot)} Slot`
+                                    : `${formatSpellLevelLabel(baseLevel)} ▲`}
                                 </button>
-                                {currentSlot < 9 && (
+                                {canIncrementSlot && (
                                   <button
                                     type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      setActionUpcastLevel(rawAction, currentSlot + 1);
+                                      setActionUpcastLevel(rawAction, expendedSlot + 1);
                                     }}
                                     className="px-1 py-0.2 bg-zinc-950/60 hover:bg-fuchsia-800/80 text-blue-200 hover:text-white font-mono text-[9px] font-bold cursor-pointer transition-colors border-l border-white/10"
-                                    title={`Upcast to ${formatSpellLevelLabel(currentSlot + 1)} Level Slot`}
+                                    title={`Upcast to ${formatSpellLevelLabel(Math.min(9, currentSlot + 1))} Level (Uses ${formatSpellLevelLabel(expendedSlot + 1)} Level Slot)`}
                                   >
                                     +
                                   </button>
@@ -2179,11 +2205,12 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                 <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
                   {Array.from({ length: 9 - (inspectedAction.level ?? 1) + 1 }, (_, i) => (inspectedAction.level ?? 1) + i).map(slotLvl => {
                     const baseSpell = spellsList.find(s => s.id === inspectedAction.id) || inspectedAction;
-                    const activeSlot = inspectedAction.castAtLevel ?? inspectedAction.level ?? 1;
+                    const activeSlot = inspectedAction.spellSlotRequired ?? inspectedAction.castAtLevel ?? inspectedAction.level ?? 1;
                     const isSelected = activeSlot === slotLvl;
-                    const isUpcast = slotLvl > (baseSpell.level ?? 1);
                     const preview = buildActionAtSlotLevel(baseSpell, slotLvl);
-                    const upcastOpt = baseSpell.upcastOptions?.find(o => o.slotLevel === slotLvl);
+                    const effectiveCastLvl = preview.castAtLevel ?? slotLvl;
+                    const isUpcast = effectiveCastLvl > (baseSpell.level ?? 1);
+                    const upcastOpt = baseSpell.upcastOptions?.find(o => o.slotLevel === effectiveCastLvl);
                     const slotInfo = characterData?.spellSlots?.[slotLvl];
                     return (
                       <button
@@ -2199,7 +2226,11 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                         }`}
                       >
                         <div className="flex items-center justify-between gap-1 text-[10px] font-bold">
-                          <span>{formatSpellLevelLabel(slotLvl)} Slot</span>
+                          <span>
+                            {effectiveCastLvl > slotLvl
+                              ? `Lv ${effectiveCastLvl} (${formatSpellLevelLabel(slotLvl)} Slot)`
+                              : `${formatSpellLevelLabel(slotLvl)} Slot`}
+                          </span>
                           {slotInfo && (
                             <span className="text-[9px] text-blue-300 opacity-80">
                               {slotInfo.available}/{slotInfo.total}
@@ -2207,7 +2238,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                           )}
                         </div>
                         <div className="text-[10px] font-bold mt-0.5 truncate text-amber-300">
-                          {preview.damageFormula || upcastOpt?.bonusEffect || (isUpcast ? `+${slotLvl - (baseSpell.level ?? 1)} Slot` : 'Base Effect')}
+                          {preview.damageFormula || upcastOpt?.bonusEffect || (isUpcast ? `+${effectiveCastLvl - (baseSpell.level ?? 1)} Level` : 'Base Effect')}
                         </div>
                       </button>
                     );
