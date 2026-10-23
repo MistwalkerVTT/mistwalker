@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { audioNarration } from '../services/audioNarrationService';
 
 const LOGO_URL = 'https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/blob-c3567a0.png/:/rs=w:1440,h:1440';
 
@@ -117,8 +118,33 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onSelectDm, onSelectPl
     ensureAudio();
     audioRef.current?.swell();
     setLeaving(mode);
-    setTimeout(() => (mode === 'dm' ? onSelectDm() : onSelectPlayer()), 1100);
+
+    // Spoken greeting: DM = Big Bad Boss voice, Player = Wizard voice.
+    // Hold the departure flash until the voice starts (or a timeout), then let it land before moving on.
+    const greeting = mode === 'dm'
+      ? { text: 'Welcome Dungeon Master', voiceId: 'big_bad_boss' }
+      : { text: 'Welcome Adventurer', voiceId: 'wizard' };
+
+    const startedAt = Date.now();
+    new Promise<void>((resolve) => {
+      let settled = false;
+      const done = () => {
+        if (!settled) {
+          settled = true;
+          resolve();
+        }
+      };
+      audioNarration
+        .play({ ...greeting, onStart: done, onError: done })
+        .catch(done);
+      setTimeout(done, 4500);
+    }).then(() => {
+      const elapsed = Date.now() - startedAt;
+      const hold = Math.max(1100 - elapsed, 0) + 1300; // let the first words land over the flash
+      setTimeout(() => (mode === 'dm' ? onSelectDm() : onSelectPlayer()), hold);
+    });
   };
+
 
   // Living background: drifting mist + rising embers + faint rune sparks
   useEffect(() => {

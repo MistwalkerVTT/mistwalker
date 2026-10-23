@@ -62,6 +62,7 @@ const shouldShowIntro = (): boolean => {
 
 function Root() {
   const [showIntro, setShowIntro] = useState<boolean>(shouldShowIntro);
+  const [chosePlayer, setChosePlayer] = useState(false);
 
   if (showIntro) {
     return (
@@ -71,14 +72,17 @@ function Root() {
           setShowIntro(false);
         }}
         onSelectPlayer={() => {
+          // Switch in-place (no page reload) so the spoken greeting keeps playing
           const url = new URL(window.location.href);
           url.searchParams.set('view', 'player');
-          window.location.assign(url.toString());
+          window.history.replaceState({}, '', url.toString());
+          setChosePlayer(true);
+          setShowIntro(false);
         }}
       />
     );
   }
-  return isPlayerView ? <PlayerView /> : <App />;
+  return isPlayerView || chosePlayer ? <PlayerView /> : <App />;
 }
 
 createRoot(document.getElementById('root')!).render(
