@@ -44,9 +44,11 @@ export interface HudActionItem {
   saveDc?: number | string;            // e.g. 15
   saveAbility?: string;       // e.g. "WIS", "DEX", "CON"
   damageFormula?: string;     // e.g. "1d12 + 8"
+  baseDamageFormula?: string; // Unmodified base damage formula before upcasting
   damageType?: string;        // e.g. "slashing", "fire", "radiant"
   description: string;
   notes?: string;             // Weapon properties / mastery notes
+  baseNotes?: string;         // Unmodified base notes before upcasting
   sourceLabel?: string;       // e.g. "Barbarian", "Goliath", "Equipped Weapon"
   jb2aAssetId?: string;       // Auto-matched asset ID (e.g. "fire_bolt", "cure_wounds")
   iconUrl?: string;
@@ -122,7 +124,11 @@ export function computeUpcastFormula(
       addFixed = 5;
     } else if (lower === 'heal' || lower.startsWith('heal (')) {
       addFixed = 10;
-    } else if (lower.includes('cure wounds') || lower.includes('prayer of healing') || lower.includes('inflict wounds') || lower.includes('chromatic orb') || lower.includes('guiding bolt') || lower.includes('shatter') || lower.includes('thunderwave') || lower.includes('blight') || lower.includes('cone of cold') || lower.includes('spirit guardians') || lower.includes('moonbeam') || lower.includes('witch bolt')) {
+    } else if (lower.includes('cure wounds')) {
+      // 2024 PHB Cure Wounds starts at 2d8 and scales by +2d8 per slot level; 2014 starts at 1d8 (+1d8/lvl)
+      addCount = baseFormula && /^2d8\b/i.test(baseFormula.trim()) ? 2 : 1;
+      addSides = 8;
+    } else if (lower.includes('prayer of healing') || lower.includes('inflict wounds') || lower.includes('chromatic orb') || lower.includes('guiding bolt') || lower.includes('shatter') || lower.includes('thunderwave') || lower.includes('blight') || lower.includes('cone of cold') || lower.includes('spirit guardians') || lower.includes('moonbeam') || lower.includes('witch bolt')) {
       addCount = 1;
       addSides = 8;
     } else if (lower.includes('spiritual weapon')) {
@@ -142,7 +148,8 @@ export function computeUpcastFormula(
       }
     } else if (lower.includes('healing word') || lower.includes('mass healing word') || lower.includes('bane') || lower.includes('bless')) {
       if (lower.includes('healing word')) {
-        addCount = 1;
+        // 2024 PHB Healing Word starts at 2d4 and scales by +2d4 per slot level; 2014 starts at 1d4 (+1d4/lvl)
+        addCount = !lower.includes('mass') && baseFormula && /^2d4\b/i.test(baseFormula.trim()) ? 2 : 1;
         addSides = 4;
       } else {
         const extraTargets = levelsAbove;
@@ -202,6 +209,12 @@ export function computeUpcastFormula(
           damageFormula: scaled,
           summaryLabel: `${scaled} (+${totalAddedDice}d${baseDiceSides})`
         };
+      } else if (totalAddedDice > 0 && addSides > 0) {
+        const scaled = `${baseDiceCount}d${baseDiceSides}${modStr}${suffix} + ${totalAddedDice}d${addSides}`;
+        return {
+          damageFormula: scaled,
+          summaryLabel: `${scaled} (+${totalAddedDice}d${addSides})`
+        };
       } else if (totalAddedFixed > 0) {
         const scaled = `${baseDiceCount}d${baseDiceSides}${modStr}${suffix}`;
         return {
@@ -251,11 +264,17 @@ export function evaluateDiceFormula(
     };
   }
 
-  const raw = String(formula).trim();
+  const rawInput = String(formula).trim();
+  // Strip any previously appended roll breakdown (e.g. "→ [3 + 4] + 7 = 14") or parenthetical labels (e.g. "(6)", "(4 Darts)")
+  const raw = rawInput
+    .split(/→|=/)[0]
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/\b\d+(?:st|nd|rd|th)\b/gi, ' ')
+    .trim();
 
   // Check if formula is a pure flat integer (e.g. "70" for Heal, "75" for Preserve Life, "5" for Aid)
   const flatOnlyMatch = raw.match(/^\+?(\d+)(?:\s+[a-zA-Z\s]+)?$/);
-  if (flatOnlyMatch && !/\d+d\d+/i.test(raw)) {
+  if (flatOnlyMatch && !/(?<![a-zA-Z])\d*d\d+/i.test(raw)) {
     const val = parseInt(flatOnlyMatch[1], 10) || 1;
     return {
       total: val,
@@ -268,34 +287,34 @@ export function evaluateDiceFormula(
     };
   }
 
-  // Extract all (\d+)d(\d+) dice groups (supports multi-dice formulas like "2d8 + 4d6" or "4d6 + 4d6")
-  const diceRegex = /(\d+)d(\d+)/gi;
+  // Parse all signed dice terms (e.g. "4d4", "+ 2d6", "d8") and signed/leading flat integer terms (e.g. "+ 7", "1 + 1d4", "- 1")
+  const termRegex = /([+-])?\s*(?:(?<![a-zA-Z])(\d*)d(\d+)|(\d+)(?!\s*d\d))/gi;
   let match: RegExpExecArray | null;
   const dice: Array<{ sides: number; result: number; type: string }> = [];
   const rolls: number[] = [];
   let primarySides = 6;
   let diceSum = 0;
-
-  while ((match = diceRegex.exec(raw)) !== null) {
-    const rawCount = Math.max(1, parseInt(match[1], 10) || 1);
-    const count = isCrit ? rawCount * 2 : rawCount;
-    const sides = Math.max(2, parseInt(match[2], 10) || 6);
-    primarySides = sides;
-    for (let i = 0; i < count; i++) {
-      const r = Math.floor(Math.random() * sides) + 1;
-      dice.push({ sides, result: r, type: `d${sides}` });
-      rolls.push(r);
-      diceSum += r;
-    }
-  }
-
-  // Remove all NdM dice terms, then sum any remaining flat modifiers (e.g. "+ 5", "- 1")
-  const withoutDice = raw.replace(/\d+d\d+/gi, ' ');
-  const modRegex = /([+-]\s*\d+)/g;
-  let modMatch: RegExpExecArray | null;
   let bonus = 0;
-  while ((modMatch = modRegex.exec(withoutDice)) !== null) {
-    bonus += parseInt(modMatch[1].replace(/\s+/g, ''), 10) || 0;
+
+  while ((match = termRegex.exec(raw)) !== null) {
+    const sign = match[1] === '-' ? -1 : 1;
+    if (match[3] !== undefined) {
+      // Dice term: (count)d(sides)
+      const rawCount = match[2] ? Math.max(1, parseInt(match[2], 10) || 1) : 1;
+      const count = isCrit ? rawCount * 2 : rawCount;
+      const sides = Math.max(2, parseInt(match[3], 10) || 6);
+      primarySides = sides;
+      for (let i = 0; i < count; i++) {
+        const r = Math.floor(Math.random() * sides) + 1;
+        dice.push({ sides, result: r, type: `d${sides}` });
+        rolls.push(r * sign);
+        diceSum += r * sign;
+      }
+    } else if (match[4] !== undefined) {
+      // Flat modifier term: e.g. "+ 7", "- 2", or leading "1" in "1 + 1d4"
+      const flatVal = parseInt(match[4], 10) || 0;
+      bonus += sign * flatVal;
+    }
   }
 
   if (dice.length === 0) {

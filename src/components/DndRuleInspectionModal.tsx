@@ -7,7 +7,7 @@ import { X, Sparkles, BookOpen, AlertCircle, ShieldAlert, GripHorizontal } from 
 import ReactMarkdown from 'react-markdown';
 import { toast } from 'sonner';
 import { DndRuleEntry } from '../data/dndRulesCompendium';
-import { computeUpcastFormula } from '../types/hud';
+import { computeUpcastFormula, evaluateDiceFormula } from '../types/hud';
 
 interface DndRuleInspectionModalProps {
   entry: DndRuleEntry | null;
@@ -86,25 +86,9 @@ export const DndRuleInspectionModal: React.FC<DndRuleInspectionModalProps> = ({
   })();
 
   const handleRollDice = (formula: string) => {
-    const cleanFormula = formula.replace(/[a-zA-Z]+/g, '').trim();
-    const rollParts = (cleanFormula || formula).match(/(\d+)d(\d+)(?:\s*([+-])\s*(\d+))?/i);
-    let rolledTotal = 0;
-    const diceResults: Array<{ sides: number; result: number; type: string }> = [];
-    if (rollParts) {
-      const numDice = parseInt(rollParts[1], 10) || 1;
-      const sides = parseInt(rollParts[2], 10) || 6;
-      const sign = rollParts[3] === '-' ? -1 : 1;
-      const mod = parseInt(rollParts[4], 10) || 0;
-      let diceSum = 0;
-      for (let i = 0; i < numDice; i++) {
-        const r = Math.floor(Math.random() * sides) + 1;
-        diceSum += r;
-        diceResults.push({ sides, result: r, type: `d${sides}` });
-      }
-      rolledTotal = Math.max(1, diceSum + sign * mod);
-    } else {
-      rolledTotal = parseInt(cleanFormula, 10) || 1;
-    }
+    const evalRoll = evaluateDiceFormula(formula, false);
+    const rolledTotal = evalRoll.total;
+    const diceResults = evalRoll.dice;
 
     const upcastLabel = isUpcasted ? ` (${formatSlotLabel(activeSlotLevel)} Slot)` : '';
     const diceEvent: any = {
@@ -112,9 +96,9 @@ export const DndRuleInspectionModal: React.FC<DndRuleInspectionModalProps> = ({
       characterName: 'Spell Aura',
       action: `${entry.name}${upcastLabel} (${entry.isHeal ? 'Healing' : 'Damage'})`,
       rollType: entry.isHeal ? 'heal' : 'damage',
-      formula,
+      formula: `${formula} → ${evalRoll.breakdown}`,
       diceNotation: formula,
-      dice: diceResults.length > 0 ? diceResults : [{ sides: 8, result: rolledTotal, type: 'd8' }],
+      dice: diceResults,
       total: rolledTotal,
       isCritical: false,
       isFumble: false,
@@ -124,15 +108,15 @@ export const DndRuleInspectionModal: React.FC<DndRuleInspectionModalProps> = ({
       source: 'player'
     };
 
-    if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+    if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d && diceResults.length > 0) {
       (window as any).__mistwalkerRoll3d(diceEvent);
     }
-    if (typeof window !== 'undefined' && (window as any).__mistwalkerSocket?.connected) {
+    if (typeof window !== 'undefined' && (window as any).__mistwalkerSocket?.connected && diceResults.length > 0) {
       (window as any).__mistwalkerSocket.emit('SYNC_LOCAL_DICE_ROLL', diceEvent);
     }
 
     toast.success(`${entry.name}${upcastLabel}: Rolled ${rolledTotal}!`, {
-      description: `${formula} ${entry.damageType || (entry.isHeal ? 'healing' : 'damage')}`
+      description: `${formula} → ${evalRoll.breakdown} ${entry.damageType || (entry.isHeal ? 'healing' : 'damage')}`
     });
   };
 

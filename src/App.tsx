@@ -42,6 +42,7 @@ import { LeftSidebar } from './components/LeftSidebar';
 import { AnimatedMapOverlay, AnimatedFeaturesKonvaImage } from './components/AnimatedMapOverlay';
 import { DiceTableOverlay } from './components/DiceTableOverlay';
 import { DdbDiceRollEvent } from './types/dice';
+import { evaluateDiceFormula } from './types/hud';
 import { EffectContextMenu, ContextMenuData } from './components/EffectContextMenu';
 import { DndRuleInspectionModal } from './components/DndRuleInspectionModal';
 import { canTokenHaveHalo } from './effects/db/tokenFxMap';
@@ -4152,33 +4153,28 @@ export default function App() {
 
     // 2. Damage Roll
     let rolledDamage = 0;
+    let damageBreakdown = '';
     if (action.damageFormula) {
-      const formulaMatch = action.damageFormula.match(/(\d+)d(\d+)(?:\s*([+-])\s*(\d+))?/i);
-      if (formulaMatch) {
-        const numDice = (parseInt(formulaMatch[1], 10) || 1) * (isCrit ? 2 : 1);
-        const sides = parseInt(formulaMatch[2], 10) || 6;
-        const sign = formulaMatch[3] === '-' ? -1 : 1;
-        const mod = parseInt(formulaMatch[4], 10) || 0;
-        let sum = 0;
-        for (let i = 0; i < numDice; i++) {
-          const r = Math.floor(Math.random() * sides) + 1;
-          sum += r;
-          diceResults.push({ sides, result: r, type: `d${sides}` });
-        }
-        rolledDamage = Math.max(1, sum + sign * mod);
-      } else {
-        rolledDamage = parseInt(action.damageFormula, 10) || 0;
+      const evalDmg = evaluateDiceFormula(action.damageFormula, isCrit);
+      rolledDamage = evalDmg.total;
+      damageBreakdown = evalDmg.breakdown;
+      if (action.hitBonus === undefined) {
+        diceResults.push(...evalDmg.dice);
       }
     }
 
     // 3. 3D Physics Dice Event
+    const rawHit = action.hitBonus !== undefined ? (parseInt(String(action.hitBonus).replace('+', ''), 10) || 0) : 0;
+    const hitSignStr = rawHit >= 0 ? `+ ${rawHit}` : `- ${Math.abs(rawHit)}`;
     const diceEvent: DdbDiceRollEvent = {
       id: `roll-${Date.now()}`,
       characterName: token.name || 'Monster',
       avatarUrl: token.url,
       action: action.name,
       rollType: action.isHeal ? 'heal' : (action.hitBonus !== undefined ? 'attack' : 'damage'),
-      formula: action.hitBonus !== undefined ? `1d20${action.hitBonus} (To Hit) | ${action.damageFormula || ''} (Damage)` : (action.damageFormula || ''),
+      formula: action.hitBonus !== undefined
+        ? `1d20 ${hitSignStr} → [${d20Result}] ${hitSignStr} = ${attackTotal}${action.damageFormula ? ` | Dmg: ${action.damageFormula} → ${damageBreakdown}` : ''}`
+        : `${action.damageFormula || ''} → ${damageBreakdown}`,
       diceNotation: diceResults.map(d => d.type).join('+'),
       dice: diceResults,
       total: action.hitBonus !== undefined ? attackTotal : rolledDamage,

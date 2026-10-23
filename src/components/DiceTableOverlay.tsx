@@ -21,6 +21,7 @@ export const DiceTableOverlay: React.FC<Props> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<ThreeDiceEngine | null>(null);
   const [activeRollToast, setActiveRollToast] = useState<DdbDiceRollEvent | null>(null);
+  const recentRollIdsRef = useRef<Set<string>>(new Set());
 
   // Initialize Three.js + Cannon-es 3D physics dice engine
   useEffect(() => {
@@ -44,6 +45,16 @@ export const DiceTableOverlay: React.FC<Props> = ({
 
   // Execute 3D physical dice roll animation with predetermined results
   const roll3d = useCallback(async (rollData: DdbDiceRollEvent) => {
+    if (rollData?.id) {
+      if (recentRollIdsRef.current.has(rollData.id)) {
+        return;
+      }
+      recentRollIdsRef.current.add(rollData.id);
+      if (recentRollIdsRef.current.size > 100) {
+        const first = recentRollIdsRef.current.values().next().value;
+        if (first) recentRollIdsRef.current.delete(first);
+      }
+    }
     setActiveRollToast(rollData);
 
     // If Nat 20, trigger critical hit screen shake

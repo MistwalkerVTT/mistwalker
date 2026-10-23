@@ -438,6 +438,10 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
     const baseLevel = action.level ?? 0;
     if (baseLevel < 1) return action;
 
+    // Always preserve original unmodified baseDamageFormula and baseNotes so repeated upcast changes are idempotent
+    const originalDamageFormula = action.baseDamageFormula !== undefined ? action.baseDamageFormula : action.damageFormula;
+    const originalNotes = action.baseNotes !== undefined ? action.baseNotes : action.notes;
+
     // Book of Exalted Deeds (Enlightened Magic):
     // "any spell slot you expend to cast a cleric or paladin spell counts as a spell slot of one level higher."
     const hasBookOfExaltedDeeds = Boolean(
@@ -453,6 +457,10 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
     if (effectiveCastLevel <= baseLevel) {
       return {
         ...action,
+        baseDamageFormula: originalDamageFormula,
+        baseNotes: originalNotes,
+        damageFormula: originalDamageFormula,
+        notes: originalNotes,
         castAtLevel: baseLevel,
         spellSlotRequired: clampedExpendedSlot
       };
@@ -461,7 +469,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
     const precomputed = action.upcastOptions?.find(o => o.slotLevel === effectiveCastLevel);
     const computed = precomputed || {
       slotLevel: effectiveCastLevel,
-      ...computeUpcastFormula(action.damageFormula, baseLevel, effectiveCastLevel, action.name)
+      ...computeUpcastFormula(originalDamageFormula, baseLevel, effectiveCastLevel, action.name)
     };
 
     const enlightenedNotice = hasBookOfExaltedDeeds
@@ -474,10 +482,12 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
 
     return {
       ...action,
+      baseDamageFormula: originalDamageFormula,
+      baseNotes: originalNotes,
       castAtLevel: effectiveCastLevel,
       spellSlotRequired: clampedExpendedSlot,
-      damageFormula: computed.damageFormula ?? action.damageFormula,
-      notes: [action.notes, enlightenedNotice, upcastTag].filter(Boolean).join(' • ')
+      damageFormula: computed.damageFormula ?? originalDamageFormula,
+      notes: [originalNotes, enlightenedNotice, upcastTag].filter(Boolean).join(' • ')
     };
   };
 
@@ -511,18 +521,19 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
       [action.id]: clamped,
       [`name:${normName}`]: clamped
     }));
-    const updated = buildActionAtSlotLevel(action, clamped);
+    const baseAction = spellsList.find(s => s.id === action.id || s.name.trim().toLowerCase() === normName) || action;
+    const updated = buildActionAtSlotLevel(baseAction, clamped);
     if (inspectedAction && (inspectedAction.id === action.id || inspectedAction.name.trim().toLowerCase() === normName)) {
-      setInspectedAction(buildActionAtSlotLevel(inspectedAction, clamped));
+      setInspectedAction(updated);
     }
     if (hoveredAction && (hoveredAction.id === action.id || hoveredAction.name.trim().toLowerCase() === normName)) {
-      setHoveredAction(buildActionAtSlotLevel(hoveredAction, clamped));
+      setHoveredAction(updated);
     }
     if (pinnedAction && (pinnedAction.id === action.id || pinnedAction.name.trim().toLowerCase() === normName)) {
-      setPinnedAction(buildActionAtSlotLevel(pinnedAction, clamped));
+      setPinnedAction(updated);
     }
     if (currentTargetingAction && (currentTargetingAction.id === action.id || currentTargetingAction.name.trim().toLowerCase() === normName)) {
-      onSelectAction(buildActionAtSlotLevel(currentTargetingAction, clamped));
+      onSelectAction(updated);
     }
   };
 

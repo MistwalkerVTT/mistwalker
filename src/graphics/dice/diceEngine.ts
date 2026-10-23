@@ -256,8 +256,28 @@ export class ThreeDiceEngine {
     this.isFadingOut = false;
     this.fadeOpacity = 1.0;
 
-    const count = diceRequests.length;
-    diceRequests.forEach((req, idx) => {
+    // Expand any single percentile (d100) die into a tens (d100) + ones (d10) die pair so 1..100 rolls display accurately
+    const expandedRequests: DieRollRequest[] = [];
+    for (const req of diceRequests) {
+      const key = this.resolveDieKey(req.type);
+      if (key === 'd100' && diceRequests.length === 1) {
+        const val = Math.max(1, Math.min(100, req.result || 100));
+        if (val === 100) {
+          expandedRequests.push({ ...req, type: 'd100', result: 0 });
+          expandedRequests.push({ ...req, type: 'd10', result: 10 });
+        } else {
+          const tens = Math.floor(val / 10) * 10;
+          const ones = val % 10 === 0 ? 10 : val % 10;
+          expandedRequests.push({ ...req, type: 'd100', result: tens });
+          expandedRequests.push({ ...req, type: 'd10', result: ones });
+        }
+      } else {
+        expandedRequests.push(req);
+      }
+    }
+
+    const count = expandedRequests.length;
+    expandedRequests.forEach((req, idx) => {
       this.spawnDie(req, idx, count);
     });
 
