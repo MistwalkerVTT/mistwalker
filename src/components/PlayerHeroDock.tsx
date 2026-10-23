@@ -60,6 +60,8 @@ interface PlayerHeroDockProps {
   onRevertWildShape?: () => void;
   activeWildShape?: any | null;
   collapseRequestTick?: number;
+  onAdjustHp?: (delta: number) => void;
+  onAdjustSpellSlot?: (level: number, delta: number) => void;
 }
 
 export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
@@ -91,7 +93,9 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
   onOpenWildShape,
   onRevertWildShape,
   activeWildShape,
-  collapseRequestTick
+  collapseRequestTick,
+  onAdjustHp,
+  onAdjustSpellSlot
 }) => {
   const currentTargetingAction = activeTargetingAction ?? selectedAction ?? (
     activeEquippedAsset ? {
@@ -1272,7 +1276,37 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                 </div>
                 <div className="flex items-center gap-2 text-[10px] font-mono text-zinc-400">
                   {classLevel && <span className="text-amber-300">{classLevel}</span>}
-                  <span className="text-emerald-400 font-bold">HP {currentHp}/{maxHp}</span>
+                  <span className="text-emerald-400 font-bold flex items-center gap-1">
+                    {onAdjustHp && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onAdjustHp(e.shiftKey ? -5 : -1);
+                        }}
+                        disabled={currentHp <= 0}
+                        className="w-4 h-4 rounded bg-zinc-900 hover:bg-rose-500/30 border border-zinc-700 text-zinc-300 disabled:opacity-35 flex items-center justify-center text-[10px] font-bold leading-none"
+                        title="Decrease HP (-1, Shift+Click for -5)"
+                      >
+                        −
+                      </button>
+                    )}
+                    <span>HP {currentHp}/{maxHp}</span>
+                    {onAdjustHp && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onAdjustHp(e.shiftKey ? 5 : 1);
+                        }}
+                        disabled={currentHp >= maxHp}
+                        className="w-4 h-4 rounded bg-zinc-900 hover:bg-emerald-500/30 border border-zinc-700 text-zinc-300 disabled:opacity-35 flex items-center justify-center text-[10px] font-bold leading-none"
+                        title="Increase HP (+1, Shift+Click for +5)"
+                      >
+                        +
+                      </button>
+                    )}
+                  </span>
                   <span>•</span>
                   <span className="text-sky-300">AC {ac}</span>
                   <span>•</span>
@@ -1371,8 +1405,36 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                     <span>{formatSpellLevelLabel(lvl)}</span>
                     <span className="opacity-70">({countForLvl})</span>
                     {slotInfo && (
-                      <span className="ml-0.5 px-1 rounded bg-blue-950 text-blue-300 border border-blue-500/30 text-[9px]">
-                        {slotInfo.available}/{slotInfo.total}
+                      <span className="ml-0.5 px-1 rounded bg-blue-950 text-blue-300 border border-blue-500/30 text-[9px] flex items-center gap-1">
+                        {onAdjustSpellSlot && (
+                          <span
+                            role="button"
+                            tabIndex={0}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (slotInfo.available > 0) onAdjustSpellSlot(lvl, -1);
+                            }}
+                            className={`px-0.5 rounded bg-zinc-900/90 hover:bg-rose-500/30 text-zinc-300 font-bold ${slotInfo.available <= 0 ? 'opacity-30 pointer-events-none' : ''}`}
+                            title={`Remove 1 Level ${lvl} slot`}
+                          >
+                            −
+                          </span>
+                        )}
+                        <span>{slotInfo.available}/{slotInfo.total}</span>
+                        {onAdjustSpellSlot && (
+                          <span
+                            role="button"
+                            tabIndex={0}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (slotInfo.available < slotInfo.total) onAdjustSpellSlot(lvl, 1);
+                            }}
+                            className={`px-0.5 rounded bg-zinc-900/90 hover:bg-emerald-500/30 text-zinc-300 font-bold ${slotInfo.available >= slotInfo.total ? 'opacity-30 pointer-events-none' : ''}`}
+                            title={`Add 1 Level ${lvl} slot`}
+                          >
+                            +
+                          </span>
+                        )}
                       </span>
                     )}
                   </button>
@@ -1631,20 +1693,50 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
           {/* Center: D&D Beyond Vitals Stat Boxes (HP Bar, AC, Speed, PP, Spell Save DC) */}
           <div className="flex items-center gap-2 flex-wrap">
             {/* Hit Points Stat Box */}
-            <div className="flex flex-col justify-center px-3 py-1 rounded-xl bg-zinc-950 border border-zinc-800 min-w-[135px]">
+            <div className="flex flex-col justify-center px-3 py-1 rounded-xl bg-zinc-950 border border-zinc-800 min-w-[165px]">
               <div className="flex items-center justify-between gap-2 text-[10px] font-mono">
                 <span className="text-zinc-400 uppercase font-bold flex items-center gap-1">
                   <Heart className="w-3 h-3 text-emerald-400" />
                   HP
                 </span>
-                <div>
-                  <span className={`font-bold text-xs ${hpPercent <= 25 ? 'text-rose-400' : 'text-emerald-400'}`}>
-                    {currentHp}
-                  </span>
-                  <span className="text-zinc-500"> / </span>
-                  <span className="text-zinc-200 font-bold text-xs">{maxHp}</span>
-                  {tempHp > 0 && (
-                    <span className="ml-1 text-cyan-300 font-bold text-[10px]">(+{tempHp})</span>
+                <div className="flex items-center gap-1">
+                  {onAdjustHp && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAdjustHp(e.shiftKey ? -5 : -1);
+                      }}
+                      disabled={currentHp <= 0}
+                      className="w-4 h-4 rounded bg-zinc-900 hover:bg-rose-500/30 border border-zinc-700 hover:border-rose-400 text-zinc-300 hover:text-rose-200 disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center text-[11px] font-bold leading-none transition-colors cursor-pointer"
+                      title="Decrease HP (-1, Shift+Click for -5)"
+                    >
+                      −
+                    </button>
+                  )}
+                  <div>
+                    <span className={`font-bold text-xs ${hpPercent <= 25 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                      {currentHp}
+                    </span>
+                    <span className="text-zinc-500"> / </span>
+                    <span className="text-zinc-200 font-bold text-xs">{maxHp}</span>
+                    {tempHp > 0 && (
+                      <span className="ml-1 text-cyan-300 font-bold text-[10px]">(+{tempHp})</span>
+                    )}
+                  </div>
+                  {onAdjustHp && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAdjustHp(e.shiftKey ? 5 : 1);
+                      }}
+                      disabled={currentHp >= maxHp}
+                      className="w-4 h-4 rounded bg-zinc-900 hover:bg-emerald-500/30 border border-zinc-700 hover:border-emerald-400 text-zinc-300 hover:text-emerald-200 disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center text-[11px] font-bold leading-none transition-colors cursor-pointer"
+                      title="Increase HP (+1, Shift+Click for +5)"
+                    >
+                      +
+                    </button>
                   )}
                 </div>
               </div>
@@ -1913,28 +2005,55 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
 
               {/* D&D Beyond Spell Slot Tracker Boxes */}
               {characterData?.spellSlots && Object.keys(characterData.spellSlots).length > 0 && (
-                <div className="flex items-center gap-1.5 text-xs font-mono">
+                <div className="flex items-center gap-1.5 text-xs font-mono flex-wrap">
                   <span className="text-[10px] text-zinc-500 uppercase font-bold">Spell Slots:</span>
                   {Object.values(characterData.spellSlots).map((slot: any) => (
-                    <button
+                    <div
                       key={slot.level}
-                      type="button"
                       onClick={() => {
                         setActiveCategory('spells');
                         setSelectedSpellLevel(prev => (prev === slot.level ? 'all' : slot.level));
                       }}
-                      className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[11px] cursor-pointer transition-all ${
+                      className={`flex items-center gap-1 px-1.5 py-1 rounded-lg border text-[11px] cursor-pointer transition-all select-none ${
                         activeCategory === 'spells' && selectedSpellLevel === slot.level
                           ? 'bg-blue-500/25 border-blue-400 text-white'
                           : 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:border-blue-500/50'
                       }`}
-                      title={`Level ${slot.level} Spell Slots: ${slot.available}/${slot.total} available (Click to filter Level ${slot.level} spells)`}
+                      title={`Level ${slot.level} Spell Slots: ${slot.available}/${slot.total} available (Click to filter Level ${slot.level} spells, use − / + to adjust slots)`}
                     >
                       <span className="text-blue-400 font-bold">{formatSpellLevelLabel(slot.level)}:</span>
-                      <span className="font-bold">
+                      {onAdjustSpellSlot && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onAdjustSpellSlot(slot.level, -1);
+                          }}
+                          disabled={slot.available <= 0}
+                          className="w-3.5 h-3.5 rounded bg-zinc-950/90 hover:bg-rose-500/30 border border-zinc-700/80 hover:border-rose-400 text-zinc-400 hover:text-rose-200 disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center text-[10px] font-bold leading-none transition-colors cursor-pointer"
+                          title={`Spend / remove 1 Level ${slot.level} spell slot`}
+                        >
+                          −
+                        </button>
+                      )}
+                      <span className={`font-bold min-w-[20px] text-center ${slot.available === 0 ? 'text-rose-400' : ''}`}>
                         {slot.available}/{slot.total}
                       </span>
-                    </button>
+                      {onAdjustSpellSlot && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onAdjustSpellSlot(slot.level, 1);
+                          }}
+                          disabled={slot.available >= slot.total}
+                          className="w-3.5 h-3.5 rounded bg-zinc-950/90 hover:bg-emerald-500/30 border border-zinc-700/80 hover:border-emerald-400 text-zinc-400 hover:text-emerald-200 disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center text-[10px] font-bold leading-none transition-colors cursor-pointer"
+                          title={`Restore / add 1 Level ${slot.level} spell slot`}
+                        >
+                          +
+                        </button>
+                      )}
+                    </div>
                   ))}
                 </div>
               )}

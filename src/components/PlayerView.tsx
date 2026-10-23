@@ -1437,6 +1437,24 @@ const buildFallbackHudData = (token: Token, stats: any, customChars?: Character[
         description: 'When you cast a spell of 1st level or higher that restores HP to a creature other than you, you regain HP equal to 2 + the spell’s level.'
       },
       {
+        id: 'special-devotees-censer',
+        name: "Devotee's Censer: Healing Incense",
+        category: 'special',
+        type: 'bonus_action',
+        subCategory: 'item',
+        sourceLabel: "Rare Flail • Devotee's Censer",
+        castingTime: '1 Bonus Action',
+        rangeFt: 10,
+        duration: '1 minute',
+        damageFormula: '1d4',
+        damageType: 'healing',
+        isHeal: true,
+        isSelfAction: true,
+        uses: { available: 1, total: 1, resetType: 'Dawn' },
+        description: 'Speak the command word as a bonus action to cause the flail to emanate a thin cloud of incense out to 10 feet for 1 minute. At the start of each of your turns, you and any other creatures in the incense each regain 1d4 hit points.',
+        jb2aAssetId: 'healing_incense'
+      },
+      {
         id: 'special-blessed-strikes',
         name: 'Blessed Strikes',
         category: 'special',
@@ -1866,6 +1884,36 @@ export default function PlayerView() {
   }, [claimedToken, compendiumCharacters]);
 
   const promptedPrivateCharIdRef = useRef<string | null>(null);
+  const manualSpellSlotsRef = useRef<Record<string, Record<number, { available: number; total: number }>>>({});
+  const manualHpOverrideRef = useRef<Record<string, { hp: number; ddbBaselineHp: number }>>({});
+
+  const applyManualHudOverrides = useCallback((baseHud: HudCharacterData, charKey: string): HudCharacterData => {
+    let nextHud = { ...baseHud };
+    const savedSlots = manualSpellSlotsRef.current[charKey];
+    if (savedSlots && nextHud.spellSlots) {
+      const mergedSlots: Record<number, { level: number; total: number; available: number }> = { ...nextHud.spellSlots };
+      Object.entries(savedSlots).forEach(([lvlStr, slotOverride]) => {
+        const lvl = Number(lvlStr);
+        if (mergedSlots[lvl]) {
+          mergedSlots[lvl] = {
+            ...mergedSlots[lvl],
+            available: Math.max(0, Math.min(mergedSlots[lvl].total, slotOverride.available))
+          };
+        }
+      });
+      nextHud.spellSlots = mergedSlots;
+    }
+    const savedHp = manualHpOverrideRef.current[charKey];
+    if (savedHp) {
+      // Keep manual HP unless D&D Beyond's own HP changed from the baseline when the override was set
+      if (baseHud.currentHp === savedHp.ddbBaselineHp) {
+        nextHud.currentHp = Math.max(0, Math.min(nextHud.maxHp, savedHp.hp));
+      } else {
+        delete manualHpOverrideRef.current[charKey];
+      }
+    }
+    return nextHud;
+  }, []);
 
   const applyActiveWildShapeOverlay = useCallback((baseHud: HudCharacterData): HudCharacterData => {
     const ws = activeWildShapeRef.current;
@@ -1949,10 +1997,15 @@ export default function PlayerView() {
             } else if (!isPriv && privacyModalState?.isOpen && privacyModalState?.characterId === String(targetDdbId)) {
               setPrivacyModalState(prev => ({ ...prev, isOpen: false }));
             }
-            setHudCharacterData(applyActiveWildShapeOverlay({
+            const charKey = String(targetDdbId || claimedToken.id || data.name);
+            if (forceRefresh) {
+              delete manualSpellSlotsRef.current[charKey];
+              delete manualHpOverrideRef.current[charKey];
+            }
+            setHudCharacterData(applyActiveWildShapeOverlay(applyManualHudOverrides({
               ...data,
               avatarUrl: claimedToken.url || claimedToken.avatarUrl || data.avatarUrl || getCharacterTokenUrl(data.name)
-            }));
+            }, charKey)));
             if (forceRefresh) {
               toast.success(`Synced ${data.name} from D&D Beyond!`, {
                 description: `${(data.attacks || []).length} Attacks • ${(data.bonusActions || []).length} Bonus • ${(data.spells || []).length} Spells • ${(data.special || []).length} Special`
@@ -3745,8 +3798,8 @@ export default function PlayerView() {
       activeEquippedAsset.targetType === 'aura' ||
       activeEquippedAsset.targetType === 'self' ||
       activeTargetingAction?.rangeFt === 0 ||
-      ['spirit_guardians', 'aura_of_vitality', 'aura_of_life', 'aura_of_purity', 'crusaders_mantle', 'holy_aura', 'circle_of_power', 'detect_magic', 'shield', 'armor_of_agathys', 'fire_shield', 'shadow_of_moil', 'ashardalons_stride', 'twilight_sanctuary'].includes(activeEquippedAsset.id) ||
-      ['spirit guardians', 'aura of vitality', 'aura of life', 'aura of purity', 'crusader\'s mantle', 'holy aura', 'circle of power', 'detect magic', 'armor of agathys', 'fire shield', 'shadow of moil', 'ashardalon\'s stride', 'twilight sanctuary'].some(k => lowerAssetName.includes(k))
+      ['spirit_guardians', 'aura_of_vitality', 'aura_of_life', 'aura_of_purity', 'crusaders_mantle', 'holy_aura', 'circle_of_power', 'detect_magic', 'shield', 'armor_of_agathys', 'fire_shield', 'shadow_of_moil', 'ashardalons_stride', 'twilight_sanctuary', 'healing_incense'].includes(activeEquippedAsset.id) ||
+      ['spirit guardians', 'aura of vitality', 'aura of life', 'aura of purity', 'crusader\'s mantle', 'holy aura', 'circle of power', 'detect magic', 'armor of agathys', 'fire shield', 'shadow of moil', 'ashardalon\'s stride', 'twilight sanctuary', 'healing incense', 'devotee\'s censer', 'devotees censer'].some(k => lowerAssetName.includes(k))
     );
 
     const isAuraOrBuff = Boolean(
@@ -4115,6 +4168,99 @@ export default function PlayerView() {
           : `${claimedToken.name}'s illumination deactivated.`,
         { description: action.name }
       );
+      return;
+    }
+
+    // Intercept Devotee's Censer: Healing Incense (10 ft Green Smoke Aura + 1d4 Healing)
+    if ((lowerName.includes('healing incense') || action.id === 'special-devotees-censer') && claimedToken) {
+      const tokenRadius = ((claimedToken.size || 1) * gridSize) / 2;
+      const casterCenter = { x: claimedToken.x + tokenRadius, y: claimedToken.y + tokenRadius };
+      const incenseAsset = JB2A_REGISTRY.find(a => a.id === 'healing_incense') || matchedAsset;
+      const incenseEffect: VttEffectInstance = {
+        id: `eff_incense_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        name: "Devotee's Censer: Healing Incense",
+        label: "Healing Incense (10ft Green Smoke Healing Aura)",
+        assetKey: 'healing_incense',
+        videoUrl: incenseAsset?.webm || '/jb2a/Community/JAA/cloudKill.webm',
+        loopVideoUrl: incenseAsset?.loopWebm || '/jb2a/Community/JAA/cloudKill.webm',
+        thumbUrl: incenseAsset?.thumb || '/jb2a/Community/JAA/cloudKill.webp',
+        paradigm: 'aura',
+        x: casterCenter.x,
+        y: casterCenter.y,
+        sizeFt: action.rangeFt || 10,
+        rotation: 0,
+        opacity: 0.9,
+        blendMode: 'screen',
+        isPersistent: true,
+        loop: true,
+        attachedTokenId: claimedToken.id,
+        castTime: Date.now(),
+        durationMs: 60000,
+        soundKey: 'radiant_heal',
+        color: '#22c55e',
+        ownerId: claimedToken.id,
+        casterName: claimedToken.name || 'Hero',
+        spellId: action.id,
+        damageFormula: action.damageFormula || '1d4',
+        damageType: 'healing',
+        description: action.description,
+        actionSnapshot: { ...action }
+      };
+      setEffects(prev => [...prev.filter(e => e.assetKey !== 'healing_incense' || e.attachedTokenId !== claimedToken.id), incenseEffect]);
+      soundCatalog.play('radiant_heal');
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('EFFECT_SPAWN', incenseEffect);
+      }
+
+      const formula = action.damageFormula || '1d4';
+      const evaluated = evaluateDiceFormula(formula, false);
+      const rolledTotal = evaluated.total;
+      const diceResults = evaluated.dice;
+
+      const diceEvent: DdbDiceRollEvent = {
+        id: `roll-${Date.now()}`,
+        characterId: String(hudCharacterData?.id || claimedToken.id || ''),
+        characterName: claimedToken.name || 'Hero',
+        avatarUrl: hudCharacterData?.avatarUrl || claimedToken.avatarUrl || claimedToken.url,
+        action: `${action.name} (10ft Aura Healing)`,
+        rollType: 'heal',
+        formula: `${formula} → ${evaluated.breakdown}`,
+        diceNotation: formula,
+        dice: diceResults.length > 0 ? diceResults : [{ sides: 4, result: rolledTotal, type: 'd4' }],
+        modifier: evaluated.bonus,
+        total: rolledTotal,
+        isCritical: false,
+        isFumble: false,
+        theme: selectedDicePreset.id,
+        themeColor: '#10b981',
+        timestamp: Date.now(),
+        source: 'player'
+      };
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', diceEvent);
+      }
+      if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+        (window as any).__mistwalkerRoll3d(diceEvent);
+      }
+      if (rolledTotal > 0 && socketRef.current?.connected) {
+        socketRef.current.emit('REQUEST_TOKEN_MUTATION', {
+          sourceTokenId: claimedToken.id,
+          sourceName: claimedToken.name || 'Hero',
+          targetTokenId: claimedToken.id,
+          targetName: claimedToken.name || 'Hero',
+          actionName: action.name,
+          deltaHp: rolledTotal,
+          requiresApproval: false,
+          requestId: `req_incense_${Date.now()}`
+        });
+      }
+      toast.success(`🌿 ${claimedToken.name}: Devotee's Censer Healing Incense Active!`, {
+        description: `10 ft green smoke aura emanated for 1 minute • Restored +${rolledTotal} HP (${evaluated.breakdown}).`
+      });
+      setActiveTargetingAction(null);
+      setActiveEquippedAsset(null);
+      setAimOrigin(null);
+      setAimCurrent(null);
       return;
     }
 
@@ -4731,8 +4877,8 @@ export default function PlayerView() {
         asset.targetType === 'aura' ||
         asset.targetType === 'self' ||
         action.rangeFt === 0 ||
-        ['spirit_guardians', 'aura_of_vitality', 'aura_of_life', 'aura_of_purity', 'crusaders_mantle', 'holy_aura', 'circle_of_power', 'detect_magic', 'shield', 'armor_of_agathys', 'fire_shield', 'shadow_of_moil', 'ashardalons_stride', 'twilight_sanctuary'].includes(asset.id) ||
-        ['spirit guardians', 'aura of vitality', 'aura of life', 'aura of purity', 'crusader\'s mantle', 'holy aura', 'circle of power', 'detect magic', 'armor of agathys', 'fire shield', 'shadow of moil', 'ashardalon\'s stride', 'twilight sanctuary'].some(k => lowerActName.includes(k))
+        ['spirit_guardians', 'aura_of_vitality', 'aura_of_life', 'aura_of_purity', 'crusaders_mantle', 'holy_aura', 'circle_of_power', 'detect_magic', 'shield', 'armor_of_agathys', 'fire_shield', 'shadow_of_moil', 'ashardalons_stride', 'twilight_sanctuary', 'healing_incense'].includes(asset.id) ||
+        ['spirit guardians', 'aura of vitality', 'aura of life', 'aura of purity', 'crusader\'s mantle', 'holy aura', 'circle of power', 'detect magic', 'armor of agathys', 'fire shield', 'shadow of moil', 'ashardalon\'s stride', 'twilight sanctuary', 'healing incense', 'devotee\'s censer', 'devotees censer'].some(k => lowerActName.includes(k))
       );
 
       const isAuraOrBuff = Boolean(
@@ -4820,11 +4966,17 @@ export default function PlayerView() {
       setHudCharacterData(prev => {
         if (!prev?.spellSlots?.[expendedActionSlot]) return prev;
         const cur = prev.spellSlots[expendedActionSlot];
+        const nextAvail = Math.max(0, cur.available - 1);
+        const charKey = String(prev.ddbCharacterId || prev.id || claimedToken?.id || prev.name);
+        manualSpellSlotsRef.current[charKey] = {
+          ...(manualSpellSlotsRef.current[charKey] || {}),
+          [expendedActionSlot]: { available: nextAvail, total: cur.total }
+        };
         return {
           ...prev,
           spellSlots: {
             ...prev.spellSlots,
-            [expendedActionSlot]: { ...cur, available: Math.max(0, cur.available - 1) }
+            [expendedActionSlot]: { ...cur, available: nextAvail }
           }
         };
       });
@@ -4921,6 +5073,75 @@ export default function PlayerView() {
       socketRef.current.emit('REQUEST_TOKEN_MUTATION', payload);
     }
 
+    // 4b. Blessed Healer Automatic Trigger (Life Domain Cleric / Stavros)
+    // "When you cast a spell of 1st level or higher that restores HP to a creature other than you, you regain HP equal to 2 + the spell's level."
+    const casterHasBlessedHealer = Boolean(
+      (caster.name || '').toLowerCase().includes('stavros') ||
+      (hudCharacterData?.name || '').toLowerCase().includes('stavros') ||
+      hudCharacterData?.special?.some(s => (s.name || '').toLowerCase().includes('blessed healer'))
+    );
+    const effectiveCastSpellLevel = action.castAtLevel ?? action.level ?? 0;
+    const isLeveledHealingSpell = Boolean(
+      effectiveCastSpellLevel >= 1 &&
+      (action.category === 'spells' || action.subCategory === 'spell' || (action.level ?? 0) >= 1) &&
+      (action.isHeal || calculatedDeltaHp > 0)
+    );
+    if (casterHasBlessedHealer && isLeveledHealingSpell && !isSelfTarget) {
+      const blessedHealAmount = 2 + effectiveCastSpellLevel;
+      const bhPayload = {
+        sourceTokenId: caster.id,
+        sourceName: caster.name || 'Stavros',
+        targetTokenId: caster.id,
+        targetName: caster.name || 'Stavros',
+        actionName: `Blessed Healer (Lvl ${effectiveCastSpellLevel} Spell)`,
+        deltaHp: blessedHealAmount,
+        requiresApproval: false,
+        isMonster: false,
+        requestId: `req_bh_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
+      };
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('REQUEST_TOKEN_MUTATION', bhPayload);
+      } else {
+        setHudCharacterData(prev => {
+          if (!prev) return null;
+          return { ...prev, currentHp: Math.min(prev.maxHp, prev.currentHp + blessedHealAmount) };
+        });
+      }
+
+      // Subtle green healing shimmer on Stavros for Blessed Healer
+      const bhEffect: VttEffectInstance = {
+        id: `eff_bh_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        name: `Blessed Healer (+${blessedHealAmount} HP)`,
+        label: 'Blessed Healer Self-Restoration',
+        assetKey: 'cure_wounds',
+        videoUrl: '/jb2a/Library/1st_Level/Cure_Wounds/CureWounds_01_Green_400x400.webm',
+        thumbUrl: '/jb2a/Library/1st_Level/Cure_Wounds/CureWounds_01_Green_Thumb.webp',
+        paradigm: 'token_hit',
+        x: casterCenter.x,
+        y: casterCenter.y,
+        sizeFt: 5,
+        rotation: 0,
+        opacity: 0.95,
+        blendMode: 'screen',
+        isPersistent: false,
+        loop: false,
+        castTime: Date.now(),
+        durationMs: 2800,
+        soundKey: 'radiant_heal',
+        color: '#4ade80',
+        ownerId: caster.id,
+        casterName: caster.name || 'Stavros'
+      };
+      setEffects(prev => [...prev, bhEffect]);
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('EFFECT_SPAWN', bhEffect);
+      }
+
+      toast.success(`✨ Blessed Healer: ${caster.name} regained +${blessedHealAmount} HP!`, {
+        description: `Cast a Level ${effectiveCastSpellLevel} healing spell on ${targetToken.name} (2 + ${effectiveCastSpellLevel} = +${blessedHealAmount} HP to self).`
+      });
+    }
+
     if (calculatedDeltaHp < 0 && isTargetMonster) {
       if (autoApplyMonsterDamage) {
         toast.success(`${upcastActionLabel} hit ${targetToken.name}!`, {
@@ -4958,6 +5179,51 @@ export default function PlayerView() {
     toast.success(`Accepted ${incomingMutationPrompt.actionName} (${incomingMutationPrompt.deltaHp > 0 ? '+' : ''}${incomingMutationPrompt.deltaHp} HP)`);
     setIncomingMutationPrompt(null);
   }, [incomingMutationPrompt]);
+
+  const handleAdjustHp = useCallback((delta: number) => {
+    if (!delta) return;
+    setHudCharacterData(prev => {
+      if (!prev) return prev;
+      const nextHp = Math.max(0, Math.min(prev.maxHp, prev.currentHp + delta));
+      const charKey = String(prev.ddbCharacterId || prev.id || claimedToken?.id || prev.name);
+      const currentOverride = manualHpOverrideRef.current[charKey];
+      manualHpOverrideRef.current[charKey] = {
+        hp: nextHp,
+        ddbBaselineHp: currentOverride ? currentOverride.ddbBaselineHp : prev.currentHp
+      };
+      if (claimedToken) {
+        handleUpdateToken(claimedToken.id, { hp: nextHp, currentHp: nextHp });
+      }
+      return {
+        ...prev,
+        currentHp: nextHp
+      };
+    });
+  }, [claimedToken, handleUpdateToken]);
+
+  const handleAdjustSpellSlot = useCallback((level: number, delta: number) => {
+    if (!delta) return;
+    setHudCharacterData(prev => {
+      if (!prev?.spellSlots?.[level]) return prev;
+      const cur = prev.spellSlots[level];
+      const nextAvail = Math.max(0, Math.min(cur.total, cur.available + delta));
+      const charKey = String(prev.ddbCharacterId || prev.id || claimedToken?.id || prev.name);
+      manualSpellSlotsRef.current[charKey] = {
+        ...(manualSpellSlotsRef.current[charKey] || {}),
+        [level]: { available: nextAvail, total: cur.total }
+      };
+      return {
+        ...prev,
+        spellSlots: {
+          ...prev.spellSlots,
+          [level]: {
+            ...cur,
+            available: nextAvail
+          }
+        }
+      };
+    });
+  }, [claimedToken]);
 
   const handleDeclineMutation = useCallback(() => {
     if (!incomingMutationPrompt) return;
@@ -7931,6 +8197,8 @@ export default function PlayerView() {
           onRevertWildShape={handleRevertWildShape}
           activeWildShape={activeWildShape}
           collapseRequestTick={hudCollapseTick}
+          onAdjustHp={handleAdjustHp}
+          onAdjustSpellSlot={handleAdjustSpellSlot}
         />
       )}
 
