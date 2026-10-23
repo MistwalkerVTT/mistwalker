@@ -339,8 +339,9 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
             const dy = targetY - startY;
             const distance = Math.max(10, Math.hypot(dx, dy));
             const angleDeg = Math.atan2(dy, dx) * (180 / Math.PI);
-            const beamWidth = distance;
-            const beamHeight = Math.max(gridSize * 0.8, Math.min(gridSize * 2, distance * 0.25));
+            const beamWidth = /_05ft_|_600x400/i.test(effect.videoUrl || '') ? Math.max(gridSize * 1.6, distance) * 3 : /_30ft_|_1600x400/i.test(effect.videoUrl || '') ? Math.max(gridSize * 1.6, distance) * (1600 / 1200) : Math.max(gridSize * 1.6, distance) * 1.25;
+            const beamHeight = /_05ft_|_600x400/i.test(effect.videoUrl || '') ? Math.max(gridSize * 2.8, Math.min(gridSize * 4.8, Math.max(gridSize * 1.6, distance) * 1.15)) : Math.max(gridSize * 2.4, Math.min(gridSize * 4.2, Math.max(gridSize * 1.6, distance) * 0.45));
+            const projAnchorX = /_05ft_|_600x400/i.test(effect.videoUrl || '') ? '33.333%' : /_30ft_|_1600x400/i.test(effect.videoUrl || '') ? '12.5%' : '10%';
 
             return (
               <video
@@ -363,8 +364,8 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                   maxHeight: 'none',
                   minWidth: `${beamWidth}px`,
                   minHeight: `${beamHeight}px`,
-                  transform: `translate(0px, -50%) rotate(${angleDeg}deg) translateZ(0)`,
-                  transformOrigin: '0 50%',
+                  transform: `translate(-${projAnchorX}, -50%) rotate(${angleDeg}deg) translateZ(0)`,
+                  transformOrigin: `${projAnchorX} 50%`,
                   objectFit: 'fill',
                   opacity: effect.opacity ?? 1.0,
                   filter: 'drop-shadow(0 0 12px rgba(255, 255, 255, 0.25))',
@@ -376,8 +377,10 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
 
           // B. Cone Spells (Burning Hands, Cone of Cold)
           if (effect.paradigm === 'cone') {
-            const coneLength = (sizeFt / 5) * gridSize;
-            const coneSpread = coneLength;
+            const isMeleeSwing = Boolean(effect.assetKey?.startsWith('attack_') || effect.assetKey === 'flurry_of_blows' || /Melee|Unarmed_Attacks|Claws/i.test(effect.videoUrl || ''));
+            const coneLength = isMeleeSwing ? Math.max(gridSize * 3.6, (sizeFt / 5) * gridSize) : Math.max(gridSize * 3.2, (sizeFt / 5) * gridSize * 1.35);
+            const coneAnchorX = isMeleeSwing ? '35%' : '15%';
+            const coneSpread = isMeleeSwing ? coneLength * 0.75 : coneLength;
             return (
               <video
                 key={effect.id}
@@ -400,8 +403,8 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                   maxHeight: 'none',
                   minWidth: `${coneLength}px`,
                   minHeight: `${coneSpread}px`,
-                  transform: `translate(0px, -50%) rotate(${effect.rotation || 0}deg) translateZ(0)`,
-                  transformOrigin: '0 50%',
+                  transform: `translate(-${coneAnchorX}, -50%) rotate(${effect.rotation || 0}deg) translateZ(0)`,
+                  transformOrigin: `${coneAnchorX} 50%`,
                   objectFit: 'fill',
                   opacity: effect.opacity ?? 1.0,
                   filter: 'drop-shadow(0 0 12px rgba(255, 255, 255, 0.25))',
@@ -413,8 +416,8 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
 
           // C. Line Spells (Lightning Bolt, Sunbeam)
           if (effect.paradigm === 'line') {
-            const lineLength = (sizeFt / 5) * gridSize;
-            const beamHeight = Math.max(gridSize, lineLength / 10);
+            const lineLength = Math.max(gridSize * 4, (sizeFt / 5) * gridSize);
+            const beamHeight = Math.max(gridSize * 2.2, lineLength * 0.22);
             return (
               <video
                 key={effect.id}
@@ -437,8 +440,8 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                   maxHeight: 'none',
                   minWidth: `${lineLength}px`,
                   minHeight: `${beamHeight}px`,
-                  transform: `translate(0px, -50%) rotate(${effect.rotation || 0}deg) translateZ(0)`,
-                  transformOrigin: '0 50%',
+                  transform: `translate(-10%, -50%) rotate(${effect.rotation || 0}deg) translateZ(0)`,
+                  transformOrigin: '10% 50%',
                   objectFit: 'fill',
                   opacity: effect.opacity ?? 1.0,
                   filter: 'drop-shadow(0 0 12px rgba(255, 255, 255, 0.25))',
@@ -459,7 +462,7 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
             ? (rawSizeFt >= 10
                 ? (attachedTokenRadius + (rawSizeFt / 5) * gridSize) * 2
                 : Math.max(attachedTokenSize * gridSize * 1.5, ((rawSizeFt * 2) / 5) * gridSize))
-            : ((sizeFt * 2) / 5) * gridSize;
+            : Math.max(gridSize * 3.4, ((sizeFt * 2) / 5) * gridSize);
 
           return (
             <video
@@ -755,7 +758,7 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
         })}
 
         {/* 4. Live Animated Targeting Preview (Follows mouse cursor while aiming spells) */}
-        {hasAimPreview && activeEquippedAsset && aimCurrent && (() => {
+        {hasAimPreview && activeEquippedAsset && aimCurrent && (activeEquippedAsset.isPersistent || activeEquippedAsset.paradigm === 'aura') && (() => {
           const previewSize = activeEquippedAsset.defaultSizeFt || 20;
 
           // A. Point / Sphere / Aura preview
@@ -843,6 +846,7 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
             const isCone = activeEquippedAsset.paradigm === 'cone';
             const length = (previewSize / 5) * gridSize;
             const spreadOrHeight = isCone ? length : Math.max(gridSize, length / 10);
+            const projAnchorX = '0px';
 
             return (
               <video
@@ -863,8 +867,10 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                   maxHeight: 'none',
                   minWidth: `${length}px`,
                   minHeight: `${spreadOrHeight}px`,
-                  transform: `translate(0px, -50%) rotate(${angleDeg}deg) translateZ(0)`,
-                  transformOrigin: '0 50%',
+                  transform: `translate(-${projAnchorX}, -50%) rotate(${angleDeg}deg) translateZ(0)`,
+                  transformOrigin: `${projAnchorX} 50%`,
+                  // projectile-origin-anchored
+                  // origin-anchored
                   objectFit: 'fill',
                   opacity: 0.8,
                   filter: 'drop-shadow(0 0 16px rgba(255, 255, 255, 0.4))',
@@ -880,8 +886,9 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
             const dy = aimCurrent.y - aimOrigin.y;
             const distance = Math.max(20, Math.hypot(dx, dy));
             const angleDeg = Math.atan2(dy, dx) * (180 / Math.PI);
-            const beamHeight = Math.max(gridSize * 0.8, Math.min(gridSize * 2, distance * 0.25));
             const videoUrl = activeEquippedAsset.projectileWebm || activeEquippedAsset.webm;
+            const beamHeight = Math.max(gridSize * 0.8, Math.min(gridSize * 2, distance * 0.25));
+            const projAnchorX = '0px';
 
             return (
               <video
@@ -902,8 +909,8 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                   maxHeight: 'none',
                   minWidth: `${distance}px`,
                   minHeight: `${beamHeight}px`,
-                  transform: `translate(0px, -50%) rotate(${angleDeg}deg) translateZ(0)`,
-                  transformOrigin: '0 50%',
+                  transform: `translate(-${projAnchorX}, -50%) rotate(${angleDeg}deg) translateZ(0)`,
+                  transformOrigin: `${projAnchorX} 50%`,
                   objectFit: 'fill',
                   opacity: 0.8,
                   filter: 'drop-shadow(0 0 16px rgba(255, 255, 255, 0.4))',

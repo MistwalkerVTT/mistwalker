@@ -675,6 +675,11 @@ const PlayerToken = React.memo(({
           e.cancelBubble = true;
         }
       }}
+      onMouseUp={(e: any) => {
+        if (!isCondition && e.evt?.button !== 2) {
+          e.cancelBubble = true;
+        }
+      }}
       onTouchStart={(e: any) => {
         if (!isCondition) {
           // If 2 or more touches on screen, do not swallow - let Stage handle multi-touch pinch-to-zoom!
@@ -682,6 +687,11 @@ const PlayerToken = React.memo(({
             if (groupRef.current?.isDragging()) groupRef.current.stopDrag();
             return;
           }
+          e.cancelBubble = true;
+        }
+      }}
+      onTouchEnd={(e: any) => {
+        if (!isCondition) {
           e.cancelBubble = true;
         }
       }}
@@ -3381,12 +3391,14 @@ export default function PlayerView() {
   const lastCastTimeRef = useRef<number>(0);
   const lastTargetTimeRef = useRef<number>(0);
   const hasCastOnMouseDownRef = useRef<boolean>(false);
+  const isStageDragAimingRef = useRef<boolean>(false);
 
   const castSpellAt = useCallback((origin: { x: number; y: number }, target: { x: number; y: number }) => {
     if (!activeEquippedAsset) return;
     const now = Date.now();
-    if (now - lastCastTimeRef.current < 400) return;
+    if (now - lastCastTimeRef.current < 450 || now - lastTargetTimeRef.current < 450) return;
     lastCastTimeRef.current = now;
+    lastTargetTimeRef.current = now;
 
     const dx = target.x - origin.x;
     const dy = target.y - origin.y;
@@ -3612,8 +3624,8 @@ export default function PlayerView() {
         endX: target.x,
         endY: target.y,
         speedPxSec: 1400,
-        burstOnImpact: true,
-        burstVideoUrl: activeEquippedAsset.burstWebm || activeEquippedAsset.webm,
+        burstOnImpact: Boolean(activeEquippedAsset.burstWebm && activeEquippedAsset.burstWebm !== (activeEquippedAsset.projectileWebm || activeEquippedAsset.webm)),
+        burstVideoUrl: (activeEquippedAsset.burstWebm && activeEquippedAsset.burstWebm !== (activeEquippedAsset.projectileWebm || activeEquippedAsset.webm)) ? activeEquippedAsset.burstWebm : undefined,
         burstSoundKey: activeEquippedAsset.soundKey
       } : undefined,
       ownerId: claimedToken?.id || claimedToken?.name || 'player',
@@ -4288,8 +4300,9 @@ export default function PlayerView() {
   const handleTargetToken = useCallback((targetToken: Token) => {
     if (!activeTargetingAction) return;
     const now = Date.now();
-    if (now - lastTargetTimeRef.current < 400) return;
+    if (now - lastTargetTimeRef.current < 450 || now - lastCastTimeRef.current < 450) return;
     lastTargetTimeRef.current = now;
+    lastCastTimeRef.current = now;
     const action = activeTargetingAction;
     const caster = claimedToken;
     if (!caster) {
@@ -4348,7 +4361,9 @@ export default function PlayerView() {
       const auraLockedCenter = isCasterSelfAura ? casterCenter : targetCenter;
       const isAuraSelf = auraLockedToken.id === caster.id;
 
-      const isTrajectory = !isAuraOrBuff && ((asset.paradigm === 'projectile' || asset.paradigm === 'ray') || Boolean(asset.projectileWebm)) && distPx > 25;
+      const isDirectional = !isAuraOrBuff && (asset.paradigm === 'cone' || asset.paradigm === 'line');
+      const isTrajectory = !isAuraOrBuff && !isDirectional && ((asset.paradigm === 'projectile' || asset.paradigm === 'ray') || Boolean(asset.projectileWebm)) && distPx > 15;
+      const aimAngleDeg = Math.atan2(targetCenter.y - casterCenter.y, targetCenter.x - casterCenter.x) * (180 / Math.PI);
       const newEffect: VttEffectInstance = {
         id: `eff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         name: (isAuraOrBuff ? isAuraSelf : isSelfTarget) ? asset.name : `${asset.name} (${auraLockedToken.name})`,
@@ -4358,14 +4373,14 @@ export default function PlayerView() {
         loopVideoUrl: asset.loopWebm,
         thumbUrl: asset.thumb,
         paradigm: isTrajectory ? 'projectile' : (isAuraOrBuff ? 'aura' : asset.paradigm),
-        x: isTrajectory ? casterCenter.x : (isAuraOrBuff ? auraLockedCenter.x : targetCenter.x),
-        y: isTrajectory ? casterCenter.y : (isAuraOrBuff ? auraLockedCenter.y : targetCenter.y),
+        x: (isTrajectory || isDirectional) ? casterCenter.x : (isAuraOrBuff ? auraLockedCenter.x : targetCenter.x),
+        y: (isTrajectory || isDirectional) ? casterCenter.y : (isAuraOrBuff ? auraLockedCenter.y : targetCenter.y),
         originX: casterCenter.x,
         originY: casterCenter.y,
         targetX: isAuraOrBuff ? auraLockedCenter.x : targetCenter.x,
         targetY: isAuraOrBuff ? auraLockedCenter.y : targetCenter.y,
         sizeFt: asset.defaultSizeFt,
-        rotation: isTrajectory ? Math.atan2(targetCenter.y - casterCenter.y, targetCenter.x - casterCenter.x) * (180 / Math.PI) : 0,
+        rotation: (isTrajectory || isDirectional) ? aimAngleDeg : 0,
         opacity: 1.0,
         blendMode: asset.blendMode,
         isPersistent: isAuraOrBuff || Boolean(asset.isPersistent),
@@ -4669,6 +4684,7 @@ export default function PlayerView() {
       }
     }
 
+    isStageDragAimingRef.current = true;
     setAimOrigin(point);
     setAimCurrent(point);
   };
@@ -4683,8 +4699,13 @@ export default function PlayerView() {
   };
 
   const handleStageMouseUp = () => {
+    const wasStageDragAiming = isStageDragAimingRef.current;
+    isStageDragAimingRef.current = false;
     if (hasCastOnMouseDownRef.current) {
       hasCastOnMouseDownRef.current = false;
+      return;
+    }
+    if (!wasStageDragAiming) {
       return;
     }
     if (activeEquippedAsset && aimOrigin && aimCurrent) {

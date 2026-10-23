@@ -222,7 +222,7 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onSelectDm, onSelectPl
         @keyframes mw-slowzoom { from { transform: scale(1.06); } to { transform: scale(1.22); } }
         @keyframes mw-rune-spin { to { transform: rotate(360deg); } }
         @keyframes mw-rune-spin-rev { to { transform: rotate(-360deg); } }
-        @keyframes mw-letter { 0% { opacity: 0; transform: translateY(24px) scale(1.25); filter: blur(14px); letter-spacing: 0.6em; } 100% { opacity: 1; transform: none; filter: blur(0); } }
+        @keyframes mw-letter { 0% { opacity: 0; transform: translate3d(0, 28px, 0) scale(1.15); filter: blur(12px); } 60% { opacity: 1; } 100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); filter: blur(0); } }
         @keyframes mw-fade-up { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
         @keyframes mw-sweep { 0% { transform: translateX(-120%) skewX(-20deg); } 100% { transform: translateX(260%) skewX(-20deg); } }
         @keyframes mw-glow { 0%,100% { filter: drop-shadow(0 0 18px rgba(245,158,11,0.55)); } 50% { filter: drop-shadow(0 0 46px rgba(251,191,36,0.95)); } }
@@ -318,16 +318,13 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onSelectDm, onSelectPl
         />
 
         <h1
-          className="mt-5 flex font-black tracking-[0.18em] text-center"
+          className="mt-5 flex font-black text-center"
           style={{
             fontSize: 'clamp(2.4rem, 9vw, 7.5rem)',
             lineHeight: 1,
-            background: 'linear-gradient(180deg, #fff7d6 0%, #fbbf24 45%, #b45309 100%)',
-            WebkitBackgroundClip: 'text',
-            backgroundClip: 'text',
-            color: 'transparent',
-            textShadow: '0 0 60px rgba(245,158,11,0.35)',
-            filter: 'drop-shadow(0 4px 24px rgba(0,0,0,0.9))'
+            letterSpacing: '0.18em',
+            // Compensate trailing letter-spacing so the word stays optically centered
+            paddingLeft: '0.18em'
           }}
         >
           {title.split('').map((ch, i) => (
@@ -336,7 +333,13 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onSelectDm, onSelectPl
               style={{
                 display: 'inline-block',
                 opacity: 0,
-                animation: stage >= 2 ? `mw-letter 1.1s ${i * 0.09}s cubic-bezier(.2,.8,.2,1) forwards` : undefined
+                willChange: 'transform, opacity, filter',
+                backfaceVisibility: 'hidden',
+                background: 'linear-gradient(180deg, #fff7d6 0%, #fbbf24 45%, #b45309 100%)',
+                WebkitBackgroundClip: 'text',
+                backgroundClip: 'text',
+                color: 'transparent',
+                animation: stage >= 2 ? `mw-letter 1.2s ${i * 0.1}s cubic-bezier(.22,.8,.24,1) both` : undefined
               }}
             >
               {ch}

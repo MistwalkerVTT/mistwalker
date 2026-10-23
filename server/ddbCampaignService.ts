@@ -624,7 +624,7 @@ export function matchJb2aAssetId(name: string): string | undefined {
   if (n.includes('magic circle')) return 'magic_circle';
   if (n.includes('counterspell') || n.includes('dispel magic')) return 'counterspell';
 
-  if (n.includes('fireball')) return 'fireball';
+  if (n.includes('fireball') || n.includes('fire storm')) return 'fireball';
   if (n.includes('fire bolt') || n.includes('firebolt')) return 'fire_bolt';
   if (n.includes('burning hands')) return 'burning_hands';
   if (n.includes('cone of cold')) return 'cone_of_cold';
@@ -632,16 +632,16 @@ export function matchJb2aAssetId(name: string): string | undefined {
   if (n.includes('eldritch blast')) return 'eldritch_blast';
   if (n.includes('magic missile')) return 'magic_missile';
   if (n.includes('healing word') || n.includes('mass healing word')) return 'healing_word';
-  if (n.includes('cure wounds') || n.includes('mass cure wounds') || n.includes('preserve life') || n.includes('wholeness of body') || n.includes('quickened healing') || n.includes('second wind') || n === 'heal') return 'cure_wounds';
-  if (n.includes('aid')) return 'aid';
+  if (n.includes('cure wounds') || n.includes('mass cure wounds') || n.includes('preserve life') || n.includes('wholeness of body') || n.includes('quickened healing') || n.includes('second wind') || n.includes('restoration') || n.includes('revivify') || n.includes('resurrection') || n.includes('drunkard') || n === 'heal') return 'cure_wounds';
+  if (n.includes('aid') || n.includes("heroes' feast") || n.includes('heroes feast') || n.includes('power word fortify')) return 'aid';
   if (n.includes('sanctuary')) return 'sanctuary';
   if (n.includes('shield')) return 'shield';
-  if (n.includes('sacred flame')) return 'sacred_flame';
+  if (n.includes('sacred flame') || n.includes('word of radiance') || n.includes('flame strike')) return 'sacred_flame';
   if (n.includes('guiding bolt')) return 'guiding_bolt';
   if (n.includes('chromatic orb')) return 'chromatic_orb';
   if (n.includes('scorching ray')) return 'scorching_ray';
   if (n.includes('hellish rebuke')) return 'hellish_rebuke';
-  if (n.includes('spiritual weapon')) return 'spiritual_weapon';
+  if (n.includes('spiritual weapon') || n.includes('holy weapon')) return 'spiritual_weapon';
   if (n.includes('spirit guardians')) return 'spirit_guardians';
   if (n.includes('misty step') || n.includes("cloud's jaunt") || n.includes('clouds jaunt')) return 'misty_step';
   if (n.includes('thunderwave') || n.includes('thunderclap')) return 'thunderwave';
@@ -649,13 +649,13 @@ export function matchJb2aAssetId(name: string): string | undefined {
   if (n.includes('call lightning')) return 'call_lightning';
   if (n.includes('chain lightning')) return 'chain_lightning';
   if (n.includes('witch bolt') || n.includes('shocking grasp') || n.includes('lightning launcher')) return 'witch_bolt';
-  if (n.includes('bless')) return 'bless';
-  if (n.includes('bardic inspiration') || n.includes('mantle of inspiration')) return 'bardic_inspiration';
-  if (n.includes('cutting words') || n.includes('vicious mockery') || n.includes('dissonant whispers')) return 'cutting_words';
+  if (n.includes('bless') || n.includes('divine word')) return 'bless';
+  if (n.includes('bardic inspiration') || n.includes('mantle of inspiration') || n.includes('silvery barbs')) return 'bardic_inspiration';
+  if (n.includes('cutting words') || n.includes('vicious mockery') || n.includes('dissonant whispers') || n.includes('command')) return 'cutting_words';
   if (n.includes("hunter's mark") || n.includes('hunters mark') || n.includes('hex')) return 'hunters_mark';
   if (n.includes('toll the dead')) return 'toll_the_dead';
   if (n.includes('arms of hadar') || n.includes('hunger of hadar')) return 'arms_of_hadar';
-  if (n.includes('shatter')) return 'shatter';
+  if (n.includes('shatter') || n.includes('silence')) return 'shatter';
   if (n.includes('moonbeam')) return 'moonbeam';
   if (n.includes('disintegrate')) return 'disintegrate';
   if (n.includes('cloud of daggers')) return 'cloud_of_daggers';
@@ -669,7 +669,7 @@ export function matchJb2aAssetId(name: string): string | undefined {
   if (n.includes('black tentacles')) return 'black_tentacles';
   if (n.includes('gust of wind') || n.includes('zephyr strike')) return 'gust_of_wind';
   if (n.includes('caustic brew') || n.includes('acid stream')) return 'caustic_brew';
-  if (n.includes('dimension door') || n.includes('vortex warp')) return 'dimension_door';
+  if (n.includes('dimension door') || n.includes('vortex warp') || n.includes('banishment')) return 'dimension_door';
   if (n.includes('flaming sphere')) return 'flaming_sphere';
   if (n.includes('mage hand') || n.includes('arcane hand')) return 'mage_hand';
   if (n.includes('wall of force') || n.includes('forcecage')) return 'wall_of_force';
@@ -681,17 +681,11 @@ export function matchJb2aAssetId(name: string): string | undefined {
   if (
     n.includes('blade ward') ||
     n.includes('false life') ||
-    n.includes('restoration') ||
-    n.includes('holy weapon') ||
-    n.includes('divine word') ||
-    n.includes('fire storm') ||
-    n.includes('flame strike') ||
     n.includes('power word') ||
     n.includes('wall of thorns') ||
     n.includes('true strike') ||
     n.includes('phantasmal') ||
-    n.includes('protection from') ||
-    n.includes('banishment')
+    n.includes('protection from')
   ) {
     return undefined;
   }
