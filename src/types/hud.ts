@@ -120,7 +120,9 @@ export function computeUpcastFormula(
       addSides = 6;
     } else if (lower.includes('false life') || lower.includes('armor of agathys') || lower.includes('aid')) {
       addFixed = 5;
-    } else if (lower.includes('cure wounds') || lower.includes('inflict wounds') || lower.includes('chromatic orb') || lower.includes('guiding bolt') || lower.includes('shatter') || lower.includes('thunderwave') || lower.includes('blight') || lower.includes('cone of cold') || lower.includes('spirit guardians') || lower.includes('moonbeam') || lower.includes('witch bolt')) {
+    } else if (lower === 'heal' || lower.startsWith('heal (')) {
+      addFixed = 10;
+    } else if (lower.includes('cure wounds') || lower.includes('prayer of healing') || lower.includes('inflict wounds') || lower.includes('chromatic orb') || lower.includes('guiding bolt') || lower.includes('shatter') || lower.includes('thunderwave') || lower.includes('blight') || lower.includes('cone of cold') || lower.includes('spirit guardians') || lower.includes('moonbeam') || lower.includes('witch bolt')) {
       addCount = 1;
       addSides = 8;
     } else if (lower.includes('spiritual weapon')) {
@@ -168,7 +170,19 @@ export function computeUpcastFormula(
   }
 
   if (baseFormula) {
-    const match = baseFormula.match(/^(\d+)d(\d+)(\s*[+-]\s*\d+)?(.*)$/i);
+    // Pure flat numeric formula (e.g. "70" for Heal, "5" for Aid)
+    if (/^\d+$/.test(baseFormula.trim()) && addFixed > 0) {
+      const baseVal = parseInt(baseFormula.trim(), 10) || 0;
+      const totalAddedFixed = addFixed * levelsAbove;
+      const scaled = `${baseVal + totalAddedFixed}`;
+      return {
+        damageFormula: scaled,
+        summaryLabel: `${scaled} (+${totalAddedFixed})`
+      };
+    }
+
+    // Match primary dice group, optional flat modifier (NOT followed by 'd' so "+ 4d6" stays in suffix), and remaining suffix
+    const match = baseFormula.match(/^(\d+)d(\d+)(\s*[+-]\s*\d+(?!\s*d))?(.*)$/i);
     if (match) {
       const baseDiceCount = parseInt(match[1], 10) || 1;
       const baseDiceSides = parseInt(match[2], 10) || 6;
@@ -202,6 +216,113 @@ export function computeUpcastFormula(
     damageFormula: baseFormula,
     bonusEffect: `Slot Level ${slotLevel}`,
     summaryLabel: baseFormula ? `${baseFormula} (L${slotLevel})` : `Slot Level ${slotLevel}`
+  };
+}
+
+export interface EvaluatedDiceRoll {
+  total: number;
+  dice: Array<{ sides: number; result: number; type: string }>;
+  rolls: number[];
+  sides: number;
+  bonus: number;
+  diceSum: number;
+  breakdown: string;
+}
+
+/**
+ * Evaluates any D&D 5e dice formula (e.g. "8d6", "9d8", "3d4 + 3", "2d8 + 4d6", "1d8 + 5", "70")
+ * by rolling every individual die, summing all dice + flat modifiers, and returning the full
+ * array of 3D physics dice results so the exact number of dice tumble and add up accurately.
+ */
+export function evaluateDiceFormula(
+  formula: string | undefined,
+  isCrit = false
+): EvaluatedDiceRoll {
+  if (!formula || !String(formula).trim()) {
+    const r = Math.floor(Math.random() * 8) + 1;
+    return {
+      total: r,
+      dice: [{ sides: 8, result: r, type: 'd8' }],
+      rolls: [r],
+      sides: 8,
+      bonus: 0,
+      diceSum: r,
+      breakdown: `[${r}] = ${r}`
+    };
+  }
+
+  const raw = String(formula).trim();
+
+  // Check if formula is a pure flat integer (e.g. "70" for Heal, "75" for Preserve Life, "5" for Aid)
+  const flatOnlyMatch = raw.match(/^\+?(\d+)(?:\s+[a-zA-Z\s]+)?$/);
+  if (flatOnlyMatch && !/\d+d\d+/i.test(raw)) {
+    const val = parseInt(flatOnlyMatch[1], 10) || 1;
+    return {
+      total: val,
+      dice: [],
+      rolls: [val],
+      sides: 8,
+      bonus: val,
+      diceSum: 0,
+      breakdown: `${val} (Flat)`
+    };
+  }
+
+  // Extract all (\d+)d(\d+) dice groups (supports multi-dice formulas like "2d8 + 4d6" or "4d6 + 4d6")
+  const diceRegex = /(\d+)d(\d+)/gi;
+  let match: RegExpExecArray | null;
+  const dice: Array<{ sides: number; result: number; type: string }> = [];
+  const rolls: number[] = [];
+  let primarySides = 6;
+  let diceSum = 0;
+
+  while ((match = diceRegex.exec(raw)) !== null) {
+    const rawCount = Math.max(1, parseInt(match[1], 10) || 1);
+    const count = isCrit ? rawCount * 2 : rawCount;
+    const sides = Math.max(2, parseInt(match[2], 10) || 6);
+    primarySides = sides;
+    for (let i = 0; i < count; i++) {
+      const r = Math.floor(Math.random() * sides) + 1;
+      dice.push({ sides, result: r, type: `d${sides}` });
+      rolls.push(r);
+      diceSum += r;
+    }
+  }
+
+  // Remove all NdM dice terms, then sum any remaining flat modifiers (e.g. "+ 5", "- 1")
+  const withoutDice = raw.replace(/\d+d\d+/gi, ' ');
+  const modRegex = /([+-]\s*\d+)/g;
+  let modMatch: RegExpExecArray | null;
+  let bonus = 0;
+  while ((modMatch = modRegex.exec(withoutDice)) !== null) {
+    bonus += parseInt(modMatch[1].replace(/\s+/g, ''), 10) || 0;
+  }
+
+  if (dice.length === 0) {
+    const fallbackVal = parseInt(raw.replace(/[^\d-]/g, ''), 10) || 1;
+    return {
+      total: Math.max(1, fallbackVal),
+      dice: [],
+      rolls: [Math.max(1, fallbackVal)],
+      sides: 8,
+      bonus: Math.max(1, fallbackVal),
+      diceSum: 0,
+      breakdown: `${Math.max(1, fallbackVal)}`
+    };
+  }
+
+  const total = Math.max(1, diceSum + bonus);
+  const signStr = bonus > 0 ? ` + ${bonus}` : bonus < 0 ? ` - ${Math.abs(bonus)}` : '';
+  const breakdown = `[${rolls.join(' + ')}]${signStr} = ${total}${isCrit ? ' (CRIT 2x DICE!)' : ''}`;
+
+  return {
+    total,
+    dice,
+    rolls,
+    sides: primarySides,
+    bonus,
+    diceSum,
+    breakdown
   };
 }
 

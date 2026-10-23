@@ -135,7 +135,7 @@ export const DEFAULT_ALLIES: Ally[] = [
     languages: '—',
     challenge: '1 (200 XP)',
     proficiencyBonus: 2,
-    avatarUrl: 'https://www.dndbeyond.com/avatars/30849/299/638064499038216933.png',
+    avatarUrl: '/tokens/wildshape/giant_spider.jpg',
     traits: [
       {
         name: 'Spider Climb',

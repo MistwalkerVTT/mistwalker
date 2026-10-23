@@ -113,7 +113,7 @@ import { WildShapeBeastForm, ActiveWildShapeState, GAIAH_WILD_SHAPE_FORMS } from
 import { DndRuleInspectionModal } from './DndRuleInspectionModal';
 import { canTokenHaveHalo } from '../effects/db/tokenFxMap';
 import { DndRuleEntry, lookupDndRuleDetails } from '../data/dndRulesCompendium';
-import { HudCharacterData, HudActionItem, computeUpcastFormula } from '../types/hud';
+import { HudCharacterData, HudActionItem, computeUpcastFormula, evaluateDiceFormula } from '../types/hud';
 import { TokenDragRuler, TokenDragState, parseSpeedFt } from './TokenDragRuler';
 import { RoomHotspotLayer } from './RoomHotspotLayer';
 import {
@@ -1241,7 +1241,13 @@ const buildFallbackHudData = (token: Token, stats: any, customChars?: Character[
       if (baseFormula && baseLvl === 0) {
         const cantripMult = totalLevel >= 17 ? 4 : totalLevel >= 11 ? 3 : totalLevel >= 5 ? 2 : 1;
         baseFormula = baseFormula.replace(/^1(d\d+)/i, `${cantripMult}$1`);
-      } else if (baseFormula && isHeal && (lower.includes('cure wounds') || lower.includes('healing word'))) {
+      } else if (
+        baseFormula &&
+        isHeal &&
+        (lower.includes('cure wounds') || lower.includes('healing word') || lower.includes('prayer of healing'))
+      ) {
+        baseFormula = `${baseFormula} + ${Math.max(1, spellMod)}`;
+      } else if (baseFormula && lower.includes('spiritual weapon')) {
         baseFormula = `${baseFormula} + ${Math.max(1, spellMod)}`;
       }
       const castingTime = rule?.castingTime || (lower.includes('healing word') || lower.includes('mark') || lower.includes('hex') || lower.includes('misty step') || lower.includes('shield of faith') || lower.includes('sanctuary') || lower.includes('spiritual weapon') || lower.includes('holy weapon') || lower.includes('divine word') || lower.includes('smite') ? '1 Bonus Action' : lower.includes('counterspell') || lower === 'shield' || lower.includes('absorb elements') || lower.includes('hellish rebuke') || lower.includes('silvery barbs') ? '1 Reaction' : '1 Action');
@@ -3805,25 +3811,9 @@ export default function PlayerView() {
         : '';
 
     if (rawFormula) {
-      const cleanFormula = rawFormula.replace(/[a-zA-Z]+/g, '').trim();
-      const rollParts = (cleanFormula || rawFormula).match(/(\d+)d(\d+)(?:\s*([+-])\s*(\d+))?/i);
-      let rolledTotal = 0;
-      const diceResults: Array<{ sides: number; result: number; type: string }> = [];
-      if (rollParts) {
-        const numDice = parseInt(rollParts[1], 10) || 1;
-        const sides = parseInt(rollParts[2], 10) || 6;
-        const sign = rollParts[3] === '-' ? -1 : 1;
-        const mod = parseInt(rollParts[4], 10) || 0;
-        let diceSum = 0;
-        for (let i = 0; i < numDice; i++) {
-          const r = Math.floor(Math.random() * sides) + 1;
-          diceSum += r;
-          diceResults.push({ sides, result: r, type: `d${sides}` });
-        }
-        rolledTotal = Math.max(1, diceSum + sign * mod);
-      } else {
-        rolledTotal = parseInt(cleanFormula, 10) || 0;
-      }
+      const evaluated = evaluateDiceFormula(rawFormula, false);
+      const rolledTotal = evaluated.total;
+      const diceResults = evaluated.dice;
 
       if (rolledTotal > 0) {
         const diceEvent: DdbDiceRollEvent = {
@@ -3833,9 +3823,10 @@ export default function PlayerView() {
           avatarUrl: hudCharacterData?.avatarUrl || claimedToken?.avatarUrl || claimedToken?.url,
           action: `${aimedAction?.name || activeEquippedAsset.name}${upcastLabel} (${aimedAction?.isHeal ? 'Healing' : 'Damage'})`,
           rollType: aimedAction?.isHeal ? 'heal' : 'damage',
-          formula: rawFormula,
+          formula: `${rawFormula} → ${evaluated.breakdown}`,
           diceNotation: rawFormula,
           dice: diceResults.length > 0 ? diceResults : [{ sides: 6, result: rolledTotal, type: 'd6' }],
+          modifier: evaluated.bonus,
           total: rolledTotal,
           isCritical: false,
           isFumble: false,
@@ -3853,7 +3844,7 @@ export default function PlayerView() {
         }
 
         toast.success(`Cast ${aimedAction?.name || activeEquippedAsset.name}${upcastLabel}!`, {
-          description: `Rolled ${rolledTotal} ${aimedAction?.damageType || (aimedAction?.isHeal ? 'HP' : 'damage')} (${rawFormula})`
+          description: `Rolled ${rolledTotal} ${aimedAction?.damageType || (aimedAction?.isHeal ? 'HP' : 'damage')} (${evaluated.breakdown})`
         });
       } else {
         toast.success(`Cast ${aimedAction?.name || activeEquippedAsset.name}${upcastLabel}!`);
@@ -4184,24 +4175,9 @@ export default function PlayerView() {
       }
 
       if (action.damageFormula) {
-        const rollParts = action.damageFormula.match(/(\d+)d(\d+)(?:\s*([+-])\s*(\d+))?/i);
-        let rolledTotal = 0;
-        const diceResults: Array<{ sides: number; result: number; type: string }> = [];
-        if (rollParts) {
-          const numDice = parseInt(rollParts[1], 10) || 1;
-          const sides = parseInt(rollParts[2], 10) || 6;
-          const sign = rollParts[3] === '-' ? -1 : 1;
-          const mod = parseInt(rollParts[4], 10) || 0;
-          let diceSum = 0;
-          for (let i = 0; i < numDice; i++) {
-            const r = Math.floor(Math.random() * sides) + 1;
-            diceSum += r;
-            diceResults.push({ sides, result: r, type: `d${sides}` });
-          }
-          rolledTotal = Math.max(1, diceSum + sign * mod);
-        } else {
-          rolledTotal = parseInt(action.damageFormula, 10) || 0;
-        }
+        const evaluated = evaluateDiceFormula(action.damageFormula, false);
+        const rolledTotal = evaluated.total;
+        const diceResults = evaluated.dice;
 
         if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d && diceResults.length > 0) {
           (window as any).__mistwalkerRoll3d({
@@ -4209,9 +4185,10 @@ export default function PlayerView() {
             characterName: claimedToken.name || 'Hero',
             action: `${action.name}${action.isHeal ? ' (Self Heal)' : ''}`,
             rollType: action.isHeal ? 'heal' : 'roll',
-            formula: action.damageFormula,
+            formula: `${action.damageFormula} → ${evaluated.breakdown}`,
             diceNotation: action.damageFormula,
             dice: diceResults,
+            modifier: evaluated.bonus,
             total: rolledTotal,
             isCritical: false,
             isFumble: false,
@@ -4360,25 +4337,9 @@ export default function PlayerView() {
     const rawFormula = action.damageFormula;
     if (!rawFormula) return;
 
-    const cleanFormula = rawFormula.replace(/[a-zA-Z]+/g, '').trim();
-    const rollParts = (cleanFormula || rawFormula).match(/(\d+)d(\d+)(?:\s*([+-])\s*(\d+))?/i);
-    let rolledTotal = 0;
-    const diceResults: Array<{ sides: number; result: number; type: string }> = [];
-    if (rollParts) {
-      const numDice = parseInt(rollParts[1], 10) || 1;
-      const sides = parseInt(rollParts[2], 10) || 6;
-      const sign = rollParts[3] === '-' ? -1 : 1;
-      const mod = parseInt(rollParts[4], 10) || 0;
-      let diceSum = 0;
-      for (let i = 0; i < numDice; i++) {
-        const r = Math.floor(Math.random() * sides) + 1;
-        diceSum += r;
-        diceResults.push({ sides, result: r, type: `d${sides}` });
-      }
-      rolledTotal = Math.max(1, diceSum + sign * mod);
-    } else {
-      rolledTotal = parseInt(cleanFormula, 10) || 1;
-    }
+    const evaluated = evaluateDiceFormula(rawFormula, false);
+    const rolledTotal = evaluated.total;
+    const diceResults = evaluated.dice;
 
     const charName = hudCharacterData?.name || claimedToken?.name || 'Hero';
     const upcastSuffix =
@@ -4393,9 +4354,10 @@ export default function PlayerView() {
       avatarUrl: hudCharacterData?.avatarUrl || claimedToken?.avatarUrl || claimedToken?.url,
       action: `${action.name}${upcastSuffix} (${action.isHeal ? 'Healing' : 'Damage'})`,
       rollType: action.isHeal ? 'heal' : 'damage',
-      formula: rawFormula,
+      formula: `${rawFormula} → ${evaluated.breakdown}`,
       diceNotation: rawFormula,
       dice: diceResults.length > 0 ? diceResults : [{ sides: 8, result: rolledTotal, type: 'd8' }],
+      modifier: evaluated.bonus,
       total: rolledTotal,
       isCritical: false,
       isFumble: false,
@@ -4413,7 +4375,7 @@ export default function PlayerView() {
     }
 
     toast.success(`${charName}: ${action.name}${upcastSuffix}!`, {
-      description: `Rolled ${rolledTotal} ${action.damageType || (action.isHeal ? 'HP' : 'damage')} (${rawFormula})`
+      description: `Rolled ${rolledTotal} ${action.damageType || (action.isHeal ? 'HP' : 'damage')} (${evaluated.breakdown})`
     });
   }, [hudCharacterData, claimedToken, selectedDicePreset]);
 
@@ -4835,29 +4797,11 @@ export default function PlayerView() {
       else formula = '1d8 + 2';
     }
 
-    // Sanitize formula to pure dice math (strip words like "piercing", "slashing", etc.)
-    const cleanFormula = formula ? formula.replace(/[a-zA-Z]+/g, '').trim() : '';
-
     let calculatedDeltaHp = 0;
     if (formula) {
-      const rollParts = (cleanFormula || formula).match(/(\d+)d(\d+)(?:\s*([+-])\s*(\d+))?/i);
-      let rolledTotal = 0;
-      const diceResults: Array<{ sides: number; result: number; type: string }> = [];
-      if (rollParts) {
-        const numDice = parseInt(rollParts[1], 10) || 1;
-        const sides = parseInt(rollParts[2], 10) || 6;
-        const sign = rollParts[3] === '-' ? -1 : 1;
-        const mod = parseInt(rollParts[4], 10) || 0;
-        let diceSum = 0;
-        for (let i = 0; i < numDice; i++) {
-          const r = Math.floor(Math.random() * sides) + 1;
-          diceSum += r;
-          diceResults.push({ sides, result: r, type: `d${sides}` });
-        }
-        rolledTotal = Math.max(1, diceSum + (sign * mod));
-      } else {
-        rolledTotal = Math.floor(Math.random() * 8) + 3;
-      }
+      const evaluated = evaluateDiceFormula(formula, false);
+      const rolledTotal = evaluated.total;
+      const diceResults = evaluated.dice;
 
       calculatedDeltaHp = action.isHeal ? rolledTotal : -rolledTotal;
 
@@ -4875,9 +4819,10 @@ export default function PlayerView() {
         avatarUrl: hudCharacterData?.avatarUrl || caster.avatarUrl || caster.url,
         action: `${action.name}${upcastSuffix} (${action.isHeal ? 'Healing' : 'Damage'})`,
         rollType: action.isHeal ? 'heal' : 'damage',
-        formula,
+        formula: `${formula} → ${evaluated.breakdown}`,
         diceNotation: formula,
         dice: diceResults.length > 0 ? diceResults : [{ sides: action.isHeal ? 8 : 20, result: Math.abs(calculatedDeltaHp), type: action.isHeal ? 'd8' : 'd20' }],
+        modifier: evaluated.bonus,
         total: Math.abs(calculatedDeltaHp),
         isCritical: false,
         isFumble: false,

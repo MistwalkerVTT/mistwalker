@@ -25,7 +25,7 @@ import {
   GripHorizontal,
   PawPrint
 } from 'lucide-react';
-import { HudCharacterData, HudActionItem, HudActionCategory, computeUpcastFormula } from '../types/hud';
+import { HudCharacterData, HudActionItem, HudActionCategory, computeUpcastFormula, evaluateDiceFormula } from '../types/hud';
 import { findJb2aAsset } from '../effects/db/jb2aRegistry';
 import { toast } from 'sonner';
 
@@ -219,25 +219,9 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
     const rawFormula = action.damageFormula;
     if (!rawFormula) return;
 
-    const cleanFormula = rawFormula.replace(/[a-zA-Z]+/g, '').trim();
-    const rollParts = (cleanFormula || rawFormula).match(/(\d+)d(\d+)(?:\s*([+-])\s*(\d+))?/i);
-    let rolledTotal = 0;
-    const diceResults: Array<{ sides: number; result: number; type: string }> = [];
-    if (rollParts) {
-      const numDice = parseInt(rollParts[1], 10) || 1;
-      const sides = parseInt(rollParts[2], 10) || 6;
-      const sign = rollParts[3] === '-' ? -1 : 1;
-      const mod = parseInt(rollParts[4], 10) || 0;
-      let diceSum = 0;
-      for (let i = 0; i < numDice; i++) {
-        const r = Math.floor(Math.random() * sides) + 1;
-        diceSum += r;
-        diceResults.push({ sides, result: r, type: `d${sides}` });
-      }
-      rolledTotal = Math.max(1, diceSum + sign * mod);
-    } else {
-      rolledTotal = parseInt(cleanFormula, 10) || 1;
-    }
+    const evaluated = evaluateDiceFormula(rawFormula, false);
+    const rolledTotal = evaluated.total;
+    const diceResults = evaluated.dice;
 
     const charName = characterData?.name || claimedToken?.name || 'Hero';
     const upcastSuffix =
@@ -252,9 +236,10 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
       avatarUrl: characterData?.avatarUrl || claimedToken?.avatarUrl || claimedToken?.url,
       action: `${action.name}${upcastSuffix} (${action.isHeal ? 'Healing' : 'Damage'})`,
       rollType: action.isHeal ? 'heal' : 'damage',
-      formula: rawFormula,
+      formula: `${rawFormula} → ${evaluated.breakdown}`,
       diceNotation: rawFormula,
       dice: diceResults.length > 0 ? diceResults : [{ sides: 8, result: rolledTotal, type: 'd8' }],
+      modifier: evaluated.bonus,
       total: rolledTotal,
       isCritical: false,
       isFumble: false,
@@ -272,7 +257,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
     }
 
     toast.success(`${charName}: ${action.name}${upcastSuffix}!`, {
-      description: `Rolled ${rolledTotal} ${action.damageType || (action.isHeal ? 'HP' : 'damage')} (${rawFormula})`
+      description: `Rolled ${rolledTotal} ${action.damageType || (action.isHeal ? 'HP' : 'damage')} (${evaluated.breakdown})`
     });
   };
 
@@ -496,13 +481,19 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
   const getEffectiveAction = (action: HudActionItem): HudActionItem => {
     const baseLevel = action.level ?? 0;
     if (baseLevel < 1) return action;
+    const normName = action.name.trim().toLowerCase();
     const filterSlot =
       typeof selectedSpellLevel === 'number' &&
       selectedSpellLevel > baseLevel &&
       includeUpcastInFilter
         ? selectedSpellLevel
         : undefined;
-    const chosenSlot = upcastLevels[action.id] ?? filterSlot ?? action.spellSlotRequired ?? baseLevel;
+    const chosenSlot =
+      upcastLevels[action.id] ??
+      upcastLevels[`name:${normName}`] ??
+      filterSlot ??
+      action.spellSlotRequired ??
+      baseLevel;
     return buildActionAtSlotLevel(action, chosenSlot);
   };
 
@@ -510,22 +501,24 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
     const baseLevel = action.level ?? 0;
     if (baseLevel < 1) return;
     const clamped = Math.max(baseLevel, Math.min(9, nextSlotLevel));
+    const normName = action.name.trim().toLowerCase();
     setUpcastLevels(prev => ({
       ...prev,
-      [action.id]: clamped
+      [action.id]: clamped,
+      [`name:${normName}`]: clamped
     }));
     const updated = buildActionAtSlotLevel(action, clamped);
-    if (inspectedAction?.id === action.id) {
-      setInspectedAction(updated);
+    if (inspectedAction && (inspectedAction.id === action.id || inspectedAction.name.trim().toLowerCase() === normName)) {
+      setInspectedAction(buildActionAtSlotLevel(inspectedAction, clamped));
     }
-    if (hoveredAction?.id === action.id) {
-      setHoveredAction(updated);
+    if (hoveredAction && (hoveredAction.id === action.id || hoveredAction.name.trim().toLowerCase() === normName)) {
+      setHoveredAction(buildActionAtSlotLevel(hoveredAction, clamped));
     }
-    if (pinnedAction?.id === action.id) {
-      setPinnedAction(updated);
+    if (pinnedAction && (pinnedAction.id === action.id || pinnedAction.name.trim().toLowerCase() === normName)) {
+      setPinnedAction(buildActionAtSlotLevel(pinnedAction, clamped));
     }
-    if (currentTargetingAction?.id === action.id) {
-      onSelectAction(updated);
+    if (currentTargetingAction && (currentTargetingAction.id === action.id || currentTargetingAction.name.trim().toLowerCase() === normName)) {
+      onSelectAction(buildActionAtSlotLevel(currentTargetingAction, clamped));
     }
   };
 
@@ -884,7 +877,10 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                 { length: 9 - (currentTargetingAction.level ?? 1) + 1 },
                 (_, i) => (currentTargetingAction.level ?? 1) + i
               ).map(slotLvl => {
-                const baseSpell = spellsList.find(s => s.id === currentTargetingAction.id) || currentTargetingAction;
+                const baseSpell =
+                  spellsList.find(
+                    s => s.id === currentTargetingAction.id || s.name.trim().toLowerCase() === currentTargetingAction.name.trim().toLowerCase()
+                  ) || currentTargetingAction;
                 const activeSlot = currentTargetingAction.spellSlotRequired ?? currentTargetingAction.castAtLevel ?? currentTargetingAction.level ?? 1;
                 const isSelected = activeSlot === slotLvl;
                 const slotInfo = characterData?.spellSlots?.[slotLvl];
@@ -930,7 +926,10 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
       {(() => {
         const detailAction = hoveredAction || pinnedAction;
         if (!detailAction || currentTargetingAction) return null;
-        const baseSpell = spellsList.find(s => s.id === detailAction.id) || detailAction;
+        const baseSpell =
+          spellsList.find(
+            s => s.id === detailAction.id || s.name.trim().toLowerCase() === detailAction.name.trim().toLowerCase()
+          ) || detailAction;
         const baseLvl = baseSpell.level ?? detailAction.level ?? 0;
         const expendedSlot = detailAction.spellSlotRequired ?? baseLvl;
         const currentSlot = detailAction.castAtLevel ?? baseLvl;
@@ -2311,7 +2310,10 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                 </div>
                 <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
                   {Array.from({ length: 9 - (inspectedAction.level ?? 1) + 1 }, (_, i) => (inspectedAction.level ?? 1) + i).map(slotLvl => {
-                    const baseSpell = spellsList.find(s => s.id === inspectedAction.id) || inspectedAction;
+                    const baseSpell =
+                      spellsList.find(
+                        s => s.id === inspectedAction.id || s.name.trim().toLowerCase() === inspectedAction.name.trim().toLowerCase()
+                      ) || inspectedAction;
                     const activeSlot = inspectedAction.spellSlotRequired ?? inspectedAction.castAtLevel ?? inspectedAction.level ?? 1;
                     const isSelected = activeSlot === slotLvl;
                     const preview = buildActionAtSlotLevel(baseSpell, slotLvl);

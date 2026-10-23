@@ -259,6 +259,63 @@ export const GAIAH_WILD_SHAPE_FORMS: WildShapeBeastForm[] = [
     description: 'A colossal 3x3 battlefield controller that automatically binds, crushes, and restrains enemy targets.'
   },
   {
+    id: 'form_giant_spider',
+    name: 'Giant Spider',
+    cr: '1',
+    crNum: 1,
+    size: 'Large',
+    sizeMultiplier: 2,
+    avatarUrl: '/tokens/wildshape/giant_spider.jpg',
+    speed: '30 ft., climb 30 ft.',
+    walkSpeedFt: 30,
+    climbSpeedFt: 30,
+    baseAc: 14,
+    nativeHp: 26,
+    stats: { str: 14, dex: 16, con: 12, int: 13, wis: 18, cha: 10 },
+    traits: [
+      {
+        name: 'Spider Climb',
+        description: 'You can climb difficult surfaces, including upside down on ceilings, without needing an ability check.'
+      },
+      {
+        name: 'Web Sense & Walker',
+        description: 'You ignore movement restrictions from webs and know the location of creatures touching the same web.'
+      }
+    ],
+    attacks: [
+      {
+        id: 'ws-spider-bite',
+        name: 'Venomous Bite',
+        category: 'attacks',
+        type: 'action',
+        subCategory: 'weapon',
+        isAttack: true,
+        sourceLabel: 'Wild Shape (Giant Spider)',
+        hitBonus: '+5',
+        damageFormula: '1d8 + 3',
+        damageType: 'piercing',
+        rangeFt: 5,
+        jb2aAssetId: 'attack_bite',
+        description: 'Melee Attack: +5 to hit, reach 5 ft. Hit: 1d8 + 3 piercing + 2d8 poison damage (DC 11 CON save for half).'
+      },
+      {
+        id: 'ws-spider-web',
+        name: 'Web Restraint',
+        category: 'attacks',
+        type: 'action',
+        subCategory: 'special',
+        isAttack: true,
+        sourceLabel: 'Wild Shape (Recharge 5-6)',
+        hitBonus: '+5',
+        damageFormula: '0',
+        rangeFt: 60,
+        jb2aAssetId: 'entangle',
+        description: 'Ranged Weapon Attack: +5 to hit, range 30/60 ft. Target is restrained by webbing (DC 12 STR check to escape).'
+      }
+    ],
+    description: 'An agile 3D infiltrator capable of wall and ceiling scaling with ranged webbing.'
+  },
+  {
     id: 'form_giant_badger',
     name: 'Giant Badger',
     cr: '1/4',
