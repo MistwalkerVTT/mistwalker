@@ -1142,13 +1142,19 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
 
           {/* Sync & Turn Controls */}
           <div className="flex items-center gap-1 shrink-0">
-            {(characterData?.canWildShape ||
+            {(Boolean(activeWildShape) ||
+              characterData?.canWildShape ||
               characterData?.name?.toLowerCase().includes("g'aiah") ||
               characterData?.name?.toLowerCase().includes("gaiah") ||
+              characterData?.name?.toLowerCase().includes("g’aiah") ||
+              claimedToken?.name?.toLowerCase().includes("g'aiah") ||
+              claimedToken?.name?.toLowerCase().includes("gaiah") ||
+              claimedToken?.name?.toLowerCase().includes("g’aiah") ||
               characterData?.classLevel?.toLowerCase().includes("druid")) && onOpenWildShape && (
               <button
                 type="button"
                 onClick={() => {
+                  setIsHoveringWildShapeBtn(false);
                   if (activeWildShape && onRevertWildShape) {
                     onRevertWildShape();
                   } else {
@@ -1685,13 +1691,19 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
             )}
 
             {/* Wild Shape Button (Visible for Druids like G'aiah) */}
-            {(characterData?.canWildShape ||
+            {(Boolean(activeWildShape) ||
+              characterData?.canWildShape ||
               characterData?.name?.toLowerCase().includes("g'aiah") ||
               characterData?.name?.toLowerCase().includes("gaiah") ||
+              characterData?.name?.toLowerCase().includes("g’aiah") ||
+              claimedToken?.name?.toLowerCase().includes("g'aiah") ||
+              claimedToken?.name?.toLowerCase().includes("gaiah") ||
+              claimedToken?.name?.toLowerCase().includes("g’aiah") ||
               characterData?.classLevel?.toLowerCase().includes("druid")) && onOpenWildShape && (
               <button
                 type="button"
                 onClick={() => {
+                  setIsHoveringWildShapeBtn(false);
                   if (activeWildShape && onRevertWildShape) {
                     onRevertWildShape();
                   } else {

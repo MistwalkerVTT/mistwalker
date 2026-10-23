@@ -109,7 +109,7 @@ import { PlayerCharacterSelectModal, PlayerCharacterChoiceItem } from './PlayerC
 import { PlayerDdbPrivacyModal } from './PlayerDdbPrivacyModal';
 import { PlayerHeroDock } from './PlayerHeroDock';
 import { WildShapeModal } from './WildShapeModal';
-import { WildShapeBeastForm, ActiveWildShapeState } from '../types/wildShape';
+import { WildShapeBeastForm, ActiveWildShapeState, GAIAH_WILD_SHAPE_FORMS } from '../types/wildShape';
 import { DndRuleInspectionModal } from './DndRuleInspectionModal';
 import { canTokenHaveHalo } from '../effects/db/tokenFxMap';
 import { DndRuleEntry, lookupDndRuleDetails } from '../data/dndRulesCompendium';
@@ -1727,6 +1727,10 @@ export default function PlayerView() {
   const [isCurrentCharacterPrivate, setIsCurrentCharacterPrivate] = useState<boolean>(false);
   const [showWildShapeModal, setShowWildShapeModal] = useState<boolean>(false);
   const [activeWildShape, setActiveWildShape] = useState<ActiveWildShapeState | null>(null);
+  const activeWildShapeRef = useRef<ActiveWildShapeState | null>(null);
+  useEffect(() => {
+    activeWildShapeRef.current = activeWildShape;
+  }, [activeWildShape]);
   const [hudCollapseTick, setHudCollapseTick] = useState<number>(0);
   const [privacyModalState, setPrivacyModalState] = useState<{
     isOpen: boolean;
@@ -1810,6 +1814,12 @@ export default function PlayerView() {
     return found;
   }, [tokens, claimedTokenId]);
 
+  // Clear Wild Shape state if player switches to a different token
+  useEffect(() => {
+    activeWildShapeRef.current = null;
+    setActiveWildShape(null);
+  }, [claimedTokenId]);
+
   const claimedStats = useMemo(() => {
     if (!claimedToken) return null;
     return resolveTokenCharacterStats(claimedToken, compendiumCharacters);
@@ -1843,6 +1853,26 @@ export default function PlayerView() {
   }, [claimedToken, compendiumCharacters]);
 
   const promptedPrivateCharIdRef = useRef<string | null>(null);
+
+  const applyActiveWildShapeOverlay = useCallback((baseHud: HudCharacterData): HudCharacterData => {
+    const ws = activeWildShapeRef.current;
+    if (!ws) return baseHud;
+    const form = GAIAH_WILD_SHAPE_FORMS.find(f => f.id === ws.beastFormId);
+    if (!form) return baseHud;
+    const filteredAttacks = (baseHud.attacks || []).filter(a => !a.sourceLabel?.includes('Wild Shape'));
+    return {
+      ...baseHud,
+      name: `${ws.originalName} (${form.name})`,
+      avatarUrl: form.avatarUrl,
+      ac: Math.max(form.baseAc, 17),
+      tempHp: Math.max(baseHud.tempHp || 0, ws.tempHpGranted),
+      speed: form.speed,
+      walkSpeedFt: form.walkSpeedFt,
+      canWildShape: true,
+      wildShapeState: ws,
+      attacks: [...form.attacks, ...filteredAttacks]
+    };
+  }, []);
 
   const syncHudFromDdb = useCallback(async (forceRefresh = false) => {
     if (!claimedToken) {
@@ -1894,10 +1924,10 @@ export default function PlayerView() {
             } else if (!isPriv && privacyModalState?.isOpen && privacyModalState?.characterId === String(targetDdbId)) {
               setPrivacyModalState(prev => ({ ...prev, isOpen: false }));
             }
-            setHudCharacterData({
+            setHudCharacterData(applyActiveWildShapeOverlay({
               ...data,
               avatarUrl: claimedToken.url || claimedToken.avatarUrl || data.avatarUrl || getCharacterTokenUrl(data.name)
-            });
+            }));
             if (forceRefresh) {
               toast.success(`Synced ${data.name} from D&D Beyond!`, {
                 description: `${(data.attacks || []).length} Attacks • ${(data.bonusActions || []).length} Bonus • ${(data.spells || []).length} Spells • ${(data.special || []).length} Special`
@@ -1919,14 +1949,14 @@ export default function PlayerView() {
         }
       }
 
-      setHudCharacterData(buildFallbackHudData(claimedToken, claimedStats, compendiumCharacters));
+      setHudCharacterData(applyActiveWildShapeOverlay(buildFallbackHudData(claimedToken, claimedStats, compendiumCharacters)));
     } catch (err) {
       console.warn('[PlayerView] Failed fetching DDB HUD data:', err);
-      setHudCharacterData(buildFallbackHudData(claimedToken, claimedStats, compendiumCharacters));
+      setHudCharacterData(applyActiveWildShapeOverlay(buildFallbackHudData(claimedToken, claimedStats, compendiumCharacters)));
     } finally {
       setIsSyncingHudDdb(false);
     }
-  }, [claimedToken, resolvedClaimedDdbId, claimedStats, compendiumCharacters]);
+  }, [claimedToken, resolvedClaimedDdbId, claimedStats, compendiumCharacters, applyActiveWildShapeOverlay]);
 
   // Fetch or synthesize D&D Beyond HUD Character Data when claimedToken changes
   useEffect(() => {
@@ -1939,10 +1969,10 @@ export default function PlayerView() {
       if (prev && resolvedClaimedDdbId && String(prev.ddbCharacterId) === String(resolvedClaimedDdbId)) {
         return prev;
       }
-      return buildFallbackHudData(claimedToken, claimedStats, compendiumCharacters);
+      return applyActiveWildShapeOverlay(buildFallbackHudData(claimedToken, claimedStats, compendiumCharacters));
     });
     syncHudFromDdb(false);
-  }, [claimedToken?.id, claimedToken?.name, resolvedClaimedDdbId]);
+  }, [claimedToken?.id, resolvedClaimedDdbId]);
 
   // 3D Dice Customization State (persisted in localStorage)
   const [dicePresetId, setDicePresetId] = useState<string>(() => {
@@ -4096,6 +4126,7 @@ export default function PlayerView() {
           };
         });
         const revertedBeastName = activeWildShape.beastName;
+        activeWildShapeRef.current = null;
         setActiveWildShape(null);
         toast.success(`Reverted from ${revertedBeastName} back to Wood Elf!`, {
           description: `Normal stats, token size, and humanoid form restored.`
@@ -4408,7 +4439,7 @@ export default function PlayerView() {
           startedAt: Date.now()
         }
       : {
-          originalName: claimedToken.name || "G'aiah",
+          originalName: (claimedToken.name || "G'aiah").replace(/\s*\([^)]*\)\s*$/, '').trim(),
           originalAvatarUrl: claimedToken.url || claimedToken.avatarUrl || getCharacterTokenUrl(claimedToken.name),
           originalSize: claimedToken.size || 1,
           originalAc: claimedToken.ac || 12,
@@ -4421,6 +4452,7 @@ export default function PlayerView() {
           durationHours: 3,
           canRadiantStrikes: true
         };
+    activeWildShapeRef.current = prevState;
     setActiveWildShape(prevState);
 
     // Minimize modal & collapse HUD tray so G'aiah can watch her transformation on the board
@@ -4551,6 +4583,7 @@ export default function PlayerView() {
     });
 
     const revertedBeastName = activeWildShape.beastName;
+    activeWildShapeRef.current = null;
     setActiveWildShape(null);
 
     toast.success(`Reverted from ${revertedBeastName} back to Wood Elf!`, {

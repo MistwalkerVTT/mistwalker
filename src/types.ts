@@ -71,9 +71,10 @@ export const isMonsterToken = (token?: { name?: string; isPlayer?: boolean; isMo
 
   // Explicit known player character names - never monsters unless isMonster is true
   const standardPlayers = [
-    'varrak', 'brannoc', 'aziza', 'noctua', 'aggie', 'burmi', 'rowan', 'stavros', 'mayo'
+    'varrak', 'brannoc', 'aziza', 'noctua', 'aggie', 'aggapanthus', 'burmi', 'rowan', 'stavros', 'mayo',
+    "g'aiah", 'gaiah', 'g’aiah', 'sylas', 'etho', 'arameng', 'zal-tan', 'zaltan'
   ];
-  if (standardPlayers.some(p => lowerName === p || lowerName.startsWith(p + ' '))) {
+  if (standardPlayers.some(p => lowerName === p || lowerName.startsWith(p + ' ') || lowerName.includes(p))) {
     return false;
   }
 
