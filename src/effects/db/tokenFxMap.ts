@@ -148,7 +148,10 @@ export function getAuraVideoUrl(name?: string, color?: string): string | null {
     return '/jb2a/Library/Generic/Template/Circle/Aura/AuraThemedOrbitLoopCold01_01_Regular_Blue_700x700.webm';
   }
 
-  // 6. Nature, Plants & Entanglement
+  // 6. Nature, Plants, Healing Incense & Entanglement
+  if (n.includes('incense') || n.includes('censer') || n.includes('green smoke')) {
+    return '/jb2a/Community/JAA/cloudKill.webm';
+  }
   if (n.includes('entangle') || n.includes('overgrowth') || n.includes('briar') || n.includes('vine') || n.includes('root')) {
     return '/jb2a/Library/1st_Level/Entangle/EntangleLoop02_02_Regular_Green_500x500.webm';
   }

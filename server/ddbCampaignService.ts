@@ -607,6 +607,7 @@ export function matchJb2aAssetId(name: string): string | undefined {
   if (n.includes('arcane eye')) return 'arcane_eye';
   if (n.includes('color spray') || n.includes('colour spray')) return 'color_spray';
   if (n.includes('circle of death')) return 'circle_of_death';
+  if (n.includes('healing incense') || n.includes('healing_incense') || (n.includes('censer') && n.includes('incense'))) return 'healing_incense';
   if (n.includes('cloudkill')) return 'cloudkill';
   if (n.includes('incendiary cloud')) return 'incendiary_cloud';
   if (n.includes('aura of vitality')) return 'aura_of_vitality';
@@ -1532,9 +1533,11 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
       isSelfAction: true,
       uses: { available: 1, total: 1, resetType: 'Dawn' },
       description: 'Speak the command word as a bonus action to cause the flail to emanate a thin cloud of incense out to 10 feet for 1 minute. At the start of each of your turns, you and any other creatures in the incense each regain 1d4 hit points.',
+      duration: '1 minute',
+      jb2aAssetId: 'healing_incense' /*
       jb2aAssetId: 'cure_wounds'
     });
-    seenSpecialNames.add("devotee's censer");
+      */}); seenSpecialNames.add("devotee's censer");
   }
 
   // Extract Class Features, Subclass Features, Options (Invocations/Maneuvers/Infusions), Feats, and Species Traits

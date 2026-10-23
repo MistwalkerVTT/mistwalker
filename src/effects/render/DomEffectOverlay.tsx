@@ -53,7 +53,11 @@ const AURA_OR_TOKEN_BUFF_KEYWORDS = [
   'hunters mark',
   'globe of invulnerability',
   'antilife shell',
-  'antimagic field'
+  'antimagic field',
+  'healing incense',
+  'healing_incense',
+  'devotee\'s censer',
+  'devotees censer'
 ];
 
 function isAuraOrTokenLockedEffect(effect: VttEffectInstance): boolean {

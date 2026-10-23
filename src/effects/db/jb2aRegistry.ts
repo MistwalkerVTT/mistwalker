@@ -1696,6 +1696,26 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "tags": ["light", "daylight", "guidance", "illumination", "radiance"]
   },
   {
+    "id": "healing_incense",
+    "name": "Devotee's Censer: Healing Incense",
+    "label": "Healing Incense (10ft Green Smoke Healing Aura)",
+    "level": 1,
+    "school": "evocation",
+    "paradigm": "aura",
+    "shape": "aura",
+    "targetType": "aura",
+    "rangeFt": 10,
+    "defaultSizeFt": 10,
+    "color": "#22c55e",
+    "webm": "/jb2a/Community/JAA/cloudKill.webm",
+    "loopWebm": "/jb2a/Community/JAA/cloudKill.webm",
+    "thumb": "/jb2a/Community/JAA/cloudKill.webp",
+    "isPersistent": true,
+    "blendMode": "screen",
+    "soundKey": "radiant_heal",
+    "tags": ["devotees censer", "devotee's censer", "healing incense", "incense", "green smoke"]
+  },
+  {
     "id": "sunbeam",
     "name": "Sunbeam",
     "label": "60ft Brilliant Solar Energy Beam",
@@ -2269,6 +2289,7 @@ export const findJb2aAsset = (idOrName: string): Jb2aAssetDefinition | undefined
   if (n.includes('arcane eye')) return byId('arcane_eye');
   if (n.includes('color spray') || n.includes('colour spray') || n.includes('hypnotic pattern')) return byId('color_spray');
   if (n.includes('circle of death')) return byId('circle_of_death');
+  if (n.includes('healing incense') || n.includes('healing_incense') || (n.includes('censer') && n.includes('incense'))) return byId('healing_incense');
   if (n.includes('cloudkill')) return byId('cloudkill');
   if (n.includes('incendiary cloud')) return byId('incendiary_cloud');
   if (n.includes('aura of vitality') || n.includes('healing spirit') || n.includes('regenerate')) return byId('aura_of_vitality');

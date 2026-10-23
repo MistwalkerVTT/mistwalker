@@ -29,7 +29,7 @@ const SINGLE_TARGET_IDS = new Set([
 const CASTER_AURA_IDS = new Set([
   'spirit_guardians', 'aura_of_vitality', 'aura_of_life', 'aura_of_purity',
   'crusaders_mantle', 'holy_aura', 'circle_of_power', 'detect_magic', 'light',
-  'twilight_sanctuary', 'globe_of_invulnerability', 'antilife_shell', 'antimagic_field'
+  'healing_incense', 'twilight_sanctuary', 'globe_of_invulnerability', 'antilife_shell', 'antimagic_field'
 ]);
 
 export const AimReticle: React.FC<AimReticleProps> = React.memo(({

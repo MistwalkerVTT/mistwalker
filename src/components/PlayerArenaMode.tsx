@@ -178,6 +178,39 @@ function rollDiceFormula(formula: string | undefined, isCrit = false): {
 }
 
 /**
+ * Detects whether an action represents a healing spell, potion, or restorative ability
+ */
+export function isActionHealing(action: HudActionItem | undefined | null): boolean {
+  if (!action) return false;
+  if (action.isHeal === true) return true;
+  if (action.damageType?.toLowerCase() === 'healing') return true;
+  const name = (action.name || '').toLowerCase();
+  const desc = (action.description || '').toLowerCase();
+  if (
+    name.includes('heal') ||
+    name.includes('cure') ||
+    name.includes('potion') ||
+    name.includes('draught') ||
+    name.includes('lay on hands') ||
+    name.includes('second wind') ||
+    name.includes('surge') ||
+    name.includes('aid') ||
+    name.includes('goodberry') ||
+    name.includes('revivify') ||
+    name.includes('restoration') ||
+    name.includes('prayer') ||
+    name.includes('regeneration') ||
+    name.includes('vitality')
+  ) {
+    return true;
+  }
+  if (desc.includes('regains') && (desc.includes('hit point') || desc.includes('hp'))) {
+    return true;
+  }
+  return false;
+}
+
+/**
  * Builds the exact HudCharacterData used by <PlayerHeroDock /> for any Arena Combatant
  */
 function buildArenaCombatantHudData(
@@ -235,13 +268,13 @@ function buildArenaCombatantHudData(
   if (char) {
     // 1. Seed from live D&D Beyond HUD if available
     if (liveDdbHud) {
-      liveDdbHud.attacks.forEach((a) => attacks.push({ ...a }));
-      liveDdbHud.actions.forEach((a) => actions.push({ ...a }));
-      liveDdbHud.bonusActions.forEach((a) => bonusActions.push({ ...a }));
-      liveDdbHud.spells.forEach((a) => spells.push({ ...a }));
-      liveDdbHud.reactions.forEach((a) => reactions.push({ ...a }));
-      liveDdbHud.items.forEach((a) => items.push({ ...a }));
-      (liveDdbHud.special || []).forEach((a) => special.push({ ...a }));
+      liveDdbHud.attacks.forEach((a) => attacks.push({ ...a, isHeal: isActionHealing(a) ? true : a.isHeal }));
+      liveDdbHud.actions.forEach((a) => actions.push({ ...a, isHeal: isActionHealing(a) ? true : a.isHeal }));
+      liveDdbHud.bonusActions.forEach((a) => bonusActions.push({ ...a, isHeal: isActionHealing(a) ? true : a.isHeal }));
+      liveDdbHud.spells.forEach((a) => spells.push({ ...a, isHeal: isActionHealing(a) ? true : a.isHeal }));
+      liveDdbHud.reactions.forEach((a) => reactions.push({ ...a, isHeal: isActionHealing(a) ? true : a.isHeal }));
+      liveDdbHud.items.forEach((a) => items.push({ ...a, isHeal: isActionHealing(a) ? true : a.isHeal }));
+      (liveDdbHud.special || []).forEach((a) => special.push({ ...a, isHeal: isActionHealing(a) ? true : a.isHeal }));
     }
 
     // 2. Ensure all local compendium weapons/actions are present
@@ -686,8 +719,9 @@ function buildArenaCombatantHudData(
       isSelfAction: true,
       isHeal: true,
       damageFormula: '4d4 + 4',
+      damageType: 'healing',
       description: 'Drink a crimson healing draught to restore 4d4 + 4 HP.',
-      rangeFt: 5,
+      rangeFt: 0,
       jb2aAssetId: 'cure_wounds'
     });
   }
@@ -2153,8 +2187,22 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       spawnArenaVisualEffect(actor, target, action, targetPointPx);
 
       // 3. Healing Action / Spell
-      if (action.isHeal) {
-        const healFormula = action.damageFormula || '2d8 + 4';
+      const isHeal = isActionHealing(action);
+      if (isHeal) {
+        let healFormula = action.damageFormula;
+        if (!healFormula || healFormula === '0') {
+          if (lowerName.includes('healing word')) {
+            healFormula = '1d4 + 4';
+          } else if (lowerName.includes('potion')) {
+            healFormula = '4d4 + 4';
+          } else if (lowerName.includes('second wind')) {
+            healFormula = `1d10 + ${actor.classOrCr?.match(/\d+/)?.[0] || '5'}`;
+          } else if (lowerName.includes('lay on hands')) {
+            healFormula = '15';
+          } else {
+            healFormula = '2d8 + 4';
+          }
+        }
         const healRoll = rollDiceFormula(healFormula, false);
         const upcastSuffix =
           action.castAtLevel && action.castAtLevel > (action.level ?? 0)
@@ -2184,36 +2232,44 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           lowerName.includes('preserve life') ||
           lowerName.includes('aura of vitality');
 
+        let totalHealedAmount = 0;
         const healedNames: string[] = [];
+
         setCombatants((prev) =>
           prev.map((c) => {
-            if (isMultiAllyHeal && c.team === actor.team && c.currentHp > 0) {
-              const cx = c.x + ((c.size || 1) * ARENA_GRID_SIZE) / 2;
-              const cy = c.y + ((c.size || 1) * ARENA_GRID_SIZE) / 2;
-              const dFt = Math.round((Math.hypot(cx - targetCx, cy - targetCy) / ARENA_GRID_SIZE) * 5);
-              if (dFt <= 30 || c.id === target.id || c.id === actor.id) {
-                healedNames.push(c.name);
-                return {
-                  ...c,
-                  currentHp: Math.min(c.maxHp, c.currentHp + healRoll.total),
-                  ...(c.id === actor.id ? markActorUsed(c) : {})
-                };
-              }
-            }
-            if (c.id === target.id) {
+            const isTarget = c.id === target.id;
+            const isActor = c.id === actor.id;
+            const isMultiTarget = isMultiAllyHeal && c.team === actor.team && c.currentHp > 0;
+
+            if (isMultiTarget || isTarget) {
+              const oldHp = c.currentHp;
+              const newHp = Math.min(c.maxHp, oldHp + healRoll.total);
+              const gained = newHp - oldHp;
+              totalHealedAmount += gained;
               healedNames.push(c.name);
+
               return {
                 ...c,
-                currentHp: Math.min(c.maxHp, c.currentHp + healRoll.total),
-                ...(c.id === actor.id ? markActorUsed(c) : {})
+                currentHp: newHp,
+                ...(isActor ? markActorUsed(c) : {})
               };
             }
-            if (c.id === actor.id) {
+            if (isActor) {
               return markActorUsed(c);
             }
             return c;
           })
         );
+
+        soundCatalog.play('radiant_heal', 0.85);
+
+        if (target.currentHp >= target.maxHp && totalHealedAmount === 0 && !isMultiAllyHeal) {
+          toast.info(`💚 ${target.name} is already at full health (${target.maxHp}/${target.maxHp} HP)!`);
+        } else {
+          toast.success(
+            `💚 Restored +${healRoll.total} HP to ${healedNames.length > 1 ? healedNames.join(', ') : target.name}!`
+          );
+        }
 
         addCombatLog(
           actor.name,
@@ -3741,16 +3797,28 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                 x: Math.floor(worldX / ARENA_GRID_SIZE) * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2,
                 y: Math.floor(worldY / ARENA_GRID_SIZE) * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2
               };
-              const nearestEnemy =
-                combatants
-                  .filter((c) => c.team !== activeCombatant.team && c.currentHp > 0)
-                  .sort(
-                    (a, b) =>
-                      Math.hypot(a.x - snapCenter.x, a.y - snapCenter.y) -
-                      Math.hypot(b.x - snapCenter.x, b.y - snapCenter.y)
-                  )[0] || activeCombatant;
-              executeCombatAction(activeCombatant, nearestEnemy, activeTargetingAction, snapCenter);
+              const isHealing = isActionHealing(activeTargetingAction);
+              const targetCandidate = isHealing
+                ? combatants
+                    .filter((c) => c.team === activeCombatant.team && c.currentHp > 0)
+                    .sort(
+                      (a, b) =>
+                        Math.hypot(a.x - snapCenter.x, a.y - snapCenter.y) -
+                        Math.hypot(b.x - snapCenter.x, b.y - snapCenter.y)
+                    )[0] || activeCombatant
+                : combatants
+                    .filter((c) => c.team !== activeCombatant.team && c.currentHp > 0)
+                    .sort(
+                      (a, b) =>
+                        Math.hypot(a.x - snapCenter.x, a.y - snapCenter.y) -
+                        Math.hypot(b.x - snapCenter.x, b.y - snapCenter.y)
+                    )[0] || activeCombatant;
+
+              executeCombatAction(activeCombatant, targetCandidate, activeTargetingAction, snapCenter);
               setActiveTargetingAction(null);
+              setActiveEquippedAsset(null);
+              setAimOrigin(null);
+              setAimCurrent(null);
             }}
             onTap={(e) => {
               if (!activeCombatant || activeCombatant.isAI || !activeTargetingAction) return;
@@ -3764,16 +3832,28 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                 x: Math.floor(worldX / ARENA_GRID_SIZE) * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2,
                 y: Math.floor(worldY / ARENA_GRID_SIZE) * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2
               };
-              const nearestEnemy =
-                combatants
-                  .filter((c) => c.team !== activeCombatant.team && c.currentHp > 0)
-                  .sort(
-                    (a, b) =>
-                      Math.hypot(a.x - snapCenter.x, a.y - snapCenter.y) -
-                      Math.hypot(b.x - snapCenter.x, b.y - snapCenter.y)
-                  )[0] || activeCombatant;
-              executeCombatAction(activeCombatant, nearestEnemy, activeTargetingAction, snapCenter);
+              const isHealing = isActionHealing(activeTargetingAction);
+              const targetCandidate = isHealing
+                ? combatants
+                    .filter((c) => c.team === activeCombatant.team && c.currentHp > 0)
+                    .sort(
+                      (a, b) =>
+                        Math.hypot(a.x - snapCenter.x, a.y - snapCenter.y) -
+                        Math.hypot(b.x - snapCenter.x, b.y - snapCenter.y)
+                    )[0] || activeCombatant
+                : combatants
+                    .filter((c) => c.team !== activeCombatant.team && c.currentHp > 0)
+                    .sort(
+                      (a, b) =>
+                        Math.hypot(a.x - snapCenter.x, a.y - snapCenter.y) -
+                        Math.hypot(b.x - snapCenter.x, b.y - snapCenter.y)
+                    )[0] || activeCombatant;
+
+              executeCombatAction(activeCombatant, targetCandidate, activeTargetingAction, snapCenter);
               setActiveTargetingAction(null);
+              setActiveEquippedAsset(null);
+              setAimOrigin(null);
+              setAimCurrent(null);
             }}
           >
             <Rect
@@ -4040,12 +4120,20 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
               return;
             }
 
-            if (action.isSelfAction && !action.rangeFt) {
+            const lowerName = action.name.toLowerCase();
+            const isHeal = isActionHealing(action);
+            const isSelfHeal =
+              action.isSelfAction ||
+              lowerName.includes('potion') ||
+              lowerName.includes('second wind') ||
+              lowerName.includes('surge') ||
+              lowerName.includes('wholeness of body');
+
+            if (isSelfHeal) {
               executeCombatAction(activeCombatant, activeCombatant, action);
               return;
             }
 
-            const lowerName = action.name.toLowerCase();
             if (lowerName.includes('wild shape') || action.id === 'druid-wild-shape') {
               if (activeWildShape) {
                 handleRevertWildShape();
@@ -4058,9 +4146,9 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             const matchedAsset =
               findJb2aAsset(action.jb2aAssetId || '') ||
               findJb2aAsset(action.name) ||
-              findJb2aAsset(action.isHeal ? 'cure_wounds' : (action.rangeFt || 5) > 10 ? 'fire_bolt' : 'attack_slash');
+              findJb2aAsset(isHeal ? 'cure_wounds' : (action.rangeFt || 5) > 10 ? 'fire_bolt' : 'attack_slash');
 
-            setActiveTargetingAction(action);
+            setActiveTargetingAction({ ...action, isHeal });
             setActiveEquippedAsset(matchedAsset || null);
 
             const tokenRadius = ((activeCombatant.size || 1) * ARENA_GRID_SIZE) / 2;
@@ -4070,7 +4158,11 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             };
             setAimOrigin(originPt);
             setAimCurrent(originPt);
-            toast.info(`🎯 Aim & click a target token or grid cell for ${action.name}`);
+            toast.info(
+              isHeal
+                ? `💚 Aim & click a target token, ally, or grid cell for ${action.name} (or click "Self" on dock)`
+                : `🎯 Aim & click a target token or grid cell for ${action.name}`
+            );
           }}
           onRollToHit={(action) => {
             const nearestEnemy =
@@ -4084,14 +4176,22 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             executeCombatAction(activeCombatant, nearestEnemy, action);
           }}
           onRollDamage={(action) => {
-            const formula = action.damageFormula || '2d8';
+            const isHeal = isActionHealing(action);
+            let formula = action.damageFormula;
+            if (!formula || formula === '0') {
+              if (action.name.toLowerCase().includes('healing word')) formula = '1d4 + 4';
+              else if (action.name.toLowerCase().includes('potion')) formula = '4d4 + 4';
+              else if (action.name.toLowerCase().includes('second wind')) formula = `1d10 + ${activeCombatant.classOrCr?.match(/\d+/)?.[0] || '5'}`;
+              else if (isHeal) formula = '2d8 + 4';
+              else formula = '1d8 + 4';
+            }
             const dmgRoll = rollDiceFormula(formula, false);
             if (onTrigger3dDice && dmgRoll.dice.length > 0) {
               onTrigger3dDice({
                 id: `arena-dmg-${Date.now()}`,
                 characterName: activeCombatant.name,
-                action: `${action.name}${action.castAtLevel ? ` (L${action.castAtLevel})` : ''} (${action.isHeal ? 'Heal' : action.damageType || 'Damage'})`,
-                rollType: action.isHeal ? 'heal' : 'damage',
+                action: `${action.name}${action.castAtLevel ? ` (L${action.castAtLevel})` : ''} (${isHeal ? 'Heal' : action.damageType || 'Damage'})`,
+                rollType: isHeal ? 'heal' : 'damage',
                 formula: `${formula} → ${dmgRoll.breakdown}`,
                 diceNotation: formula,
                 dice: dmgRoll.dice,
@@ -4101,14 +4201,22 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                 source: 'player'
               });
             }
-            if (action.isHeal) {
+            if (isHeal) {
+              const oldHp = activeCombatant.currentHp;
+              const newHp = Math.min(activeCombatant.maxHp, oldHp + dmgRoll.total);
               setCombatants((prev) =>
                 prev.map((c) =>
                   c.id === activeCombatant.id
-                    ? { ...c, currentHp: Math.min(c.maxHp, c.currentHp + dmgRoll.total) }
+                    ? { ...c, currentHp: newHp }
                     : c
                 )
               );
+              soundCatalog.play('radiant_heal', 0.85);
+              if (oldHp >= activeCombatant.maxHp) {
+                toast.info(`💚 ${activeCombatant.name} is already at full health (${activeCombatant.maxHp}/${activeCombatant.maxHp} HP)!`);
+              } else {
+                toast.success(`💚 ${activeCombatant.name} healed for +${dmgRoll.total} HP! (${newHp}/${activeCombatant.maxHp} HP)`);
+              }
               addCombatLog(
                 activeCombatant.name,
                 activeCombatant.team,
