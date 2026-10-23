@@ -6,6 +6,8 @@ const LOGO_URL = 'https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453
 interface IntroScreenProps {
   onSelectDm: () => void;
   onSelectPlayer: () => void;
+  /** Called after the overlay has fully faded out following the selection (safe to unmount). */
+  onFinished?: () => void;
 }
 
 /** Procedural ambient audio (no asset files): low drone + shimmer, and a swell on selection. */
@@ -66,11 +68,12 @@ function createAmbience() {
   }
 }
 
-export const IntroScreen: React.FC<IntroScreenProps> = ({ onSelectDm, onSelectPlayer }) => {
+export const IntroScreen: React.FC<IntroScreenProps> = ({ onSelectDm, onSelectPlayer, onFinished }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const audioRef = useRef<ReturnType<typeof createAmbience>>(null);
   const [stage, setStage] = useState(0); // 0 black, 1 logo, 2 title, 3 tagline, 4 choices
   const [leaving, setLeaving] = useState<null | 'dm' | 'player'>(null);
+  const [fadingOut, setFadingOut] = useState(false);
   const [muted, setMuted] = useState(false);
   const [audioOn, setAudioOn] = useState(false);
 
@@ -116,34 +119,54 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onSelectDm, onSelectPl
   const choose = (mode: 'dm' | 'player') => {
     if (leaving) return;
     ensureAudio();
-    audioRef.current?.swell();
+    // Fade out the drone; the custom transition sound takes over
+    audioRef.current?.setMuted(true);
     setLeaving(mode);
 
-    // Spoken greeting: DM = Big Bad Boss voice, Player = Wizard voice.
-    // Hold the departure flash until the voice starts (or a timeout), then let it land before moving on.
+    // 1) Transition sound (user's ElevenLabs favorite) starts immediately
+    const sfx = new Audio('/audio/transition.mp3');
+    sfx.volume = 1;
+    sfx.play().catch(() => undefined);
+
+    // 2) Greeting voice starts ~2s into the transition sound
+    //    DM = Big Bad Boss voice, Player = Wizard voice
     const greeting = mode === 'dm'
       ? { text: 'Welcome Dungeon Master', voiceId: 'big_bad_boss' }
       : { text: 'Welcome Adventurer', voiceId: 'wizard' };
+    const gate = new Promise<void>((resolve) => setTimeout(resolve, 2000));
 
-    const startedAt = Date.now();
-    new Promise<void>((resolve) => {
-      let settled = false;
-      const done = () => {
-        if (!settled) {
-          settled = true;
-          resolve();
+    // 3) The instant the voice starts, load the next screen underneath and fade this overlay away,
+    //    so the next menu is already showing by the time the greeting finishes.
+    let revealed = false;
+    const reveal = () => {
+      if (revealed) return;
+      revealed = true;
+      // Duck the transition sound under the voice
+      try { sfx.volume = 0.4; } catch { /* ignore */ }
+      if (mode === 'dm') onSelectDm();
+      else onSelectPlayer();
+      setFadingOut(true);
+      // Fade sfx tail out while the overlay dissolves
+      const fade = setInterval(() => {
+        try {
+          sfx.volume = Math.max(0, sfx.volume - 0.04);
+          if (sfx.volume <= 0) {
+            sfx.pause();
+            clearInterval(fade);
+          }
+        } catch {
+          clearInterval(fade);
         }
-      };
-      audioNarration
-        .play({ ...greeting, onStart: done, onError: done })
-        .catch(done);
-      setTimeout(done, 4500);
-    }).then(() => {
-      const elapsed = Date.now() - startedAt;
-      const hold = Math.max(1100 - elapsed, 0) + 1300; // let the first words land over the flash
-      setTimeout(() => (mode === 'dm' ? onSelectDm() : onSelectPlayer()), hold);
-    });
+      }, 100);
+      setTimeout(() => onFinished?.(), 2200);
+    };
+
+    audioNarration
+      .play({ ...greeting, waitUntil: gate, onStart: reveal, onError: reveal })
+      .catch(reveal);
+    setTimeout(reveal, 6500); // safety net if the voice never starts
   };
+
 
 
   // Living background: drifting mist + rising embers + faint rune sparks
@@ -242,7 +265,12 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onSelectDm, onSelectPl
         skipToChoices();
       }}
       className="fixed inset-0 z-[9999] overflow-hidden bg-black text-zinc-100 select-none"
-      style={{ fontFamily: "'Cinzel', 'Trajan Pro', 'Georgia', serif" }}
+      style={{
+        fontFamily: "'Cinzel', 'Trajan Pro', 'Georgia', serif",
+        opacity: fadingOut ? 0 : 1,
+        transition: 'opacity 1.8s ease-in-out',
+        pointerEvents: fadingOut ? 'none' : 'auto'
+      }}
     >
       <style>{`
         @keyframes mw-slowzoom { from { transform: scale(1.06); } to { transform: scale(1.22); } }

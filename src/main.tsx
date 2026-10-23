@@ -1,4 +1,4 @@
-import { StrictMode, lazy, Suspense, useState } from 'react';
+import { StrictMode, lazy, Suspense, useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
 import { CrashRecoveryBoundary } from './components/CrashRecoveryBoundary';
@@ -61,30 +61,42 @@ const shouldShowIntro = (): boolean => {
 };
 
 function Root() {
-  const [showIntro, setShowIntro] = useState<boolean>(shouldShowIntro);
+  const initialIntro = useState<boolean>(shouldShowIntro)[0];
+  const [introMounted, setIntroMounted] = useState<boolean>(initialIntro);
+  const [appRevealed, setAppRevealed] = useState<boolean>(!initialIntro);
   const [chosePlayer, setChosePlayer] = useState(false);
 
-  if (showIntro) {
-    return (
-      <IntroScreen
-        onSelectDm={() => {
-          try { sessionStorage.setItem(INTRO_SEEN_KEY, '1'); } catch { /* ignore */ }
-          setShowIntro(false);
-        }}
-        onSelectPlayer={() => {
-          // Switch in-place (no page reload) so the spoken greeting keeps playing
-          const url = new URL(window.location.href);
-          url.searchParams.set('view', 'player');
-          window.history.replaceState({}, '', url.toString());
-          setChosePlayer(true);
-          setShowIntro(false);
-        }}
-      />
-    );
-  }
-  return isPlayerView || chosePlayer ? <PlayerView /> : <App />;
-}
+  // Warm up both app bundles while the intro plays so the reveal is instant
+  useEffect(() => {
+    if (initialIntro) {
+      import('./App.tsx').catch(() => undefined);
+      import('./components/PlayerView.tsx').catch(() => undefined);
+    }
+  }, [initialIntro]);
 
+  return (
+    <>
+      {appRevealed && (isPlayerView || chosePlayer ? <PlayerView /> : <App />)}
+      {introMounted && (
+        <IntroScreen
+          onSelectDm={() => {
+            try { sessionStorage.setItem(INTRO_SEEN_KEY, '1'); } catch { /* ignore */ }
+            setAppRevealed(true);
+          }}
+          onSelectPlayer={() => {
+            // Switch in-place (no page reload) so the spoken greeting keeps playing
+            const url = new URL(window.location.href);
+            url.searchParams.set('view', 'player');
+            window.history.replaceState({}, '', url.toString());
+            setChosePlayer(true);
+            setAppRevealed(true);
+          }}
+          onFinished={() => setIntroMounted(false)}
+        />
+      )}
+    </>
+  );
+}
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <CrashRecoveryBoundary fallbackTitle={isPlayerView ? "MistWalker Player View Interrupted" : "MistWalker DM View Interrupted"}>

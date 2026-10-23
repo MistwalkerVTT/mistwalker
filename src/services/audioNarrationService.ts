@@ -255,11 +255,13 @@ class AudioNarrationService {
   public async play(params: {
     text: string;
     voiceId?: string;
+    /** Optional gate: audio is generated immediately but playback waits until this resolves. */
+    waitUntil?: Promise<unknown>;
     onStart?: () => void;
     onEnded?: () => void;
     onError?: (err: any) => void;
   }): Promise<string> {
-    const { text, voiceId, onStart, onEnded, onError } = params;
+    const { text, voiceId, waitUntil, onStart, onEnded, onError } = params;
 
     // Immediately stop any currently playing narration
     this.stop();
@@ -333,6 +335,12 @@ class AudioNarrationService {
 
       this.isLoading = false;
       this.notify();
+
+      if (waitUntil) {
+        await waitUntil.catch(() => undefined);
+        // Narration may have been stopped/replaced while we were waiting
+        if (this.activeAudio !== audio) return '';
+      }
 
       await audio.play();
       if (onStart) onStart();
