@@ -23,11 +23,13 @@ import {
   Undo2,
   Lock,
   Unlock,
-  Play
+  Play,
+  ArrowRight,
+  CheckCircle2
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Campaign, uploadAndRegisterAsset, subscribeToMonsters } from '../lib/firebase';
-import { UploadedAsset, WallSegment, WallType } from '../types';
+import { Campaign, Scene, uploadAndRegisterAsset, subscribeToMonsters } from '../lib/firebase';
+import { UploadedAsset, WallSegment } from '../types';
 import { Monster } from '../types/monster';
 import { DEFAULT_MONSTERS } from '../data/defaultMonsters';
 import { PRESET_BATTLEMAPS, PresetBattlemap } from '../data/presetBattlemaps';
@@ -37,9 +39,7 @@ import {
   loadArenaConfig,
   saveArenaConfig,
   subscribeToArenaConfig,
-  generateColosseumPillarWalls,
-  generateChokepointDivideWalls,
-  generateTacticalBarricadeWalls
+  normalizeArenaWallSegment
 } from '../services/arenaConfigService';
 import { generateScaledRandomEncounter } from './PlayerArenaMode';
 
@@ -54,13 +54,21 @@ interface ArenaManagerPanelProps {
   savedMaps: UploadedAsset[];
   onMapUploaded?: (asset: UploadedAsset) => void;
   onLaunchArenaPreview?: () => void;
+  onLoadScene?: (scene: Scene, campaignId: string, chapterId: string, targetView?: 'DM1' | 'DM2' | 'DM3') => void;
+  onClose?: () => void;
+  activeSceneInfo?: { campaignId: string; chapterId: string; sceneId: string } | null;
+  currentWalls?: WallSegment[];
 }
 
 export const ArenaManagerPanel: React.FC<ArenaManagerPanelProps> = ({
   campaigns,
   savedMaps,
   onMapUploaded,
-  onLaunchArenaPreview
+  onLaunchArenaPreview,
+  onLoadScene,
+  onClose,
+  activeSceneInfo,
+  currentWalls = []
 }) => {
   const [config, setConfig] = useState<ArenaConfig>(() => loadArenaConfig());
   const [activeSubTab, setActiveSubTab] = useState<'maps_walls' | 'monsters' | 'settings'>('maps_walls');
@@ -84,10 +92,6 @@ export const ArenaManagerPanel: React.FC<ArenaManagerPanelProps> = ({
     [allMaps, selectedMapId]
   );
 
-  const [wallTool, setWallTool] = useState<'solid' | 'door' | 'window' | 'erase'>('solid');
-  const [snapToGrid, setSnapToGrid] = useState<boolean>(true);
-  const [dragStartPt, setDragStartPt] = useState<{ x: number; y: number } | null>(null);
-  const [dragCurrentPt, setDragCurrentPt] = useState<{ x: number; y: number } | null>(null);
   const [isUploadingArenaMap, setIsUploadingArenaMap] = useState<boolean>(false);
   const [showAddUrlForm, setShowAddUrlForm] = useState<boolean>(false);
   const [customMapNameInput, setCustomMapNameInput] = useState<string>('');
@@ -96,7 +100,6 @@ export const ArenaManagerPanel: React.FC<ArenaManagerPanelProps> = ({
   const [showSavedLibraryPicker, setShowSavedLibraryPicker] = useState<boolean>(false);
   const [showSceneImportPicker, setShowSceneImportPicker] = useState<boolean>(false);
 
-  const svgCanvasRef = useRef<SVGSVGElement | null>(null);
   const fileUploadRef = useRef<HTMLInputElement | null>(null);
 
   // Monster Compendium & Custom Monster State
@@ -173,76 +176,55 @@ export const ArenaManagerPanel: React.FC<ArenaManagerPanelProps> = ({
   );
 
   const setWallsForSelectedMap = (nextWalls: WallSegment[], toastMsg?: string) => {
+    const normalized = nextWalls.map((w) => normalizeArenaWallSegment(w));
     commitConfigUpdate(
       (prev) => ({
         ...prev,
         mapWalls: {
           ...(prev.mapWalls || {}),
-          [selectedMap.id]: nextWalls
+          [selectedMap.id]: normalized
         }
       }),
       toastMsg
     );
   };
 
-  // Convert pointer event on SVG to Arena 1320x840 world coordinates
-  const getArenaCoordsFromPointer = (e: React.PointerEvent<SVGSVGElement>): { x: number; y: number } => {
-    const svg = svgCanvasRef.current;
-    if (!svg) return { x: 0, y: 0 };
-    const rect = svg.getBoundingClientRect();
-    const rawX = ((e.clientX - rect.left) / Math.max(1, rect.width)) * ARENA_WIDTH;
-    const rawY = ((e.clientY - rect.top) / Math.max(1, rect.height)) * ARENA_HEIGHT;
-    const clampedX = Math.max(0, Math.min(ARENA_WIDTH, rawX));
-    const clampedY = Math.max(0, Math.min(ARENA_HEIGHT, rawY));
-    if (snapToGrid) {
-      const snapStep = ARENA_GRID_SIZE / 2; // 30px half-grid & intersection snapping
-      return {
-        x: Math.round(clampedX / snapStep) * snapStep,
-        y: Math.round(clampedY / snapStep) * snapStep
-      };
-    }
-    return {
-      x: Math.round(clampedX),
-      y: Math.round(clampedY)
-    };
-  };
-
-  const handleCanvasPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
-    if (wallTool === 'erase') return;
-    const pt = getArenaCoordsFromPointer(e);
-    setDragStartPt(pt);
-    setDragCurrentPt(pt);
-  };
-
-  const handleCanvasPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
-    if (!dragStartPt) return;
-    setDragCurrentPt(getArenaCoordsFromPointer(e));
-  };
-
-  const handleCanvasPointerUp = () => {
-    if (!dragStartPt || !dragCurrentPt) {
-      setDragStartPt(null);
-      setDragCurrentPt(null);
+  // Load the selected Arena Map directly onto the live VTT canvas for editing (just like Campaign Mode)
+  const handleLaunchArenaMapLive = (mapItem: PresetBattlemap, targetView?: 'DM1' | 'DM2' | 'DM3') => {
+    if (!onLoadScene) {
+      toast.warning('Live VTT loader is not available in this context.');
       return;
     }
-    const dist = Math.hypot(dragCurrentPt.x - dragStartPt.x, dragCurrentPt.y - dragStartPt.y);
-    if (dist >= 15) {
-      const wallType: WallType = wallTool === 'door' ? 'door' : wallTool === 'window' ? 'window' : 'solid';
-      const newSegment: WallSegment = {
-        id: `arena_wall_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-        x1: dragStartPt.x,
-        y1: dragStartPt.y,
-        x2: dragCurrentPt.x,
-        y2: dragCurrentPt.y,
-        type: wallType,
-        doorState: wallType === 'door' ? 'closed' : undefined,
-        blocksLight: wallType !== 'window',
-        blocksMovement: true
-      };
-      setWallsForSelectedMap([...currentMapWalls, newSegment]);
+    const existingWalls = (config.mapWalls?.[mapItem.id] || []).map((w) => normalizeArenaWallSegment(w));
+    const arenaScene: Scene = {
+      sceneId: mapItem.id,
+      sceneTitle: `Arena: ${mapItem.name}`,
+      mapUrl: mapItem.url,
+      mapThumbnailUrl: mapItem.thumbnailUrl || mapItem.url,
+      mapWidth: ARENA_WIDTH,
+      mapHeight: ARENA_HEIGHT,
+      gridSize: ARENA_GRID_SIZE,
+      gridOpacity: config.gridOpacity ?? 0.35,
+      gridVisible: true,
+      isFogVisible: false,
+      walls: existingWalls,
+      tokens: [],
+      dmNotes: mapItem.desc || `Battle Arena Map: ${mapItem.name}`
+    };
+
+    onLoadScene(arenaScene, '__arena__', '__arena__', targetView);
+    if (onClose) {
+      onClose();
     }
-    setDragStartPt(null);
-    setDragCurrentPt(null);
+  };
+
+  // Pull walls currently placed on the live VTT canvas into the selected Arena Map
+  const handlePullWallsFromCanvas = () => {
+    const normalized = (currentWalls || []).map((w) => normalizeArenaWallSegment(w));
+    setWallsForSelectedMap(
+      normalized,
+      `Pulled ${normalized.length} wall/door segments from the live VTT canvas into "${selectedMap.name}"!`
+    );
   };
 
   // Upload a new Map Image, Video, or Universal VTT (.dd2vtt) directly into the Battle Arena
@@ -457,7 +439,7 @@ export const ArenaManagerPanel: React.FC<ArenaManagerPanelProps> = ({
             }`}
           >
             <Layers className="w-4 h-4" />
-            <span>1. Arena Maps & Wall Builder</span>
+            <span>1. Arena Maps</span>
             <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-black/20 font-mono">
               {allMaps.length} Maps
             </span>
@@ -525,7 +507,7 @@ export const ArenaManagerPanel: React.FC<ArenaManagerPanelProps> = ({
                   <ImageIcon className="w-3.5 h-3.5" />
                   <span>Arena Map Pool ({allMaps.length})</span>
                 </h3>
-                <span className="text-[10px] font-mono text-zinc-500">Click to edit walls</span>
+                <span className="text-[10px] font-mono text-zinc-500">Select or Load Live</span>
               </div>
 
               <div className="space-y-2">
@@ -534,6 +516,7 @@ export const ArenaManagerPanel: React.FC<ArenaManagerPanelProps> = ({
                   const isDefault = config.defaultMapId === m.id;
                   const isDisabled = (config.disabledMapIds || []).includes(m.id);
                   const wallCount = (config.mapWalls?.[m.id] || []).length;
+                  const isLiveOnVtt = activeSceneInfo?.campaignId === '__arena__' && activeSceneInfo?.sceneId === m.id;
 
                   return (
                     <div
@@ -560,13 +543,29 @@ export const ArenaManagerPanel: React.FC<ArenaManagerPanelProps> = ({
                               DEFAULT
                             </span>
                           )}
+                          {isLiveOnVtt && (
+                            <span className="px-1.5 py-0.2 rounded bg-emerald-500/25 border border-emerald-400/50 text-emerald-300 text-[9px] font-mono font-bold shrink-0">
+                              LIVE
+                            </span>
+                          )}
                         </div>
                         <div className="text-[10px] font-mono text-zinc-400 flex items-center gap-2 mt-0.5">
                           <span>{wallCount} walls</span>
                           <span>•</span>
                           <span>{isDisabled ? 'Hidden' : 'Active'}</span>
                         </div>
-                        <div className="flex items-center gap-1.5 mt-1.5" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1.5" onClick={(e) => e.stopPropagation()}>
+                          {onLoadScene && (
+                            <button
+                              type="button"
+                              onClick={() => handleLaunchArenaMapLive(m)}
+                              className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] font-mono font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                              title={`Load "${m.name}" onto the live VTT canvas to edit walls, doors, and lighting`}
+                            >
+                              <Play className="w-2.5 h-2.5 fill-white" />
+                              <span>Load Live</span>
+                            </button>
+                          )}
                           {!isDefault && (
                             <button
                               type="button"
@@ -812,113 +811,95 @@ export const ArenaManagerPanel: React.FC<ArenaManagerPanelProps> = ({
             </div>
           </div>
 
-          {/* Right Panel: Interactive Arena Wall & Obstacle Canvas */}
-          <div className="flex-1 flex flex-col p-4 overflow-y-auto bg-zinc-950">
-            {/* Wall Editor Toolbar */}
-            <div className="flex flex-wrap items-center justify-between gap-2 pb-3 mb-3 border-b border-zinc-800">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-xs font-mono font-bold text-amber-300 mr-1">
-                  Editing: {selectedMap.name}
-                </span>
-
-                {(
-                  [
-                    { id: 'solid', label: 'Solid Wall', color: 'amber' },
-                    { id: 'door', label: 'Doorway', color: 'cyan' },
-                    { id: 'window', label: 'Cover / Window', color: 'blue' },
-                    { id: 'erase', label: 'Click Wall to Delete', color: 'rose' }
-                  ] as const
-                ).map((toolItem) => (
-                  <button
-                    key={toolItem.id}
-                    type="button"
-                    onClick={() => setWallTool(toolItem.id)}
-                    className={`px-2.5 py-1.5 rounded-xl text-[11px] font-mono font-bold border transition-all cursor-pointer ${
-                      wallTool === toolItem.id
-                        ? 'bg-amber-500 text-zinc-950 border-amber-300 shadow'
-                        : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border-zinc-800'
-                    }`}
-                  >
-                    {toolItem.label}
-                  </button>
-                ))}
-
-                <button
-                  type="button"
-                  onClick={() => setSnapToGrid((v) => !v)}
-                  className={`px-2.5 py-1.5 rounded-xl text-[11px] font-mono border cursor-pointer ${
-                    snapToGrid
-                      ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
-                      : 'bg-zinc-900 border-zinc-800 text-zinc-400'
-                  }`}
-                >
-                  Snap: {snapToGrid ? 'ON' : 'OFF'}
-                </button>
+          {/* Right Panel: Arena Map Inspector & Live VTT Loader (Campaign Mode Style) */}
+          <div className="flex-1 flex flex-col p-6 overflow-y-auto bg-zinc-950">
+            {/* Arena Map Header & Primary Live Actions */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 mb-4 border-b border-zinc-800">
+              <div>
+                <div className="flex items-center gap-2 text-xs font-mono text-zinc-500 mb-1">
+                  <span>Battle Arena Pool</span>
+                  <span>/</span>
+                  <span>{selectedMap.type || 'Arena Map'}</span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <h2 className="text-xl font-bold font-mono text-white tracking-tight">
+                    {selectedMap.name}
+                  </h2>
+                  {activeSceneInfo?.campaignId === '__arena__' && activeSceneInfo?.sceneId === selectedMap.id && (
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/50 text-emerald-300 text-[10px] font-mono font-bold flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" />
+                      LIVE ON VTT
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono text-zinc-400 mt-1">
+                  <span className="text-emerald-400 font-medium">{currentMapWalls.length} walls/doors</span>
+                  <span>•</span>
+                  <span>22×14 Tactical Grid (1320×840)</span>
+                </div>
               </div>
 
-              {/* Quick Tactical Wall Presets */}
-              <div className="flex flex-wrap items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setWallsForSelectedMap(
-                      [...currentMapWalls, ...generateColosseumPillarWalls(ARENA_GRID_SIZE)],
-                      `Added 4 Colosseum Pillars to ${selectedMap.name}!`
-                    )
-                  }
-                  className="px-2.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-[11px] font-mono text-amber-300 cursor-pointer"
-                  title="Generate 4 stone pillars that block movement and Line of Sight"
-                >
-                  + 4 Pillars
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setWallsForSelectedMap(
-                      [...currentMapWalls, ...generateChokepointDivideWalls(ARENA_GRID_SIZE)],
-                      `Added Central Chokepoint & Doors to ${selectedMap.name}!`
-                    )
-                  }
-                  className="px-2.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-[11px] font-mono text-cyan-300 cursor-pointer"
-                  title="Generate central divide wall with 2 interactive doors"
-                >
-                  + Chokepoint Doors
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setWallsForSelectedMap(
-                      [...currentMapWalls, ...generateTacticalBarricadeWalls(ARENA_GRID_SIZE)],
-                      `Added Tactical Cover Barricades to ${selectedMap.name}!`
-                    )
-                  }
-                  className="px-2.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-[11px] font-mono text-blue-300 cursor-pointer"
-                >
-                  + Cover Barricades
-                </button>
-                <button
-                  type="button"
-                  disabled={currentMapWalls.length === 0}
-                  onClick={() => setWallsForSelectedMap(currentMapWalls.slice(0, -1))}
-                  className="p-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 disabled:opacity-40 cursor-pointer"
-                  title="Undo last wall segment"
-                >
-                  <Undo2 className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  type="button"
-                  disabled={currentMapWalls.length === 0}
-                  onClick={() => setWallsForSelectedMap([], `Cleared all walls on ${selectedMap.name}`)}
-                  className="px-2.5 py-1.5 rounded-xl bg-rose-950/50 hover:bg-rose-900/60 border border-rose-500/40 text-rose-300 text-[11px] font-mono disabled:opacity-40 cursor-pointer"
-                >
-                  Clear ({currentMapWalls.length})
-                </button>
+              {/* Campaign-Mode Live Editing Controls */}
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                {onLoadScene && (
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleLaunchArenaMapLive(selectedMap)}
+                      className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow-lg shadow-emerald-950/50 active:scale-95 cursor-pointer"
+                      title="Load this Arena map onto the live VTT canvas to edit walls, doors, windows, and lighting just like in Campaign Mode"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-white" />
+                      <span>Load Live to Edit</span>
+                    </button>
+                    {(['DM1', 'DM2', 'DM3'] as const).map((dmSlot) => (
+                      <button
+                        key={dmSlot}
+                        type="button"
+                        onClick={() => handleLaunchArenaMapLive(selectedMap, dmSlot)}
+                        className="px-2.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 font-bold font-mono text-xs transition-all cursor-pointer"
+                        title={`Load Arena Map into ${dmSlot} View`}
+                      >
+                        {dmSlot}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {currentWalls && currentWalls.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handlePullWallsFromCanvas}
+                    disabled={isSaving}
+                    className="px-3 py-2 rounded-xl bg-blue-600/30 hover:bg-blue-600/50 border border-blue-500/40 disabled:opacity-50 text-blue-200 text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer"
+                    title="Import walls and doors currently drawn on the live VTT canvas into this Arena map"
+                  >
+                    <ArrowRight className="w-3.5 h-3.5" />
+                    <span>Pull from Canvas ({currentWalls.length})</span>
+                  </button>
+                )}
+
+                {currentMapWalls.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setWallsForSelectedMap([], `Cleared all walls on ${selectedMap.name}`)}
+                    className="px-3 py-2 rounded-xl bg-rose-950/50 hover:bg-rose-900/60 border border-rose-500/40 text-rose-300 text-xs font-mono transition-all cursor-pointer"
+                  >
+                    Clear Walls ({currentMapWalls.length})
+                  </button>
+                )}
               </div>
             </div>
 
-            {/* Interactive SVG Arena Map & Wall Canvas */}
+            {/* Arena Map Preview & Spawn Zones */}
             <div className="flex-1 flex flex-col items-center justify-center min-h-[380px]">
-              <div className="relative w-full max-w-[920px] aspect-[22/14] rounded-2xl overflow-hidden border-2 border-amber-500/50 shadow-2xl bg-zinc-900 select-none">
+              <div
+                onClick={() => onLoadScene && handleLaunchArenaMapLive(selectedMap)}
+                className={`relative w-full max-w-[920px] aspect-[22/14] rounded-2xl overflow-hidden border-2 border-amber-500/50 shadow-2xl bg-zinc-900 select-none group ${
+                  onLoadScene ? 'cursor-pointer' : ''
+                }`}
+                title="Click to load this Arena map onto the live VTT canvas for editing"
+              >
                 <img
                   src={selectedMap.url}
                   alt={selectedMap.name}
@@ -926,14 +907,8 @@ export const ArenaManagerPanel: React.FC<ArenaManagerPanelProps> = ({
                 />
 
                 <svg
-                  ref={svgCanvasRef}
                   viewBox={`0 0 ${ARENA_WIDTH} ${ARENA_HEIGHT}`}
-                  onPointerDown={handleCanvasPointerDown}
-                  onPointerMove={handleCanvasPointerMove}
-                  onPointerUp={handleCanvasPointerUp}
-                  className={`absolute inset-0 w-full h-full ${
-                    wallTool === 'erase' ? 'cursor-pointer' : 'cursor-crosshair'
-                  }`}
+                  className="absolute inset-0 w-full h-full pointer-events-none"
                 >
                   {/* 22x14 Tactical Grid Lines */}
                   {Array.from({ length: ARENA_COLS + 1 }).map((_, c) => (
@@ -1006,11 +981,16 @@ export const ArenaManagerPanel: React.FC<ArenaManagerPanelProps> = ({
                     CRIMSON SPAWN
                   </text>
 
-                  {/* Existing Wall Segments */}
+                  {/* Existing Wall Segments Preview */}
                   {currentMapWalls.map((w) => {
-                    const isDoor = w.type === 'door';
-                    const isWindow = w.type === 'window';
-                    const isOpenDoor = isDoor && w.doorState === 'open';
+                    const wx1 = w.x1 ?? w.p1?.x ?? 0;
+                    const wy1 = w.y1 ?? w.p1?.y ?? 0;
+                    const wx2 = w.x2 ?? w.p2?.x ?? 0;
+                    const wy2 = w.y2 ?? w.p2?.y ?? 0;
+                    const wType = w.type || w.wallType || 'solid';
+                    const isDoor = wType === 'door' || wType === 'secret_door';
+                    const isWindow = wType === 'window' || wType === 'terrain';
+                    const isOpenDoor = isDoor && (w.doorState === 'open' || w.isOpen);
                     const strokeColor = isDoor
                       ? isOpenDoor
                         ? '#34d399'
@@ -1020,79 +1000,46 @@ export const ArenaManagerPanel: React.FC<ArenaManagerPanelProps> = ({
                       : '#f59e0b';
 
                     return (
-                      <g
-                        key={w.id}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (wallTool === 'erase') {
-                            setWallsForSelectedMap(currentMapWalls.filter((item) => item.id !== w.id));
-                          } else if (isDoor) {
-                            setWallsForSelectedMap(
-                              currentMapWalls.map((item) =>
-                                item.id === w.id
-                                  ? { ...item, doorState: item.doorState === 'open' ? 'closed' : 'open' }
-                                  : item
-                              )
-                            );
-                          }
-                        }}
-                        className="cursor-pointer"
-                      >
-                        {/* Hit target line */}
+                      <g key={w.id}>
                         <line
-                          x1={w.x1}
-                          y1={w.y1}
-                          x2={w.x2}
-                          y2={w.y2}
-                          stroke="transparent"
-                          strokeWidth={22}
-                        />
-                        {/* Outer glow */}
-                        <line
-                          x1={w.x1}
-                          y1={w.y1}
-                          x2={w.x2}
-                          y2={w.y2}
+                          x1={wx1}
+                          y1={wy1}
+                          x2={wx2}
+                          y2={wy2}
                           stroke="#000000"
                           strokeWidth={11}
                           strokeLinecap="round"
                           opacity={0.65}
                         />
-                        {/* Main Wall Line */}
                         <line
-                          x1={w.x1}
-                          y1={w.y1}
-                          x2={w.x2}
-                          y2={w.y2}
+                          x1={wx1}
+                          y1={wy1}
+                          x2={wx2}
+                          y2={wy2}
                           stroke={strokeColor}
                           strokeWidth={7}
                           strokeLinecap="round"
                           strokeDasharray={isOpenDoor ? '8 8' : isWindow ? '12 6' : undefined}
                         />
-                        <circle cx={w.x1} cy={w.y1} r={5} fill="#ffffff" stroke={strokeColor} strokeWidth={2} />
-                        <circle cx={w.x2} cy={w.y2} r={5} fill="#ffffff" stroke={strokeColor} strokeWidth={2} />
+                        <circle cx={wx1} cy={wy1} r={5} fill="#ffffff" stroke={strokeColor} strokeWidth={2} />
+                        <circle cx={wx2} cy={wy2} r={5} fill="#ffffff" stroke={strokeColor} strokeWidth={2} />
                       </g>
                     );
                   })}
-
-                  {/* Active Drag Preview Line */}
-                  {dragStartPt && dragCurrentPt && (
-                    <line
-                      x1={dragStartPt.x}
-                      y1={dragStartPt.y}
-                      x2={dragCurrentPt.x}
-                      y2={dragCurrentPt.y}
-                      stroke={wallTool === 'door' ? '#22d3ee' : wallTool === 'window' ? '#60a5fa' : '#fbbf24'}
-                      strokeWidth={7}
-                      strokeDasharray="10 6"
-                      strokeLinecap="round"
-                    />
-                  )}
                 </svg>
+
+                {onLoadScene && (
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                    <div className="px-4 py-2.5 rounded-2xl bg-emerald-600/95 text-white font-mono font-bold text-xs flex items-center gap-2 shadow-2xl border border-emerald-400/50">
+                      <Play className="w-4 h-4 fill-white" />
+                      <span>Click to Load &ldquo;{selectedMap.name}&rdquo; Live on VTT to Edit</span>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <p className="text-[11px] font-mono text-zinc-400 mt-2 text-center">
-                Click and drag on the battlemap to draw walls, cover, or doors. Click a Doorway to toggle Open/Closed, or select &ldquo;Click Wall to Delete&rdquo; to remove segments.
+              <p className="text-[11px] font-mono text-zinc-400 mt-2.5 text-center">
+                Click <strong className="text-emerald-400">Load Live to Edit</strong> (or click the map preview) to open this Arena map on the live VTT canvas and edit walls, doors, windows, and obstacles using the full DM tools — changes automatically sync back to this Arena map.
               </p>
             </div>
           </div>

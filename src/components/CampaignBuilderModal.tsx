@@ -2026,6 +2026,10 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
               setInternalSavedMaps((prev) => [asset, ...prev.filter((m) => m.assetId !== asset.assetId)])
             }
             onLaunchArenaPreview={onLaunchArenaPreview}
+            onLoadScene={onLoadScene}
+            onClose={onClose}
+            activeSceneInfo={activeSceneInfo}
+            currentWalls={currentWalls}
           />
         ) : (
         <div className="flex-1 flex overflow-hidden">

@@ -75,6 +75,11 @@ import {
   exportUniversalVtt,
   downloadUniversalVttFile
 } from './services/universalVttService';
+import {
+  loadArenaConfig,
+  saveArenaConfig,
+  normalizeArenaWallSegment
+} from './services/arenaConfigService';
 import { DEFAULT_MONSTERS } from './data/defaultMonsters';
 import { repairMonsterToken } from './data/srdMonstersCatalog';
 import { DEFAULT_CHARACTERS, getCharacterTokenUrl, getCharacterTokenDisplayName, resolveTokenCharacterStats, isDdbMatch } from './data/defaultCharacters';
@@ -2372,9 +2377,11 @@ export default function App() {
     let baseWidth = mapType === 'image' ? (image ? image.width : dimensions.width) : (videoSize.width || dimensions.width);
     let baseHeight = mapType === 'image' ? (image ? image.height : dimensions.height) : (videoSize.height || dimensions.height);
 
-    // If a loaded image is present with valid natural dimensions, use its true pixel size
-    // (or scale up to scene dimensions if the loaded image is a <1000px recovered thumbnail)
-    if (mapType === 'image' && image && image.width > 0 && image.height > 0) {
+    // When editing a Battle Arena map live on the VTT canvas, lock to Arena 1320x840 world coordinates
+    if (activeSceneInfo?.campaignId === '__arena__' && activeSceneInfo.mapWidth && activeSceneInfo.mapHeight) {
+      baseWidth = activeSceneInfo.mapWidth;
+      baseHeight = activeSceneInfo.mapHeight;
+    } else if (mapType === 'image' && image && image.width > 0 && image.height > 0) {
       if (image.width < 1000 && activeSceneInfo?.mapWidth && activeSceneInfo.mapWidth > image.width) {
         baseWidth = activeSceneInfo.mapWidth;
         baseHeight = activeSceneInfo.mapHeight || image.height;
@@ -3728,7 +3735,7 @@ export default function App() {
 
     // 4. Walls, Doors, Windows & Vision
     if (scene.walls && Array.isArray(scene.walls)) {
-      setWalls(scene.walls);
+      setWalls(scene.walls.map((w) => normalizeArenaWallSegment(w)));
       setSelectedWallId(null);
       setWallDrawStart(null);
     } else {
@@ -3738,6 +3745,9 @@ export default function App() {
     }
     if (scene.visionConfig) {
       setVisionConfig(scene.visionConfig);
+    }
+    if (campaignId === '__arena__') {
+      setCampaignMode('creator');
     }
 
     // 5. Load Room Annotations, Polygon Zones & Map Labels (directly tied to the scene bundle)
@@ -3751,7 +3761,7 @@ export default function App() {
       if (mapsDataRef.current[activeMapId]) {
         mapsDataRef.current[activeMapId].roomAnnotations = mapped;
       }
-    } else {
+    } else if (campaignId !== '__arena__') {
       // Fallback if scene.roomAnnotations is empty or missing (e.g. legacy scenes stored in mapZones)
       fetchMapZones(campaignId, scene.sceneId)
         .then(zones => {
@@ -3773,6 +3783,11 @@ export default function App() {
         .catch(() => {
           setRoomAnnotations([]);
         });
+    } else {
+      setRoomAnnotations([]);
+      if (mapsDataRef.current[activeMapId]) {
+        mapsDataRef.current[activeMapId].roomAnnotations = [];
+      }
     }
     setSelectedRoomAnnotation(null);
     setSelectedZoneForSidePanel(null);
@@ -3872,15 +3887,67 @@ export default function App() {
 
     const wallCount = scene.walls?.length || 0;
     const roomCount = scene.roomAnnotations?.length || 0;
-    toast.success(`Loaded scene "${scene.sceneTitle}" into ${targetSlot} (Press "Force Sync" to broadcast to players)`, {
-      duration: 4000
-    });
+    if (campaignId === '__arena__') {
+      toast.success(`Loaded "${scene.sceneTitle}" into ${targetSlot} for live editing! Any walls or doors you draw auto-save to the Battle Arena.`, {
+        duration: 4500
+      });
+    } else {
+      toast.success(`Loaded scene "${scene.sceneTitle}" into ${targetSlot} (Press "Force Sync" to broadcast to players)`, {
+        duration: 4000
+      });
+    }
   };
+
+  // Automatically sync live VTT wall & door edits back to Battle Arena config when an Arena Map is loaded live
+  useEffect(() => {
+    if (!activeSceneInfo || activeSceneInfo.campaignId !== '__arena__') return;
+    const arenaMapId = activeSceneInfo.sceneId;
+    if (!arenaMapId) return;
+
+    const timer = setTimeout(() => {
+      const currentCfg = loadArenaConfig();
+      const normalizedWalls = (walls || []).map((w) => normalizeArenaWallSegment(w));
+      const nextCfg = {
+        ...currentCfg,
+        mapWalls: {
+          ...(currentCfg.mapWalls || {}),
+          [arenaMapId]: normalizedWalls
+        }
+      };
+      saveArenaConfig(nextCfg, socketRef.current).catch(console.warn);
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [walls, activeSceneInfo]);
 
   // Quick Save current canvas state to active scene
   const handleQuickSaveScene = async () => {
     if (!activeSceneInfo) {
       setShowSaveToCampaignModal(true);
+      return;
+    }
+
+    if (activeSceneInfo.campaignId === '__arena__') {
+      setIsQuickSaving(true);
+      try {
+        const currentCfg = loadArenaConfig();
+        const normalizedWalls = (walls || []).map((w) => normalizeArenaWallSegment(w));
+        const nextCfg = {
+          ...currentCfg,
+          gridOpacity: gridOpacity ?? currentCfg.gridOpacity,
+          mapWalls: {
+            ...(currentCfg.mapWalls || {}),
+            [activeSceneInfo.sceneId]: normalizedWalls
+          }
+        };
+        await saveArenaConfig(nextCfg, socketRef.current);
+        toast.success(`Saved ${normalizedWalls.length} walls/doors to ${activeSceneInfo.sceneTitle}!`);
+      } catch (err) {
+        console.error('[App] Failed to quick-save Arena map:', err);
+        toast.error('Failed to save Arena map');
+      } finally {
+        setIsQuickSaving(false);
+      }
       return;
     }
 
