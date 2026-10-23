@@ -50,7 +50,7 @@ export const GAIAH_WILD_SHAPE_FORMS: WildShapeBeastForm[] = [
     crNum: 1,
     size: 'Large',
     sizeMultiplier: 2,
-    avatarUrl: 'https://www.dndbeyond.com/avatars/47158/804/638742831347754764.png',
+    avatarUrl: '/tokens/wildshape/dire_wolf.jpg',
     speed: '50 ft.',
     walkSpeedFt: 50,
     baseAc: 14,
@@ -92,7 +92,7 @@ export const GAIAH_WILD_SHAPE_FORMS: WildShapeBeastForm[] = [
     crNum: 1,
     size: 'Large',
     sizeMultiplier: 2,
-    avatarUrl: 'https://www.dndbeyond.com/avatars/43939/60/638607413478213174.png',
+    avatarUrl: '/tokens/wildshape/brown_bear.jpg',
     speed: '40 ft., climb 30 ft.',
     walkSpeedFt: 40,
     climbSpeedFt: 30,
@@ -150,7 +150,7 @@ export const GAIAH_WILD_SHAPE_FORMS: WildShapeBeastForm[] = [
     crNum: 2,
     size: 'Large',
     sizeMultiplier: 2,
-    avatarUrl: 'https://www.dndbeyond.com/avatars/43939/948/638607435568755201.png',
+    avatarUrl: '/tokens/wildshape/saber_toothed_tiger.jpg',
     speed: '40 ft.',
     walkSpeedFt: 40,
     baseAc: 12,
@@ -207,7 +207,7 @@ export const GAIAH_WILD_SHAPE_FORMS: WildShapeBeastForm[] = [
     crNum: 2,
     size: 'Huge',
     sizeMultiplier: 3,
-    avatarUrl: 'https://www.dndbeyond.com/avatars/47138/856/638741964104306226.png',
+    avatarUrl: '/tokens/wildshape/giant_constrictor_snake.jpg',
     speed: '30 ft., swim 30 ft.',
     walkSpeedFt: 30,
     swimSpeedFt: 30,
@@ -259,70 +259,13 @@ export const GAIAH_WILD_SHAPE_FORMS: WildShapeBeastForm[] = [
     description: 'A colossal 3x3 battlefield controller that automatically binds, crushes, and restrains enemy targets.'
   },
   {
-    id: 'form_giant_spider',
-    name: 'Giant Spider',
-    cr: '1',
-    crNum: 1,
-    size: 'Large',
-    sizeMultiplier: 2,
-    avatarUrl: 'https://www.dndbeyond.com/avatars/30849/299/638064499038216933.png',
-    speed: '30 ft., climb 30 ft.',
-    walkSpeedFt: 30,
-    climbSpeedFt: 30,
-    baseAc: 14,
-    nativeHp: 26,
-    stats: { str: 14, dex: 16, con: 12, int: 13, wis: 18, cha: 10 },
-    traits: [
-      {
-        name: 'Spider Climb',
-        description: 'You can climb difficult surfaces, including upside down on ceilings, without needing an ability check.'
-      },
-      {
-        name: 'Web Sense & Walker',
-        description: 'You ignore movement restrictions from webs and know the location of creatures touching the same web.'
-      }
-    ],
-    attacks: [
-      {
-        id: 'ws-spider-bite',
-        name: 'Venomous Bite',
-        category: 'attacks',
-        type: 'action',
-        subCategory: 'weapon',
-        isAttack: true,
-        sourceLabel: 'Wild Shape (Giant Spider)',
-        hitBonus: '+5',
-        damageFormula: '1d8 + 3',
-        damageType: 'piercing',
-        rangeFt: 5,
-        jb2aAssetId: 'attack_bite',
-        description: 'Melee Attack: +5 to hit, reach 5 ft. Hit: 1d8 + 3 piercing + 2d8 poison damage (DC 11 CON save for half).'
-      },
-      {
-        id: 'ws-spider-web',
-        name: 'Web Restraint',
-        category: 'attacks',
-        type: 'action',
-        subCategory: 'special',
-        isAttack: true,
-        sourceLabel: 'Wild Shape (Recharge 5-6)',
-        hitBonus: '+5',
-        damageFormula: '0',
-        rangeFt: 60,
-        jb2aAssetId: 'entangle',
-        description: 'Ranged Weapon Attack: +5 to hit, range 30/60 ft. Target is restrained by webbing (DC 12 STR check to escape).'
-      }
-    ],
-    description: 'An agile 3D infiltrator capable of wall and ceiling scaling with ranged webbing.'
-  },
-  {
     id: 'form_giant_badger',
     name: 'Giant Badger',
     cr: '1/4',
     crNum: 0.25,
     size: 'Medium',
     sizeMultiplier: 1,
-    avatarUrl: 'https://www.dndbeyond.com/avatars/16/530/636376327839601860.jpeg',
+    avatarUrl: '/tokens/wildshape/giant_badger.jpg',
     speed: '30 ft., burrow 10 ft.',
     walkSpeedFt: 30,
     baseAc: 10,

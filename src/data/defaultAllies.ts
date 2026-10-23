@@ -28,7 +28,7 @@ export const DEFAULT_ALLIES: Ally[] = [
     languages: '—',
     challenge: '1 (200 XP)',
     proficiencyBonus: 2,
-    avatarUrl: 'https://www.dndbeyond.com/avatars/47158/804/638742831347754764.png',
+    avatarUrl: '/tokens/wildshape/dire_wolf.jpg',
     traits: [
       {
         name: 'Keen Hearing and Smell',
@@ -77,7 +77,7 @@ export const DEFAULT_ALLIES: Ally[] = [
     languages: '—',
     challenge: '1 (200 XP)',
     proficiencyBonus: 2,
-    avatarUrl: 'https://www.dndbeyond.com/avatars/43939/60/638607413478213174.png',
+    avatarUrl: '/tokens/wildshape/brown_bear.jpg',
     traits: [
       {
         name: 'Keen Smell',
@@ -193,7 +193,7 @@ export const DEFAULT_ALLIES: Ally[] = [
     languages: '—',
     challenge: '1/4 (50 XP)',
     proficiencyBonus: 2,
-    avatarUrl: 'https://www.dndbeyond.com/avatars/16/530/636376327839601860.jpeg',
+    avatarUrl: '/tokens/wildshape/giant_badger.jpg',
     traits: [
       {
         name: 'Keen Smell',
@@ -298,7 +298,7 @@ export const DEFAULT_ALLIES: Ally[] = [
     languages: '—',
     challenge: '2 (450 XP)',
     proficiencyBonus: 2,
-    avatarUrl: 'https://www.dndbeyond.com/avatars/47138/856/638741964104306226.png',
+    avatarUrl: '/tokens/wildshape/giant_constrictor_snake.jpg',
     actions: [
       {
         name: 'Bite',
