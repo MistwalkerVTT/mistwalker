@@ -1729,6 +1729,11 @@ export default function PlayerView() {
   const [hudCharacterData, setHudCharacterData] = useState<HudCharacterData | null>(null);
   const [activeTargetingAction, setActiveTargetingAction] = useState<HudActionItem | null>(null);
   const [isSyncingHudDdb, setIsSyncingHudDdb] = useState<boolean>(false);
+  const [isDdbSyncEnabled, setIsDdbSyncEnabled] = useState<boolean>(true);
+  const isDdbSyncEnabledRef = useRef<boolean>(true);
+  useEffect(() => {
+    isDdbSyncEnabledRef.current = isDdbSyncEnabled;
+  }, [isDdbSyncEnabled]);
   const [showCharacterSelectModal, setShowCharacterSelectModal] = useState<boolean>(false);
   const [isCurrentCharacterPrivate, setIsCurrentCharacterPrivate] = useState<boolean>(false);
   const [showWildShapeModal, setShowWildShapeModal] = useState<boolean>(false);
@@ -1820,10 +1825,12 @@ export default function PlayerView() {
     return found;
   }, [tokens, claimedTokenId]);
 
-  // Clear Wild Shape state if player switches to a different token
+  // Clear Wild Shape state and ensure D&D Beyond sync always starts ON when switching characters
   useEffect(() => {
     activeWildShapeRef.current = null;
     setActiveWildShape(null);
+    isDdbSyncEnabledRef.current = true;
+    setIsDdbSyncEnabled(true);
   }, [claimedTokenId]);
 
   const claimedStats = useMemo(() => {
@@ -1880,9 +1887,21 @@ export default function PlayerView() {
     };
   }, []);
 
-  const syncHudFromDdb = useCallback(async (forceRefresh = false) => {
+  const syncHudFromDdb = useCallback(async (forceRefresh = false, overrideEnabled?: boolean) => {
     if (!claimedToken) {
       setHudCharacterData(null);
+      return;
+    }
+
+    const syncAllowed = overrideEnabled !== undefined ? overrideEnabled : isDdbSyncEnabledRef.current;
+    if (!syncAllowed) {
+      setIsCurrentCharacterPrivate(false);
+      setHudCharacterData(prev => {
+        if (prev) {
+          return applyActiveWildShapeOverlay({ ...prev, isLiveSynced: false });
+        }
+        return applyActiveWildShapeOverlay(buildFallbackHudData(claimedToken, claimedStats, compendiumCharacters));
+      });
       return;
     }
 
@@ -1963,6 +1982,31 @@ export default function PlayerView() {
       setIsSyncingHudDdb(false);
     }
   }, [claimedToken, resolvedClaimedDdbId, claimedStats, compendiumCharacters, applyActiveWildShapeOverlay]);
+
+  const handleToggleDdbSync = useCallback((nextEnabled: boolean) => {
+    isDdbSyncEnabledRef.current = nextEnabled;
+    setIsDdbSyncEnabled(nextEnabled);
+    if (nextEnabled) {
+      toast.success('D&D Beyond Character Sheet Sync turned ON', {
+        description: 'Syncing live HP, AC, spells, and actions from D&D Beyond...'
+      });
+      syncHudFromDdb(true, true);
+    } else {
+      setIsCurrentCharacterPrivate(false);
+      setPrivacyModalState(null);
+      setHudCharacterData(prev => {
+        if (!prev) {
+          return claimedToken
+            ? applyActiveWildShapeOverlay(buildFallbackHudData(claimedToken, claimedStats, compendiumCharacters))
+            : null;
+        }
+        return { ...prev, isLiveSynced: false };
+      });
+      toast.info('D&D Beyond Character Sheet Sync turned OFF', {
+        description: 'Using local VTT character stats & manual HP adjustments.'
+      });
+    }
+  }, [claimedToken, claimedStats, compendiumCharacters, applyActiveWildShapeOverlay, syncHudFromDdb]);
 
   // Fetch or synthesize D&D Beyond HUD Character Data when claimedToken changes
   useEffect(() => {
@@ -2682,6 +2726,9 @@ export default function PlayerView() {
           );
 
           if (match) {
+            if (!isDdbSyncEnabledRef.current && t.id === claimedTokenIdRef.current) {
+              return t;
+            }
             changed = true;
             return {
               ...t,
@@ -2769,6 +2816,9 @@ export default function PlayerView() {
         const next = prev.map(t => {
           const isMatch = isDdbMatch(t.name, (t as any).characterId || t.id, (t as any).ddbCharacterId, charIdStr, ddbName);
           if (isMatch) {
+            if (!isDdbSyncEnabledRef.current && t.id === claimedTokenIdRef.current) {
+              return t;
+            }
             changed = true;
             return {
               ...t,
@@ -2788,19 +2838,21 @@ export default function PlayerView() {
         return next;
       });
 
-      // 3. Update active Hero Dock if claimed character matches
-      setHudCharacterData(prev => {
-        if (!prev) return null;
-        if (String(prev.id) === charIdStr || prev.name.toLowerCase().trim() === ddbName.toLowerCase()) {
-          return {
-            ...prev,
-            currentHp: data.currentHp,
-            maxHp: data.maxHp,
-            tempHp: data.tempHp || 0
-          };
-        }
-        return prev;
-      });
+      // 3. Update active Hero Dock if claimed character matches and DDB Sync is ON
+      if (isDdbSyncEnabledRef.current) {
+        setHudCharacterData(prev => {
+          if (!prev) return null;
+          if (String(prev.id) === charIdStr || prev.name.toLowerCase().trim() === ddbName.toLowerCase()) {
+            return {
+              ...prev,
+              currentHp: data.currentHp,
+              maxHp: data.maxHp,
+              tempHp: data.tempHp || 0
+            };
+          }
+          return prev;
+        });
+      }
     });
 
     socket.on('SYNC_AUTO_APPLY_MONSTER_DAMAGE', (enabled: boolean) => {
@@ -7869,6 +7921,8 @@ export default function PlayerView() {
           isCharacterPrivate={isCurrentCharacterPrivate}
           onRefreshDdb={() => syncHudFromDdb(true)}
           isSyncingDdb={isSyncingHudDdb}
+          isDdbSyncEnabled={isDdbSyncEnabled}
+          onToggleDdbSync={handleToggleDdbSync}
           activeEffects={effects}
           onDispelEffect={handleDispelEffect}
           inspectedAuraRequest={inspectedAuraRequest}

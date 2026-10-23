@@ -48,6 +48,8 @@ interface PlayerHeroDockProps {
   onOpenRestModal?: () => void;
   onRefreshDdb?: () => void;
   isSyncingDdb?: boolean;
+  isDdbSyncEnabled?: boolean;
+  onToggleDdbSync?: (enabled: boolean) => void;
   isMobile?: boolean;
   onTargetSelf?: () => void;
   activeEffects?: any[];
@@ -79,6 +81,8 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
   onOpenRestModal,
   onRefreshDdb,
   isSyncingDdb = false,
+  isDdbSyncEnabled = true,
+  onToggleDdbSync,
   onTargetSelf,
   activeEffects = [],
   onDispelEffect,
@@ -1124,11 +1128,15 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
               <span className="text-[10px] font-mono font-bold text-emerald-400 shrink-0">
                 HP {currentHp}/{maxHp}
               </span>
-              {isLiveSynced && (
-                <span className="px-1 py-0.2 rounded bg-red-500/20 border border-red-500/40 text-red-300 text-[8px] font-mono font-bold shrink-0">
-                  DDB
-                </span>
-              )}
+              <span
+                className={`px-1 py-0.2 rounded text-[8px] font-mono font-bold shrink-0 border ${
+                  isDdbSyncEnabled
+                    ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+                    : 'bg-zinc-800 border-zinc-700 text-zinc-400'
+                }`}
+              >
+                {isDdbSyncEnabled ? 'DDB ON' : 'DDB OFF'}
+              </span>
             </div>
             <div className="flex items-center gap-1 text-[10px] font-mono text-zinc-300 mt-0.5">
               <Swords className="w-3 h-3 text-rose-400" />
@@ -1182,7 +1190,27 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
               </button>
             )}
 
-            {onRefreshDdb && (
+            {onToggleDdbSync && (
+              <button
+                type="button"
+                onClick={() => onToggleDdbSync(!isDdbSyncEnabled)}
+                className={`px-2 py-1.5 rounded-lg font-mono text-[10px] font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${
+                  isDdbSyncEnabled
+                    ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300'
+                    : 'bg-zinc-900 border-zinc-700 text-zinc-400'
+                }`}
+                title={isDdbSyncEnabled ? 'D&D Beyond Sync is ON (Click to turn OFF)' : 'D&D Beyond Sync is OFF (Click to turn ON)'}
+              >
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    isDdbSyncEnabled ? 'bg-emerald-400 shadow-[0_0_6px_#34d399]' : 'bg-zinc-600'
+                  }`}
+                />
+                <span>DDB</span>
+              </button>
+            )}
+
+            {isDdbSyncEnabled && onRefreshDdb && (
               <button
                 type="button"
                 onClick={onRefreshDdb}
@@ -1243,7 +1271,26 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
             </div>
 
             <div className="flex items-center gap-1.5">
-              {onRefreshDdb && (
+              {onToggleDdbSync && (
+                <button
+                  type="button"
+                  onClick={() => onToggleDdbSync(!isDdbSyncEnabled)}
+                  className={`px-2.5 py-1.5 rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 text-[10px] font-mono font-bold ${
+                    isDdbSyncEnabled
+                      ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300'
+                      : 'bg-zinc-900 border-zinc-700 text-zinc-400'
+                  }`}
+                  title={isDdbSyncEnabled ? 'D&D Beyond Sync is ON (Tap to turn OFF)' : 'D&D Beyond Sync is OFF (Tap to turn ON)'}
+                >
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      isDdbSyncEnabled ? 'bg-emerald-400 shadow-[0_0_6px_#34d399]' : 'bg-zinc-600'
+                    }`}
+                  />
+                  <span>DDB Sync: {isDdbSyncEnabled ? 'ON' : 'OFF'}</span>
+                </button>
+              )}
+              {isDdbSyncEnabled && onRefreshDdb && (
                 <button
                   type="button"
                   onClick={onRefreshDdb}
@@ -1531,15 +1578,28 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                 <h3 className="text-sm font-bold text-white font-mono truncate" title={name}>
                   {name}
                 </h3>
-                {isLiveSynced && (
+                <button
+                  type="button"
+                  onClick={() => onToggleDdbSync && onToggleDdbSync(!isDdbSyncEnabled)}
+                  className={`px-1.5 py-0.5 rounded border text-[9px] font-mono font-bold tracking-wide shrink-0 flex items-center gap-1 transition-all cursor-pointer ${
+                    isDdbSyncEnabled
+                      ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300 hover:bg-emerald-500/30'
+                      : 'bg-zinc-800/90 border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
+                  }`}
+                  title={
+                    isDdbSyncEnabled
+                      ? 'D&D Beyond Character Sheet Sync is ON (Click to toggle OFF)'
+                      : 'D&D Beyond Character Sheet Sync is OFF — using local VTT sheet (Click to toggle ON)'
+                  }
+                >
                   <span
-                    className="px-1.5 py-0.2 rounded bg-red-500/20 border border-red-500/40 text-red-300 text-[9px] font-mono font-bold tracking-wide shrink-0"
-                    title="Live Synced with D&D Beyond Character Sheet"
-                  >
-                    DDB LIVE
-                  </span>
-                )}
-                {isCharacterPrivate && (
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      isDdbSyncEnabled ? 'bg-emerald-400 shadow-[0_0_5px_#34d399]' : 'bg-zinc-500'
+                    }`}
+                  />
+                  <span>{isDdbSyncEnabled ? 'DDB SYNC: ON' : 'DDB SYNC: OFF'}</span>
+                </button>
+                {isDdbSyncEnabled && isCharacterPrivate && (
                   <button
                     type="button"
                     onClick={onOpenPrivacyModal}
@@ -1665,15 +1725,44 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
               </div>
             )}
 
-            {onRefreshDdb && (
+            {onToggleDdbSync && (
+              <button
+                type="button"
+                onClick={() => onToggleDdbSync(!isDdbSyncEnabled)}
+                role="switch"
+                aria-checked={isDdbSyncEnabled}
+                className={`px-2.5 py-1.5 rounded-xl border transition-all cursor-pointer flex items-center gap-2 text-[11px] font-mono font-bold ${
+                  isDdbSyncEnabled
+                    ? 'bg-emerald-950/70 hover:bg-emerald-900/80 text-emerald-300 border-emerald-500/50 shadow-sm'
+                    : 'bg-zinc-950 hover:bg-zinc-900 text-zinc-400 hover:text-zinc-200 border-zinc-800'
+                }`}
+                title={
+                  isDdbSyncEnabled
+                    ? 'D&D Beyond Character Sheet Sync is ON (Click to turn OFF)'
+                    : 'D&D Beyond Character Sheet Sync is OFF (Click to turn ON)'
+                }
+              >
+                <div
+                  className={`w-6 h-3.5 rounded-full p-0.5 transition-colors flex items-center ${
+                    isDdbSyncEnabled ? 'bg-emerald-500 justify-end' : 'bg-zinc-700 justify-start'
+                  }`}
+                >
+                  <div className="w-2.5 h-2.5 rounded-full bg-white shadow-xs" />
+                </div>
+                <span className="hidden lg:inline">
+                  DDB Sync: {isDdbSyncEnabled ? 'ON' : 'OFF'}
+                </span>
+              </button>
+            )}
+
+            {isDdbSyncEnabled && onRefreshDdb && (
               <button
                 type="button"
                 onClick={onRefreshDdb}
-                className="px-2.5 py-1.5 rounded-xl bg-zinc-950 hover:bg-zinc-800 text-emerald-400 hover:text-emerald-300 border border-zinc-800 transition-colors cursor-pointer flex items-center gap-1 text-[11px] font-mono font-bold"
-                title="Pull latest Attacks, Actions, Bonus Actions & Spells from D&D Beyond"
+                className="p-1.5 rounded-xl bg-zinc-950 hover:bg-zinc-800 text-emerald-400 hover:text-emerald-300 border border-zinc-800 transition-colors cursor-pointer flex items-center justify-center"
+                title="Pull latest Attacks, Actions, Bonus Actions & Spells from D&D Beyond now"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isSyncingDdb ? 'animate-spin' : ''}`} />
-                <span className="hidden lg:inline">Sync DDB</span>
               </button>
             )}
 
