@@ -2955,6 +2955,187 @@ aiRouter.post("/antigravity", async (req, res) => {
   }
 });
 
+/**
+ * POST /api/ai/elevenlabs-sfx
+ * Generates studio-grade sound effects or seamless environmental loops via ElevenLabs Sound Generation API (/v1/sound-generation)
+ */
+aiRouter.post("/elevenlabs-sfx", async (req, res) => {
+  try {
+    const {
+      prompt,
+      durationSeconds = 3.0,
+      promptInfluence = 0.45,
+      loop = false,
+      targetSpellKey,
+      name
+    } = req.body || {};
+
+    if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
+      return res.status(400).json({ error: "Missing sound effect prompt" });
+    }
+
+    const elevenKey =
+      currentElevenLabsApiKey ||
+      (isValidElevenLabsKey(process.env.ELEVENLABS_API_KEY) ? process.env.ELEVENLABS_API_KEY : null) ||
+      (isValidElevenLabsKey(process.env.XI_API_KEY) ? process.env.XI_API_KEY : null);
+
+    if (!elevenKey) {
+      return res.status(400).json({
+        error: "ElevenLabs API Key is not configured. Please add your ElevenLabs API Key in Settings."
+      });
+    }
+
+    const clampedDuration = Math.max(0.5, Math.min(22, Number(durationSeconds) || 3.0));
+    const clampedInfluence = Math.max(0.1, Math.min(1.0, Number(promptInfluence) || 0.45));
+
+    const elRes = await fetch("https://api.elevenlabs.io/v1/sound-generation", {
+      method: "POST",
+      headers: {
+        "xi-api-key": elevenKey,
+        "Content-Type": "application/json",
+        Accept: "audio/mpeg"
+      },
+      body: JSON.stringify({
+        text: prompt.trim(),
+        duration_seconds: clampedDuration,
+        prompt_influence: clampedInfluence,
+        loop: Boolean(loop)
+      })
+    });
+
+    if (!elRes.ok) {
+      const errText = await elRes.text().catch(() => "");
+      console.error(`[ElevenLabs SFX] API error (${elRes.status}):`, errText);
+      return res.status(elRes.status).json({
+        error: `ElevenLabs Sound Generation failed (${elRes.status}): ${errText.slice(0, 200)}`
+      });
+    }
+
+    const arrayBuffer = await elRes.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    const uploadsAudioDir = path.resolve(process.cwd(), "uploads", "audio");
+    if (!fs.existsSync(uploadsAudioDir)) {
+      fs.mkdirSync(uploadsAudioDir, { recursive: true });
+    }
+
+    const cleanSlug = String(targetSpellKey || name || "sfx")
+      .toLowerCase()
+      .replace(/[^a-z0-9_\-]/g, "_")
+      .slice(0, 40);
+    const filename = `el_${cleanSlug}_${Date.now()}.mp3`;
+    const savedPath = path.join(uploadsAudioDir, filename);
+    fs.writeFileSync(savedPath, buffer);
+
+    // If overriding a built-in spell SFX key, also update public/audio/sfx/spells/<key>.mp3
+    if (targetSpellKey && typeof targetSpellKey === "string") {
+      try {
+        const spellDir = path.resolve(process.cwd(), "public", "audio", "sfx", "spells");
+        if (fs.existsSync(spellDir)) {
+          const safeKey = targetSpellKey.replace(/[^a-z0-9_]/gi, "");
+          fs.writeFileSync(path.join(spellDir, `${safeKey}.mp3`), buffer);
+        }
+      } catch (e) {
+        console.warn("[ElevenLabs SFX] Could not overwrite public spell file:", e);
+      }
+    }
+
+    const staticUrl = `/uploads/audio/${filename}`;
+    const dataUrl = `data:audio/mpeg;base64,${buffer.toString("base64")}`;
+
+    return res.json({
+      success: true,
+      audioUrl: staticUrl,
+      dataUrl,
+      durationSeconds: clampedDuration,
+      loop: Boolean(loop),
+      byteSize: buffer.length
+    });
+  } catch (err: any) {
+    console.error("[ElevenLabs SFX] Error:", err);
+    return res.status(500).json({ error: err.message || "Failed to generate ElevenLabs sound effect" });
+  }
+});
+
+/**
+ * POST /api/ai/elevenlabs-music
+ * Generates custom instrumental fantasy music tracks via ElevenLabs Music API (/v1/music)
+ */
+aiRouter.post("/elevenlabs-music", async (req, res) => {
+  try {
+    const { prompt, lengthSeconds = 25, name } = req.body || {};
+    if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
+      return res.status(400).json({ error: "Missing music prompt" });
+    }
+
+    const elevenKey =
+      currentElevenLabsApiKey ||
+      (isValidElevenLabsKey(process.env.ELEVENLABS_API_KEY) ? process.env.ELEVENLABS_API_KEY : null) ||
+      (isValidElevenLabsKey(process.env.XI_API_KEY) ? process.env.XI_API_KEY : null);
+
+    if (!elevenKey) {
+      return res.status(400).json({
+        error: "ElevenLabs API Key is not configured. Please add your ElevenLabs API Key in Settings."
+      });
+    }
+
+    const lengthMs = Math.max(5000, Math.min(120000, Math.round((Number(lengthSeconds) || 25) * 1000)));
+
+    const elRes = await fetch("https://api.elevenlabs.io/v1/music", {
+      method: "POST",
+      headers: {
+        "xi-api-key": elevenKey,
+        "Content-Type": "application/json",
+        Accept: "audio/mpeg"
+      },
+      body: JSON.stringify({
+        prompt: prompt.trim(),
+        music_length_ms: lengthMs,
+        force_instrumental: true
+      })
+    });
+
+    if (!elRes.ok) {
+      const errText = await elRes.text().catch(() => "");
+      console.error(`[ElevenLabs Music] API error (${elRes.status}):`, errText);
+      return res.status(elRes.status).json({
+        error: `ElevenLabs Music Generation failed (${elRes.status}): ${errText.slice(0, 200)}`
+      });
+    }
+
+    const arrayBuffer = await elRes.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    const uploadsAudioDir = path.resolve(process.cwd(), "uploads", "audio");
+    if (!fs.existsSync(uploadsAudioDir)) {
+      fs.mkdirSync(uploadsAudioDir, { recursive: true });
+    }
+
+    const cleanSlug = String(name || "music")
+      .toLowerCase()
+      .replace(/[^a-z0-9_\-]/g, "_")
+      .slice(0, 40);
+    const filename = `el_music_${cleanSlug}_${Date.now()}.mp3`;
+    const savedPath = path.join(uploadsAudioDir, filename);
+    fs.writeFileSync(savedPath, buffer);
+
+    const staticUrl = `/uploads/audio/${filename}`;
+    const dataUrl = `data:audio/mpeg;base64,${buffer.toString("base64")}`;
+
+    return res.json({
+      success: true,
+      audioUrl: staticUrl,
+      dataUrl,
+      lengthMs,
+      byteSize: buffer.length
+    });
+  } catch (err: any) {
+    console.error("[ElevenLabs Music] Error:", err);
+    return res.status(500).json({ error: err.message || "Failed to generate ElevenLabs music track" });
+  }
+});
+
+
 
 
 

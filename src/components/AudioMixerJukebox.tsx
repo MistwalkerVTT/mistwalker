@@ -42,6 +42,7 @@ import {
   SoundboardCategory
 } from '../types/audioJukebox';
 import { jukeboxAudioEngine } from '../services/jukeboxAudioEngine';
+import { soundCatalog, SOUND_EFFECT_CATALOG_META, SoundCatalogEntryMeta } from '../effects/db/soundCatalog';
 import { isLineOfSightBlocked } from '../lib/visionEngine';
 import { WallSegment } from '../types';
 import { uploadAndRegisterAsset } from '../lib/firebase';
@@ -482,9 +483,21 @@ export const AudioMixerJukeboxModal: React.FC<{
   onAddCustomPad,
   getViewportCenterWorldPx
 }) => {
-  const [activeTab, setActiveTab] = useState<'ambience' | 'soundboard' | 'spatial'>('ambience');
+  const [activeTab, setActiveTab] = useState<'ambience' | 'soundboard' | 'spatial' | 'elevenlabs'>('ambience');
   const [padCategoryFilter, setPadCategoryFilter] = useState<'all' | SoundboardCategory>('all');
   const [isUploadingAudio, setIsUploadingAudio] = useState(false);
+
+  // ElevenLabs AI Audio Lab State
+  const [elGenMode, setElGenMode] = useState<'pad' | 'loop' | 'music'>('pad');
+  const [elName, setElName] = useState('');
+  const [elPrompt, setElPrompt] = useState('');
+  const [elDuration, setElDuration] = useState(3.5);
+  const [isGeneratingElevenLabs, setIsGeneratingElevenLabs] = useState(false);
+  const [spellCategoryFilter, setSpellCategoryFilter] = useState<string>('all');
+  const [upgradingSpellKey, setUpgradingSpellKey] = useState<string | null>(null);
+  const [customOverridesMap, setCustomOverridesMap] = useState<Record<string, string>>(() =>
+    soundCatalog.getCustomOverrides()
+  );
 
   // Spatial Audio Form State
   const [newPinLabel, setNewPinLabel] = useState('Roaring Hearth');
@@ -568,6 +581,130 @@ export const AudioMixerJukeboxModal: React.FC<{
     };
     onSaveMapAudioSource(newSource);
     toast.success(`🔊 Placed "${newSource.label}" on map (${newSource.radiusFt}ft radius)! Drag the 🔊 pin to position it.`);
+  };
+
+  const handleGenerateElevenLabsCustom = async () => {
+    if (!elPrompt.trim()) {
+      toast.error('Please enter a description for ElevenLabs to generate.');
+      return;
+    }
+    const cleanTitle = elName.trim() || elPrompt.trim().slice(0, 28);
+    setIsGeneratingElevenLabs(true);
+    try {
+      if (elGenMode === 'music') {
+        const res = await fetch('/api/ai/elevenlabs-music', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: cleanTitle,
+            prompt: elPrompt.trim(),
+            lengthSeconds: Math.max(10, Math.min(60, elDuration))
+          })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'ElevenLabs Music generation failed');
+        }
+        onAddCustomTrack({
+          id: `el_music_${Date.now()}`,
+          name: cleanTitle,
+          category: 'music',
+          description: `ElevenLabs Music • ${elPrompt.trim()}`,
+          color: '#f59e0b',
+          iconName: 'Music',
+          customUrl: data.audioUrl
+        });
+        toast.success(`🎵 ElevenLabs generated music track "${cleanTitle}" and started playback!`);
+      } else if (elGenMode === 'loop') {
+        const res = await fetch('/api/ai/elevenlabs-sfx', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: cleanTitle,
+            prompt: elPrompt.trim(),
+            durationSeconds: Math.max(5, Math.min(20, elDuration)),
+            loop: true
+          })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'ElevenLabs loop generation failed');
+        }
+        onAddCustomTrack({
+          id: `el_loop_${Date.now()}`,
+          name: cleanTitle,
+          category: 'environment',
+          description: `ElevenLabs Loop • ${elPrompt.trim()}`,
+          color: '#06b6d4',
+          iconName: 'Sparkles',
+          customUrl: data.audioUrl
+        });
+        toast.success(`🔁 ElevenLabs generated seamless loop "${cleanTitle}" and added it to Ambience!`);
+      } else {
+        const res = await fetch('/api/ai/elevenlabs-sfx', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: cleanTitle,
+            prompt: elPrompt.trim(),
+            durationSeconds: Math.max(1, Math.min(12, elDuration)),
+            loop: false
+          })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'ElevenLabs SFX generation failed');
+        }
+        const newPad: SoundboardPadDefinition = {
+          id: `el_pad_${Date.now()}`,
+          name: cleanTitle,
+          category: 'world',
+          subtitle: `ElevenLabs • ${elPrompt.trim()}`,
+          color: '#a855f7',
+          customUrl: data.audioUrl
+        };
+        onAddCustomPad(newPad);
+        onTriggerPad(newPad, 0.9);
+        toast.success(`⚡ ElevenLabs generated SFX pad "${cleanTitle}"!`);
+      }
+      setElName('');
+    } catch (err: any) {
+      console.error('[ElevenLabs Lab] Error:', err);
+      toast.error(err.message || 'Could not generate audio via ElevenLabs.');
+    } finally {
+      setIsGeneratingElevenLabs(false);
+    }
+  };
+
+  const handleUpgradeSpellSfx = async (entry: SoundCatalogEntryMeta, customPromptOverride?: string) => {
+    const promptToUse = (customPromptOverride || entry.defaultPrompt).trim();
+    setUpgradingSpellKey(entry.key);
+    try {
+      const res = await fetch('/api/ai/elevenlabs-sfx', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: entry.key,
+          targetSpellKey: entry.key,
+          prompt: promptToUse,
+          durationSeconds: 2.8,
+          loop: false
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to upgrade spell SFX');
+      }
+      soundCatalog.setCustomOverride(entry.key, data.audioUrl);
+      setCustomOverridesMap(soundCatalog.getCustomOverrides());
+      soundCatalog.play(entry.key, 0.95);
+      toast.success(`✨ Upgraded "${entry.label}" with ElevenLabs Neural SFX!`);
+    } catch (err: any) {
+      console.error('[ElevenLabs Spell Upgrade] Error:', err);
+      toast.error(err.message || `Failed to upgrade ${entry.label}`);
+    } finally {
+      setUpgradingSpellKey(null);
+    }
   };
 
   const renderTrackIcon = (iconName: string, color: string) => {
@@ -732,6 +869,22 @@ export const AudioMixerJukeboxModal: React.FC<{
                   {jukeboxState.mapAudioSources.length}
                 </span>
               )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('elevenlabs')}
+              className={`px-4 py-2.5 rounded-t-2xl text-xs font-mono font-bold flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+                activeTab === 'elevenlabs'
+                  ? 'border-purple-400 text-purple-300 bg-zinc-900'
+                  : 'border-transparent text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <Sparkles className="w-4 h-4 text-purple-400" />
+              <span>4. ElevenLabs AI Audio Lab</span>
+              <span className="px-1.5 py-0.2 rounded-full bg-purple-500/25 border border-purple-400/50 text-purple-200 text-[9px] font-black">
+                SFX + MUSIC
+              </span>
             </button>
           </div>
         </div>
@@ -1170,6 +1323,270 @@ export const AudioMixerJukeboxModal: React.FC<{
                     })}
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================= */}
+          {/* TAB 4: ELEVENLABS AI SOUND EFFECTS & MUSIC STUDIO LAB     */}
+          {/* ========================================================= */}
+          {activeTab === 'elevenlabs' && (
+            <div className="space-y-6">
+              {/* Top Panel: Custom ElevenLabs SFX / Loop / Music Generator */}
+              <div className="bg-gradient-to-br from-purple-950/35 via-zinc-900/90 to-zinc-950 border border-purple-500/35 rounded-2xl p-5 space-y-4 shadow-lg">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-purple-400" />
+                      <h3 className="text-sm font-mono font-bold text-white">
+                        ElevenLabs Neural SFX &amp; Fantasy Music Generator
+                      </h3>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-purple-500/20 text-purple-300 border border-purple-400/40">
+                        eleven_text_to_sound_v2 + music_v1
+                      </span>
+                    </div>
+                    <p className="text-xs text-zinc-400 mt-0.5">
+                      Generate studio-grade D&amp;D soundboard pads, seamless environmental loops, or full instrumental soundtracks on demand.
+                    </p>
+                  </div>
+
+                  {/* Mode Selector */}
+                  <div className="flex bg-zinc-950 p-1 rounded-xl border border-zinc-800 gap-1">
+                    {(
+                      [
+                        { id: 'pad', label: '⚡ One-Shot SFX Pad', defaultDur: 3.5 },
+                        { id: 'loop', label: '🔁 Seamless Ambience Loop', defaultDur: 12 },
+                        { id: 'music', label: '🎵 Instrumental Music Track', defaultDur: 25 }
+                      ] as const
+                    ).map((m) => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => {
+                          setElGenMode(m.id);
+                          setElDuration(m.defaultDur);
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer ${
+                          elGenMode === m.id
+                            ? 'bg-purple-600 text-white shadow-sm'
+                            : 'text-zinc-400 hover:text-white'
+                        }`}
+                      >
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Quick Prompt Presets */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] font-mono uppercase text-zinc-500 mr-1">Quick Prompts:</span>
+                  {[
+                    {
+                      mode: 'pad' as const,
+                      name: 'Mimic Chest Bite',
+                      dur: 3.0,
+                      prompt: 'Wooden treasure chest snapping open with monstrous wet teeth crunching and guttural mimic snarl'
+                    },
+                    {
+                      mode: 'pad' as const,
+                      name: 'Critical Hit Cleave',
+                      dur: 2.5,
+                      prompt: 'Earth-shattering critical hit greatsword cleave with metallic bone-crunching impact and heroic brass sting'
+                    },
+                    {
+                      mode: 'pad' as const,
+                      name: 'Beholder Disintegration Ray',
+                      dur: 3.5,
+                      prompt: 'High-energy eldritch eye beam firing with sub-bass disintegration hum and stone vaporizing crackle'
+                    },
+                    {
+                      mode: 'loop' as const,
+                      name: 'Dwarven Forge Hammers',
+                      dur: 12,
+                      prompt: 'Underground dwarven smithy ambience with rhythmic anvil hammer clangs, roaring furnace bellows, and molten lava bubble'
+                    },
+                    {
+                      mode: 'music' as const,
+                      name: 'Ascended Archlich Phase 2',
+                      dur: 25,
+                      prompt: 'Epic gothic dark fantasy final boss orchestral music with ominous pipe organ, frantic violin ostinato, and thunderous war drums, instrumental only'
+                    }
+                  ].map((preset) => (
+                    <button
+                      key={preset.name}
+                      type="button"
+                      onClick={() => {
+                        setElGenMode(preset.mode);
+                        setElName(preset.name);
+                        setElPrompt(preset.prompt);
+                        setElDuration(preset.dur);
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-purple-950/60 border border-zinc-800 hover:border-purple-500/50 text-[11px] font-mono text-zinc-300 hover:text-purple-200 transition-colors cursor-pointer"
+                    >
+                      + {preset.name}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                  <div className="md:col-span-3">
+                    <label className="block text-[11px] font-mono text-zinc-400 mb-1">
+                      Track / Pad Title
+                    </label>
+                    <input
+                      type="text"
+                      value={elName}
+                      onChange={(e) => setElName(e.target.value)}
+                      placeholder="e.g., Mimic Bite, Dwarven Forge..."
+                      className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white font-mono focus:border-purple-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="md:col-span-5">
+                    <label className="block text-[11px] font-mono text-zinc-400 mb-1">
+                      ElevenLabs Audio Prompt
+                    </label>
+                    <input
+                      type="text"
+                      value={elPrompt}
+                      onChange={(e) => setElPrompt(e.target.value)}
+                      placeholder="Describe the sound effect, ambience loop, or instrumental music..."
+                      className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white font-mono focus:border-purple-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="block text-[11px] font-mono text-zinc-400 mb-1">
+                      Duration: <strong className="text-purple-300">{elDuration}s</strong>
+                    </label>
+                    <input
+                      type="range"
+                      min={elGenMode === 'music' ? 10 : elGenMode === 'loop' ? 6 : 1}
+                      max={elGenMode === 'music' ? 45 : elGenMode === 'loop' ? 20 : 10}
+                      step={0.5}
+                      value={elDuration}
+                      onChange={(e) => setElDuration(parseFloat(e.target.value))}
+                      className="w-full accent-purple-400 cursor-pointer"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <button
+                      type="button"
+                      disabled={isGeneratingElevenLabs}
+                      onClick={handleGenerateElevenLabsCustom}
+                      className="w-full py-2 px-3 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-mono font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-purple-600/25 cursor-pointer transition-all"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>{isGeneratingElevenLabs ? 'Generating...' : 'Generate AI'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bottom Panel: Complete 37 Spell & Combat SFX Library + 1-Click ElevenLabs Upgrade */}
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-2.5">
+                  <div>
+                    <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-zinc-200 flex items-center gap-2">
+                      <span>Spell &amp; Combat SFX Catalog ({SOUND_EFFECT_CATALOG_META.length} Effects)</span>
+                      <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[10px]">
+                        All 21 Missing/Duplicate Effects Upgraded with ElevenLabs
+                      </span>
+                    </h3>
+                    <p className="text-[11px] text-zinc-400 mt-0.5">
+                      Audition any spell or combat sound effect below, or click <strong>Re-Synth with ElevenLabs</strong> to generate a fresh neural variation.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-1 flex-wrap">
+                    {(['all', 'fire', 'lightning', 'cold', 'arcane', 'radiant', 'necrotic', 'martial', 'elemental'] as const).map(
+                      (cat) => (
+                        <button
+                          key={cat}
+                          type="button"
+                          onClick={() => setSpellCategoryFilter(cat)}
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold uppercase cursor-pointer transition-all ${
+                            spellCategoryFilter === cat
+                              ? 'bg-purple-600 text-white'
+                              : 'bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800'
+                          }`}
+                        >
+                          {cat}
+                        </button>
+                      )
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                  {SOUND_EFFECT_CATALOG_META.filter(
+                    (item) => spellCategoryFilter === 'all' || item.category === spellCategoryFilter
+                  ).map((entry) => {
+                    const isUpgrading = upgradingSpellKey === entry.key;
+                    const hasCustomOverride = Boolean(customOverridesMap[entry.key]);
+                    const isElevenLabs = entry.sourceEngine === 'elevenlabs' || hasCustomOverride;
+
+                    return (
+                      <div
+                        key={entry.key}
+                        className="p-3 rounded-2xl bg-zinc-900/75 border border-zinc-800 hover:border-purple-500/40 flex flex-col justify-between gap-2.5 transition-all"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-xs font-mono font-bold text-white truncate">
+                                {entry.label}
+                              </span>
+                              <span
+                                className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded border ${
+                                  isElevenLabs
+                                    ? 'bg-purple-950/80 text-purple-300 border-purple-500/50'
+                                    : 'bg-zinc-800 text-zinc-300 border-zinc-700'
+                                }`}
+                              >
+                                {hasCustomOverride ? 'ELEVENLABS CUSTOM' : isElevenLabs ? 'ELEVENLABS AI' : 'STUDIO OGG'}
+                              </span>
+                            </div>
+                            <div className="text-[10px] font-mono text-zinc-500 mt-0.5">
+                              Key: <code className="text-zinc-400">{entry.key}</code>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => soundCatalog.play(entry.key, 0.95)}
+                            className="p-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 cursor-pointer shrink-0 transition-colors"
+                            title={`Play ${entry.label}`}
+                          >
+                            <Play className="w-3.5 h-3.5 fill-current" />
+                          </button>
+                        </div>
+
+                        <p className="text-[10px] text-zinc-400 line-clamp-2 leading-relaxed">
+                          {entry.defaultPrompt}
+                        </p>
+
+                        <div className="flex items-center justify-between gap-2 pt-1 border-t border-zinc-800/70">
+                          <span className="text-[10px] font-mono uppercase text-zinc-500">
+                            {entry.category}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={isUpgrading}
+                            onClick={() => handleUpgradeSpellSfx(entry)}
+                            className="px-2.5 py-1 rounded-lg bg-purple-950/60 hover:bg-purple-600 text-purple-200 hover:text-white border border-purple-500/40 text-[10px] font-mono font-bold flex items-center gap-1 cursor-pointer transition-all disabled:opacity-50"
+                            title="Generate a fresh studio sound effect for this spell using ElevenLabs"
+                          >
+                            <Sparkles className="w-3 h-3" />
+                            <span>{isUpgrading ? 'Synthesizing...' : isElevenLabs ? 'Re-Synth ElevenLabs' : 'Upgrade via ElevenLabs'}</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           )}

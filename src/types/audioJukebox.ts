@@ -8,6 +8,7 @@ export interface AmbienceTrackDefinition {
   color: string;
   iconName: string;
   customUrl?: string;
+  defaultPrompt?: string;
 }
 
 export interface SceneMoodPreset {
@@ -27,6 +28,7 @@ export interface SoundboardPadDefinition {
   subtitle: string;
   color: string;
   customUrl?: string;
+  defaultPrompt?: string;
 }
 
 export interface MapAudioSource {
@@ -64,106 +66,130 @@ export interface SoundboardTriggerPayload {
 }
 
 export const BUILTIN_AMBIENCE_TRACKS: AmbienceTrackDefinition[] = [
-  // Music & Melodic Drones
+  // Music & Melodic Soundtracks (ElevenLabs Music AI)
   {
     id: 'tavern_hearth',
     name: 'Tavern Hearth & Lute',
     category: 'music',
-    description: 'Warm acoustic harmonic fifths & cozy inn resonance',
+    description: 'ElevenLabs Music • Warm medieval lute, guitar, wooden flute & cozy inn',
     color: '#f59e0b',
-    iconName: 'Music'
+    iconName: 'Music',
+    customUrl: '/audio/jukebox/music/tavern_hearth.mp3',
+    defaultPrompt: 'Warm medieval fantasy tavern instrumental music featuring acoustic lute, fingerpicked guitar, gentle wooden flute, and cozy hearth atmosphere, no vocals'
   },
   {
     id: 'crypt_catacombs',
     name: 'Crypt & Catacombs',
     category: 'music',
-    description: 'Deep sub-bass catacomb drone with eerie resonant chimes',
+    description: 'ElevenLabs Music • Deep bowed cello drones & eerie gothic catacomb chimes',
     color: '#8b5cf6',
-    iconName: 'Skull'
+    iconName: 'Skull',
+    customUrl: '/audio/jukebox/music/crypt_catacombs.mp3',
+    defaultPrompt: 'Dark atmospheric dungeon exploration instrumental soundtrack with deep bowed cello drones, eerie gothic chimes, and suspenseful dark fantasy ambience, no vocals'
   },
   {
     id: 'boss_battle_pulse',
     name: 'Boss Battle Pulse',
     category: 'music',
-    description: 'Driving low war-drum pulse & dark brass tension',
+    description: 'ElevenLabs Music • Epic orchestral war drums, staccato strings & dark brass',
     color: '#ef4444',
-    iconName: 'Swords'
+    iconName: 'Swords',
+    customUrl: '/audio/jukebox/music/boss_battle_pulse.mp3',
+    defaultPrompt: 'Epic dark fantasy RPG boss battle orchestral combat music with driving war drums, aggressive staccato strings, and menacing low brass, instrumental only'
   },
   {
     id: 'arcane_sanctum',
     name: 'Arcane Sanctum',
     category: 'music',
-    description: 'Crystalline astral shimmer & leyline harmonic hum',
+    description: 'ElevenLabs Music • Mystical celesta, astral harp arpeggios & glass pads',
     color: '#06b6d4',
-    iconName: 'Sparkles'
+    iconName: 'Sparkles',
+    customUrl: '/audio/jukebox/music/arcane_sanctum.mp3',
+    defaultPrompt: 'Mystical high-fantasy wizard sanctum instrumental music with ethereal celesta, shimmering harp arpeggios, and cosmic glass pads, no vocals'
   },
   {
     id: 'overland_frontier',
     name: 'Overland Wilderness',
     category: 'music',
-    description: 'Open horizon wind-harp & tranquil modal chord pad',
+    description: 'ElevenLabs Music • Sweeping pastoral strings, oboe & Celtic exploration harp',
     color: '#10b981',
-    iconName: 'Compass'
+    iconName: 'Compass',
+    customUrl: '/audio/jukebox/music/overland_frontier.mp3',
+    defaultPrompt: 'Sweeping tranquil fantasy wilderness exploration instrumental soundtrack with acoustic strings, pastoral oboe, and gentle Celtic harp, no vocals'
   },
 
-  // Environmental Loops
+  // Environmental Loops (ElevenLabs Seamless Loops)
   {
     id: 'crackling_campfire',
     name: 'Crackling Campfire',
     category: 'environment',
-    description: 'Warm hearth rumble with organic snapping embers',
+    description: 'ElevenLabs SFX • Roaring hearth logs crackling with snapping embers',
     color: '#f97316',
-    iconName: 'Flame'
+    iconName: 'Flame',
+    customUrl: '/audio/jukebox/ambience/crackling_campfire.mp3',
+    defaultPrompt: 'Warm cozy medieval tavern hearth and wilderness campfire logs crackling steadily with gentle popping embers'
   },
   {
     id: 'dungeon_drips',
     name: 'Dungeon Water Drips',
     category: 'environment',
-    description: 'Echoing subterranean cavern droplets & damp stone',
+    description: 'ElevenLabs SFX • Echoing subterranean stone cavern droplets & pools',
     color: '#38bdf8',
-    iconName: 'Droplets'
+    iconName: 'Droplets',
+    customUrl: '/audio/jukebox/ambience/dungeon_drips.mp3',
+    defaultPrompt: 'Dark subterranean stone dungeon cavern ambience with echoing water droplets dripping into underground pools'
   },
   {
     id: 'tavern_crowd',
     name: 'Tavern Crowd Murmur',
     category: 'environment',
-    description: 'Lively common-room chatter, tankards & distant laughter',
+    description: 'ElevenLabs SFX • Lively common-room chatter, clinking tankards & laughter',
     color: '#eab308',
-    iconName: 'Users'
+    iconName: 'Users',
+    customUrl: '/audio/jukebox/ambience/tavern_crowd.mp3',
+    defaultPrompt: 'Lively medieval fantasy inn common room ambience with warm background crowd murmur, clinking tankards, and distant laughter'
   },
   {
     id: 'whispering_souls',
     name: 'Whispering Altar',
     category: 'environment',
-    description: 'Otherworldly spectral whispers & eldritch static',
+    description: 'ElevenLabs SFX • Haunted crypt spectral whispers & eldritch resonance',
     color: '#a855f7',
-    iconName: 'Eye'
+    iconName: 'Eye',
+    customUrl: '/audio/jukebox/ambience/whispering_souls.mp3',
+    defaultPrompt: 'Eerie haunted necromancer crypt altar with ghostly overlapping spectral whispers and dark eldritch resonance'
   },
 
-  // Weather Loops
+  // Weather Loops (ElevenLabs Seamless Loops)
   {
     id: 'heavy_rain',
     name: 'Heavy Rain & Downpour',
     category: 'weather',
-    description: 'Steady rainfall wash & roof patter',
+    description: 'ElevenLabs SFX • Steady rainstorm downpour on cobblestone & slate roofs',
     color: '#0ea5e9',
-    iconName: 'CloudRain'
+    iconName: 'CloudRain',
+    customUrl: '/audio/jukebox/ambience/heavy_rain.mp3',
+    defaultPrompt: 'Steady heavy rainstorm downpour pattering against medieval cobblestone, slate rooftops, and forest leaves'
   },
   {
     id: 'howling_wind',
     name: 'Howling Cavern Wind',
     category: 'weather',
-    description: 'Sweeping mountain & cavern wind gusts',
+    description: 'ElevenLabs SFX • Desolate mountain pass & deep stone cavern wind gusts',
     color: '#94a3b8',
-    iconName: 'Wind'
+    iconName: 'Wind',
+    customUrl: '/audio/jukebox/ambience/howling_wind.mp3',
+    defaultPrompt: 'Desolate howling mountain pass and deep cavern wind sweeping through ancient stone ruins'
   },
   {
     id: 'distant_thunder',
     name: 'Thunderstorm Rumbles',
     category: 'weather',
-    description: 'Rolling low-frequency storm thunder across the sky',
+    description: 'ElevenLabs SFX • Rolling low-frequency storm thunder across dark skies',
     color: '#6366f1',
-    iconName: 'Zap'
+    iconName: 'Zap',
+    customUrl: '/audio/jukebox/ambience/distant_thunder.mp3',
+    defaultPrompt: 'Ominous dark storm ambience with low rolling distant thunder rumbles and brooding storm wind'
   }
 ];
 
@@ -239,34 +265,42 @@ export const SCENE_MOOD_PRESETS: SceneMoodPreset[] = [
 ];
 
 export const BUILTIN_SOUNDBOARD_PADS: SoundboardPadDefinition[] = [
-  // Dungeon & Doors
+  // Dungeon & Doors (ElevenLabs Neural SFX)
   {
     id: 'pad_door_creak',
     name: 'Heavy Door Creak',
     category: 'dungeon',
     subtitle: 'Aged oak hinges groaning open',
-    color: '#f59e0b'
+    color: '#f59e0b',
+    customUrl: '/audio/jukebox/pads/pad_door_creak.mp3',
+    defaultPrompt: 'Heavy ancient medieval oak dungeon door slowly creaking open on rusty iron hinges in a stone hall'
   },
   {
     id: 'pad_portcullis_slam',
     name: 'Portcullis Slam',
     category: 'dungeon',
     subtitle: 'Iron gate crashing into stone',
-    color: '#94a3b8'
+    color: '#94a3b8',
+    customUrl: '/audio/jukebox/pads/pad_portcullis_slam.mp3',
+    defaultPrompt: 'Massive iron castle portcullis gate dropping chains and slamming violently onto a stone dungeon floor'
   },
   {
     id: 'pad_secret_stone',
     name: 'Secret Stone Slide',
     category: 'dungeon',
     subtitle: 'Heavy masonry grinding aside',
-    color: '#a8a29e'
+    color: '#a8a29e',
+    customUrl: '/audio/jukebox/pads/pad_secret_stone.mp3',
+    defaultPrompt: 'Heavy ancient stone wall secret door grinding and sliding open against rough masonry in a dark tomb'
   },
   {
     id: 'pad_lock_click',
     name: 'Lock / Tumbler Click',
     category: 'dungeon',
     subtitle: 'Crisp metallic mechanism unlock',
-    color: '#fbbf24'
+    color: '#fbbf24',
+    customUrl: '/audio/jukebox/pads/pad_lock_click.mp3',
+    defaultPrompt: 'Crisp medieval iron lock tumblers clicking and heavy bolt sliding open with thieves tools'
   },
 
   // Traps & Hazards
@@ -275,28 +309,36 @@ export const BUILTIN_SOUNDBOARD_PADS: SoundboardPadDefinition[] = [
     name: 'Trap Pressure Click',
     category: 'traps',
     subtitle: 'Deadly floor plate trigger snap',
-    color: '#ef4444'
+    color: '#ef4444',
+    customUrl: '/audio/jukebox/pads/pad_trap_click.mp3',
+    defaultPrompt: 'Deadly dungeon stone floor pressure plate clicking down followed by a taut metallic spring trigger snap'
   },
   {
     id: 'pad_dart_volley',
     name: 'Arrow / Dart Trap',
     category: 'traps',
     subtitle: 'Whip-fast projectile volley & impact',
-    color: '#f97316'
+    color: '#f97316',
+    customUrl: '/audio/jukebox/pads/pad_dart_volley.mp3',
+    defaultPrompt: 'Volley of deadly poison darts and crossbow bolts firing from hidden wall slots and thudding into wood'
   },
   {
     id: 'pad_poison_gas',
     name: 'Poison Gas Hiss',
     category: 'traps',
     subtitle: 'Pressurized noxious vapor vent',
-    color: '#22c55e'
+    color: '#22c55e',
+    customUrl: '/audio/jukebox/pads/pad_poison_gas.mp3',
+    defaultPrompt: 'High-pressure noxious poison gas trap venting and hissing loudly from hidden dungeon stone nozzles'
   },
   {
     id: 'pad_collapse_rumble',
     name: 'Collapsing Rubble',
     category: 'traps',
     subtitle: 'Crashing stone & ceiling tremor',
-    color: '#d97706'
+    color: '#d97706',
+    customUrl: '/audio/jukebox/pads/pad_collapse_rumble.mp3',
+    defaultPrompt: 'Violent subterranean cave-in with heavy stone boulders crashing down and rumbling dungeon tremor'
   },
 
   // Monsters & Combat
@@ -305,28 +347,36 @@ export const BUILTIN_SOUNDBOARD_PADS: SoundboardPadDefinition[] = [
     name: 'Dragon / Beast Roar',
     category: 'combat',
     subtitle: 'Earth-shaking apex predator roar',
-    color: '#dc2626'
+    color: '#dc2626',
+    customUrl: '/audio/jukebox/pads/pad_dragon_roar.mp3',
+    defaultPrompt: 'Terrifying colossal ancient red dragon roaring with guttural fire-breathing resonance in a vast cavern'
   },
   {
     id: 'pad_undead_shriek',
     name: 'Banshee / Crypt Shriek',
     category: 'combat',
     subtitle: 'Chilling wraith wail from the dark',
-    color: '#a855f7'
+    color: '#a855f7',
+    customUrl: '/audio/jukebox/pads/pad_undead_shriek.mp3',
+    defaultPrompt: 'Blood-curdling ghostly banshee wail and terrifying undead crypt shriek echoing in the dark'
   },
   {
     id: 'pad_war_horn',
     name: 'Dread War Horn',
     category: 'combat',
     subtitle: 'Deep brass battle horn across the valley',
-    color: '#ea580c'
+    color: '#ea580c',
+    customUrl: '/audio/jukebox/pads/pad_war_horn.mp3',
+    defaultPrompt: 'Deep ancient Viking and fantasy dread war horn bellowing a long echoing battle call across a misty valley'
   },
   {
     id: 'pad_steel_clash',
     name: 'Swords & Shields Clash',
     category: 'combat',
     subtitle: 'Ringing steel-on-steel ambush',
-    color: '#38bdf8'
+    color: '#38bdf8',
+    customUrl: '/audio/jukebox/pads/pad_steel_clash.mp3',
+    defaultPrompt: 'Intense medieval melee ambush with multiple steel swords clashing against shields, armor, and battle cries'
   },
 
   // World & Table Moments
@@ -335,28 +385,36 @@ export const BUILTIN_SOUNDBOARD_PADS: SoundboardPadDefinition[] = [
     name: 'Thunderclap Strike',
     category: 'world',
     subtitle: 'Deafening lightning bolt & boom',
-    color: '#6366f1'
+    color: '#6366f1',
+    customUrl: '/audio/jukebox/pads/pad_thunderclap.mp3',
+    defaultPrompt: 'Blinding lightning bolt strike and immediate deafening thunderclap shaking the sky'
   },
   {
     id: 'pad_crowd_cheer',
     name: 'Tavern / Crowd Cheer',
     category: 'world',
     subtitle: 'Triumphant roar & raised tankards',
-    color: '#10b981'
+    color: '#10b981',
+    customUrl: '/audio/jukebox/pads/pad_crowd_cheer.mp3',
+    defaultPrompt: 'Boisterous medieval fantasy tavern crowd roaring in celebration, cheering, applause, and clinking ale tankards'
   },
   {
     id: 'pad_ominous_bell',
     name: 'Cathedral Bell Toll',
     category: 'world',
     subtitle: 'Deep resonant bronze doom bell',
-    color: '#eab308'
+    color: '#eab308',
+    customUrl: '/audio/jukebox/pads/pad_ominous_bell.mp3',
+    defaultPrompt: 'Deep gothic cathedral bronze doom bell tolling slowly in a foggy cursed graveyard'
   },
   {
     id: 'pad_arcane_portal',
     name: 'Arcane Portal Surge',
     category: 'world',
     subtitle: 'Reality-warping rift opening',
-    color: '#06b6d4'
+    color: '#06b6d4',
+    customUrl: '/audio/jukebox/pads/pad_arcane_portal.mp3',
+    defaultPrompt: 'Massive interdimensional arcane portal tearing open with swirling cosmic bass hum and crackling leyline lightning'
   }
 ];
 

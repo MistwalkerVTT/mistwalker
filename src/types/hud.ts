@@ -1,7 +1,7 @@
 // src/types/hud.ts
 // Strict TypeScript types for the MistWalker D&D Beyond Tactical Character HUD
 
-export type HudActionCategory = 'attacks' | 'actions' | 'bonus_actions' | 'spells' | 'reactions' | 'items';
+export type HudActionCategory = 'attacks' | 'actions' | 'bonus_actions' | 'spells' | 'reactions' | 'items' | 'special';
 
 export type HudActionType = 'action' | 'bonus_action' | 'reaction' | 'item' | 'passive' | 'special';
 
@@ -56,6 +56,7 @@ export interface HudActionItem {
   isEquipped?: boolean;
   isAttack?: boolean;
   isSelfAction?: boolean;     // True if action targets self or activates immediately (e.g. Rage, Dodge, Dash)
+  isHaloToggle?: boolean;     // True if action toggles token illumination/halo glow on the battlemap
   spellSlotRequired?: number; // Slot level needed if casting with slot
   isHeal?: boolean;           // True if spell/action restores HP
   duration?: string;          // e.g. "Instantaneous", "Concentration, up to 1 minute"
@@ -244,6 +245,7 @@ export interface HudCharacterData {
   spells: HudActionItem[];
   reactions?: HudActionItem[];
   items: HudActionItem[];
+  special?: HudActionItem[];
   spellSlots: Record<number, HudSpellSlot>;
   resources: Array<{
     name: string;
