@@ -394,6 +394,11 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
     [characterData?.items]
   );
 
+  const specialList = useMemo<HudActionItem[]>(
+    () => (Array.isArray(characterData?.special) ? characterData.special : []),
+    [characterData?.special]
+  );
+
   // Available spell levels for the Spells filter bar
   const availableSpellLevels = useMemo<number[]>(() => {
     const lvlSet = new Set<number>();
@@ -569,6 +574,9 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
       case 'items':
         base = itemsList;
         break;
+      case 'special':
+        base = specialList;
+        break;
       default:
         base = actionsList;
     }
@@ -591,6 +599,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
     filteredSpellsList,
     reactionsList,
     itemsList,
+    specialList,
     searchQuery
   ]);
 
@@ -630,6 +639,12 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
       );
     }
 
+    if (action.isHaloToggle) {
+      return <Sparkles className={`${sizeClass} text-amber-300`} />;
+    }
+    if (action.category === 'special' || action.type === 'special') {
+      return <Sparkles className={`${sizeClass} text-cyan-400`} />;
+    }
     if (action.isHeal) {
       return <Heart className={`${sizeClass} text-emerald-400`} />;
     }
@@ -707,6 +722,14 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
       count: itemsList.length,
       accentText: 'text-purple-400',
       activeClass: 'bg-purple-500/15 border-purple-500/70 text-purple-200'
+    },
+    {
+      id: 'special',
+      label: 'Special',
+      shortLabel: 'Special',
+      count: specialList.length,
+      accentText: 'text-cyan-400',
+      activeClass: 'bg-cyan-500/15 border-cyan-500/70 text-cyan-200'
     }
   ];
 
@@ -999,7 +1022,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                 )}
                 {detailAction.uses && (
                   <span className="px-1.5 py-0.5 rounded bg-indigo-950 border border-indigo-500/50 text-indigo-300 font-bold">
-                    {detailAction.uses.available}/{detailAction.uses.total} Uses
+                    Uses: {detailAction.uses.available}/{detailAction.uses.total}{detailAction.uses.resetType ? ` • ${detailAction.uses.resetType}` : ''}
                   </span>
                 )}
               </div>
@@ -1169,7 +1192,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
           </div>
 
           {/* Category Tabs */}
-          <div className="grid grid-cols-6 gap-1 py-2 shrink-0">
+          <div className="grid grid-cols-7 gap-1 py-2 shrink-0">
             {categoryTabs.map(tab => (
               <button
                 key={tab.id}
@@ -1872,6 +1895,12 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                         </div>
                         <div className="flex items-center gap-1.5 text-[10px] font-mono text-zinc-400 truncate mt-0.5">
                           <span>{action.sourceLabel || action.castingTime || '1 Action'}</span>
+                          {action.sourceLabel && action.castingTime && action.sourceLabel !== action.castingTime && (
+                            <>
+                              <span>•</span>
+                              <span className="text-amber-300/90">{action.castingTime}</span>
+                            </>
+                          )}
                           {action.rangeFt !== undefined && (
                             <>
                               <span>•</span>
@@ -1953,9 +1982,27 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                         </button>
                       )}
 
+                      {action.isHaloToggle && (
+                        <div
+                          className={`flex flex-col items-center px-2 py-1 rounded-lg border font-bold transition-all shrink-0 ${
+                            claimedToken?.haloActive
+                              ? 'bg-amber-400/25 border-amber-300 text-amber-100 shadow-[0_0_12px_rgba(251,191,36,0.55)]'
+                              : 'bg-zinc-950 border-amber-500/40 text-amber-300 group-hover:border-amber-400'
+                          }`}
+                        >
+                          <span className="text-[8px] uppercase leading-none opacity-80">Glow</span>
+                          <span className="text-xs leading-tight">{claimedToken?.haloActive ? '😇 ON' : '✨ OFF'}</span>
+                        </div>
+                      )}
+
                       {action.uses && (
-                        <div className="flex flex-col items-center px-2 py-1 rounded-lg bg-indigo-950/90 border border-indigo-500/40 text-indigo-300">
-                          <span className="text-[8px] uppercase text-indigo-400/80 leading-none">Uses</span>
+                        <div
+                          className="flex flex-col items-center px-2 py-1 rounded-lg bg-indigo-950/90 border border-indigo-500/40 text-indigo-300"
+                          title={action.uses.resetType ? `Uses: ${action.uses.available}/${action.uses.total} (${action.uses.resetType})` : `Uses: ${action.uses.available}/${action.uses.total}`}
+                        >
+                          <span className="text-[8px] uppercase text-indigo-400/80 leading-none">
+                            {action.uses.resetType ? action.uses.resetType.replace(' Rest', '') : 'Uses'}
+                          </span>
                           <span className="font-bold text-xs leading-tight">
                             {action.uses.available}/{action.uses.total}
                           </span>

@@ -1093,6 +1093,7 @@ const buildFallbackHudData = (token: Token, stats: any, customChars?: Character[
   const spells: HudActionItem[] = [];
   const reactions: HudActionItem[] = [];
   const items: HudActionItem[] = [];
+  const special: HudActionItem[] = [];
 
   if (matchedChar && Array.isArray(matchedChar.actions) && matchedChar.actions.length > 0) {
     matchedChar.actions.forEach((act, idx) => {
@@ -1265,6 +1266,217 @@ const buildFallbackHudData = (token: Token, stats: any, customChars?: Character[
     jb2aAssetId: 'cure_wounds'
   });
 
+  const lowerCharName = name.toLowerCase();
+  if (lowerCharName.includes('stavros')) {
+    special.push(
+      {
+        id: 'special-halo-glow',
+        name: 'Illuminate Self: Divine Halo & Holy Glow',
+        category: 'special',
+        type: 'special',
+        subCategory: 'class',
+        sourceLabel: 'Divine Illumination • Book of Exalted Deeds',
+        castingTime: 'Special (Toggle Glow)',
+        rangeFt: 20,
+        isSelfAction: true,
+        isHaloToggle: true,
+        notes: '20 ft. Bright Light + 20 ft. Dim Light',
+        description: 'Illuminate yourself with a radiant golden halo and holy light (Book of Exalted Deeds & Mace of Disruption), shedding Bright Light in a 20-foot radius and Dim Light for an additional 20 feet. Click to toggle your token halo & glow on the battlemap.',
+        jb2aAssetId: 'bless'
+      },
+      {
+        id: 'special-harness-divine-power',
+        name: 'Harness Divine Power',
+        category: 'special',
+        type: 'bonus_action',
+        subCategory: 'class',
+        sourceLabel: 'TCoE, pg. 30',
+        castingTime: '1 Bonus Action',
+        uses: { available: 2, total: 2, resetType: 'Long Rest' },
+        isSelfAction: true,
+        description: 'You can expend a use of your Channel Divinity to fuel your spells. As a bonus action, you regain one expended spell slot of up to level 3. You can use this feature 2 times. You regain all expended uses when you finish a long rest.'
+      },
+      {
+        id: 'special-channel-divinity',
+        name: 'Channel Divinity',
+        category: 'special',
+        type: 'special',
+        subCategory: 'class',
+        sourceLabel: 'PHB, pg. 58',
+        castingTime: 'Special',
+        uses: { available: 2, total: 2, resetType: 'Short Rest' },
+        isSelfAction: true,
+        description: 'You can channel divine energy to fuel magical effects a number of times per short rest.'
+      },
+      {
+        id: 'special-turn-undead',
+        name: 'Channel Divinity: Turn Undead',
+        category: 'special',
+        type: 'action',
+        subCategory: 'class',
+        sourceLabel: 'PHB, pg. 59',
+        castingTime: '1 Action',
+        rangeFt: 30,
+        saveDc: 19,
+        saveAbility: 'WIS',
+        description: 'As an action, you present your holy symbol and speak a prayer censuring the undead. Each undead that can see or hear you within 30 feet of you must make a WIS saving throw (DC 19). On a failed save, it is turned for 1 minute or until it takes damage.',
+        jb2aAssetId: 'spirit_guardians'
+      },
+      {
+        id: 'special-preserve-life',
+        name: 'Channel Divinity: Preserve Life',
+        category: 'special',
+        type: 'action',
+        subCategory: 'class',
+        sourceLabel: 'PHB, pg. 60',
+        castingTime: '1 Action',
+        rangeFt: 30,
+        damageFormula: '75',
+        damageType: 'healing',
+        isHeal: true,
+        description: 'As an action, you can restore 75 HP. Choose any creatures within 30 ft. of you, and divide those hit points among them. This feature can restore a creature to no more than half of its hit point maximum. You can’t use this feature on an undead or a construct.',
+        jb2aAssetId: 'cure_wounds'
+      },
+      {
+        id: 'special-destroy-undead',
+        name: 'Destroy Undead (CR 3 or Lower)',
+        category: 'special',
+        type: 'special',
+        subCategory: 'class',
+        sourceLabel: 'PHB, pg. 59',
+        castingTime: 'Special',
+        isSelfAction: true,
+        description: 'When an undead fails its saving throw against your Turn Undead feature, it is instantly destroyed if its CR is 3 or lower.'
+      },
+      {
+        id: 'special-blessed-healer',
+        name: 'Blessed Healer',
+        category: 'special',
+        type: 'passive',
+        subCategory: 'class',
+        sourceLabel: 'PHB, pg. 60',
+        castingTime: '(No Action)',
+        isSelfAction: true,
+        description: 'When you cast a spell of 1st level or higher that restores HP to a creature other than you, you regain HP equal to 2 + the spell’s level.'
+      },
+      {
+        id: 'special-blessed-strikes',
+        name: 'Blessed Strikes',
+        category: 'special',
+        type: 'special',
+        subCategory: 'class',
+        sourceLabel: 'TCoE, pg. 31',
+        castingTime: 'Special',
+        damageFormula: '1d8',
+        damageType: 'radiant',
+        isSelfAction: true,
+        description: 'When a creature takes damage from one of your cantrips or weapon attacks, you can also deal 1d8 radiant damage to that creature. Once you deal this damage, you can’t use this feature again until the start of your next turn.'
+      },
+      {
+        id: 'special-divine-intervention',
+        name: 'Divine Intervention',
+        category: 'special',
+        type: 'action',
+        subCategory: 'class',
+        sourceLabel: 'PHB, pg. 59',
+        castingTime: '1 Action',
+        damageFormula: '1d100',
+        uses: { available: 1, total: 1, resetType: 'Long Rest' },
+        isSelfAction: true,
+        description: "As an action, you can request your deity's aid and roll percentile dice. If your roll is equal to or less than 15, your deity intervenes (your DM chooses the nature of the intervention). If successful, you can't use this feature again for 7 days, otherwise, you can use it again after a long rest."
+      }
+    );
+  } else if (lowerCharName.includes('sylas')) {
+    special.push({
+      id: 'special-halo-glow',
+      name: 'Rite of the Dawn: Radiant Illumination (Glow)',
+      category: 'special',
+      type: 'bonus_action',
+      subCategory: 'class',
+      sourceLabel: 'Order of the Ghostslayer',
+      castingTime: '1 Bonus Action (Toggle Glow)',
+      rangeFt: 20,
+      damageFormula: '1d6',
+      damageType: 'radiant',
+      isSelfAction: true,
+      isHaloToggle: true,
+      description: 'Your weapon sheds Bright Light out to a radius of 20 feet, you gain resistance to Necrotic damage, and your Crimson Rite deals Radiant damage (plus an extra 1d6 radiant against Undead). Click to toggle your radiant glow on the battlemap.'
+    });
+  } else if (canTokenHaveHalo(name)) {
+    special.push({
+      id: 'special-halo-glow',
+      name: 'Illuminate Self (Radiant Glow)',
+      category: 'special',
+      type: 'special',
+      subCategory: 'item',
+      sourceLabel: 'Special Illumination',
+      castingTime: 'Special (Toggle Glow)',
+      rangeFt: 30,
+      isSelfAction: true,
+      isHaloToggle: true,
+      description: 'Shed Bright Light in a 30-foot radius around your token. Click to toggle your illumination on the battlemap.'
+    });
+  }
+
+  bonusActions.forEach((ba, idx) => {
+    if (!special.some(s => s.name.toLowerCase() === ba.name.toLowerCase())) {
+      special.push({ ...ba, id: `fallback-spec-ba-${idx}`, category: 'special' });
+    }
+  });
+  if (matchedChar && Array.isArray((matchedChar as any).specialFeatures)) {
+    (matchedChar as any).specialFeatures.forEach((sf: any, idx: number) => {
+      if (sf?.name && !special.some(s => s.name.toLowerCase() === String(sf.name).toLowerCase())) {
+        special.push({
+          id: `fallback-spec-sf-${idx}`,
+          name: sf.name,
+          category: 'special',
+          type: 'special',
+          subCategory: 'class',
+          sourceLabel: sf.category || 'Special Feature',
+          castingTime: 'Special',
+          isSelfAction: true,
+          description: sf.description || sf.name
+        });
+      }
+    });
+  }
+  if (matchedChar && Array.isArray((matchedChar as any).features)) {
+    (matchedChar as any).features.forEach((f: any, idx: number) => {
+      const fName = typeof f === 'string' ? f : f?.name;
+      if (fName && !special.some(s => s.name.toLowerCase() === String(fName).toLowerCase())) {
+        special.push({
+          id: `fallback-spec-feat-${idx}`,
+          name: String(fName),
+          category: 'special',
+          type: 'special',
+          subCategory: 'class',
+          sourceLabel: typeof f === 'object' && f?.source ? f.source : 'Feature & Trait',
+          castingTime: 'Special',
+          isSelfAction: true,
+          description: typeof f === 'object' && f?.description ? f.description : String(fName)
+        });
+      }
+    });
+  }
+  if (matchedChar && Array.isArray((matchedChar as any).feats)) {
+    (matchedChar as any).feats.forEach((f: any, idx: number) => {
+      const fName = typeof f === 'string' ? f : f?.name;
+      if (fName && !special.some(s => s.name.toLowerCase() === String(fName).toLowerCase())) {
+        special.push({
+          id: `fallback-spec-ft-${idx}`,
+          name: String(fName),
+          category: 'special',
+          type: 'special',
+          subCategory: 'feat',
+          sourceLabel: 'Feat',
+          castingTime: 'Special / Feat',
+          isSelfAction: true,
+          description: typeof f === 'object' && f?.description ? f.description : `Feat: ${fName}`
+        });
+      }
+    });
+  }
+
   return {
     id: token.id,
     ddbCharacterId: ddbId ? String(ddbId) : undefined,
@@ -1290,6 +1502,7 @@ const buildFallbackHudData = (token: Token, stats: any, customChars?: Character[
     spells,
     reactions,
     items,
+    special,
     spellSlots: spells.length > 0 ? {
       1: { level: 1, total: 4, used: 0, available: 4 },
       2: { level: 2, total: 3, used: 0, available: 3 }
@@ -1574,7 +1787,7 @@ export default function PlayerView() {
             });
             if (forceRefresh) {
               toast.success(`Synced ${data.name} from D&D Beyond!`, {
-                description: `${(data.attacks || []).length} Attacks • ${(data.bonusActions || []).length} Bonus • ${(data.spells || []).length} Spells`
+                description: `${(data.attacks || []).length} Attacks • ${(data.bonusActions || []).length} Bonus • ${(data.spells || []).length} Spells • ${(data.special || []).length} Special`
               });
             }
             return;
@@ -3682,7 +3895,33 @@ export default function PlayerView() {
     // Immediate execution for pure physical combat maneuvers (e.g., Rage, Dash, Dodge, Disengage)
     // Spells (like Shield, Cure Wounds, Healing Word, Bless, etc.) enter active targeting so the player can aim/select onto tokens or self!
     const lowerName = action.name.toLowerCase();
-    const isManeuver = ['dash', 'dodge', 'disengage', 'hide', 'rage', 'action surge', 'second wind'].some(k => lowerName.includes(k));
+
+    // Handle Halo / Self-Illumination Glow Toggle from the Special tab
+    if ((action.isHaloToggle || action.id === 'special-halo-glow') && claimedToken) {
+      const nextHalo = !Boolean(claimedToken.haloActive);
+      const radiusFt = action.rangeFt && action.rangeFt > 0 ? action.rangeFt : 20;
+      handleUpdateToken(claimedToken.id, {
+        haloActive: nextHalo,
+        lightRadius: nextHalo ? radiusFt : 0
+      } as any);
+      soundCatalog.play('magic_chime');
+      toast.success(
+        nextHalo
+          ? `😇 ${claimedToken.name} is now glowing (${radiusFt} ft. Bright Light)!`
+          : `${claimedToken.name}'s illumination deactivated.`,
+        { description: action.name }
+      );
+      return;
+    }
+
+    const isManeuver = [
+      'dash', 'dodge', 'disengage', 'hide', 'rage', 'action surge', 'second wind',
+      'harness divine power', 'channel divinity', 'divine intervention', 'blessed strikes',
+      'blessed healer', 'destroy undead', 'enlightened magic', 'relentless endurance',
+      'ki points', 'patient defense', 'step of the wind', 'wholeness of body',
+      'quickened healing', 'indomitable', 'arcane recovery', 'portent', 'lucky',
+      'wild shape', 'wild resurgence', 'crimson rite', 'magical cunning', 'cunning action', 'steady aim'
+    ].some(k => lowerName.includes(k)) || (action.category === 'special' && action.isSelfAction);
     const isSpellOrTargeted = action.category === 'spells' || action.subCategory === 'spell' || action.isHeal || lowerName.includes('shield');
     if (action.isSelfAction && isManeuver && !isSpellOrTargeted && claimedToken) {
       const tokenRadius = ((claimedToken.size || 1) * gridSize) / 2;
@@ -3773,8 +4012,37 @@ export default function PlayerView() {
           });
         }
 
+        if (socketRef.current?.connected && diceResults.length > 0) {
+          socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', {
+            id: `roll-${Date.now()}`,
+            characterId: String(hudCharacterData?.id || claimedToken.id || ''),
+            characterName: claimedToken.name || 'Hero',
+            avatarUrl: hudCharacterData?.avatarUrl || claimedToken.avatarUrl || claimedToken.url,
+            action: `${action.name}${action.isHeal ? ' (Self Heal)' : ''}`,
+            rollType: action.isHeal ? 'heal' : 'roll',
+            formula: action.damageFormula,
+            diceNotation: action.damageFormula,
+            dice: diceResults,
+            total: rolledTotal,
+            isCritical: lowerName.includes('divine intervention') && rolledTotal <= (hudCharacterData?.totalLevel || 15),
+            isFumble: false,
+            theme: selectedDicePreset.id,
+            themeColor: selectedDicePreset.theme.primaryColor,
+            timestamp: Date.now(),
+            source: 'player'
+          });
+        }
+
+        const isDivInt = lowerName.includes('divine intervention');
+        const divThreshold = hudCharacterData?.totalLevel || 15;
         toast.success(`${claimedToken.name}: ${action.name}!`, {
-          description: action.isHeal ? `Restored +${rolledTotal} HP (${action.damageFormula})` : `Rolled ${rolledTotal} (${action.damageFormula})`
+          description: isDivInt
+            ? rolledTotal <= divThreshold
+              ? `✨ DEITY INTERVENES! Rolled ${rolledTotal} on d100 (Target: ≤ ${divThreshold})`
+              : `Rolled ${rolledTotal} on d100 (Target: ≤ ${divThreshold} — Try again after a Long Rest)`
+            : action.isHeal
+              ? `Restored +${rolledTotal} HP (${action.damageFormula})`
+              : `Rolled ${rolledTotal}${action.damageType ? ` ${action.damageType}` : ''} (${action.damageFormula})`
         });
       } else {
         toast.success(`${claimedToken.name} used ${action.name}!`, {

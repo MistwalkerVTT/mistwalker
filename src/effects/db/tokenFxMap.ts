@@ -266,7 +266,7 @@ export function getAuraVideoUrl(name?: string, color?: string): string | null {
 /**
  * Characters with a signature toggleable glowing halo special effect.
  */
-const HALO_CHARACTER_KEYS = ['stavros'];
+const HALO_CHARACTER_KEYS = ['stavros', 'sylas', 'varrak', 'arameng'];
 
 export function canTokenHaveHalo(tokenName?: string): boolean {
   if (!tokenName) return false;

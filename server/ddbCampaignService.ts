@@ -777,14 +777,31 @@ function cleanDdbText(
     const expr = exprRaw.toLowerCase().trim();
     const isSigned = expr.includes('#signed');
 
+    if (expr.includes('proficiency') && expr.includes('/2')) {
+      return String(Math.ceil(context.profBonus / 2));
+    }
     if (expr.startsWith('proficiency')) {
       return isSigned ? `+${context.profBonus}` : String(context.profBonus);
     }
     if (expr.startsWith('characterlevel')) {
       return String(context.totalLevel);
     }
+    if (expr.includes('classlevel*5')) {
+      return String((context.classLevelNum || context.totalLevel) * 5);
+    }
     if (expr.startsWith('classlevel')) {
       return String(context.classLevelNum || context.totalLevel);
+    }
+    if (expr.startsWith('spellattack:')) {
+      const statPart = expr.split(':')[1]?.split('#')[0]?.trim() || '';
+      let maxMod = -10;
+      for (const k of ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const) {
+        if (statPart.includes(k)) {
+          maxMod = Math.max(maxMod, context.mods[k]);
+        }
+      }
+      const atkVal = context.profBonus + (maxMod > -10 ? maxMod : 0);
+      return atkVal >= 0 ? `+${atkVal}` : String(atkVal);
     }
     if (expr.startsWith('scalevalue')) {
       return context.scaleValue !== undefined ? String(context.scaleValue) : '';
@@ -958,6 +975,8 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
   const spells: any[] = [];
   const reactions: any[] = [];
   const items: any[] = [];
+  const special: any[] = [];
+  const seenSpecialNames = new Set<string>();
   const resources: Array<{ name: string; total: number; available: number; resetType?: string }> = [];
   const seenResourceNames = new Set<string>();
 
@@ -1242,10 +1261,42 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
           damageFormula = `${computed.totalLevel * 5}`;
         } else if (lowerName.includes('second wind')) {
           damageFormula = `1d10 + ${computed.totalLevel}`;
+        } else if (lowerName.includes('blessed strikes')) {
+          damageFormula = '1d8';
+          damageType = 'radiant';
+        } else if (lowerName.includes('divine strike')) {
+          damageFormula = computed.totalLevel >= 14 ? '2d8' : '1d8';
+          damageType = 'radiant';
+        } else if (lowerName.includes('divine intervention')) {
+          damageFormula = '1d100';
+        } else if (lowerName.includes('eldritch smite')) {
+          damageFormula = '6d8';
+          damageType = 'force';
+        } else if (lowerName.includes('hurl through hell')) {
+          damageFormula = '10d10';
+          damageType = 'psychic';
+        } else if (lowerName.includes("dark one's own luck") || lowerName.includes('dark one’s own luck')) {
+          damageFormula = '1d10';
+        } else if (lowerName.includes("dark one's blessing") || lowerName.includes('dark one’s blessing')) {
+          damageFormula = `${mods.cha + computed.totalLevel}`;
+          damageType = 'temp hp';
+        } else if (lowerName.includes('mantle of inspiration')) {
+          damageFormula = computed.totalLevel >= 15 ? '14' : computed.totalLevel >= 10 ? '11' : computed.totalLevel >= 5 ? '8' : '5';
+          damageType = 'temp hp';
+        } else if (lowerName.includes('deflect missiles')) {
+          damageFormula = `1d10 + ${mods.dex + (monkLevel || computed.totalLevel)}`;
+        } else if (lowerName.includes('martial adept') || lowerName.includes('precision attack') || lowerName.includes('disarming attack')) {
+          damageFormula = '1d6';
         }
       }
 
-      // Check if this action is an attack roll (e.g. Lightning Launcher, Breath Weapon, Starry Form Archer)
+      if (lowerName.includes('blessed strikes')) {
+        damageFormula = '1d8';
+        damageType = 'radiant';
+      } else if (lowerName.includes('eldritch smite')) {
+        damageFormula = '6d8';
+        damageType = 'force';
+      }
       const isAttackAction = Boolean(
         act.isAttack ||
         act.attackTypeRange ||
@@ -1285,7 +1336,11 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
         saveDc = 8 + profBonus + dcMod;
       }
 
-      const rangeFt = act.range?.range || act.range?.rangeValue || (lowerName.includes("cloud's jaunt") || lowerName.includes('jaunt') ? 30 : lowerName.includes('launcher') ? 90 : isAttackAction ? 5 : 0);
+      if (!saveDc && lowerName.includes('turn undead')) {
+        saveDc = spellSaveDc;
+        saveAbility = 'WIS';
+      }
+      const rangeFt = act.range?.range || act.range?.rangeValue || (lowerName.includes("cloud's jaunt") || lowerName.includes('jaunt') || lowerName.includes('turn undead') || lowerName.includes('preserve life') ? 30 : lowerName.includes('launcher') ? 90 : isAttackAction ? 5 : 0);
 
       const isHeal = Boolean(
         lowerName.includes('heal') ||
@@ -1311,9 +1366,12 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
           lowerName.includes('quickened healing'))
       );
 
+      const destroyUndeadCr = lowerName.includes('destroy undead')
+        ? (computed.totalLevel >= 17 ? '4' : computed.totalLevel >= 14 ? '3' : computed.totalLevel >= 11 ? '2' : computed.totalLevel >= 8 ? '1' : '1/2')
+        : undefined;
       const descText = cleanDdbText(act.snippet || act.description, {
         ...snippetCtx,
-        scaleValue: damageFormula,
+        scaleValue: destroyUndeadCr || damageFormula,
         limitedUseMax: usesObj?.total
       }) || `${sourceLabel}: ${rawName}`;
 
@@ -1321,6 +1379,7 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
         actTypeNum === 3 ? '1 Bonus Action' :
         actTypeNum === 4 ? '1 Reaction' :
         actTypeNum === 1 ? '1 Action' :
+        actTypeNum === 2 ? '(No Action)' :
         'Special';
 
       const category: 'actions' | 'bonus_actions' | 'reactions' =
@@ -1330,7 +1389,7 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
 
       const hudAction: any = {
         id: `feat-${sourceCat}-${idx}-${act.id || idx}`,
-        name: rawName,
+        name: destroyUndeadCr ? `${rawName} (CR ${destroyUndeadCr} or Lower)` : rawName,
         category,
         type: actTypeNum === 3 ? 'bonus_action' : actTypeNum === 4 ? 'reaction' : 'action',
         subCategory: lowerName.includes('cleave') || lowerName.includes('topple') || lowerName.includes('mastery') ? 'mastery' : subCategory,
@@ -1364,8 +1423,260 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
           attacks.push({ ...hudAction, category: 'attacks' });
         }
       }
+      // Also populate the Special tab with all class/species/feat/item special actions (excluding internal DDB Circle Spell boilerplate)
+      if (!lowerName.includes('circle spell') && !seenSpecialNames.has(canonName)) {
+        seenSpecialNames.add(canonName);
+        special.push({
+          ...hudAction,
+          id: `special-act-${sourceCat}-${idx}-${act.id || idx}`,
+          category: 'special'
+        });
+      }
     });
   });
+
+  // =========================================================================
+  // 2B. SPECIAL TAB: ILLUMINATION / GLOW, ARTIFACT POWERS, FEATS & TRAITS
+  // =========================================================================
+  const lowerCharName = (c.name || '').toLowerCase();
+  const hasMaceOfDisruption = Array.isArray(c.inventory) && c.inventory.some((i: any) => i.equipped && (i.definition?.name || '').toLowerCase().includes('mace of disruption'));
+  const hasDevoteesCenser = Array.isArray(c.inventory) && c.inventory.some((i: any) => i.equipped && (i.definition?.name || '').toLowerCase().includes("devotee's censer"));
+  const hasGemOfBrightness = Array.isArray(c.inventory) && c.inventory.some((i: any) => i.equipped && (i.definition?.name || '').toLowerCase().includes('gem of brightness'));
+  const hasLanternOfRevealing = Array.isArray(c.inventory) && c.inventory.some((i: any) => i.equipped && (i.definition?.name || '').toLowerCase().includes('lantern of revealing'));
+  const isGhostslayer = Array.isArray(c.classes) && c.classes.some((cl: any) => (cl.subclassDefinition?.name || '').toLowerCase().includes('ghostslayer')) || lowerCharName.includes('sylas');
+
+  if (hasBookOfExaltedDeeds || hasMaceOfDisruption || lowerCharName.includes('stavros')) {
+    special.unshift({
+      id: 'special-halo-glow',
+      name: 'Illuminate Self: Divine Halo & Holy Glow',
+      category: 'special',
+      type: 'special',
+      subCategory: 'class',
+      sourceLabel: 'Divine Illumination • Book of Exalted Deeds',
+      castingTime: 'Special (Toggle Glow)',
+      rangeFt: 20,
+      isSelfAction: true,
+      isHaloToggle: true,
+      notes: '20 ft. Bright Light + 20 ft. Dim Light',
+      description: 'Illuminate yourself with a radiant golden halo and holy light (Book of Exalted Deeds & Mace of Disruption), shedding Bright Light in a 20-foot radius and Dim Light for an additional 20 feet. Click to toggle your token halo & glow on the battlemap.',
+      jb2aAssetId: 'bless'
+    });
+    seenSpecialNames.add('illuminate self: divine halo & holy glow');
+  } else if (isGhostslayer) {
+    special.unshift({
+      id: 'special-halo-glow',
+      name: 'Rite of the Dawn: Radiant Illumination (Glow)',
+      category: 'special',
+      type: 'bonus_action',
+      subCategory: 'class',
+      sourceLabel: 'Order of the Ghostslayer',
+      castingTime: '1 Bonus Action (Toggle Glow)',
+      rangeFt: 20,
+      damageFormula: computed.totalLevel >= 11 ? '1d8' : computed.totalLevel >= 5 ? '1d6' : '1d4',
+      damageType: 'radiant',
+      isSelfAction: true,
+      isHaloToggle: true,
+      notes: '20 ft. Bright Light • Necrotic Resistance • +1d4 Radiant vs Undead',
+      description: 'Your weapon sheds Bright Light out to a radius of 20 feet, you gain resistance to Necrotic damage, and your Crimson Rite deals Radiant damage (plus an extra Crimson Rite die against Undead). Click to toggle your radiant glow on the battlemap.',
+      jb2aAssetId: 'divine_smite'
+    });
+    seenSpecialNames.add('rite of the dawn');
+  } else if (hasGemOfBrightness) {
+    special.unshift({
+      id: 'special-halo-glow',
+      name: 'Gem of Brightness: Radiant Illumination (Glow)',
+      category: 'special',
+      type: 'action',
+      subCategory: 'item',
+      sourceLabel: 'Magic Item • Gem of Brightness',
+      castingTime: '1 Action (Toggle Glow)',
+      rangeFt: 30,
+      isSelfAction: true,
+      isHaloToggle: true,
+      notes: '30 ft. Bright Light + 30 ft. Dim Light',
+      description: 'Speak the command word to cause the Gem of Brightness to shed Bright Light in a 30-foot radius and Dim Light for an additional 30 feet. Click to toggle your illumination on the battlemap.',
+      jb2aAssetId: 'guiding_bolt'
+    });
+    seenSpecialNames.add('gem of brightness');
+  } else if (hasLanternOfRevealing) {
+    special.unshift({
+      id: 'special-halo-glow',
+      name: 'Lantern of Revealing: Illumination (Glow)',
+      category: 'special',
+      type: 'action',
+      subCategory: 'item',
+      sourceLabel: 'Magic Item • Lantern of Revealing',
+      castingTime: 'Special (Toggle Glow)',
+      rangeFt: 30,
+      isSelfAction: true,
+      isHaloToggle: true,
+      notes: '30 ft. Bright Light • Reveals Invisible Creatures',
+      description: 'Sheds Bright Light in a 30-foot radius and Dim Light for an additional 30 feet. Invisible creatures and objects are visible as long as they are in the lantern’s bright light. Click to toggle illumination on the battlemap.',
+      jb2aAssetId: 'faerie_fire'
+    });
+    seenSpecialNames.add('lantern of revealing');
+  }
+
+  if (hasBookOfExaltedDeeds) {
+    special.push({
+      id: 'special-enlightened-magic',
+      name: 'Enlightened Magic (Book of Exalted Deeds)',
+      category: 'special',
+      type: 'passive',
+      subCategory: 'item',
+      sourceLabel: 'Artifact • Book of Exalted Deeds',
+      castingTime: 'Passive / Special',
+      isSelfAction: true,
+      notes: '+1 Effective Spell Slot Level',
+      description: 'Once you have read the Book of Exalted Deeds, any spell slot you expend to cast a Cleric or Paladin spell counts as a spell slot of one level higher.',
+      jb2aAssetId: 'bless'
+    });
+    seenSpecialNames.add('enlightened magic');
+  }
+
+  if (hasDevoteesCenser) {
+    special.push({
+      id: 'special-devotees-censer',
+      name: "Devotee's Censer: Healing Incense",
+      category: 'special',
+      type: 'bonus_action',
+      subCategory: 'item',
+      sourceLabel: "Rare Flail • Devotee's Censer",
+      castingTime: '1 Bonus Action',
+      rangeFt: 10,
+      damageFormula: '1d4',
+      damageType: 'healing',
+      isHeal: true,
+      isSelfAction: true,
+      uses: { available: 1, total: 1, resetType: 'Dawn' },
+      description: 'Speak the command word as a bonus action to cause the flail to emanate a thin cloud of incense out to 10 feet for 1 minute. At the start of each of your turns, you and any other creatures in the incense each regain 1d4 hit points.',
+      jb2aAssetId: 'cure_wounds'
+    });
+    seenSpecialNames.add("devotee's censer");
+  }
+
+  // Extract Class Features, Subclass Features, Options (Invocations/Maneuvers/Infusions), Feats, and Species Traits
+  const BOILERPLATE_FEATURE_REGEX = /^(ability score improvement|ability score increases?|proficiencies|bonus proficienc(y|ies)|hit points|equipment|spellcasting|expanded spell list|pact magic|core .+ traits|.+ subclass|divine domain|martial archetype|roguish archetype|monastic tradition|arcane tradition|otherworldly patron|druid circle|bard college|ranger conclave|primal path|blood hunter order|artificer subclass|languages|extra language|size|speed|age|alignment|creature type|darkvision|superior darkvision|increase two scores.*|increase one score.*|weapon mastery|\d+: weapon mastery|eldritch invocations|eldritch invocation options|fighting style|fighting style feat|blood curses|magic item plans|replicate magic item|tools of the trade|thieves['’] cant|druidic|expertise|jack of all trades|cantrip|ability score increase|.*ability score improvements?|strength|dexterity|constitution|intelligence|wisdom|charisma|activate rage)$/i;
+
+  const pushPassiveOrTraitToSpecial = (
+    rawTitle: string,
+    rawDesc: string | undefined,
+    sourceLabel: string,
+    subCategory: string,
+    idPrefix: string,
+    idx: number
+  ) => {
+    const title = (rawTitle || '').trim();
+    if (!title || BOILERPLATE_FEATURE_REGEX.test(title)) return;
+    const canon = canonicalActionKey(title);
+    if (seenSpecialNames.has(canon)) return;
+    // Also skip if a prefixed version is already in seenSpecialNames (e.g. "Channel Divinity: Preserve Life" vs "Preserve Life")
+    for (const existing of seenSpecialNames) {
+      if (existing.endsWith(`: ${canon}`) || canon.endsWith(`: ${existing}`)) return;
+    }
+    const cleaned = cleanDdbText(rawDesc, {
+      ...snippetCtx,
+      scaleValue: canon.includes('divine strike') ? (computed.totalLevel >= 14 ? '2d8' : '1d8') : undefined
+    });
+    if (!cleaned) return;
+    seenSpecialNames.add(canon);
+
+    let damageFormula: string | undefined;
+    let damageType: string | undefined;
+    if (canon.includes('divine strike')) {
+      damageFormula = computed.totalLevel >= 14 ? '2d8' : '1d8';
+      damageType = 'radiant';
+    } else if (canon.includes('frenzy')) {
+      damageFormula = '2d6';
+    } else if (canon.includes('lifedrinker')) {
+      damageFormula = `${Math.max(1, mods.cha)}`;
+      damageType = 'necrotic';
+    }
+
+    special.push({
+      id: `${idPrefix}-${idx}`,
+      name: title,
+      category: 'special',
+      type: 'special',
+      subCategory,
+      sourceLabel,
+      castingTime: 'Special / Trait',
+      damageFormula,
+      damageType,
+      isSelfAction: true,
+      description: cleaned,
+      jb2aAssetId: matchJb2aAssetId(title)
+    });
+  };
+
+  if (Array.isArray(c.classes)) {
+    c.classes.forEach((cls: any, cIdx: number) => {
+      const clsName = cls.definition?.name || 'Class';
+      const subName = cls.subclassDefinition?.name;
+      const clsLvl = cls.level || 1;
+      const features = Array.isArray(cls.classFeatures) ? cls.classFeatures : [];
+      features.forEach((cf: any, fIdx: number) => {
+        const def = cf?.definition;
+        if (!def || !def.name) return;
+        if (def.requiredLevel && def.requiredLevel > clsLvl) return;
+        if (def.hideInSheet) return;
+        pushPassiveOrTraitToSpecial(
+          def.name,
+          def.snippet || def.description,
+          subName ? `${clsName} (${subName})` : `${clsName} Feature`,
+          'class',
+          `special-cf-${cIdx}`,
+          fIdx
+        );
+      });
+    });
+  }
+
+  for (const optCat of ['class', 'race', 'feat'] as const) {
+    const optList = Array.isArray(c.options?.[optCat]) ? c.options[optCat] : [];
+    optList.forEach((opt: any, oIdx: number) => {
+      const def = opt?.definition;
+      if (!def || !def.name) return;
+      pushPassiveOrTraitToSpecial(
+        def.name,
+        def.snippet || def.description,
+        optCat === 'class' ? 'Class Option / Invocation' : optCat === 'feat' ? 'Feat Option' : 'Species Option',
+        optCat === 'race' ? 'species' : optCat,
+        `special-opt-${optCat}`,
+        oIdx
+      );
+    });
+  }
+
+  if (Array.isArray(c.feats)) {
+    c.feats.forEach((f: any, fIdx: number) => {
+      const def = f?.definition;
+      if (!def || !def.name) return;
+      pushPassiveOrTraitToSpecial(
+        def.name,
+        def.snippet || def.description,
+        'Feat',
+        'feat',
+        'special-feat',
+        fIdx
+      );
+    });
+  }
+
+  if (Array.isArray(c.race?.racialTraits)) {
+    c.race.racialTraits.forEach((rt: any, rIdx: number) => {
+      const def = rt?.definition;
+      if (!def || !def.name || def.hideInSheet) return;
+      pushPassiveOrTraitToSpecial(
+        def.name,
+        def.snippet || def.description,
+        `${c.race?.fullName || 'Species'} Trait`,
+        'species',
+        'special-race',
+        rIdx
+      );
+    });
+  }
 
   // =========================================================================
   // 3. STANDARD 5E COMBAT ACTIONS & REACTIONS
@@ -1783,6 +2094,7 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
     spells,
     reactions,
     items,
+    special,
     spellSlots,
     resources,
     hasBookOfExaltedDeeds,
