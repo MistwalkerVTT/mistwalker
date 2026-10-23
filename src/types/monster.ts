@@ -2,13 +2,15 @@ import { WallSegment, VisionConfig, RoomAnnotation } from '../types';
 
 export interface MonsterTrait {
   name: string;
-  description: string;
+  description?: string;
+  desc?: string;
 }
 
 export interface MonsterAction {
   name: string;
   type?: 'attack' | 'spell' | 'multiattack' | 'special';
-  description: string;
+  description?: string;
+  desc?: string;
   attackBonus?: number;
   damage?: string;
   reachRange?: string;
@@ -35,7 +37,7 @@ export interface Monster {
   hp: number;
   hpFormula?: string; // e.g. "(22d8 + 88)"
   speed: string; // e.g. "30 ft., fly 60 ft."
-  initiativeBonus: number;
+  initiativeBonus?: number;
   str: number;
   dex: number;
   con: number;
@@ -51,7 +53,7 @@ export interface Monster {
   senses?: string; // e.g. "Darkvision 60 ft., Passive Perception 18"
   languages?: string; // e.g. "Elvish, Sylvan"
   challenge: string; // e.g. "13 (10,000 XP)"
-  proficiencyBonus: number;
+  proficiencyBonus?: number;
   avatarUrl?: string; // Portrait/token image
   statblockImageUrl?: string; // Raw screenshot uploaded
   traits?: MonsterTrait[];

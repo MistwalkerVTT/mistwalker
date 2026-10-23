@@ -18,7 +18,8 @@ import {
   Radio,
   Share2,
   Scroll,
-  Music
+  Music,
+  Swords
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Campaign, Scene } from '../lib/firebase';
@@ -41,6 +42,7 @@ interface MainCampaignBarProps {
   onOpenSaveModal: () => void;
   onOpenLoadModal: () => void;
   onOpenCampaignManager: () => void;
+  onOpenArenaManager?: () => void;
   onOpenMonsterCompendium?: () => void;
   onOpenCharacterCompendium?: () => void;
   onOpenAlliesCompendium?: () => void;
@@ -71,6 +73,7 @@ export const MainCampaignBar: React.FC<MainCampaignBarProps> = React.memo(({
   onOpenSaveModal,
   onOpenLoadModal,
   onOpenCampaignManager,
+  onOpenArenaManager,
   onOpenMonsterCompendium,
   onOpenCharacterCompendium,
   onOpenAlliesCompendium,
@@ -449,12 +452,25 @@ export const MainCampaignBar: React.FC<MainCampaignBarProps> = React.memo(({
         <button
           id="btn-main-open-campaign-manager"
           onClick={onOpenCampaignManager}
-          className="px-2 py-1 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px] font-bold flex items-center gap-1 transition-all"
+          className="px-2 py-1 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer"
           title="Open Full Campaign Builder and Chapter Hierarchy"
         >
           <BookOpen className="w-3.5 h-3.5 text-amber-400" />
           <span>Manager</span>
         </button>
+
+        {/* Battle Arena Management Link */}
+        {onOpenArenaManager && (
+          <button
+            id="btn-main-open-arena-manager"
+            onClick={onOpenArenaManager}
+            className="px-2 py-1 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/50 text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer"
+            title="Open Battle Arena Manager (Configure Arena Maps, Walls, Monsters & Rules)"
+          >
+            <Swords className="w-3.5 h-3.5 text-amber-400" />
+            <span>Arena</span>
+          </button>
+        )}
 
         {/* D&D AI Oracle / Chatbot Launcher */}
         {onOpenDndChatbot && (

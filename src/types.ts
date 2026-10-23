@@ -144,16 +144,25 @@ export const MAP_SIZE_PRESETS: Record<
   colossal: { label: 'Colossal Battlefield', width: 60, height: 40, description: '300×200 ft (Siege, Open Realm, Volcano)' }
 };
 
-export type WallType = 'normal' | 'door' | 'secret_door' | 'window' | 'terrain';
+export type WallType = 'normal' | 'door' | 'secret_door' | 'window' | 'terrain' | 'solid';
 export type DoorState = 'closed' | 'open' | 'locked';
 export type CampaignMode = 'creator' | 'run';
 
 export interface WallSegment {
   id: string;
-  p1: { x: number; y: number };
-  p2: { x: number; y: number };
+  points?: number[];
+  p1?: { x: number; y: number };
+  p2?: { x: number; y: number };
   wallType?: WallType;
   doorState?: DoorState;
+  isOpen?: boolean;
+  x1?: number;
+  y1?: number;
+  x2?: number;
+  y2?: number;
+  type?: WallType | string;
+  blocksLight?: boolean;
+  blocksMovement?: boolean;
 }
 
 export interface VisionConfig {

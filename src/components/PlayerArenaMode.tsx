@@ -32,7 +32,8 @@ import {
   ScrollText,
   PawPrint,
   User,
-  GripHorizontal
+  GripHorizontal,
+  Lock
 } from 'lucide-react';
 import { WildShapeModal } from './WildShapeModal';
 import { WildShapeBeastForm, ActiveWildShapeState, GAIAH_WILD_SHAPE_FORMS } from '../types/wildShape';
@@ -43,6 +44,7 @@ import { DEFAULT_CHARACTERS, getCharacterTokenUrl, isDdbMatch } from '../data/de
 import { DEFAULT_MONSTERS } from '../data/defaultMonsters';
 import { PRESET_BATTLEMAPS, PresetBattlemap } from '../data/presetBattlemaps';
 import { HudCharacterData, HudActionItem, computeUpcastFormula } from '../types/hud';
+import { WallSegment, DoorState } from '../types';
 import { PlayerHeroDock } from './PlayerHeroDock';
 import { GridLayer } from './GridLayer';
 import { buildDmMonsterHudData } from '../services/monsterHudService';
@@ -60,14 +62,27 @@ import {
   VttEffectInstance,
   DomEffectOverlay,
   findJb2aAsset,
-  soundCatalog
+  soundCatalog,
+  AimReticle
 } from '../effects';
+import { Jb2aAssetDefinition } from '../effects/types/effect';
+import { TokenDragRuler, TokenDragState, parseSpeedFt } from './TokenDragRuler';
 import {
   computeFlightLiftMetrics,
   TokenGroundFootprint,
   TokenAerialOverlay,
   useTokenFlightAnimation
 } from './TokenFlightElevation';
+import {
+  ArenaConfig,
+  loadArenaConfig,
+  subscribeToArenaConfig,
+  saveArenaConfig,
+  getAvailableArenaMaps,
+  doesArenaWallBlockMovement,
+  doesArenaWallBlockSight
+} from '../services/arenaConfigService';
+import { subscribeToMonsters } from '../lib/firebase';
 
 export type ArenaMatchMode = '1v1' | '2v2' | 'vs_npcs' | 'random_encounter';
 export type ArenaDifficulty = 'standard' | 'hard' | 'deadly';
@@ -206,7 +221,8 @@ function rollDiceFormula(formula: string | undefined, isCrit = false): {
 function buildArenaCombatantHudData(
   combatant: ArenaCombatant,
   liveDdbHud?: HudCharacterData | null,
-  activeWildShape?: ActiveWildShapeState | null
+  activeWildShape?: ActiveWildShapeState | null,
+  arenaConfig?: ArenaConfig
 ): HudCharacterData {
   const char = combatant.sourceCharacter;
   const mon = combatant.sourceMonster;
@@ -661,7 +677,7 @@ function buildArenaCombatantHudData(
       rangeFt: 0
     });
   }
-  if (!actions.some((a) => a.id === 'arena-second-wind')) {
+  if ((arenaConfig?.allowArenaSurge ?? true) && !actions.some((a) => a.id === 'arena-second-wind')) {
     actions.push({
       id: 'arena-second-wind',
       name: 'Arena Surge (Heal)',
@@ -695,7 +711,8 @@ function buildArenaCombatantHudData(
     });
   }
 
-  if (!items.some((i) => i.name.toLowerCase().includes('potion'))) {
+  const potionCount = arenaConfig?.startingPotionsCount ?? 2;
+  if (potionCount > 0 && !items.some((i) => i.name.toLowerCase().includes('potion'))) {
     items.push({
       id: 'arena-potion-greater',
       name: 'Potion of Greater Healing',
@@ -703,7 +720,7 @@ function buildArenaCombatantHudData(
       type: 'bonus_action',
       subCategory: 'item',
       castingTime: '1 Bonus Action',
-      quantity: 2,
+      quantity: potionCount,
       isSelfAction: true,
       isHeal: true,
       damageFormula: '4d4 + 4',
@@ -861,10 +878,22 @@ const ArenaTokenNode: React.FC<{
   isCurrentTurn: boolean;
   isTargetable: boolean;
   canDrag: boolean;
-  onMove: (id: string, newX: number, newY: number) => void;
+  onMove: (id: string, newX: number, newY: number, distanceMovedFt?: number) => void;
+  onDragStartToken?: (combatant: ArenaCombatant, originX: number, originY: number, baseSpeed: number) => void;
+  onDragMoveToken?: (id: string, rawX: number, rawY: number) => void;
   onClickToken: (combatant: ArenaCombatant) => void;
   onContextMenu?: (combatant: ArenaCombatant, clientX: number, clientY: number) => void;
-}> = ({ combatant, isCurrentTurn, isTargetable, canDrag, onMove, onClickToken, onContextMenu }) => {
+}> = ({
+  combatant,
+  isCurrentTurn,
+  isTargetable,
+  canDrag,
+  onMove,
+  onDragStartToken,
+  onDragMoveToken,
+  onClickToken,
+  onContextMenu
+}) => {
   const [img] = useImage(combatant.avatarUrl || '');
   const pixelSize = (combatant.size || 1) * ARENA_GRID_SIZE;
   const radius = pixelSize / 2;
@@ -902,27 +931,83 @@ const ArenaTokenNode: React.FC<{
   const teamColor = combatant.team === 'gold' ? '#f59e0b' : '#ef4444';
   const hpPct = Math.max(0, Math.min(1, combatant.currentHp / Math.max(1, combatant.maxHp)));
 
+  const isCurrentlyDraggingRef = useRef<boolean>(false);
+
+  const handleDragStart = (e: any) => {
+    e.cancelBubble = true;
+    if (!canDrag || isDead) {
+      e.target.stopDrag();
+      return;
+    }
+    if (isTargetable) {
+      e.target.stopDrag();
+      onClickToken(combatant);
+      return;
+    }
+    isCurrentlyDraggingRef.current = true;
+    const baseSpeed = combatant.remainingMoveFt ?? combatant.speedFt ?? 30;
+    if (onDragStartToken) {
+      onDragStartToken(combatant, combatant.x, combatant.y, baseSpeed);
+    }
+  };
+
+  const handleDragMove = (e: any) => {
+    e.cancelBubble = true;
+    if (!isCurrentlyDraggingRef.current) return;
+    const rawX = e.target.x();
+    const rawY = e.target.y();
+    if (onDragMoveToken) {
+      onDragMoveToken(combatant.id, rawX, rawY);
+    }
+  };
+
+  const handleDragEnd = (e: any) => {
+    e.cancelBubble = true;
+    const wasDragging = isCurrentlyDraggingRef.current;
+    isCurrentlyDraggingRef.current = false;
+    if (!wasDragging) {
+      e.target.position({ x: combatant.x, y: combatant.y });
+      return;
+    }
+    const rawX = e.target.x();
+    const rawY = e.target.y();
+    // Snap to 1-inch Arena Grid
+    const snappedX = Math.max(
+      0,
+      Math.min(ARENA_WIDTH - pixelSize, Math.round(rawX / ARENA_GRID_SIZE) * ARENA_GRID_SIZE)
+    );
+    const snappedY = Math.max(
+      0,
+      Math.min(ARENA_HEIGHT - pixelSize, Math.round(rawY / ARENA_GRID_SIZE) * ARENA_GRID_SIZE)
+    );
+    const dx = snappedX - combatant.x;
+    const dy = snappedY - combatant.y;
+    const distanceFt = Math.round(Math.hypot(dx, dy) / ARENA_GRID_SIZE) * 5;
+
+    // Check if movement exceeds available budget
+    const budget = combatant.remainingMoveFt ?? combatant.speedFt ?? 30;
+    if (distanceFt > budget) {
+      e.target.position({ x: combatant.x, y: combatant.y });
+      onMove(combatant.id, combatant.x, combatant.y, 0);
+      toast.warning(
+        `Only ${combatant.remainingMoveFt} ft of movement remaining this turn! (Use Dash for +${combatant.speedFt} ft)`
+      );
+      return;
+    }
+
+    e.target.position({ x: snappedX, y: snappedY });
+    onMove(combatant.id, snappedX, snappedY, distanceFt);
+  };
+
   return (
     <Group
       x={combatant.x}
       y={combatant.y}
       draggable={canDrag && !isDead}
       opacity={isDead ? 0.45 : 1}
-      onDragEnd={(e) => {
-        const rawX = e.target.x();
-        const rawY = e.target.y();
-        // Snap to 1-inch Arena Grid
-        const snappedX = Math.max(
-          0,
-          Math.min(ARENA_WIDTH - pixelSize, Math.round(rawX / ARENA_GRID_SIZE) * ARENA_GRID_SIZE)
-        );
-        const snappedY = Math.max(
-          0,
-          Math.min(ARENA_HEIGHT - pixelSize, Math.round(rawY / ARENA_GRID_SIZE) * ARENA_GRID_SIZE)
-        );
-        e.target.position({ x: snappedX, y: snappedY });
-        onMove(combatant.id, snappedX, snappedY);
-      }}
+      onDragStart={handleDragStart}
+      onDragMove={handleDragMove}
+      onDragEnd={handleDragEnd}
       onClick={(e) => {
         e.cancelBubble = true;
         onClickToken(combatant);
@@ -1095,13 +1180,47 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
   hasLiveDmMap,
   onTrigger3dDice
 }) => {
+  // DM Battle Arena Configuration (Real-time synced via Firestore / Socket.IO / LocalStorage)
+  const [arenaConfig, setArenaConfig] = useState<ArenaConfig>(() => loadArenaConfig());
+  const [cloudMonsters, setCloudMonsters] = useState<Monster[]>([]);
+
+  useEffect(() => {
+    const unsubConfig = subscribeToArenaConfig((cfg) => {
+      setArenaConfig(cfg);
+    });
+    const unsubMonsters = subscribeToMonsters((mons) => {
+      setCloudMonsters(mons || []);
+    });
+    return () => {
+      unsubConfig();
+      unsubMonsters();
+    };
+  }, []);
+
   // Arena Phase: 'lobby' (Match Setup & Ready Room) vs 'battle' (Live Turn-Based Arena)
   const [phase, setPhase] = useState<'lobby' | 'battle'>('lobby');
-  const [matchMode, setMatchMode] = useState<ArenaMatchMode>('random_encounter');
-  const [difficulty, setDifficulty] = useState<ArenaDifficulty>('standard');
-  const [selectedMap, setSelectedMap] = useState<PresetBattlemap>(() => PRESET_BATTLEMAPS[3] || PRESET_BATTLEMAPS[0]);
+  const [matchMode, setMatchMode] = useState<ArenaMatchMode>(() => arenaConfig.defaultMatchMode || 'random_encounter');
+  const [difficulty, setDifficulty] = useState<ArenaDifficulty>(() => arenaConfig.defaultDifficulty || 'standard');
 
-  // Available Heroes & Monsters
+  const availableMaps = useMemo<PresetBattlemap[]>(() => getAvailableArenaMaps(arenaConfig), [arenaConfig]);
+
+  const [selectedMap, setSelectedMap] = useState<PresetBattlemap>(() => {
+    const maps = getAvailableArenaMaps(arenaConfig);
+    return maps.find((m) => m.id === arenaConfig.defaultMapId) || maps[0] || PRESET_BATTLEMAPS[0];
+  });
+
+  // Sync default map / mode / difficulty when DM updates Arena Config while in Lobby
+  useEffect(() => {
+    if (phase !== 'lobby') return;
+    const found = availableMaps.find((m) => m.id === arenaConfig.defaultMapId);
+    if (found) {
+      setSelectedMap(found);
+    } else if (!availableMaps.some((m) => m.id === selectedMap.id) && availableMaps[0]) {
+      setSelectedMap(availableMaps[0]);
+    }
+  }, [arenaConfig.defaultMapId, availableMaps, phase]);
+
+  // Available Heroes & Monsters (including DM Custom Arena Monsters & Cloud Bestiary, excluding DM disabled monsters)
   const heroPool = useMemo<Character[]>(() => {
     const merged: Character[] = [];
     const seen = new Set<string>();
@@ -1115,7 +1234,19 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
     return merged;
   }, [compendiumCharacters]);
 
-  const monsterPool = useMemo<Monster[]>(() => DEFAULT_MONSTERS, []);
+  const monsterPool = useMemo<Monster[]>(() => {
+    const disabledSet = new Set(arenaConfig.disabledMonsterIds || []);
+    const merged: Monster[] = [];
+    const seen = new Set<string>();
+    [...(arenaConfig.customArenaMonsters || []), ...cloudMonsters, ...DEFAULT_MONSTERS].forEach((m) => {
+      const key = (m.monsterId || m.name || '').toLowerCase().trim();
+      if (key && !seen.has(key) && !disabledSet.has(m.monsterId)) {
+        seen.add(key);
+        merged.push(m);
+      }
+    });
+    return merged.length > 0 ? merged : DEFAULT_MONSTERS;
+  }, [arenaConfig.customArenaMonsters, arenaConfig.disabledMonsterIds, cloudMonsters]);
 
   // Drafted Team Gold (Players) and Team Crimson (Opponents / NPCs)
   const [goldHeroIds, setGoldHeroIds] = useState<string[]>(() => {
@@ -1131,8 +1262,17 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
   );
   const [crimsonIsAI, setCrimsonIsAI] = useState<boolean>(true);
   const [draftedMonsters, setDraftedMonsters] = useState<Monster[]>(() =>
-    generateScaledRandomEncounter(2, 'standard', DEFAULT_MONSTERS)
+    arenaConfig.pinnedEncounterMonsters && arenaConfig.pinnedEncounterMonsters.length > 0
+      ? arenaConfig.pinnedEncounterMonsters
+      : generateScaledRandomEncounter(2, arenaConfig.defaultDifficulty || 'standard', DEFAULT_MONSTERS)
   );
+
+  // Sync DM Pinned Encounter Squad when DM updates it in Campaign Manager
+  useEffect(() => {
+    if (arenaConfig.pinnedEncounterMonsters && arenaConfig.pinnedEncounterMonsters.length > 0) {
+      setDraftedMonsters(arenaConfig.pinnedEncounterMonsters);
+    }
+  }, [arenaConfig.pinnedEncounterMonsters]);
 
   // Connected Players in Arena Lobby (Synced via Socket.IO ARENA_LOBBY_SYNC)
   const [lobbyPlayers, setLobbyPlayers] = useState<ArenaLobbyPlayer[]>([]);
@@ -1198,12 +1338,16 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
 
   // Re-generate scaled random encounter when player count or difficulty changes in 'random_encounter' mode
   useEffect(() => {
-    if (matchMode === 'random_encounter') {
+    if (arenaConfig.lockDmEncounter && arenaConfig.pinnedEncounterMonsters?.length > 0) {
+      setDraftedMonsters(arenaConfig.pinnedEncounterMonsters);
+      return;
+    }
+    if (matchMode === 'random_encounter' && (!arenaConfig.pinnedEncounterMonsters || arenaConfig.pinnedEncounterMonsters.length === 0)) {
       setDraftedMonsters(
         generateScaledRandomEncounter(Math.max(1, goldHeroIds.length), difficulty, monsterPool)
       );
     }
-  }, [matchMode, goldHeroIds.length, difficulty, monsterPool]);
+  }, [matchMode, goldHeroIds.length, difficulty, monsterPool, arenaConfig.lockDmEncounter, arenaConfig.pinnedEncounterMonsters]);
 
   // Adjust team slot counts automatically when switching between 1v1 and 2v2
   useEffect(() => {
@@ -1353,9 +1497,13 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
     } else {
       // vs_npcs or random_encounter
       const monstersToSpawn =
-        draftedMonsters.length > 0
+        arenaConfig.lockDmEncounter && arenaConfig.pinnedEncounterMonsters?.length > 0
+          ? arenaConfig.pinnedEncounterMonsters
+          : draftedMonsters.length > 0
           ? draftedMonsters
           : generateScaledRandomEncounter(goldHeroes.length, difficulty, monsterPool);
+
+      const hpMult = arenaConfig.monsterHpMultiplier || 1;
 
       monstersToSpawn.forEach((mon, idx) => {
         const d20 = Math.floor(Math.random() * 20) + 1;
@@ -1364,6 +1512,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         const sizeSq = mon.size === 'Huge' || mon.size === 'Gargantuan' ? 3 : mon.size === 'Large' ? 2 : 1;
         const duplicateCount = monstersToSpawn.slice(0, idx).filter((m) => m.name === mon.name).length;
         const displayName = duplicateCount > 0 ? `${mon.name} #${duplicateCount + 1}` : mon.name;
+        const scaledHp = Math.max(1, Math.round((mon.hp || 45) * hpMult));
 
         roster.push({
           id: `arena_crimson_mon_${idx}_${Date.now()}`,
@@ -1374,8 +1523,8 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           raceOrType: `${mon.size} ${mon.type}`,
           classOrCr: `CR ${mon.challenge?.split(' ')[0] || '1'}`,
           ac: mon.ac || 14,
-          currentHp: mon.hp || 45,
-          maxHp: mon.hp || 45,
+          currentHp: scaledHp,
+          maxHp: scaledHp,
           tempHp: 0,
           speedFt: 30,
           remainingMoveFt: 30,
@@ -1492,6 +1641,72 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
   // Druid Circle of the Moon Wild Shape State
   const [showWildShapeModal, setShowWildShapeModal] = useState<boolean>(false);
   const [activeWildShape, setActiveWildShape] = useState<ActiveWildShapeState | null>(null);
+  const [hudCollapseTick, setHudCollapseTick] = useState<number>(0);
+
+  // Real-time Movement Drag Ruler State (Identical to standard Player View)
+  const [tokenDragState, setTokenDragState] = useState<TokenDragState | null>(null);
+
+  // Aiming Reticle State for Spells & Weapon Targeting (Identical to standard Player View)
+  const [activeEquippedAsset, setActiveEquippedAsset] = useState<Jb2aAssetDefinition | null>(null);
+  const [aimOrigin, setAimOrigin] = useState<{ x: number; y: number } | null>(null);
+  const [aimCurrent, setAimCurrent] = useState<{ x: number; y: number } | null>(null);
+
+  // Drag Ruler Handlers
+  const handleDragStartToken = useCallback(
+    (combatant: ArenaCombatant, originX: number, originY: number, baseSpeed: number) => {
+      setTokenDragState({
+        tokenId: combatant.id,
+        tokenName: combatant.name,
+        tokenAvatarUrl: combatant.avatarUrl,
+        tokenSize: combatant.size || 1,
+        originX,
+        originY,
+        currentX: originX,
+        currentY: originY,
+        baseSpeed,
+        distancePx: 0,
+        distanceFt: 0,
+        remainingFt: baseSpeed
+      });
+    },
+    []
+  );
+
+  const handleDragMoveToken = useCallback((id: string, rawX: number, rawY: number) => {
+    setTokenDragState((prev) => {
+      if (!prev || prev.tokenId !== id) return prev;
+      const dx = rawX - prev.originX;
+      const dy = rawY - prev.originY;
+      const distancePx = Math.hypot(dx, dy);
+      const distanceFt = Math.round(distancePx / ARENA_GRID_SIZE) * 5;
+      const remainingFt = prev.baseSpeed - distanceFt;
+      return {
+        ...prev,
+        currentX: rawX,
+        currentY: rawY,
+        distancePx,
+        distanceFt,
+        remainingFt
+      };
+    });
+  }, []);
+
+  // Global pointerup to ensure drag ruler cleanly releases
+  useEffect(() => {
+    const handleGlobalPointerUp = () => {
+      if (tokenDragState) {
+        setTokenDragState(null);
+      }
+    };
+    window.addEventListener('mouseup', handleGlobalPointerUp);
+    window.addEventListener('touchend', handleGlobalPointerUp);
+    window.addEventListener('touchcancel', handleGlobalPointerUp);
+    return () => {
+      window.removeEventListener('mouseup', handleGlobalPointerUp);
+      window.removeEventListener('touchend', handleGlobalPointerUp);
+      window.removeEventListener('touchcancel', handleGlobalPointerUp);
+    };
+  }, [tokenDragState]);
 
   // Handle Dragging Pinned Token Context Menu
   const startTokenMenuDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
@@ -1551,6 +1766,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       };
       setActiveWildShape(prevState);
       setShowWildShapeModal(false);
+      setHudCollapseTick((t) => t + 1);
 
       soundCatalog.play('druid_bloom', 1.0);
 
@@ -1822,6 +2038,43 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
     []
   );
 
+  // Active map walls from DM Battle Arena Config
+  const activeMapWalls = useMemo(
+    () => arenaConfig.mapWalls?.[selectedMap.id] || [],
+    [arenaConfig.mapWalls, selectedMap.id]
+  );
+
+  // Toggle a door wall open/closed during Arena Battle
+  const handleToggleArenaDoor = useCallback(
+    (wallId: string) => {
+      const currentWalls = arenaConfig.mapWalls?.[selectedMap.id] || [];
+      const updatedWalls: WallSegment[] = currentWalls.map((w) => {
+        if (w.id !== wallId) return w;
+        const nextOpen = !(w.doorState === 'open' || w.isOpen);
+        return {
+          ...w,
+          isOpen: nextOpen,
+          doorState: (nextOpen ? 'open' : 'closed') as DoorState
+        };
+      });
+      const nextCfg: ArenaConfig = {
+        ...arenaConfig,
+        mapWalls: {
+          ...(arenaConfig.mapWalls || {}),
+          [selectedMap.id]: updatedWalls
+        },
+        updatedAt: Date.now()
+      };
+      setArenaConfig(nextCfg);
+      saveArenaConfig(nextCfg, socketRef.current);
+      const targetDoor = updatedWalls.find((w) => w.id === wallId);
+      if (targetDoor) {
+        toast.info(targetDoor.doorState === 'open' || targetDoor.isOpen ? '🚪 Arena Door Opened!' : '🔒 Arena Door Closed!');
+      }
+    },
+    [arenaConfig, selectedMap.id, socketRef]
+  );
+
   // Execute an Attack, Spell, Aura, Teleport, or Heal from `actor` onto `target` (or `targetPointPx`)
   const executeCombatAction = useCallback(
     (
@@ -1843,6 +2096,22 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         Math.round((Math.hypot(targetCx - actorCx, targetCy - actorCy) / ARENA_GRID_SIZE) * 5) -
           (actor.size - 1 + (target.size - 1)) * 2.5
       );
+
+      // Enforce DM Arena Walls Line-of-Sight if enabled
+      if (
+        arenaConfig.enforceWalls &&
+        activeMapWalls.length > 0 &&
+        !action.isSelfAction &&
+        actor.id !== target.id &&
+        !actor.isFlying &&
+        !target.isFlying &&
+        doesArenaWallBlockSight(activeMapWalls, actorCx, actorCy, targetCx, targetCy)
+      ) {
+        if (!actor.isAI) {
+          toast.warning('🧱 Line of Sight blocked by an Arena wall or closed door!');
+        }
+        return false;
+      }
 
       const maxRangeFt = action.rangeFt && action.rangeFt > 0 ? action.rangeFt : 5;
       if (!action.isSelfAction && actor.id !== target.id && distFt > maxRangeFt + 5) {
@@ -2290,12 +2559,16 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         return true;
       }
 
-      // Roll Damage
+      // Roll Damage (applying DM Monster Damage Multiplier for AI monsters)
       const dmgRoll = rollDiceFormula(action.damageFormula || '1d10 + 4', isCrit);
+      const dmgMult =
+        actor.team === 'crimson' && actor.isAI ? arenaConfig.monsterDamageMultiplier || 1 : 1;
+      const finalDamage = Math.max(1, Math.round(dmgRoll.total * dmgMult));
+
       setCombatants((prev) =>
         prev.map((c) => {
           if (c.id === target.id) {
-            const nextHp = Math.max(0, c.currentHp - dmgRoll.total);
+            const nextHp = Math.max(0, c.currentHp - finalDamage);
             return { ...c, currentHp: nextHp };
           }
           if (c.id === actor.id) {
@@ -2308,13 +2581,13 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       addCombatLog(
         actor.name,
         actor.team,
-        `${isCrit ? '💥 CRITICAL HIT!' : 'hit'} ${target.name} with ${action.name}${isThreatened ? ' (Disadvantage)' : ''} for ${dmgRoll.total} ${action.damageType || ''} damage!`,
-        `To Hit: ${attackTotal} (${rollFormula}) vs AC ${target.ac} • Damage: ${dmgRoll.breakdown}`,
+        `${isCrit ? '💥 CRITICAL HIT!' : 'hit'} ${target.name} with ${action.name}${isThreatened ? ' (Disadvantage)' : ''} for ${finalDamage} ${action.damageType || ''} damage!`,
+        `To Hit: ${attackTotal} (${rollFormula}) vs AC ${target.ac} • Damage: ${dmgRoll.breakdown}${dmgMult !== 1 ? ` (×${dmgMult} DM Scale)` : ''}`,
         isCrit
       );
       return true;
     },
-    [combatants, addCombatLog, onTrigger3dDice, spawnArenaVisualEffect]
+    [combatants, addCombatLog, onTrigger3dDice, spawnArenaVisualEffect, arenaConfig.enforceWalls, arenaConfig.monsterDamageMultiplier, activeMapWalls]
   );
 
   // ============================================================================
@@ -2562,19 +2835,37 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
     };
   }, [phase, activeCombatant, turnIndex, winnerTeam, combatants, executeCombatAction, handleAdvanceTurn, addCombatLog]);
 
-  // Handle Player dragging their active token on the Arena grid
+  // Handle Player dragging or tapping their active token on the Arena grid
   const handleMoveArenaToken = useCallback(
-    (tokenId: string, newX: number, newY: number) => {
+    (tokenId: string, newX: number, newY: number, distanceMovedFt?: number) => {
+      setTokenDragState(null);
       setCombatants((prev) =>
         prev.map((c) => {
           if (c.id !== tokenId) return c;
-          const distSquares = Math.round(
-            Math.hypot(newX - c.x, newY - c.y) / ARENA_GRID_SIZE
-          );
-          const moveCostFt = distSquares * 5;
+          const moveCostFt =
+            distanceMovedFt !== undefined
+              ? distanceMovedFt
+              : Math.round(Math.hypot(newX - c.x, newY - c.y) / ARENA_GRID_SIZE) * 5;
           if (moveCostFt > c.remainingMoveFt) {
             toast.warning(
               `Only ${c.remainingMoveFt} ft of movement remaining this turn! (Use Dash for +${c.speedFt} ft)`
+            );
+            return c;
+          }
+          if (
+            arenaConfig.enforceWalls &&
+            activeMapWalls.length > 0 &&
+            !c.isFlying &&
+            doesArenaWallBlockMovement(
+              activeMapWalls,
+              c.x + ((c.size || 1) * ARENA_GRID_SIZE) / 2,
+              c.y + ((c.size || 1) * ARENA_GRID_SIZE) / 2,
+              newX + ((c.size || 1) * ARENA_GRID_SIZE) / 2,
+              newY + ((c.size || 1) * ARENA_GRID_SIZE) / 2
+            )
+          ) {
+            toast.warning(
+              '🧱 Movement blocked by an Arena wall or closed door! (Click a door on the map to open it)'
             );
             return c;
           }
@@ -2587,7 +2878,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         })
       );
     },
-    []
+    [arenaConfig.enforceWalls, activeMapWalls]
   );
 
   // Build `<PlayerHeroDock />` data for the currently active human-controlled fighter
@@ -2595,8 +2886,8 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
     if (!activeCombatant) return null;
     const ddbId = activeCombatant.sourceCharacter?.ddbCharacterId;
     const liveHud = ddbId ? liveDdbHudMap[String(ddbId)] : null;
-    return buildArenaCombatantHudData(activeCombatant, liveHud, activeWildShape);
-  }, [activeCombatant, liveDdbHudMap, activeWildShape]);
+    return buildArenaCombatantHudData(activeCombatant, liveHud, activeWildShape, arenaConfig);
+  }, [activeCombatant, liveDdbHudMap, activeWildShape, arenaConfig]);
 
   // Compute reachable 5ft grid cells for Tap-to-Move on Mobile & Desktop when it's a human player's turn
   const reachableMoveSquares = useMemo<Array<{ col: number; row: number }>>(() => {
@@ -2640,12 +2931,26 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         if (c === curCol && r === curRow) continue;
         const distSq = Math.round(Math.hypot(c - curCol, r - curRow));
         if (distSq >= 1 && distSq <= maxSteps && !occupied.has(`${c},${r}`)) {
+          if (
+            arenaConfig.enforceWalls &&
+            activeMapWalls.length > 0 &&
+            !activeCombatant.isFlying &&
+            doesArenaWallBlockMovement(
+              activeMapWalls,
+              curCol * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2,
+              curRow * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2,
+              c * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2,
+              r * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2
+            )
+          ) {
+            continue;
+          }
           cells.push({ col: c, row: r });
         }
       }
     }
     return cells;
-  }, [phase, activeCombatant, winnerTeam, activeTargetingAction, combatants]);
+  }, [phase, activeCombatant, winnerTeam, activeTargetingAction, combatants, arenaConfig.enforceWalls, activeMapWalls]);
 
   if (!isOpen) return null;
 
@@ -2927,49 +3232,60 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                       <h3 className="text-xs sm:text-sm font-mono font-bold text-rose-300 flex items-center gap-1.5">
                         <Skull className="w-4 h-4 text-rose-400 shrink-0" />
                         <span>
-                          {matchMode === 'random_encounter'
+                          {arenaConfig.lockDmEncounter
+                            ? '🔒 DM Custom Arena Encounter'
+                            : matchMode === 'random_encounter'
                             ? `Random Encounter (${goldHeroIds.length}P)`
                             : 'Custom Monster Roster'}
                         </span>
                       </h3>
                       <p className="text-[10px] sm:text-[11px] text-zinc-400">
-                        Behavior Tree AI • A* Pathfinding • Spellcasting
+                        {arenaConfig.lockDmEncounter
+                          ? 'Encounter squad pinned by your Dungeon Master in Campaign Manager'
+                          : 'Behavior Tree AI • A* Pathfinding • Spellcasting'}
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-1 flex-wrap">
-                      {(['standard', 'hard', 'deadly'] as const).map((diff) => (
+                    {!arenaConfig.lockDmEncounter ? (
+                      <div className="flex items-center gap-1 flex-wrap">
+                        {(['standard', 'hard', 'deadly'] as const).map((diff) => (
+                          <button
+                            key={diff}
+                            type="button"
+                            onClick={() => setDifficulty(diff)}
+                            className={`px-2 py-1 rounded-lg text-[10px] font-mono font-bold uppercase cursor-pointer border ${
+                              difficulty === diff
+                                ? 'bg-rose-500 text-white border-rose-400'
+                                : 'bg-zinc-950 text-zinc-400 border-zinc-800 hover:text-white'
+                            }`}
+                          >
+                            {diff}
+                          </button>
+                        ))}
                         <button
-                          key={diff}
                           type="button"
-                          onClick={() => setDifficulty(diff)}
-                          className={`px-2 py-1 rounded-lg text-[10px] font-mono font-bold uppercase cursor-pointer border ${
-                            difficulty === diff
-                              ? 'bg-rose-500 text-white border-rose-400'
-                              : 'bg-zinc-950 text-zinc-400 border-zinc-800 hover:text-white'
-                          }`}
-                        >
-                          {diff}
-                        </button>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setDraftedMonsters(
-                            generateScaledRandomEncounter(
-                              Math.max(1, goldHeroIds.length),
-                              difficulty,
-                              monsterPool
+                          onClick={() =>
+                            setDraftedMonsters(
+                              generateScaledRandomEncounter(
+                                Math.max(1, goldHeroIds.length),
+                                difficulty,
+                                monsterPool
+                              )
                             )
-                          )
-                        }
-                        className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[10px] font-mono font-bold flex items-center gap-1 cursor-pointer"
-                        title="Roll a fresh Random Encounter scaled to your party size"
-                      >
-                        <Shuffle className="w-3 h-3" />
-                        <span>Re-Roll</span>
-                      </button>
-                    </div>
+                          }
+                          className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[10px] font-mono font-bold flex items-center gap-1 cursor-pointer"
+                          title="Roll a fresh Random Encounter scaled to your party size"
+                        >
+                          <Shuffle className="w-3 h-3" />
+                          <span>Re-Roll</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="px-2.5 py-1 rounded-lg bg-rose-500/15 border border-rose-500/40 text-rose-300 text-[10px] font-mono font-bold flex items-center gap-1">
+                        <Lock className="w-3 h-3" />
+                        <span>DM Locked</span>
+                      </span>
+                    )}
                   </div>
 
                   {/* Active Drafted Monsters List */}
@@ -3039,12 +3355,20 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           {/* Step 3: Select Arena Battlemap & Launch Match */}
           <div className="bg-zinc-900/75 border border-zinc-800 rounded-3xl p-4 sm:p-5 flex flex-col md:flex-row items-center justify-between gap-5">
             <div className="flex-1 w-full">
-              <span className="block text-xs font-mono uppercase tracking-wider text-zinc-400 font-bold mb-2.5">
-                3. Choose Colosseum Battlemap (1-Inch Tactical Grid)
-              </span>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
-                {PRESET_BATTLEMAPS.map((map) => {
+              <div className="flex items-center justify-between gap-2 mb-2.5">
+                <span className="text-xs font-mono uppercase tracking-wider text-zinc-400 font-bold">
+                  3. Choose Colosseum Battlemap ({availableMaps.length} Available)
+                </span>
+                {activeMapWalls.length > 0 && (
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/35 text-amber-300">
+                    🧱 {activeMapWalls.length} Tactical Wall(s) / Door(s) Active
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 max-h-48 overflow-y-auto pr-1">
+                {availableMaps.map((map) => {
                   const isSel = selectedMap.id === map.id;
+                  const mapWallCount = (arenaConfig.mapWalls?.[map.id] || []).length;
                   return (
                     <button
                       key={map.id}
@@ -3061,10 +3385,15 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                         alt={map.name}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent flex items-end p-2">
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent flex items-end justify-between p-2 gap-1">
                         <span className="text-[10px] sm:text-[11px] font-mono font-bold text-white truncate">
                           {map.name}
                         </span>
+                        {mapWallCount > 0 && (
+                          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/25 text-amber-300 border border-amber-500/40 shrink-0">
+                            {mapWallCount}🧱
+                          </span>
+                        )}
                       </div>
                     </button>
                   );
@@ -3425,9 +3754,80 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             gridSize={ARENA_GRID_SIZE}
             gridOffsetX={0}
             gridOffsetY={0}
-            gridOpacity={0.38}
+            gridOpacity={arenaConfig.gridOpacity ?? 0.38}
             stageScale={stageScale}
           />
+
+          {/* DM Tactical Arena Walls, Cover & Interactive Doorways Layer */}
+          {activeMapWalls.length > 0 && (
+            <Layer>
+              {activeMapWalls.map((wall) => {
+                if (!wall.points || wall.points.length < 4) return null;
+                const isDoor = wall.type === 'door';
+                const isWindow = wall.type === 'window';
+                const isOpen = Boolean(wall.isOpen);
+                const strokeColor = isDoor
+                  ? isOpen
+                    ? '#10b981'
+                    : '#f59e0b'
+                  : isWindow
+                  ? '#38bdf8'
+                  : '#f43f5e';
+                const midX = (wall.points[0] + wall.points[wall.points.length - 2]) / 2;
+                const midY = (wall.points[1] + wall.points[wall.points.length - 1]) / 2;
+
+                return (
+                  <Group
+                    key={wall.id}
+                    listening={isDoor}
+                    onClick={(e) => {
+                      if (isDoor) {
+                        e.cancelBubble = true;
+                        handleToggleArenaDoor(wall.id);
+                      }
+                    }}
+                    onTap={(e) => {
+                      if (isDoor) {
+                        e.cancelBubble = true;
+                        handleToggleArenaDoor(wall.id);
+                      }
+                    }}
+                  >
+                    <Line
+                      points={wall.points}
+                      stroke={strokeColor}
+                      strokeWidth={isDoor ? 9 : isWindow ? 6 : 8}
+                      dash={isDoor && isOpen ? [10, 10] : isWindow ? [8, 6] : undefined}
+                      lineCap="round"
+                      lineJoin="round"
+                      shadowColor="#000000"
+                      shadowBlur={8}
+                      shadowOpacity={0.75}
+                      opacity={isDoor && isOpen ? 0.55 : 0.92}
+                    />
+                    {isDoor && (
+                      <Group x={midX} y={midY}>
+                        <Circle
+                          radius={13}
+                          fill="#09090b"
+                          stroke={strokeColor}
+                          strokeWidth={2.5}
+                        />
+                        <Text
+                          x={-9}
+                          y={-6}
+                          width={18}
+                          align="center"
+                          text={isOpen ? '🔓' : '🚪'}
+                          fontSize={11}
+                        />
+                      </Group>
+                    )}
+                  </Group>
+                );
+              })}
+            </Layer>
+          )}
 
           {/* Arena Tokens & Tap-to-Move Layer */}
           <Layer>
@@ -3493,6 +3893,8 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                   isTargetable={isTargetable}
                   canDrag={canDrag}
                   onMove={handleMoveArenaToken}
+                  onDragStartToken={handleDragStartToken}
+                  onDragMoveToken={handleDragMoveToken}
                   onContextMenu={(clicked, clientX, clientY) => {
                     setActiveTokenMenu({ id: clicked.id, x: clientX, y: clientY });
                   }}
@@ -3501,12 +3903,39 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                     if (activeTargetingAction) {
                       executeCombatAction(activeCombatant, clicked, activeTargetingAction);
                       setActiveTargetingAction(null);
+                      setActiveEquippedAsset(null);
+                      setAimOrigin(null);
+                      setAimCurrent(null);
                     }
                   }}
                 />
               );
             })}
           </Layer>
+
+          {/* Real-time Token Drag Measurement Ruler Layer */}
+          {tokenDragState && (
+            <Layer listening={false}>
+              <TokenDragRuler
+                dragState={tokenDragState}
+                gridSize={ARENA_GRID_SIZE}
+                stageScale={stageScale}
+              />
+            </Layer>
+          )}
+
+          {/* Dynamic JB2A Aiming Reticle Layer (Targeting preview while aiming) */}
+          {activeEquippedAsset && aimOrigin && aimCurrent && (
+            <Layer listening={false}>
+              <AimReticle
+                asset={activeEquippedAsset}
+                origin={aimOrigin}
+                current={aimCurrent}
+                gridSize={ARENA_GRID_SIZE}
+                stageScale={stageScale}
+              />
+            </Layer>
+          )}
         </Stage>
 
         {/* JB2A Animated Spells & Weapon FX Overlay */}
@@ -3546,12 +3975,56 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             } as any
           }
           onSelectAction={(action) => {
-            if (action.isSelfAction) {
-              executeCombatAction(activeCombatant, activeCombatant, action);
-            } else {
-              setActiveTargetingAction(action);
-              toast.info(`🎯 Tap a target token or grid square for ${action.name}`);
+            if (activeTargetingAction?.id === action.id) {
+              const prevSlot = activeTargetingAction.castAtLevel ?? activeTargetingAction.level ?? 0;
+              const nextSlot = action.castAtLevel ?? action.level ?? 0;
+              if (prevSlot !== nextSlot) {
+                setActiveTargetingAction(action);
+                toast.info(
+                  nextSlot > (action.level ?? 0)
+                    ? `Upcasting ${action.name} at Level ${nextSlot} Slot${action.damageFormula ? ` (${action.damageFormula})` : ''}`
+                    : `Targeting ${action.name} (Base Level ${nextSlot})`
+                );
+                return;
+              }
+              setActiveTargetingAction(null);
+              setActiveEquippedAsset(null);
+              setAimOrigin(null);
+              setAimCurrent(null);
+              return;
             }
+
+            if (action.isSelfAction && !action.rangeFt) {
+              executeCombatAction(activeCombatant, activeCombatant, action);
+              return;
+            }
+
+            const lowerName = action.name.toLowerCase();
+            if (lowerName.includes('wild shape') || action.id === 'druid-wild-shape') {
+              if (activeWildShape) {
+                handleRevertWildShape();
+              } else {
+                setShowWildShapeModal(true);
+              }
+              return;
+            }
+
+            const matchedAsset =
+              findJb2aAsset(action.jb2aAssetId || '') ||
+              findJb2aAsset(action.name) ||
+              findJb2aAsset(action.isHeal ? 'cure_wounds' : (action.rangeFt || 5) > 10 ? 'fire_bolt' : 'attack_slash');
+
+            setActiveTargetingAction(action);
+            setActiveEquippedAsset(matchedAsset || null);
+
+            const tokenRadius = ((activeCombatant.size || 1) * ARENA_GRID_SIZE) / 2;
+            const originPt = {
+              x: activeCombatant.x + tokenRadius,
+              y: activeCombatant.y + tokenRadius
+            };
+            setAimOrigin(originPt);
+            setAimCurrent(originPt);
+            toast.info(`🎯 Aim & click a target token or grid cell for ${action.name}`);
           }}
           onRollToHit={(action) => {
             const nearestEnemy =
@@ -3632,12 +4105,20 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             }
           }}
           activeTargetingAction={activeTargetingAction}
-          activeEquippedAsset={null}
-          onCancelTargeting={() => setActiveTargetingAction(null)}
+          activeEquippedAsset={activeEquippedAsset}
+          onCancelTargeting={() => {
+            setActiveTargetingAction(null);
+            setActiveEquippedAsset(null);
+            setAimOrigin(null);
+            setAimCurrent(null);
+          }}
           onTargetSelf={() => {
             if (activeTargetingAction) {
               executeCombatAction(activeCombatant, activeCombatant, activeTargetingAction);
               setActiveTargetingAction(null);
+              setActiveEquippedAsset(null);
+              setAimOrigin(null);
+              setAimCurrent(null);
             }
           }}
           isMyTurn={true}
@@ -3649,6 +4130,8 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           onOpenWildShape={() => setShowWildShapeModal(true)}
           onRevertWildShape={handleRevertWildShape}
           activeWildShape={activeWildShape}
+          onClearInspectedAura={() => setInspectedAuraRequest(null)}
+          collapseRequestTick={hudCollapseTick}
         />
       )}
 

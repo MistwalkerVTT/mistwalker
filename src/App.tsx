@@ -58,6 +58,7 @@ import {
 import { JB2A_REGISTRY, findJb2aAsset } from './effects/db/jb2aRegistry';
 import { getAuraVideoUrl } from './effects/db/tokenFxMap';
 import { CampaignBuilderModal } from './components/CampaignBuilderModal';
+import { PlayerArenaMode } from './components/PlayerArenaMode';
 import { SaveToCampaignModal } from './components/SaveToCampaignModal';
 import { LoadCampaignModal } from './components/LoadCampaignModal';
 import { MainCampaignBar } from './components/MainCampaignBar';
@@ -1361,6 +1362,8 @@ export default function App() {
   }, []);
   const [showDndChatbot, setShowDndChatbot] = useState(false);
   const [showCampaignBuilder, setShowCampaignBuilder] = useState(false);
+  const [campaignBuilderInitialTab, setCampaignBuilderInitialTab] = useState<'campaigns' | 'arena'>('campaigns');
+  const [showDmArenaPreview, setShowDmArenaPreview] = useState(false);
   const [showSaveToCampaignModal, setShowSaveToCampaignModal] = useState(false);
   const [showLoadCampaignModal, setShowLoadCampaignModal] = useState(false);
   const [showMonsterCompendium, setShowMonsterCompendium] = useState(false);
@@ -7796,7 +7799,14 @@ export default function App() {
             onFileUpload={handleFileUpload}
             onUniversalVttUpload={handleFileUpload}
             onOpenLoadModal={() => setShowLoadCampaignModal(true)}
-            onOpenCampaignManager={() => setShowCampaignBuilder(true)}
+            onOpenCampaignManager={() => {
+              setCampaignBuilderInitialTab('campaigns');
+              setShowCampaignBuilder(true);
+            }}
+            onOpenArenaManager={() => {
+              setCampaignBuilderInitialTab('arena');
+              setShowCampaignBuilder(true);
+            }}
             onOpenMonsterCompendium={() => setShowMonsterCompendium(true)}
             onOpenCharacterCompendium={() => setShowCharacterCompendium(true)}
             onOpenAlliesCompendium={() => setShowAlliesCompendium(true)}
@@ -7842,7 +7852,14 @@ export default function App() {
                 isQuickSaving={isQuickSaving}
                 onOpenSaveModal={() => setShowSaveToCampaignModal(true)}
                 onOpenLoadModal={() => setShowLoadCampaignModal(true)}
-                onOpenCampaignManager={() => setShowCampaignBuilder(true)}
+                onOpenCampaignManager={() => {
+                  setCampaignBuilderInitialTab('campaigns');
+                  setShowCampaignBuilder(true);
+                }}
+                onOpenArenaManager={() => {
+                  setCampaignBuilderInitialTab('arena');
+                  setShowCampaignBuilder(true);
+                }}
                 onOpenMonsterCompendium={() => setShowMonsterCompendium(true)}
                 onOpenCharacterCompendium={() => setShowCharacterCompendium(true)}
                 onOpenAlliesCompendium={() => {
@@ -10466,7 +10483,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Campaign Builder & Scene Management Modal */}
+      {/* Campaign Builder & Scene Management Modal (Includes Battle Arena Manager Menu) */}
       <CampaignBuilderModal
         isOpen={showCampaignBuilder}
         onClose={() => setShowCampaignBuilder(false)}
@@ -10482,6 +10499,28 @@ export default function App() {
         activeSceneInfo={activeSceneInfo}
         savedMaps={uploadedMaps}
         currentActiveDmNotes={activeDmNotes}
+        initialTab={campaignBuilderInitialTab}
+        onLaunchArenaPreview={() => {
+          setShowCampaignBuilder(false);
+          setShowDmArenaPreview(true);
+        }}
+      />
+
+      {/* DM Stand-Alone Battle Arena Preview & Test Mode */}
+      <PlayerArenaMode
+        isOpen={showDmArenaPreview}
+        onExitArena={() => setShowDmArenaPreview(false)}
+        compendiumCharacters={compendiumCharacters}
+        socketRef={socketRef}
+        hasLiveDmMap={Boolean(imageFile)}
+        onTrigger3dDice={(rollEvent) => {
+          if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+            (window as any).__mistwalkerRoll3d(rollEvent);
+          }
+          if (socketRef.current?.connected) {
+            socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', rollEvent);
+          }
+        }}
       />
 
       {/* Save to Campaign Modal */}

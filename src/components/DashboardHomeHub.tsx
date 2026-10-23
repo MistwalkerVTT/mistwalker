@@ -19,7 +19,8 @@ import {
   Bug,
   Clock,
   Scroll,
-  Music
+  Music,
+  Swords
 } from 'lucide-react';
 import { Campaign, Scene, ActiveSessionData } from '../lib/firebase';
 import { DEMO_GV_CAMPAIGN, DEMO_GV_SCENE, DEMO_GV_CHAPTER } from '../data/demoCampaignGv';
@@ -29,6 +30,7 @@ interface DashboardHomeHubProps {
   onUniversalVttUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onOpenLoadModal: () => void;
   onOpenCampaignManager: () => void;
+  onOpenArenaManager?: () => void;
   onOpenMonsterCompendium: () => void;
   onOpenCharacterCompendium: () => void;
   onOpenAlliesCompendium: () => void;
@@ -54,6 +56,7 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
   onUniversalVttUpload,
   onOpenLoadModal,
   onOpenCampaignManager,
+  onOpenArenaManager,
   onOpenMonsterCompendium,
   onOpenCharacterCompendium,
   onOpenAlliesCompendium,
@@ -602,6 +605,31 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
                     </div>
                   </div>
                   <ChevronRight className="w-4 h-4 text-emerald-400 group-hover/audio:translate-x-0.5 transition-transform" />
+                </button>
+              )}
+
+              {/* Battle Arena Manager Banner Button */}
+              {onOpenArenaManager && (
+                <button
+                  type="button"
+                  id="btn-home-arena-manager"
+                  onClick={onOpenArenaManager}
+                  className="w-full mt-2 p-3 rounded-2xl bg-gradient-to-r from-amber-950/60 via-zinc-900/90 to-orange-950/40 hover:from-amber-900/50 hover:to-orange-900/30 border border-amber-500/40 hover:border-amber-400 transition-all text-left group/arena flex items-center justify-between cursor-pointer shadow-lg shadow-amber-950/20"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/40 group-hover/arena:scale-105 transition-transform">
+                      <Swords className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="block text-xs font-mono font-bold text-amber-200 group-hover/arena:text-amber-100">
+                        Battle Arena Manager
+                      </span>
+                      <span className="block text-[10px] text-zinc-400 font-sans">
+                        Customize Arena maps, draw walls, change monsters & tweak rules
+                      </span>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-amber-400 group-hover/arena:translate-x-0.5 transition-transform" />
                 </button>
               )}
             </div>

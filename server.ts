@@ -862,6 +862,14 @@ async function startServer() {
       io.emit("APPLY_TOKEN_MUTATION", payload);
     });
 
+    socket.on("ARENA_LOBBY_ANNOUNCE", (payload) => {
+      socket.broadcast.emit("ARENA_LOBBY_ANNOUNCE", payload);
+    });
+
+    socket.on("ARENA_CONFIG_UPDATE", (payload) => {
+      io.emit("ARENA_CONFIG_UPDATE", payload);
+    });
+
     socket.on("disconnect", (reason) => {
       console.log(`[Server] User disconnected: ${socket.id} (reason: ${reason})`);
     });
