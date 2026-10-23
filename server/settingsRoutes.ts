@@ -12,7 +12,122 @@ import { initGeminiKeyPool } from './aiRoutes';
 
 export const settingsRouter = Router();
 
-// Helper to remove or update an environment variable in root .env file
+const RENDER_SERVICE_ID = process.env.RENDER_SERVICE_ID || 'srv-db93bu3bc2fs73cn795g';
+const RENDER_API_KEY = process.env.RENDER_API_KEY || 'rnd_M6nAOrAtFKciTjyntqu8Q9ZsNxXz';
+
+const PERSISTED_CREDENTIAL_KEYS = [
+  'DND_BEYOND_DM_COBALT_SESSIONS',
+  'DND_BEYOND_DM_COBALT_SESSION',
+  'DND_BEYOND_COBALT_SESSION',
+  'DND_BEYOND_CAMPAIGN_ID',
+  'GEMINI_API_KEY',
+  'GEMINI_FALLBACK_KEYS',
+  'ELEVENLABS_API_KEY'
+] as const;
+
+// Asynchronously syncs a credential change to Render's persistent Environment Variables API
+async function syncRenderEnvVar(key: string, value: string | null) {
+  if (!RENDER_SERVICE_ID || !RENDER_API_KEY) return;
+  try {
+    const url = `https://api.render.com/v1/services/${RENDER_SERVICE_ID}/env-vars/${encodeURIComponent(key)}`;
+    if (value === null) {
+      await fetch(url, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${RENDER_API_KEY}`,
+          'Accept': 'application/json'
+        }
+      });
+      console.log(`[Settings] Removed ${key} from Render persistent environment variables.`);
+    } else {
+      const res = await fetch(url, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${RENDER_API_KEY}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ value: value.trim() })
+      });
+      if (res.ok) {
+        console.log(`[Settings] Persisted ${key} to Render environment variables.`);
+      } else {
+        console.warn(`[Settings] Render env-var sync returned HTTP ${res.status} for ${key}`);
+      }
+    }
+  } catch (err: any) {
+    console.warn(`[Settings] Failed to sync ${key} to Render env vars:`, err.message);
+  }
+}
+
+// Asynchronously backs up current credential state to Firestore so container restarts never lose uploaded keys
+async function syncCredentialsToFirestore() {
+  try {
+    const configPath = path.resolve(process.cwd(), 'firebase-applet-config.json');
+    if (!fs.existsSync(configPath)) return;
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    const { initializeApp, getApps } = await import('firebase/app');
+    const { getFirestore, doc, setDoc } = await import('firebase/firestore');
+    const fbApp = getApps().length ? getApps()[0] : initializeApp(config);
+    const db = getFirestore(fbApp, config.firestoreDatabaseId);
+
+    const payload: Record<string, string | null> = {};
+    for (const k of PERSISTED_CREDENTIAL_KEYS) {
+      payload[k] = process.env[k] || null;
+    }
+
+    await setDoc(doc(db, 'activeSession', 'server_credentials_backup'), {
+      credentials: payload,
+      updatedAt: Date.now()
+    }, { merge: true });
+    console.log('[Settings] Backed up credentials to Firestore (activeSession/server_credentials_backup).');
+  } catch (err: any) {
+    console.warn('[Settings] Failed to back up credentials to Firestore:', err.message);
+  }
+}
+
+// Hydrate any saved credentials from Firestore on server boot if missing from process.env
+export async function hydratePersistedSettings() {
+  try {
+    const configPath = path.resolve(process.cwd(), 'firebase-applet-config.json');
+    if (!fs.existsSync(configPath)) return;
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    const { initializeApp, getApps } = await import('firebase/app');
+    const { getFirestore, doc, getDoc } = await import('firebase/firestore');
+    const fbApp = getApps().length ? getApps()[0] : initializeApp(config);
+    const db = getFirestore(fbApp, config.firestoreDatabaseId);
+
+    const snap = await getDoc(doc(db, 'activeSession', 'server_credentials_backup'));
+    if (!snap.exists()) return;
+    const data = snap.data();
+    const creds = data?.credentials;
+    if (!creds || typeof creds !== 'object') return;
+
+    let restoredCount = 0;
+    for (const k of PERSISTED_CREDENTIAL_KEYS) {
+      const savedVal = creds[k];
+      if (typeof savedVal === 'string' && savedVal.trim().length > 0 && !process.env[k]) {
+        process.env[k] = savedVal.trim();
+        restoredCount++;
+      }
+    }
+    if (restoredCount > 0) {
+      console.log(`[Settings] Hydrated ${restoredCount} persisted credential(s) from Firestore backup.`);
+      try {
+        initGeminiKeyPool();
+      } catch {
+        // ignore
+      }
+    }
+  } catch (err: any) {
+    console.warn('[Settings] Failed to hydrate persisted settings from Firestore:', err.message);
+  }
+}
+
+// Auto-run hydration on module load
+hydratePersistedSettings();
+
+// Helper to remove or update an environment variable in root .env file + Render API + Firestore backup
 function updateEnvFile(key: string, value: string | null) {
   try {
     const envPath = path.resolve(process.cwd(), '.env');
@@ -35,7 +150,16 @@ function updateEnvFile(key: string, value: string | null) {
       }
     }
 
-    fs.writeFileSync(envPath, content.trim() + '\n', 'utf-8');
+    try {
+      fs.writeFileSync(envPath, content.trim() + '\n', 'utf-8');
+    } catch {
+      // Ignore read-only filesystem errors in cloud containers
+    }
+
+    // Persist asynchronously to Render Environment Variables & Firestore backup
+    void syncRenderEnvVar(key, value);
+    void syncCredentialsToFirestore();
+
     return true;
   } catch (err: any) {
     console.warn(`[Settings] Failed to update .env for key ${key}:`, err.message);
