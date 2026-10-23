@@ -5837,10 +5837,10 @@ export default function PlayerView() {
 
       {/* Interactive Player Waiting Menu when no DM map is active */}
       {!imageFile && !image && (
-        <div className="absolute inset-0 z-30 flex items-center justify-center text-zinc-500 pointer-events-auto select-none p-4">
-          <div className="relative z-10 flex flex-col items-center gap-4 text-center max-w-xl w-full bg-zinc-950/90 backdrop-blur-xl border border-zinc-800/90 rounded-3xl p-7 sm:p-9 shadow-[0_25px_60px_rgba(0,0,0,0.95)] ring-1 ring-white/10 animate-in fade-in">
-            <div className="w-16 h-16 rounded-2xl bg-zinc-900/90 border border-emerald-500/30 flex items-center justify-center shadow-lg shadow-emerald-500/10">
-              <Radio className="w-8 h-8 text-emerald-400 animate-pulse" />
+        <div className="absolute inset-0 z-30 flex items-center justify-center text-zinc-500 pointer-events-auto select-none p-3 sm:p-4">
+          <div className="relative z-10 flex flex-col items-center gap-3 sm:gap-4 text-center max-w-xl w-full max-h-[88dvh] overflow-y-auto bg-zinc-950/90 backdrop-blur-xl border border-zinc-800/90 rounded-3xl p-5 sm:p-9 shadow-[0_25px_60px_rgba(0,0,0,0.95)] ring-1 ring-white/10 animate-in fade-in">
+            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl bg-zinc-900/90 border border-emerald-500/30 flex items-center justify-center shadow-lg shadow-emerald-500/10 shrink-0">
+              <Radio className="w-6 h-6 sm:w-8 sm:h-8 text-emerald-400 animate-pulse" />
             </div>
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
@@ -5848,24 +5848,24 @@ export default function PlayerView() {
                 Player Waiting Lobby Online
               </span>
             </div>
-            <h3 className="text-2xl font-extrabold text-white font-mono tracking-tight">
+            <h3 className="text-lg sm:text-2xl font-extrabold text-white font-mono tracking-tight">
               Waiting for Dungeon Master...
             </h3>
-            <p className="text-xs text-zinc-400 leading-relaxed font-sans max-w-md">
+            <p className="text-[11px] sm:text-xs text-zinc-400 leading-relaxed font-sans max-w-md">
               When the DM loads a campaign scene, it will immediately project here in real-time. While you wait, link your active character or jump into the stand-alone Battle Arena!
             </p>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full pt-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 w-full pt-1 sm:pt-2">
               <button
                 type="button"
                 onClick={() => setShowCharacterSelectModal(true)}
-                className="p-4 rounded-2xl bg-zinc-900/90 hover:bg-zinc-800 border border-amber-500/40 hover:border-amber-400 text-left transition-all cursor-pointer group"
+                className="p-3.5 sm:p-4 rounded-2xl bg-zinc-900/90 hover:bg-zinc-800 border border-amber-500/40 hover:border-amber-400 text-left transition-all cursor-pointer group"
               >
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-xs font-mono font-bold text-amber-300">
                     Link to DM & Choose Hero
                   </span>
-                  <User className="w-4 h-4 text-amber-400" />
+                  <User className="w-4 h-4 text-amber-400 shrink-0" />
                 </div>
                 <p className="text-[11px] text-zinc-400">
                   {claimedToken ? `Active Hero: ${claimedToken.name}` : 'Select your D&D Beyond or campaign hero'}
@@ -5875,13 +5875,13 @@ export default function PlayerView() {
               <button
                 type="button"
                 onClick={() => setShowArenaMode(true)}
-                className="p-4 rounded-2xl bg-gradient-to-r from-rose-950/60 to-amber-950/60 hover:from-rose-900/60 hover:to-amber-900/60 border border-rose-500/50 hover:border-amber-400 text-left transition-all cursor-pointer group shadow-lg shadow-rose-950/30"
+                className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-rose-950/60 to-amber-950/60 hover:from-rose-900/60 hover:to-amber-900/60 border border-rose-500/50 hover:border-amber-400 text-left transition-all cursor-pointer group shadow-lg shadow-rose-950/30"
               >
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-xs font-mono font-bold text-white group-hover:text-amber-200">
                     Enter Battle Arena
                   </span>
-                  <Swords className="w-4 h-4 text-rose-400 group-hover:rotate-12 transition-transform" />
+                  <Swords className="w-4 h-4 text-rose-400 group-hover:rotate-12 transition-transform shrink-0" />
                 </div>
                 <p className="text-[11px] text-zinc-300">
                   1v1 • 2v2 • Scaled Random Encounters • vs NPCs

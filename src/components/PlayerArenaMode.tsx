@@ -25,7 +25,11 @@ import {
   Flame,
   Crown,
   Target,
-  X
+  X,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  ScrollText
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Character } from '../types/character';
@@ -822,23 +826,52 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
   const [aiTacticalBanner, setAiTacticalBanner] = useState<string | null>(null);
   const [aiPathPreviewPx, setAiPathPreviewPx] = useState<Array<{ x: number; y: number }>>([]);
 
-  // Viewport Pan & Zoom
+  // Viewport Pan & Zoom + Mobile Detection
   const [dimensions, setDimensions] = useState({
-    width: typeof window !== 'undefined' ? window.innerWidth : 1600,
-    height: typeof window !== 'undefined' ? window.innerHeight : 900
+    width: typeof window !== 'undefined' ? (window.visualViewport?.width || window.innerWidth) : 1600,
+    height: typeof window !== 'undefined' ? (window.visualViewport?.height || window.innerHeight) : 900
   });
+  const isMobile = dimensions.width < 768;
+  const [showCombatFeed, setShowCombatFeed] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerWidth >= 768 : true
+  );
   const [stageScale, setStageScale] = useState<number>(0.85);
   const [stagePos, setStagePos] = useState<{ x: number; y: number }>({ x: 120, y: 60 });
+  const pinchDistRef = useRef<number | null>(null);
 
   const [bgImage] = useImage(selectedMap.url);
 
   useEffect(() => {
     const onResize = () => {
-      setDimensions({ width: window.innerWidth, height: window.innerHeight });
+      const w = window.visualViewport?.width || window.innerWidth;
+      const h = window.visualViewport?.height || window.innerHeight;
+      setDimensions({ width: w, height: h });
     };
     window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
+    window.visualViewport?.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.visualViewport?.removeEventListener('resize', onResize);
+    };
   }, []);
+
+  const fitArenaCamera = useCallback(
+    (w = dimensions.width, h = dimensions.height) => {
+      const mobile = w < 768;
+      const padX = mobile ? 16 : 80;
+      const padY = mobile ? 170 : 230;
+      const fitScale = Math.max(
+        mobile ? 0.24 : 0.45,
+        Math.min(0.95, (w - padX) / ARENA_WIDTH, (h - padY) / ARENA_HEIGHT)
+      );
+      setStageScale(fitScale);
+      setStagePos({
+        x: Math.round((w - ARENA_WIDTH * fitScale) / 2),
+        y: mobile ? 48 : 56
+      });
+    },
+    [dimensions.width, dimensions.height]
+  );
 
   // Re-generate scaled random encounter when player count or difficulty changes in 'random_encounter' mode
   useEffect(() => {
@@ -1058,20 +1091,11 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       }
     ]);
 
-    // Center Arena Stage nicely
-    const fitScale = Math.max(
-      0.45,
-      Math.min(
-        0.95,
-        (dimensions.width - 80) / ARENA_WIDTH,
-        (dimensions.height - 230) / ARENA_HEIGHT
-      )
-    );
-    setStageScale(fitScale);
-    setStagePos({
-      x: Math.round((dimensions.width - ARENA_WIDTH * fitScale) / 2),
-      y: 56
-    });
+    // Center Arena Stage nicely for both Mobile & Desktop
+    fitArenaCamera(dimensions.width, dimensions.height);
+    if (dimensions.width < 768) {
+      setShowCombatFeed(false);
+    }
 
     setPhase('battle');
     soundCatalog.play('thunder_boom', 0.85);
@@ -1514,93 +1538,144 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
     return buildArenaCombatantHudData(activeCombatant);
   }, [activeCombatant]);
 
+  // Compute reachable 5ft grid cells for Tap-to-Move on Mobile & Desktop when it's a human player's turn
+  const reachableMoveSquares = useMemo<Array<{ col: number; row: number }>>(() => {
+    if (
+      phase !== 'battle' ||
+      !activeCombatant ||
+      activeCombatant.isAI ||
+      winnerTeam ||
+      activeTargetingAction ||
+      activeCombatant.remainingMoveFt < 5
+    ) {
+      return [];
+    }
+    const maxSteps = Math.floor(activeCombatant.remainingMoveFt / 5);
+    const curCol = Math.round(activeCombatant.x / ARENA_GRID_SIZE);
+    const curRow = Math.round(activeCombatant.y / ARENA_GRID_SIZE);
+    const occupied = new Set<string>();
+    combatants.forEach((c) => {
+      if (c.id === activeCombatant.id || c.currentHp <= 0) return;
+      const cCol = Math.round(c.x / ARENA_GRID_SIZE);
+      const cRow = Math.round(c.y / ARENA_GRID_SIZE);
+      const sz = Math.max(1, c.size || 1);
+      for (let r = cRow; r < cRow + sz; r++) {
+        for (let col = cCol; col < cCol + sz; col++) {
+          occupied.add(`${col},${r}`);
+        }
+      }
+    });
+
+    const cells: Array<{ col: number; row: number }> = [];
+    for (
+      let r = Math.max(0, curRow - maxSteps);
+      r <= Math.min(ARENA_ROWS - 1, curRow + maxSteps);
+      r++
+    ) {
+      for (
+        let c = Math.max(0, curCol - maxSteps);
+        c <= Math.min(ARENA_COLS - 1, curCol + maxSteps);
+        c++
+      ) {
+        if (c === curCol && r === curRow) continue;
+        const distSq = Math.round(Math.hypot(c - curCol, r - curRow));
+        if (distSq >= 1 && distSq <= maxSteps && !occupied.has(`${c},${r}`)) {
+          cells.push({ col: c, row: r });
+        }
+      }
+    }
+    return cells;
+  }, [phase, activeCombatant, winnerTeam, activeTargetingAction, combatants]);
+
   if (!isOpen) return null;
 
   // ==========================================================================
-  // VIEW 1: PLAYER ARENA LOBBY & MATCH SETUP
+  // VIEW 1: PLAYER ARENA LOBBY & MATCH SETUP (MOBILE & DESKTOP RESPONSIVE)
   // ==========================================================================
   if (phase === 'lobby') {
     return (
       <div className="fixed inset-0 z-[220] bg-zinc-950/95 backdrop-blur-xl flex flex-col overflow-y-auto text-zinc-100 animate-in fade-in duration-200">
         {/* Top Lobby Bar */}
-        <div className="px-6 py-4 bg-zinc-900/90 border-b border-zinc-800 flex items-center justify-between sticky top-0 z-20 backdrop-blur-md">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shadow-lg shadow-amber-500/10">
-              <Swords className="w-6 h-6" />
+        <div className="px-3 py-2.5 sm:px-6 sm:py-4 bg-zinc-900/95 border-b border-zinc-800 flex items-center justify-between gap-2 sticky top-0 z-20 backdrop-blur-md">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shadow-lg shadow-amber-500/10 shrink-0">
+              <Swords className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h1 className="text-lg font-extrabold font-mono tracking-tight text-white">
-                  MistWalker Battle Arena & Skirmish Lobby
+                <h1 className="text-sm sm:text-lg font-extrabold font-mono tracking-tight text-white truncate">
+                  MistWalker Battle Arena
                 </h1>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                <span className="hidden sm:inline-block px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0">
                   Stand-Alone Mode
                 </span>
               </div>
-              <p className="text-xs text-zinc-400">
-                Battle 1v1, 2v2, or test your party against scaled Random NPC Encounters while waiting for the DM
+              <p className="text-[11px] sm:text-xs text-zinc-400 truncate">
+                1v1 • 2v2 • Scaled Random Encounters • vs NPCs
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 shrink-0">
             {hasLiveDmMap && (
               <button
                 type="button"
                 onClick={onExitArena}
-                className="px-3.5 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/50 text-xs font-mono font-bold flex items-center gap-2 cursor-pointer animate-pulse"
+                className="px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/50 text-[11px] sm:text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer animate-pulse"
               >
-                <Radio className="w-4 h-4" />
-                <span>DM Scene Active — Join Campaign Map</span>
+                <Radio className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span className="hidden md:inline">DM Scene Active —</span>
+                <span>Join DM</span>
               </button>
             )}
             <button
               type="button"
               onClick={onExitArena}
-              className="px-3.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer"
+              className="px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-[11px] sm:text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer"
             >
-              <LogOut className="w-4 h-4" />
-              <span>Return to Campaign View</span>
+              <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">Return to Campaign</span>
+              <span className="sm:hidden">Exit</span>
             </button>
           </div>
         </div>
 
         {/* Lobby Main Content Grid */}
-        <div className="max-w-6xl w-full mx-auto p-6 space-y-6 flex-1">
+        <div className="max-w-6xl w-full mx-auto p-3.5 sm:p-6 pb-28 md:pb-8 space-y-5 flex-1">
           {/* Step 1: Select Arena Mode */}
           <div>
-            <h2 className="text-xs font-mono uppercase tracking-wider text-amber-400 font-bold mb-3 flex items-center gap-1.5">
+            <h2 className="text-xs font-mono uppercase tracking-wider text-amber-400 font-bold mb-2.5 flex items-center gap-1.5">
               <Crown className="w-4 h-4" />
               <span>1. Select Arena Combat Mode</span>
             </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5">
               {[
                 {
                   id: 'random_encounter' as const,
-                  title: 'Scaled Random Encounter',
-                  badge: 'Co-Op / Solo vs AI',
-                  desc: 'Auto-generates a balanced D&D 5e monster encounter scaled to the exact number of players.',
+                  title: 'Random Encounter',
+                  badge: 'Scaled vs AI',
+                  desc: 'Balanced D&D 5e monster encounter scaled to the number of players.',
                   color: 'emerald'
                 },
                 {
                   id: '1v1' as const,
-                  title: '1v1 Champion Duel',
-                  badge: 'PvP or vs AI Rival',
-                  desc: 'Head-to-head single combat in the Colosseum. Full D&D Beyond HUD, spells, and 3D dice.',
+                  title: '1v1 Duel',
+                  badge: 'PvP or vs AI',
+                  desc: 'Head-to-head single combat with full D&D Beyond HUD & 3D dice.',
                   color: 'amber'
                 },
                 {
                   id: '2v2' as const,
-                  title: '2v2 Team Skirmish',
-                  badge: '2 Heroes vs 2 Rivals',
-                  desc: 'Tactical tag-team battle with initiative order, flanking, healing & bonus actions.',
+                  title: '2v2 Skirmish',
+                  badge: '2v2 Tag Team',
+                  desc: 'Tactical tag-team battle with initiative, flanking & healing.',
                   color: 'blue'
                 },
                 {
                   id: 'vs_npcs' as const,
-                  title: 'Custom Party vs NPCs',
-                  badge: 'Custom Bestiary Pick',
-                  desc: 'Hand-pick specific monsters or bosses from the Bestiary to test your party build.',
+                  title: 'Party vs NPCs',
+                  badge: 'Custom Pick',
+                  desc: 'Hand-pick specific monsters or bosses from the Bestiary.',
                   color: 'purple'
                 }
               ].map((m) => {
@@ -1610,21 +1685,25 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                     key={m.id}
                     type="button"
                     onClick={() => setMatchMode(m.id)}
-                    className={`p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                    className={`p-3 sm:p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
                       active
                         ? 'bg-amber-500/15 border-amber-400 ring-1 ring-amber-400/50 shadow-xl'
                         : 'bg-zinc-900/80 hover:bg-zinc-900 border-zinc-800 hover:border-zinc-700'
                     }`}
                   >
                     <div>
-                      <div className="flex items-center justify-between gap-2 mb-1.5">
-                        <span className="text-sm font-mono font-bold text-white">{m.title}</span>
-                        {active && <Check className="w-4 h-4 text-amber-400 shrink-0" />}
+                      <div className="flex items-center justify-between gap-1.5 mb-1">
+                        <span className="text-xs sm:text-sm font-mono font-bold text-white leading-tight">
+                          {m.title}
+                        </span>
+                        {active && <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400 shrink-0" />}
                       </div>
-                      <span className="inline-block text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-950 text-amber-300 border border-zinc-800 mb-2">
+                      <span className="inline-block text-[9px] sm:text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-950 text-amber-300 border border-zinc-800 mb-1.5">
                         {m.badge}
                       </span>
-                      <p className="text-xs text-zinc-400 leading-relaxed">{m.desc}</p>
+                      <p className="text-[11px] sm:text-xs text-zinc-400 leading-snug line-clamp-2 sm:line-clamp-none">
+                        {m.desc}
+                      </p>
                     </div>
                   </button>
                 );
@@ -1633,29 +1712,29 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           </div>
 
           {/* Step 2: Fighter Roster & Random Encounter Scaler */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
             {/* Left Side: Team Gold (Player Challengers) */}
-            <div className="lg:col-span-6 bg-zinc-900/75 border border-amber-500/30 rounded-3xl p-5 space-y-4">
-              <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+            <div className="lg:col-span-6 bg-zinc-900/75 border border-amber-500/30 rounded-3xl p-4 sm:p-5 space-y-3.5">
+              <div className="flex items-center justify-between border-b border-zinc-800 pb-2.5">
                 <div className="flex items-center gap-2">
-                  <Shield className="w-5 h-5 text-amber-400" />
+                  <Shield className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400 shrink-0" />
                   <div>
-                    <h3 className="text-sm font-mono font-bold text-amber-300">
-                      Team Gold — Player Challengers ({goldHeroIds.length} {goldHeroIds.length === 1 ? 'Player' : 'Players'})
+                    <h3 className="text-xs sm:text-sm font-mono font-bold text-amber-300">
+                      Team Gold — Players ({goldHeroIds.length})
                     </h3>
-                    <p className="text-[11px] text-zinc-400">
-                      Click heroes below to add/remove players ({matchMode === '1v1' ? 'Max 1' : matchMode === '2v2' ? 'Max 2' : '1 to 4 Players'})
+                    <p className="text-[10px] sm:text-[11px] text-zinc-400">
+                      Tap heroes to select ({matchMode === '1v1' ? 'Max 1' : matchMode === '2v2' ? 'Max 2' : '1–4 Players'})
                     </p>
                   </div>
                 </div>
                 {lobbyPlayers.length > 0 && (
-                  <span className="px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[10px] font-mono">
-                    {lobbyPlayers.length} Online in Lobby
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[10px] font-mono shrink-0">
+                    {lobbyPlayers.length} Online
                   </span>
                 )}
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-72 overflow-y-auto pr-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-60 sm:max-h-72 overflow-y-auto pr-1">
                 {heroPool.map((hero) => {
                   const isSelected = goldHeroIds.includes(hero.id);
                   const maxAllowed = matchMode === '1v1' ? 1 : matchMode === '2v2' ? 2 : 4;
@@ -1674,7 +1753,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                           return [...prev, hero.id];
                         });
                       }}
-                      className={`p-3 rounded-2xl border text-left flex items-center gap-3 transition-all cursor-pointer ${
+                      className={`p-2.5 sm:p-3 rounded-2xl border text-left flex items-center gap-2.5 transition-all cursor-pointer ${
                         isSelected
                           ? 'bg-amber-500/20 border-amber-400 text-white shadow-md'
                           : 'bg-zinc-950/80 hover:bg-zinc-950 border-zinc-800 text-zinc-300'
@@ -1683,7 +1762,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                       <img
                         src={avatar}
                         alt={hero.name}
-                        className="w-11 h-11 rounded-xl object-cover border border-amber-500/50 shrink-0 bg-zinc-900"
+                        className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl object-cover border border-amber-500/50 shrink-0 bg-zinc-900"
                       />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between">
@@ -1704,18 +1783,18 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             </div>
 
             {/* Right Side: Team Crimson (Opponents / Scaled Random Encounter) */}
-            <div className="lg:col-span-6 bg-zinc-900/75 border border-rose-500/30 rounded-3xl p-5 space-y-4">
+            <div className="lg:col-span-6 bg-zinc-900/75 border border-rose-500/30 rounded-3xl p-4 sm:p-5 space-y-3.5">
               {matchMode === '1v1' || matchMode === '2v2' ? (
                 <>
-                  <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-2.5">
                     <div className="flex items-center gap-2">
-                      <Swords className="w-5 h-5 text-rose-400" />
+                      <Swords className="w-4 h-4 sm:w-5 sm:h-5 text-rose-400 shrink-0" />
                       <div>
-                        <h3 className="text-sm font-mono font-bold text-rose-300">
-                          Team Crimson — Opposing Fighters ({matchMode === '1v1' ? '1' : '2'})
+                        <h3 className="text-xs sm:text-sm font-mono font-bold text-rose-300">
+                          Team Crimson — Rivals ({matchMode === '1v1' ? '1' : '2'})
                         </h3>
-                        <p className="text-[11px] text-zinc-400">
-                          Choose rival heroes and toggle Human Pass-and-Play vs Tactical AI
+                        <p className="text-[10px] sm:text-[11px] text-zinc-400">
+                          Pass-and-Play or Tactical AI Rivals
                         </p>
                       </div>
                     </div>
@@ -1723,18 +1802,18 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                     <button
                       type="button"
                       onClick={() => setCrimsonIsAI((v) => !v)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold border flex items-center gap-1.5 cursor-pointer ${
+                      className={`px-2.5 py-1.5 rounded-xl text-[11px] font-mono font-bold border flex items-center gap-1.5 cursor-pointer ${
                         crimsonIsAI
                           ? 'bg-purple-500/20 border-purple-500/50 text-purple-300'
                           : 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
                       }`}
                     >
                       {crimsonIsAI ? <Bot className="w-3.5 h-3.5" /> : <Users className="w-3.5 h-3.5" />}
-                      <span>{crimsonIsAI ? 'Controlled by AI' : 'Player 2 Controlled'}</span>
+                      <span>{crimsonIsAI ? 'AI Controlled' : 'Player 2'}</span>
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-72 overflow-y-auto pr-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-60 sm:max-h-72 overflow-y-auto pr-1">
                     {heroPool.map((hero) => {
                       const isSelected = crimsonHeroIds.includes(hero.id);
                       const maxAllowed = matchMode === '1v1' ? 1 : 2;
@@ -1753,7 +1832,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                               return [...prev, hero.id];
                             });
                           }}
-                          className={`p-3 rounded-2xl border text-left flex items-center gap-3 transition-all cursor-pointer ${
+                          className={`p-2.5 sm:p-3 rounded-2xl border text-left flex items-center gap-2.5 transition-all cursor-pointer ${
                             isSelected
                               ? 'bg-rose-500/20 border-rose-400 text-white shadow-md'
                               : 'bg-zinc-950/80 hover:bg-zinc-950 border-zinc-800 text-zinc-300'
@@ -1762,7 +1841,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                           <img
                             src={avatar}
                             alt={hero.name}
-                            className="w-11 h-11 rounded-xl object-cover border border-rose-500/50 shrink-0 bg-zinc-900"
+                            className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl object-cover border border-rose-500/50 shrink-0 bg-zinc-900"
                           />
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center justify-between">
@@ -1783,28 +1862,28 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                 </>
               ) : (
                 <>
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-2.5">
                     <div>
-                      <h3 className="text-sm font-mono font-bold text-rose-300 flex items-center gap-1.5">
-                        <Skull className="w-4 h-4 text-rose-400" />
+                      <h3 className="text-xs sm:text-sm font-mono font-bold text-rose-300 flex items-center gap-1.5">
+                        <Skull className="w-4 h-4 text-rose-400 shrink-0" />
                         <span>
                           {matchMode === 'random_encounter'
-                            ? `Random Encounter (Scaled for ${goldHeroIds.length} ${goldHeroIds.length === 1 ? 'Player' : 'Players'})`
-                            : 'Custom NPC & Monster Roster'}
+                            ? `Random Encounter (${goldHeroIds.length}P)`
+                            : 'Custom Monster Roster'}
                         </span>
                       </h3>
-                      <p className="text-[11px] text-zinc-400">
-                        Autonomous NPC AI with pathfinding, multiattack & spellcasting
+                      <p className="text-[10px] sm:text-[11px] text-zinc-400">
+                        Behavior Tree AI • A* Pathfinding • Spellcasting
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1 flex-wrap">
                       {(['standard', 'hard', 'deadly'] as const).map((diff) => (
                         <button
                           key={diff}
                           type="button"
                           onClick={() => setDifficulty(diff)}
-                          className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold uppercase cursor-pointer border ${
+                          className={`px-2 py-1 rounded-lg text-[10px] font-mono font-bold uppercase cursor-pointer border ${
                             difficulty === diff
                               ? 'bg-rose-500 text-white border-rose-400'
                               : 'bg-zinc-950 text-zinc-400 border-zinc-800 hover:text-white'
@@ -1838,18 +1917,18 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                     {draftedMonsters.map((mon, idx) => (
                       <div
                         key={`${mon.monsterId}_${idx}`}
-                        className="p-2.5 rounded-xl bg-zinc-950/90 border border-rose-500/30 flex items-center justify-between gap-3"
+                        className="p-2.5 rounded-xl bg-zinc-950/90 border border-rose-500/30 flex items-center justify-between gap-2"
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="w-9 h-9 rounded-lg bg-rose-950/60 border border-rose-500/40 flex items-center justify-center text-rose-300 font-mono font-bold text-xs shrink-0">
+                          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-rose-950/60 border border-rose-500/40 flex items-center justify-center text-rose-300 font-mono font-bold text-[10px] shrink-0">
                             CR
                           </div>
                           <div className="min-w-0">
                             <div className="text-xs font-mono font-bold text-white truncate">
                               {mon.name}
                             </div>
-                            <div className="text-[10px] font-mono text-zinc-400">
-                              {mon.size} {mon.type} • HP {mon.hp} • AC {mon.ac} • CR {mon.challenge?.split(' ')[0]}
+                            <div className="text-[10px] font-mono text-zinc-400 truncate">
+                              HP {mon.hp} • AC {mon.ac} • CR {mon.challenge?.split(' ')[0]}
                             </div>
                           </div>
                         </div>
@@ -1860,7 +1939,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                               prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev
                             )
                           }
-                          className="p-1.5 rounded-lg text-zinc-500 hover:text-rose-400 hover:bg-zinc-900 cursor-pointer"
+                          className="p-1.5 rounded-lg text-zinc-500 hover:text-rose-400 hover:bg-zinc-900 cursor-pointer shrink-0"
                           title="Remove from encounter"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -1880,10 +1959,10 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                         e.target.value = '';
                       }}
                       defaultValue=""
-                      className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-zinc-200"
+                      className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-zinc-200 min-w-0"
                     >
                       <option value="" disabled>
-                        + Add Specific Monster / Boss to Encounter...
+                        + Add Monster / Boss...
                       </option>
                       {monsterPool.map((m) => (
                         <option key={m.monsterId} value={m.monsterId}>
@@ -1898,12 +1977,12 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           </div>
 
           {/* Step 3: Select Arena Battlemap & Launch Match */}
-          <div className="bg-zinc-900/75 border border-zinc-800 rounded-3xl p-5 flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="bg-zinc-900/75 border border-zinc-800 rounded-3xl p-4 sm:p-5 flex flex-col md:flex-row items-center justify-between gap-5">
             <div className="flex-1 w-full">
               <span className="block text-xs font-mono uppercase tracking-wider text-zinc-400 font-bold mb-2.5">
                 3. Choose Colosseum Battlemap (1-Inch Tactical Grid)
               </span>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
                 {PRESET_BATTLEMAPS.map((map) => {
                   const isSel = selectedMap.id === map.id;
                   return (
@@ -1911,7 +1990,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                       key={map.id}
                       type="button"
                       onClick={() => setSelectedMap(map)}
-                      className={`group relative rounded-2xl overflow-hidden border h-20 text-left transition-all cursor-pointer ${
+                      className={`group relative rounded-2xl overflow-hidden border h-16 sm:h-20 text-left transition-all cursor-pointer ${
                         isSel
                           ? 'border-amber-400 ring-2 ring-amber-400/40'
                           : 'border-zinc-800 opacity-75 hover:opacity-100'
@@ -1923,7 +2002,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent flex items-end p-2">
-                        <span className="text-[11px] font-mono font-bold text-white truncate">
+                        <span className="text-[10px] sm:text-[11px] font-mono font-bold text-white truncate">
                           {map.name}
                         </span>
                       </div>
@@ -1936,13 +2015,26 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             <button
               type="button"
               onClick={handleStartArenaMatch}
-              className="w-full md:w-auto px-8 py-5 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-400 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-zinc-950 font-mono font-black text-base shadow-[0_0_30px_rgba(245,158,11,0.4)] flex items-center justify-center gap-3 cursor-pointer active:scale-95 transition-all shrink-0"
+              className="hidden md:flex px-8 py-5 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-400 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-zinc-950 font-mono font-black text-base shadow-[0_0_30px_rgba(245,158,11,0.4)] items-center justify-center gap-3 cursor-pointer active:scale-95 transition-all shrink-0"
             >
               <Swords className="w-6 h-6" />
               <span>ROLL INITIATIVE & START ARENA</span>
               <ChevronRight className="w-5 h-5" />
             </button>
           </div>
+        </div>
+
+        {/* Sticky Mobile Bottom Launch Bar */}
+        <div className="fixed bottom-0 inset-x-0 z-30 p-3 bg-zinc-950/95 border-t border-amber-500/30 backdrop-blur-xl md:hidden">
+          <button
+            type="button"
+            onClick={handleStartArenaMatch}
+            className="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-400 to-orange-500 text-zinc-950 font-mono font-black text-sm shadow-[0_0_25px_rgba(245,158,11,0.4)] flex items-center justify-center gap-2.5 active:scale-95 transition-all cursor-pointer"
+          >
+            <Swords className="w-5 h-5" />
+            <span>ROLL INITIATIVE & START ARENA</span>
+            <ChevronRight className="w-4 h-4" />
+          </button>
         </div>
       </div>
     );
@@ -1951,37 +2043,41 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
   // ==========================================================================
   // VIEW 2: LIVE TURN-BASED ARENA BATTLEFIELD + COPIED TACTICAL HUD
   // ==========================================================================
+  const topBarHeight = isMobile ? 52 : 64;
+
   return (
-    <div className="fixed inset-0 z-[220] bg-zinc-950 overflow-hidden select-none flex flex-col">
+    <div className="fixed inset-0 z-[220] bg-zinc-950 overflow-hidden select-none touch-none flex flex-col">
       {/* Top Initiative & Turn Order Bar */}
-      <div className="h-16 bg-zinc-950/95 border-b border-zinc-800 px-4 flex items-center justify-between gap-4 z-30">
-        <div className="flex items-center gap-3 shrink-0">
+      <div className="h-[52px] sm:h-16 bg-zinc-950/95 border-b border-zinc-800 px-2 sm:px-4 flex items-center justify-between gap-1.5 sm:gap-4 z-30">
+        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
           <button
             type="button"
             onClick={() => setPhase('lobby')}
-            className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer"
+            className="px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 text-[11px] sm:text-xs font-mono font-bold flex items-center gap-1 cursor-pointer"
+            title="Return to Arena Lobby"
           >
-            <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
-            <span>Arena Lobby</span>
+            <RotateCcw className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span className="hidden sm:inline">Arena Lobby</span>
           </button>
-          <div className="px-3 py-1 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-300 text-xs font-mono font-bold">
-            Round {round}
+          <div className="px-2 py-1 sm:px-3 sm:py-1 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-300 text-[11px] sm:text-xs font-mono font-bold">
+            <span className="sm:hidden">R{round}</span>
+            <span className="hidden sm:inline">Round {round}</span>
           </div>
         </div>
 
         {/* Turn Order Ribbon */}
-        <div className="flex items-center gap-2 overflow-x-auto py-1 px-2 flex-1 justify-center">
+        <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar py-1 px-1 flex-1 justify-start sm:justify-center">
           {combatants.map((c, idx) => {
             const isCurr = idx === turnIndex;
             const isDead = c.currentHp <= 0;
             return (
               <div
                 key={c.id}
-                className={`px-2.5 py-1 rounded-xl border flex items-center gap-2 shrink-0 transition-all ${
+                className={`px-2 py-1 rounded-xl border flex items-center gap-1.5 sm:gap-2 shrink-0 transition-all ${
                   isDead
                     ? 'opacity-40 bg-zinc-950 border-zinc-800'
                     : isCurr
-                    ? 'bg-amber-500/25 border-amber-400 ring-1 ring-amber-400/50 scale-105'
+                    ? 'bg-amber-500/25 border-amber-400 ring-1 ring-amber-400/50'
                     : c.team === 'gold'
                     ? 'bg-zinc-900/90 border-amber-500/30'
                     : 'bg-zinc-900/90 border-rose-500/30'
@@ -1990,19 +2086,20 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                 <img
                   src={c.avatarUrl}
                   alt={c.name}
-                  className="w-7 h-7 rounded-lg object-cover border border-white/20"
+                  className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg object-cover border border-white/20 shrink-0"
                 />
                 <div className="text-left">
                   <div className="flex items-center gap-1">
-                    <span className="text-[11px] font-mono font-bold text-white truncate max-w-[95px]">
-                      {c.name}
+                    <span className="text-[10px] sm:text-[11px] font-mono font-bold text-white truncate max-w-[64px] sm:max-w-[95px]">
+                      {c.name.split(' ')[0]}
                     </span>
                     <span className="text-[9px] font-mono px-1 rounded bg-zinc-950 text-amber-300">
                       {c.initiativeRoll}
                     </span>
                   </div>
-                  <div className="text-[10px] font-mono text-emerald-400">
-                    {c.currentHp}/{c.maxHp} HP • AC {c.ac}
+                  <div className="text-[9px] sm:text-[10px] font-mono text-emerald-400">
+                    {c.currentHp}/{c.maxHp}
+                    <span className="hidden sm:inline"> HP • AC {c.ac}</span>
                   </div>
                 </div>
               </div>
@@ -2011,21 +2108,21 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         </div>
 
         {/* Right Controls: End Turn & Return to Campaign */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {activeCombatant && !activeCombatant.isAI && !winnerTeam && (
             <button
               type="button"
               onClick={handleAdvanceTurn}
-              className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-mono font-black text-xs flex items-center gap-1.5 shadow-lg shadow-amber-500/20 cursor-pointer"
+              className="px-2.5 py-1.5 sm:px-4 sm:py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-mono font-black text-[11px] sm:text-xs flex items-center gap-1 shadow-lg shadow-amber-500/20 cursor-pointer"
             >
               <span>End Turn</span>
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </button>
           )}
           <button
             type="button"
             onClick={onExitArena}
-            className="px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer"
+            className="p-1.5 sm:px-3 sm:py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer"
             title="Exit Arena and return to DM Campaign Table"
           >
             <LogOut className="w-3.5 h-3.5" />
@@ -2036,68 +2133,126 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
 
       {/* Active Turn & Targeting Banner */}
       {activeCombatant && !winnerTeam && (
-        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-30 pointer-events-auto flex items-center gap-3 px-4 py-2 rounded-2xl bg-zinc-950/90 border border-amber-500/40 backdrop-blur-md shadow-2xl">
-          <span className="text-xs font-mono text-zinc-200">
+        <div className="absolute top-[58px] sm:top-20 left-1/2 -translate-x-1/2 z-30 pointer-events-auto w-[94vw] sm:w-auto max-w-xl flex items-center justify-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 rounded-2xl bg-zinc-950/90 border border-amber-500/40 backdrop-blur-md shadow-2xl text-center">
+          <span className="text-[11px] sm:text-xs font-mono text-zinc-200 leading-snug">
             {activeCombatant.isAI ? (
-              <span className="text-rose-300 font-bold flex items-center gap-1.5">
-                <Bot className="w-4 h-4 animate-spin text-amber-400" />
-                <span>{aiTacticalBanner || `${activeCombatant.name} (AI) is evaluating Behavior Tree & A* paths...`}</span>
+              <span className="text-rose-300 font-bold flex items-center justify-center gap-1.5">
+                <Bot className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin text-amber-400 shrink-0" />
+                <span className="line-clamp-2">{aiTacticalBanner || `${activeCombatant.name} (AI) is evaluating Behavior Tree & A* paths...`}</span>
               </span>
             ) : activeTargetingAction ? (
-              <span className="text-amber-300 font-bold flex items-center gap-2">
-                <Target className="w-4 h-4 text-rose-400 animate-ping" />
-                Click a target token on the grid to use <strong>{activeTargetingAction.name}</strong> (Range: {activeTargetingAction.rangeFt || 5}ft)
+              <span className="text-amber-300 font-bold flex flex-wrap items-center justify-center gap-1.5">
+                <Target className="w-3.5 h-3.5 text-rose-400 animate-ping shrink-0" />
+                <span>
+                  Tap target for <strong>{activeTargetingAction.name}</strong> ({activeTargetingAction.rangeFt || 5}ft)
+                </span>
                 <button
                   type="button"
                   onClick={() => setActiveTargetingAction(null)}
-                  className="ml-2 px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 text-[10px]"
+                  className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-200 text-[10px] border border-zinc-700"
                 >
                   Cancel
                 </button>
               </span>
             ) : (
               <span>
-                <strong className="text-amber-300">{activeCombatant.name}&apos;s Turn</strong> • Move:{' '}
-                <strong className="text-emerald-400">{activeCombatant.remainingMoveFt} ft</strong> left • Drag token to move or select an Attack/Spell in the HUD below!
+                <strong className="text-amber-300">{activeCombatant.name.split(' ')[0]}&apos;s Turn</strong> • Move:{' '}
+                <strong className="text-emerald-400">{activeCombatant.remainingMoveFt} ft</strong> •{' '}
+                <span className="text-zinc-300">Tap green square or drag token to move!</span>
               </span>
             )}
           </span>
         </div>
       )}
 
-      {/* Right-Side Live Combat Feed */}
-      <div className="fixed top-20 right-4 z-20 w-72 max-h-72 bg-zinc-950/85 backdrop-blur-md border border-zinc-800/90 rounded-2xl p-3 flex flex-col pointer-events-auto shadow-xl">
-        <div className="text-[10px] font-mono uppercase tracking-wider text-amber-400 font-bold border-b border-zinc-800 pb-1.5 mb-2 flex items-center justify-between">
-          <span>Arena Combat Feed</span>
-          <span className="text-zinc-500">{combatLogs.length} events</span>
-        </div>
-        <div className="space-y-2 overflow-y-auto pr-1 text-xs">
-          {combatLogs.map((log) => (
-            <div
-              key={log.id}
-              className={`p-2 rounded-xl border text-[11px] leading-snug ${
-                log.isCrit
-                  ? 'bg-amber-500/15 border-amber-400/60 text-amber-100'
-                  : log.team === 'gold'
-                  ? 'bg-zinc-900/90 border-amber-500/20 text-zinc-200'
-                  : 'bg-zinc-900/90 border-rose-500/20 text-zinc-200'
-              }`}
-            >
-              <div className="font-mono font-bold text-amber-300">
-                [R{log.round}] {log.actorName}{' '}
-                <span className="font-sans font-normal text-zinc-200">{log.message}</span>
-              </div>
-              {log.detail && <div className="text-[10px] font-mono text-zinc-400 mt-0.5">{log.detail}</div>}
-            </div>
-          ))}
+      {/* Floating Camera Zoom / Fit + Combat Feed Toggle Pill (Mobile & Desktop) */}
+      <div className="fixed top-28 sm:top-20 right-2.5 sm:right-4 z-30 flex flex-col gap-1.5 pointer-events-auto">
+        <button
+          type="button"
+          onClick={() => setShowCombatFeed((v) => !v)}
+          className={`px-2.5 py-2 rounded-xl border text-[11px] font-mono font-bold flex items-center justify-center gap-1.5 shadow-xl backdrop-blur-md cursor-pointer transition-all ${
+            showCombatFeed
+              ? 'bg-amber-500/20 border-amber-400 text-amber-300'
+              : 'bg-zinc-950/90 border-zinc-800 text-zinc-300 hover:text-white'
+          }`}
+          title="Toggle Arena Combat Feed"
+        >
+          <ScrollText className="w-4 h-4 text-amber-400" />
+          <span className="hidden sm:inline">Combat Log</span>
+          <span className="px-1.5 py-0.2 rounded-full bg-zinc-900 text-amber-300 text-[10px]">
+            {combatLogs.length}
+          </span>
+        </button>
+
+        <div className="flex flex-col bg-zinc-950/90 border border-zinc-800 rounded-xl overflow-hidden shadow-xl backdrop-blur-md self-end">
+          <button
+            type="button"
+            onClick={() => setStageScale((s) => Math.min(2.2, s * 1.18))}
+            className="p-2 text-zinc-300 hover:text-white hover:bg-zinc-800 border-b border-zinc-800/80 cursor-pointer"
+            title="Zoom In"
+          >
+            <ZoomIn className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setStageScale((s) => Math.max(0.22, s / 1.18))}
+            className="p-2 text-zinc-300 hover:text-white hover:bg-zinc-800 border-b border-zinc-800/80 cursor-pointer"
+            title="Zoom Out"
+          >
+            <ZoomOut className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => fitArenaCamera()}
+            className="p-2 text-amber-400 hover:text-amber-300 hover:bg-zinc-800 cursor-pointer"
+            title="Fit Arena Map to Screen"
+          >
+            <Maximize2 className="w-4 h-4" />
+          </button>
         </div>
       </div>
+
+      {/* Collapsible Live Combat Feed Drawer */}
+      {showCombatFeed && (
+        <div className="fixed top-28 sm:top-32 right-14 sm:right-4 z-30 w-68 sm:w-72 max-h-60 sm:max-h-72 bg-zinc-950/95 backdrop-blur-xl border border-zinc-800 rounded-2xl p-3 flex flex-col pointer-events-auto shadow-2xl animate-in fade-in duration-150">
+          <div className="text-[10px] font-mono uppercase tracking-wider text-amber-400 font-bold border-b border-zinc-800 pb-1.5 mb-2 flex items-center justify-between">
+            <span>Arena Combat Feed ({combatLogs.length})</span>
+            <button
+              type="button"
+              onClick={() => setShowCombatFeed(false)}
+              className="p-0.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-white cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <div className="space-y-2 overflow-y-auto pr-1 text-xs">
+            {combatLogs.map((log) => (
+              <div
+                key={log.id}
+                className={`p-2 rounded-xl border text-[11px] leading-snug ${
+                  log.isCrit
+                    ? 'bg-amber-500/15 border-amber-400/60 text-amber-100'
+                    : log.team === 'gold'
+                    ? 'bg-zinc-900/90 border-amber-500/20 text-zinc-200'
+                    : 'bg-zinc-900/90 border-rose-500/20 text-zinc-200'
+                }`}
+              >
+                <div className="font-mono font-bold text-amber-300">
+                  [R{log.round}] {log.actorName}{' '}
+                  <span className="font-sans font-normal text-zinc-200">{log.message}</span>
+                </div>
+                {log.detail && <div className="text-[10px] font-mono text-zinc-400 mt-0.5">{log.detail}</div>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Konva 1-Inch Gridded Arena Stage */}
       <div className="flex-1 relative">
         <Stage
           width={dimensions.width}
-          height={dimensions.height - 64}
+          height={dimensions.height - topBarHeight}
           scaleX={stageScale}
           scaleY={stageScale}
           x={stagePos.x}
@@ -2108,12 +2263,29 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
               setStagePos({ x: e.target.x(), y: e.target.y() });
             }
           }}
+          onTouchMove={(e) => {
+            const touches = e.evt.touches;
+            if (touches && touches.length === 2) {
+              e.evt.preventDefault();
+              const dx = touches[0].clientX - touches[1].clientX;
+              const dy = touches[0].clientY - touches[1].clientY;
+              const dist = Math.hypot(dx, dy);
+              if (pinchDistRef.current !== null && pinchDistRef.current > 0) {
+                const ratio = dist / pinchDistRef.current;
+                setStageScale((prev) => Math.max(0.22, Math.min(2.2, prev * ratio)));
+              }
+              pinchDistRef.current = dist;
+            }
+          }}
+          onTouchEnd={() => {
+            pinchDistRef.current = null;
+          }}
           onWheel={(e) => {
             e.evt.preventDefault();
             const scaleBy = 1.08;
             const oldScale = stageScale;
             const nextScale = Math.max(
-              0.35,
+              0.22,
               Math.min(2.2, e.evt.deltaY < 0 ? oldScale * scaleBy : oldScale / scaleBy)
             );
             setStageScale(nextScale);
@@ -2149,8 +2321,42 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             stageScale={stageScale}
           />
 
-          {/* Arena Tokens Layer */}
+          {/* Arena Tokens & Tap-to-Move Layer */}
           <Layer>
+            {/* Tap-to-Move Reachable Grid Squares for Active Human Fighter */}
+            {activeCombatant &&
+              !activeCombatant.isAI &&
+              !activeTargetingAction &&
+              reachableMoveSquares.map((cell) => (
+                <Rect
+                  key={`move_${cell.col}_${cell.row}`}
+                  x={cell.col * ARENA_GRID_SIZE + 2}
+                  y={cell.row * ARENA_GRID_SIZE + 2}
+                  width={ARENA_GRID_SIZE - 4}
+                  height={ARENA_GRID_SIZE - 4}
+                  cornerRadius={6}
+                  fill="rgba(16, 185, 129, 0.14)"
+                  stroke="rgba(52, 211, 153, 0.45)"
+                  strokeWidth={1.5}
+                  onClick={(e) => {
+                    e.cancelBubble = true;
+                    handleMoveArenaToken(
+                      activeCombatant.id,
+                      cell.col * ARENA_GRID_SIZE,
+                      cell.row * ARENA_GRID_SIZE
+                    );
+                  }}
+                  onTap={(e) => {
+                    e.cancelBubble = true;
+                    handleMoveArenaToken(
+                      activeCombatant.id,
+                      cell.col * ARENA_GRID_SIZE,
+                      cell.row * ARENA_GRID_SIZE
+                    );
+                  }}
+                />
+              ))}
+
             {/* AI Live A* Pathfinding Trail Visualization */}
             {aiPathPreviewPx.length >= 2 && (
               <Line
@@ -2213,6 +2419,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       {activeCombatant && !activeCombatant.isAI && activeHeroHudData && !winnerTeam && (
         <PlayerHeroDock
           characterData={activeHeroHudData}
+          isMobile={isMobile}
           claimedToken={
             {
               id: activeCombatant.id,
@@ -2231,12 +2438,12 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
               executeCombatAction(activeCombatant, activeCombatant, action);
             } else {
               setActiveTargetingAction(action);
-              toast.info(`🎯 Select a target on the grid for ${action.name}`);
+              toast.info(`🎯 Tap a target token on the grid for ${action.name}`);
             }
           }}
           onRollToHit={(action) => {
             setActiveTargetingAction(action);
-            toast.info(`🎯 Click a target token on the grid to roll ${action.name}!`);
+            toast.info(`🎯 Tap a target token on the grid to roll ${action.name}!`);
           }}
           onRollDamage={(action) => {
             setActiveTargetingAction(action);
