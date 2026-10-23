@@ -4,6 +4,7 @@ import { Character } from '../src/types/character';
 import { DdbGameLogDaemon } from './ddbGameLogDaemon';
 import { findJb2aAsset } from '../src/effects/db/jb2aRegistry';
 import { computeUpcastFormula, HudUpcastOption } from '../src/types/hud';
+import { lookupDndRuleDetails } from '../src/data/dndRulesCompendium';
 
 export interface DdbCampaignSummary {
   id: string;
@@ -677,19 +678,6 @@ export function matchJb2aAssetId(name: string): string | undefined {
   if (n.includes('wall of fire')) return 'wall_of_fire';
   if (n.includes('whirlwind')) return 'whirlwind';
 
-  // Explicitly ignore spells that have no authentic animation yet to prevent false substitutions
-  if (
-    n.includes('blade ward') ||
-    n.includes('false life') ||
-    n.includes('power word') ||
-    n.includes('wall of thorns') ||
-    n.includes('true strike') ||
-    n.includes('phantasmal') ||
-    n.includes('protection from')
-  ) {
-    return undefined;
-  }
-
   // 3. Class Features & Weapon Attacks (Strict order prevents cross-substring collisions)
   if (n.includes('divine smite') || (n.includes('smite') && !n.includes('smith'))) return 'divine_smite';
   if (n.includes('sneak attack')) return 'sneak_attack';
@@ -714,7 +702,7 @@ export function matchJb2aAssetId(name: string): string | undefined {
   if (n.includes('bite')) return 'attack_bite';
   if (n.includes('claw')) return 'attack_claw';
 
-  return undefined;
+  return findJb2aAsset(name)?.id;
 }
 
 const ABILITY_ID_TO_KEY: Record<number, 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha'> = {
@@ -1865,21 +1853,38 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
       }
     }
 
+    const compendiumRule = lookupDndRuleDetails(name, 'spell');
+
     // Fallback healing/damage formula if not found in modifiers
     if (isHeal && !damageFormula) {
       if (lowerName.includes('healing word')) damageFormula = `1d4 + ${thisSpellMod}`;
       else if (lowerName.includes('cure wounds')) damageFormula = `1d8 + ${thisSpellMod}`;
+      else if (compendiumRule?.damageFormula) damageFormula = compendiumRule.damageFormula;
     } else if (!damageFormula && lowerName.includes('magic missile')) {
       damageFormula = '3d4 + 3';
       damageType = 'force';
     } else if (!damageFormula && lowerName.includes('scorching ray')) {
       damageFormula = '6d6';
       damageType = 'fire';
+    } else if (!damageFormula && compendiumRule?.damageFormula) {
+      damageFormula = level === 0
+        ? scaleCantripDiceString(compendiumRule.damageFormula, computed.totalLevel, true)
+        : compendiumRule.damageFormula;
+      damageType = damageType || compendiumRule.damageType;
     }
 
-    const hitBonus = def.requiresAttackRoll ? `+${thisSpellAttack}` : undefined;
-    const saveDc = def.requiresSavingThrow ? thisSpellSaveDc : undefined;
-    const saveAbility = def.requiresSavingThrow && def.saveDcAbilityId ? ABILITY_ID_TO_LABEL[def.saveDcAbilityId] : undefined;
+    if (!damageType && compendiumRule?.damageType) {
+      damageType = compendiumRule.damageType;
+    }
+    if (compendiumRule?.isHeal) {
+      isHeal = true;
+    }
+
+    const isSpellAttack = Boolean(def.requiresAttackRoll || compendiumRule?.isAttack);
+    const isSpellSave = Boolean(def.requiresSavingThrow || compendiumRule?.saveAbility);
+    const hitBonus = isSpellAttack ? `+${thisSpellAttack}` : undefined;
+    const saveDc = isSpellSave ? thisSpellSaveDc : undefined;
+    const saveAbility = (def.requiresSavingThrow && def.saveDcAbilityId ? ABILITY_ID_TO_LABEL[def.saveDcAbilityId] : undefined) || compendiumRule?.saveAbility;
 
     // Limited uses on innate / item / feat spells
     let usesObj: { available: number; total: number; resetType?: string } | undefined;
@@ -1893,16 +1898,16 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
       };
     }
 
-    const cleanDesc = cleanDdbText(def.description, snippetCtx);
+    const cleanDesc = cleanDdbText(def.description, snippetCtx) || compendiumRule?.description || `Cast ${name}.`;
     const componentsText = Array.isArray(def.components)
       ? def.components.map((cNum: number) => cNum === 1 ? 'V' : cNum === 2 ? 'S' : cNum === 3 ? (def.componentsDescription ? `M (${def.componentsDescription})` : 'M') : '').filter(Boolean).join(', ')
-      : undefined;
+      : compendiumRule?.components;
     const durationText = def.duration
       ? `${def.duration.durationType === 'Concentration' ? 'Concentration, up to ' : ''}${def.duration.durationInterval ? `${def.duration.durationInterval} ` : ''}${def.duration.durationUnit || def.duration.durationType || 'Instantaneous'}`.trim()
-      : undefined;
-    const higherLevelsText = def.atHigherLevels?.higherLevelDefinitions?.length
+      : compendiumRule?.duration;
+    const higherLevelsText = (def.atHigherLevels?.higherLevelDefinitions?.length
       ? def.atHigherLevels.higherLevelDefinitions.map((h: any) => h.description || h.details || h.dice?.diceString).filter(Boolean).join(' ')
-      : undefined;
+      : undefined) || compendiumRule?.higherLevels;
 
     // Determine if this leveled spell supports upcasting (Level 1..8)
     const canUpcast = level >= 1 && level <= 8 && Boolean(
@@ -1956,8 +1961,8 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
       jb2aAssetId,
       iconUrl,
       isHeal,
-      isAttack: Boolean(def.requiresAttackRoll),
-      isSelfAction: rangeFt === 0 && !def.requiresAttackRoll && !def.requiresSavingThrow,
+      isAttack: isSpellAttack,
+      isSelfAction: Boolean(compendiumRule?.isSelfAction || (rangeFt === 0 && !isSpellAttack && !isSpellSave)),
       isPrepared: Boolean(sp.prepared || sp.alwaysPrepared || level === 0 || sourceTag !== 'Class Spell')
     };
 
@@ -1982,7 +1987,7 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
     }
 
     // Cross-list Attack Roll Cantrips/Spells into Attacks tab as Spell Attacks
-    if (def.requiresAttackRoll && !attacks.some(a => canonicalActionKey(a.name) === lowerName)) {
+    if (isSpellAttack && !attacks.some(a => canonicalActionKey(a.name) === lowerName)) {
       attacks.push({
         ...hudSpell,
         id: `atk-spell-${idx}-${def.id || idx}`,

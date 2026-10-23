@@ -41,6 +41,9 @@ import { HudCharacterData, HudActionItem, computeUpcastFormula } from '../types/
 import { PlayerHeroDock } from './PlayerHeroDock';
 import { GridLayer } from './GridLayer';
 import { buildDmMonsterHudData } from '../services/monsterHudService';
+import { lookupDndRuleDetails, DndRuleEntry } from '../data/dndRulesCompendium';
+import { DndRuleInspectionModal } from './DndRuleInspectionModal';
+import { canTokenHaveHalo } from '../effects/db/tokenFxMap';
 import { computeTacticalAiTurnPlan, classifyCombatantRole } from '../services/arenaTacticalAi';
 import {
   YukaArenaMonsterBrain,

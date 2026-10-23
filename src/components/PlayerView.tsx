@@ -1210,15 +1210,47 @@ const buildFallbackHudData = (token: Token, stats: any, customChars?: Character[
     });
   }
 
+  const totalLevel = (matchedChar?.classLevel || '')
+    .match(/\d+/g)
+    ?.reduce((acc, n) => acc + parseInt(n, 10), 0) || 5;
+  const profBonus = matchedChar?.proficiencyBonus || (Math.ceil(totalLevel / 4) + 1);
+  const charStats = matchedChar?.stats || { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
+  const classLower = (matchedChar?.classLevel || '').toLowerCase();
+  const spellAbilityScore =
+    classLower.includes('cleric') || classLower.includes('druid') || classLower.includes('ranger')
+      ? charStats.wis
+      : classLower.includes('wizard') || classLower.includes('artificer') || classLower.includes('fighter') || classLower.includes('rogue')
+        ? charStats.int
+        : classLower.includes('bard') || classLower.includes('warlock') || classLower.includes('paladin') || classLower.includes('sorcerer')
+          ? charStats.cha
+          : Math.max(charStats.int, charStats.wis, charStats.cha);
+  const spellMod = Math.floor(((spellAbilityScore || 10) - 10) / 2);
+  const spellAttackBonus = profBonus + spellMod;
+  const spellSaveDc = 8 + profBonus + spellMod;
+
   if (matchedChar && Array.isArray(matchedChar.spells) && matchedChar.spells.length > 0) {
     matchedChar.spells.forEach((spName, idx) => {
       const lower = spName.toLowerCase();
-      const isHeal = lower.includes('cure') || lower.includes('heal');
-      const isCantrip = lower.includes('blast') || lower.includes('bolt') || lower.includes('mockery') || lower.includes('flame');
+      const rule = lookupDndRuleDetails(spName, 'spell');
       const matchedAsset = findJb2aAsset(spName);
-      const baseLvl = isCantrip ? 0 : 1;
-      const baseFormula = isHeal ? '1d8 + 3' : isCantrip ? '1d10' : undefined;
-      const upcastOptions = baseLvl >= 1
+      const baseLvl = rule?.level !== undefined
+        ? rule.level
+        : (lower.includes('blast') || lower.includes('bolt') || lower.includes('mockery') || lower.includes('flame') || lower.includes('guidance') || lower.includes('light') || lower.includes('prestidigitation') || lower.includes('mage hand') || lower.includes('minor illusion') || lower.includes('thaumaturgy') || lower.includes('druidcraft') || lower.includes('frostbite') || lower.includes('starry wisp') || lower.includes('elementalism') || lower.includes('message') || lower.includes('spare the dying') || lower.includes('blade ward') || lower.includes('booming blade') || lower.includes('toll the dead') ? 0 : 1);
+      const isHeal = Boolean(rule?.isHeal || lower.includes('cure') || lower.includes('heal') || lower.includes('revivify') || lower.includes('restoration') || lower.includes('aid') || lower.includes('goodberry') || lower.includes("heroes' feast"));
+      let baseFormula = rule?.damageFormula;
+      if (baseFormula && baseLvl === 0) {
+        const cantripMult = totalLevel >= 17 ? 4 : totalLevel >= 11 ? 3 : totalLevel >= 5 ? 2 : 1;
+        baseFormula = baseFormula.replace(/^1(d\d+)/i, `${cantripMult}$1`);
+      } else if (baseFormula && isHeal && (lower.includes('cure wounds') || lower.includes('healing word'))) {
+        baseFormula = `${baseFormula} + ${Math.max(1, spellMod)}`;
+      }
+      const castingTime = rule?.castingTime || (lower.includes('healing word') || lower.includes('mark') || lower.includes('hex') || lower.includes('misty step') || lower.includes('shield of faith') || lower.includes('sanctuary') || lower.includes('spiritual weapon') || lower.includes('holy weapon') || lower.includes('divine word') || lower.includes('smite') ? '1 Bonus Action' : lower.includes('counterspell') || lower === 'shield' || lower.includes('absorb elements') || lower.includes('hellish rebuke') || lower.includes('silvery barbs') ? '1 Reaction' : '1 Action');
+      const isBonus = castingTime.toLowerCase().includes('bonus');
+      const isRx = castingTime.toLowerCase().includes('reaction');
+      const isAtk = Boolean(rule?.isAttack || lower.includes('blast') || lower.includes('bolt') || lower.includes('ray') || lower.includes('orb') || lower.includes('spiritual weapon') || lower.includes('starry wisp') || lower.includes('crown of stars') || lower.includes('booming blade'));
+      const saveAbil = rule?.saveAbility;
+      const canUpcast = baseLvl >= 1 && baseLvl <= 8 && Boolean(rule?.higherLevels || baseFormula);
+      const upcastOptions = canUpcast
         ? Array.from({ length: 9 - baseLvl + 1 }, (_, i) => {
             const slotLvl = baseLvl + i;
             return {
@@ -1227,25 +1259,52 @@ const buildFallbackHudData = (token: Token, stats: any, customChars?: Character[
             };
           })
         : undefined;
-      spells.push({
+      const rangeNum = rule?.range
+        ? (rule.range.toLowerCase().includes('self') ? (rule.radiusFeet || 0) : rule.range.toLowerCase().includes('touch') ? 5 : (parseInt(rule.range.match(/\d+/)?.[0] || '60', 10) || 60))
+        : (matchedAsset?.defaultSizeFt || (isHeal ? 30 : 60));
+
+      const hudSpell: HudActionItem = {
         id: `char-spell-${idx}`,
-        name: spName,
+        name: rule?.name || spName,
         category: 'spells',
-        type: 'action',
+        type: isBonus ? 'bonus_action' : isRx ? 'reaction' : 'action',
         subCategory: 'spell',
+        sourceLabel: baseLvl === 0 ? 'Cantrip' : `Level ${baseLvl} ${rule?.school || 'Evocation'}`,
         level: baseLvl,
-        canUpcast: baseLvl >= 1,
+        canUpcast,
         upcastOptions,
-        school: (matchedAsset?.school as any) || 'evocation',
-        castingTime: lower.includes('healing word') || lower.includes('mark') || lower.includes('hex') || lower.includes('misty step') ? '1 Bonus Action' : '1 Action',
+        school: ((rule?.school || matchedAsset?.school || 'evocation').toLowerCase()) as any,
+        castingTime,
+        duration: rule?.duration,
+        components: rule?.components,
+        atHigherLevels: rule?.higherLevels,
+        hitBonus: isAtk ? `+${spellAttackBonus}` : undefined,
+        saveDc: saveAbil ? spellSaveDc : undefined,
+        saveAbility: saveAbil,
         damageFormula: baseFormula,
+        damageType: rule?.damageType || (isHeal ? 'healing' : undefined),
         isHeal,
-        description: `Cast ${spName}.`,
-        rangeFt: matchedAsset?.defaultSizeFt || (isHeal ? 30 : 60),
+        isAttack: isAtk,
+        isSelfAction: Boolean(rule?.isSelfAction || (rangeNum === 0 && !isAtk && !saveAbil)),
+        spellSlotRequired: baseLvl > 0 ? baseLvl : undefined,
+        description: rule?.description || `Cast ${spName}.`,
+        rangeFt: rangeNum,
         jb2aAssetId: matchedAsset?.id || (isHeal ? 'cure_wounds' : lower.includes('eldritch') ? 'eldritch_blast' : 'fire_bolt'),
-        iconUrl: matchedAsset?.thumb && !matchedAsset.thumb.endsWith('.webm') ? matchedAsset.thumb : undefined
-      });
+        iconUrl: matchedAsset?.thumb && !matchedAsset.thumb.endsWith('.webm') ? matchedAsset.thumb : undefined,
+        isPrepared: true
+      };
+      spells.push(hudSpell);
+      if (isBonus && !bonusActions.some(b => b.name.toLowerCase() === hudSpell.name.toLowerCase())) {
+        bonusActions.push({ ...hudSpell, id: `char-ba-spell-${idx}`, category: 'bonus_actions' });
+      }
+      if (isRx && !reactions.some(r => r.name.toLowerCase() === hudSpell.name.toLowerCase())) {
+        reactions.push({ ...hudSpell, id: `char-rx-spell-${idx}`, category: 'reactions' });
+      }
+      if (isAtk && !attacks.some(a => a.name.toLowerCase() === hudSpell.name.toLowerCase())) {
+        attacks.push({ ...hudSpell, id: `char-atk-spell-${idx}`, category: 'attacks' });
+      }
     });
+    spells.sort((a, b) => ((a.level ?? 0) - (b.level ?? 0)) || a.name.localeCompare(b.name));
   }
 
   reactions.push({
@@ -1524,7 +1583,7 @@ const buildFallbackHudData = (token: Token, stats: any, customChars?: Character[
     avatarUrl,
     race: matchedChar?.race || 'Adventurer',
     classLevel: matchedChar?.classLevel || 'Level 5 Hero',
-    totalLevel: 5,
+    totalLevel,
     ac,
     currentHp: hp,
     maxHp,
@@ -1542,10 +1601,17 @@ const buildFallbackHudData = (token: Token, stats: any, customChars?: Character[
     reactions,
     items,
     special: special.filter(sp => !spells.some(s => s.name.trim().toLowerCase() === sp.name.trim().toLowerCase())),
-    spellSlots: spells.length > 0 ? {
-      1: { level: 1, total: 4, used: 0, available: 4 },
-      2: { level: 2, total: 3, used: 0, available: 3 }
-    } : {},
+    spellSlots: (() => {
+      if (spells.length === 0) return {};
+      const maxSpellLvl = Math.max(2, ...spells.map(s => s.level || 0), totalLevel >= 15 ? 8 : totalLevel >= 13 ? 7 : totalLevel >= 11 ? 6 : totalLevel >= 9 ? 5 : totalLevel >= 7 ? 4 : totalLevel >= 5 ? 3 : 2);
+      const slots: Record<number, { level: number; total: number; used: number; available: number }> = {};
+      const countsByLvl: Record<number, number> = { 1: 4, 2: 3, 3: 3, 4: 3, 5: 2, 6: 1, 7: 1, 8: 1, 9: 1 };
+      for (let l = 1; l <= maxSpellLvl; l++) {
+        const tot = countsByLvl[l] || 1;
+        slots[l] = { level: l, total: tot, used: 0, available: tot };
+      }
+      return slots;
+    })(),
     resources: [],
     canWildShape: Boolean(
       (token.name && (token.name.toLowerCase().includes("g'aiah") || token.name.toLowerCase().includes("gaiah"))) ||
@@ -1661,6 +1727,7 @@ export default function PlayerView() {
   const [isCurrentCharacterPrivate, setIsCurrentCharacterPrivate] = useState<boolean>(false);
   const [showWildShapeModal, setShowWildShapeModal] = useState<boolean>(false);
   const [activeWildShape, setActiveWildShape] = useState<ActiveWildShapeState | null>(null);
+  const [hudCollapseTick, setHudCollapseTick] = useState<number>(0);
   const [privacyModalState, setPrivacyModalState] = useState<{
     isOpen: boolean;
     characterId: string;
@@ -3980,7 +4047,62 @@ export default function PlayerView() {
 
     // Intercept Wild Shape activation
     if (lowerName.includes('wild shape') || action.id === 'druid-wild-shape') {
-      setShowWildShapeModal(true);
+      if (activeWildShape && claimedToken) {
+        soundCatalog.play('nature_rustle', 0.8);
+        const tokenRadius = ((claimedToken.size || 1) * gridSize) / 2;
+        const revertEffect: VttEffectInstance = {
+          id: `eff_revert_${Date.now()}`,
+          name: 'Revert Wild Shape',
+          label: 'Druid Shape Reversion',
+          assetKey: 'druidcraft',
+          videoUrl: '/jb2a/Library/Generic/Nature/PlantGrowthRing02_01_Regular_GreenRed_500x500.webm',
+          thumbUrl: '/jb2a/Library/Generic/Nature/PlantGrowthRing02_01_Regular_GreenRed_Thumb.webp',
+          paradigm: 'emanation',
+          x: claimedToken.x + tokenRadius,
+          y: claimedToken.y + tokenRadius,
+          sizeFt: 10,
+          rotation: 0,
+          opacity: 0.9,
+          blendMode: 'screen',
+          isPersistent: false,
+          durationMs: 3000,
+          soundKey: 'nature_rustle',
+          casterTokenId: claimedToken.id,
+          createdAt: Date.now()
+        };
+        setEffects(prev => [...prev, revertEffect]);
+        if (socketRef.current?.connected) {
+          socketRef.current.emit('EFFECT_SPAWN', revertEffect);
+        }
+        handleUpdateToken(claimedToken.id, {
+          name: activeWildShape.originalName,
+          url: activeWildShape.originalAvatarUrl,
+          avatarUrl: activeWildShape.originalAvatarUrl,
+          size: activeWildShape.originalSize,
+          ac: activeWildShape.originalAc
+        } as any);
+        setHudCharacterData(prev => {
+          if (!prev) return prev;
+          const cleanAttacks = (prev.attacks || []).filter(a => !a.sourceLabel?.includes('Wild Shape'));
+          return {
+            ...prev,
+            name: activeWildShape.originalName,
+            avatarUrl: activeWildShape.originalAvatarUrl,
+            ac: activeWildShape.originalAc,
+            speed: activeWildShape.originalSpeed,
+            walkSpeedFt: activeWildShape.originalWalkSpeedFt,
+            wildShapeState: null,
+            attacks: cleanAttacks
+          };
+        });
+        const revertedBeastName = activeWildShape.beastName;
+        setActiveWildShape(null);
+        toast.success(`Reverted from ${revertedBeastName} back to Wood Elf!`, {
+          description: `Normal stats, token size, and humanoid form restored.`
+        });
+      } else {
+        setShowWildShapeModal(true);
+      }
       return;
     }
 
@@ -4152,7 +4274,7 @@ export default function PlayerView() {
     toast.info(`Targeting: ${action.name}`, {
       description: 'Click target token to execute action, or press Esc to cancel.'
     });
-  }, [activeTargetingAction, claimedToken, gridSize, selectedDicePreset]);
+  }, [activeTargetingAction, claimedToken, gridSize, selectedDicePreset, activeWildShape, handleUpdateToken]);
 
   const handleRollToHit = useCallback((action: HudActionItem) => {
     if (action.hitBonus === undefined) return;
@@ -4277,21 +4399,33 @@ export default function PlayerView() {
     const calculatedAc = Math.max(form.baseAc, 13 + wisModifier); // 17 AC
 
     // Save previous state for revert
-    const prevState: ActiveWildShapeState = activeWildShape || {
-      originalName: claimedToken.name || "G'aiah",
-      originalAvatarUrl: claimedToken.url || claimedToken.avatarUrl || getCharacterTokenUrl(claimedToken.name),
-      originalSize: claimedToken.size || 1,
-      originalAc: claimedToken.ac || 12,
-      originalSpeed: hudCharacterData?.speed || '35 ft.',
-      originalWalkSpeedFt: hudCharacterData?.walkSpeedFt || 35,
-      beastFormId: form.id,
-      beastName: form.name,
-      tempHpGranted,
-      startedAt: Date.now(),
-      durationHours: 3,
-      canRadiantStrikes: true
-    };
+    const prevState: ActiveWildShapeState = activeWildShape
+      ? {
+          ...activeWildShape,
+          beastFormId: form.id,
+          beastName: form.name,
+          tempHpGranted,
+          startedAt: Date.now()
+        }
+      : {
+          originalName: claimedToken.name || "G'aiah",
+          originalAvatarUrl: claimedToken.url || claimedToken.avatarUrl || getCharacterTokenUrl(claimedToken.name),
+          originalSize: claimedToken.size || 1,
+          originalAc: claimedToken.ac || 12,
+          originalSpeed: hudCharacterData?.speed || '35 ft.',
+          originalWalkSpeedFt: hudCharacterData?.walkSpeedFt || 35,
+          beastFormId: form.id,
+          beastName: form.name,
+          tempHpGranted,
+          startedAt: Date.now(),
+          durationHours: 3,
+          canRadiantStrikes: true
+        };
     setActiveWildShape(prevState);
+
+    // Minimize modal & collapse HUD tray so G'aiah can watch her transformation on the board
+    setShowWildShapeModal(false);
+    setHudCollapseTick(t => t + 1);
 
     // 1. Play Druid Bloom / Nature Swirl SFX
     soundCatalog.play('druid_bloom', 1.0);
@@ -7762,7 +7896,9 @@ export default function PlayerView() {
           inspectedAuraRequest={inspectedAuraRequest}
           onClearInspectedAura={() => setInspectedAuraRequest(null)}
           onOpenWildShape={() => setShowWildShapeModal(true)}
+          onRevertWildShape={handleRevertWildShape}
           activeWildShape={activeWildShape}
+          collapseRequestTick={hudCollapseTick}
         />
       )}
 

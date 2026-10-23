@@ -294,10 +294,30 @@ export const DEFAULT_CHARACTERS: Character[] = [
         damage: '1d8+4 Bludgeoning',
         notes: 'Versatile (1d10+4), Push',
         description: 'Holy warhammer imbued with radiant authority.'
+      },
+      {
+        name: 'Javelin',
+        type: 'melee/thrown',
+        hitBonus: '+6',
+        damage: '1d6+3 Piercing',
+        notes: 'Thrown (30/120)',
+        description: 'Standard thrown javelin.'
+      }
+    ],
+    bonusActions: [
+      {
+        name: 'Divine Smite',
+        source: 'Paladin',
+        description: 'Expend a spell slot when hitting with a melee weapon attack to deal 2d8 radiant damage (+1d8 per slot level above 1st).'
+      },
+      {
+        name: 'Lay on Hands (25 pts)',
+        source: 'Paladin',
+        description: 'Touch a creature to restore hit points from your pool of 25 HP, or expend 5 HP to cure a disease or neutralize a poison.'
       }
     ],
     features: ['Divine Smite', 'Lay on Hands (25 pts)', 'Divine Health', 'Channel Divinity', 'Aura of Protection', 'Extra Attack'],
-    spells: ['Bless', 'Cure Wounds', 'Shield of Faith', 'Command'],
+    spells: ['Bless', 'Cure Wounds', 'Shield of Faith', 'Command', 'Divine Smite', 'Wrathful Smite', 'Thunderous Smite', 'Branding Smite', 'Aid', 'Lesser Restoration'],
     notes: 'Devoted holy knight wielding Warhammer and Shield, protecting allies with divine aura.',
     createdAt: Date.now(),
     updatedAt: Date.now()
@@ -319,6 +339,36 @@ export const DEFAULT_CHARACTERS: Character[] = [
     proficiencyBonus: 5,
     passivePerception: 10,
     stats: { str: 20, dex: 19, con: 12, int: 12, wis: 11, cha: 11 },
+    actions: [
+      {
+        name: 'Longsword, +2',
+        type: 'melee',
+        hitBonus: '+12',
+        damage: '1d8+7 Slashing',
+        notes: 'Versatile (1d10+7), Weapon Bond',
+        description: 'Bonded Eldritch Knight longsword.'
+      },
+      {
+        name: 'Longbow, +1',
+        type: 'ranged',
+        hitBonus: '+10',
+        damage: '1d8+5 Piercing',
+        notes: 'Range 150/600',
+        description: 'Martial ranged weapon.'
+      }
+    ],
+    bonusActions: [
+      {
+        name: 'Second Wind',
+        source: 'Fighter (1/Short Rest)',
+        description: 'Regain 1d10 + 15 hit points as a bonus action.'
+      },
+      {
+        name: 'War Magic Attack',
+        source: 'Eldritch Knight',
+        description: 'When you use your action to cast a cantrip, you can make one weapon attack as a bonus action.'
+      }
+    ],
     features: [
       'Second Wind',
       'Action Surge',
@@ -345,10 +395,13 @@ export const DEFAULT_CHARACTERS: Character[] = [
       'Thunderwave',
       'Mirror Image',
       'Scorching Ray',
+      'Misty Step',
+      'Shatter',
       'Daylight',
       'Fireball',
       'Haste',
       'Lightning Bolt',
+      'Counterspell',
       'Sending'
     ],
     notes: 'Campaign: An Unspeakable Power (but this time with a vengeance). Player: NorahTheExplorah. Synced from D&D Beyond.',
@@ -373,8 +426,33 @@ export const DEFAULT_CHARACTERS: Character[] = [
     passivePerception: 13,
     stats: { str: 8, dex: 20, con: 14, int: 10, wis: 16, cha: 8 },
     savingThrows: { str: '+2', dex: '+6', con: '+2', int: '+1', wis: '+2', cha: '+0' },
+    actions: [
+      {
+        name: 'Longbow, +1',
+        type: 'ranged',
+        hitBonus: '+11',
+        damage: '1d8+6 Piercing',
+        notes: 'Range 150/600, Archery (+2)',
+        description: 'Precision longbow strike from the shadows.'
+      },
+      {
+        name: 'Shortsword, +1',
+        type: 'melee',
+        hitBonus: '+9',
+        damage: '1d6+6 Piercing',
+        notes: 'Finesse, Light, Vex',
+        description: 'Quick finesse blade.'
+      }
+    ],
+    bonusActions: [
+      {
+        name: 'Cunning Action (Dash / Disengage / Hide)',
+        source: 'Rogue',
+        description: 'Take the Dash, Disengage, or Hide action as a bonus action.'
+      }
+    ],
     features: ['Sneak Attack', 'Expertise', 'Archery Style', 'Cunning Action', 'Favored Foe'],
-    spells: ["Hunter's Mark", 'Pass without Trace', 'Cure Wounds'],
+    spells: ["Hunter's Mark", 'Pass without Trace', 'Cure Wounds', 'Ensnaring Strike', 'Zephyr Strike', 'Goodberry', 'Fog Cloud', 'Silence'],
     notes: 'Stealthy rogue-ranger and agile scout of the Golden Vault.',
     createdAt: Date.now(),
     updatedAt: Date.now()
@@ -396,6 +474,41 @@ export const DEFAULT_CHARACTERS: Character[] = [
     proficiencyBonus: 5,
     passivePerception: 11,
     stats: { str: 14, dex: 18, con: 16, int: 10, wis: 13, cha: 8 },
+    actions: [
+      {
+        name: 'Martial Arts Unarmed Strike',
+        type: 'melee',
+        hitBonus: '+10',
+        damage: '1d10+5 Bludgeoning',
+        notes: 'Ki-Empowered Strikes (Magical)',
+        description: 'Master-level unarmed strike.'
+      },
+      {
+        name: 'Quarterstaff, +1',
+        type: 'melee',
+        hitBonus: '+10',
+        damage: '1d10+5 Bludgeoning',
+        notes: 'Monk Weapon, Versatile',
+        description: 'Reinforced monk staff.'
+      }
+    ],
+    bonusActions: [
+      {
+        name: 'Flurry of Blows',
+        source: 'Monk (1 Ki)',
+        description: 'Immediately after you take the Attack action on your turn, spend 1 ki point to make two unarmed strikes as a bonus action.'
+      },
+      {
+        name: 'Patient Defense',
+        source: 'Monk (1 Ki)',
+        description: 'Spend 1 ki point to take the Dodge action as a bonus action on your turn.'
+      },
+      {
+        name: 'Step of the Wind',
+        source: 'Monk (1 Ki)',
+        description: 'Spend 1 ki point to take the Disengage or Dash action as a bonus action on your turn, and your jump distance is doubled for the turn.'
+      }
+    ],
     features: ['Flurry of Blows', 'Patient Defense', 'Step of the Wind', 'Stunning Strike', 'Evasion', 'Diamond Soul', 'Relentless Endurance'],
     spells: [],
     notes: 'Campaign: An Unspeakable Power (but this time with a vengeance). Player: Perethorn. Synced from D&D Beyond.',
@@ -420,8 +533,32 @@ export const DEFAULT_CHARACTERS: Character[] = [
     passivePerception: 14,
     stats: { str: 10, dex: 14, con: 16, int: 18, wis: 12, cha: 10 },
     savingThrows: { str: '+0', dex: '+2', con: '+6', int: '+7', wis: '+1', cha: '+0' },
+    actions: [
+      {
+        name: 'Thunder Gauntlets',
+        type: 'melee',
+        hitBonus: '+7',
+        damage: '1d8+4 Thunder',
+        notes: 'Armorer Weapon (INT), Taunt',
+        description: 'Each of the armor\'s gauntlets counts as a simple melee weapon. A creature hit by the gauntlet has disadvantage on attack rolls against targets other than you.'
+      },
+      {
+        name: 'Lightning Launcher',
+        type: 'ranged',
+        hitBonus: '+7',
+        damage: '2d6+4 Lightning',
+        notes: 'Range 90/300 (INT)',
+        description: 'A gemlike node on your chest or fist launches bolts of lightning.'
+      }
+    ],
+    reactions: [
+      {
+        name: 'Flash of Genius',
+        description: 'When you or another creature you can see within 30 feet of you makes an ability check or a saving throw, use your reaction to add your Intelligence modifier (+4) to the roll.'
+      }
+    ],
     features: ['Infuse Item', 'The Right Tool for the Job', 'Flash of Genius', 'Tool Expertise', 'Gnome Cunning'],
-    spells: ['Guidance', 'Cure Wounds', 'Faerie Fire', 'Shield', 'Heat Metal'],
+    spells: ['Guidance', 'Fire Bolt', 'Mage Hand', 'Cure Wounds', 'Faerie Fire', 'Shield', 'Absorb Elements', 'Sanctuary', 'Thunderwave', 'Magic Missile', 'Heat Metal', 'Shatter', 'Web', 'Invisibility', 'Lesser Restoration', 'Vortex Warp', 'Mirror Image'],
     notes: 'Campaign: Keys from the Golden Vault. Player: TotoMojo. Synced from D&D Beyond.',
     createdAt: Date.now(),
     updatedAt: Date.now()
@@ -444,8 +581,33 @@ export const DEFAULT_CHARACTERS: Character[] = [
     passivePerception: 15,
     stats: { str: 10, dex: 16, con: 14, int: 12, wis: 14, cha: 18 },
     savingThrows: { str: '+0', dex: '+6', con: '+2', int: '+1', wis: '+2', cha: '+7' },
+    actions: [
+      {
+        name: 'Rapier, +1',
+        type: 'melee',
+        hitBonus: '+7',
+        damage: '1d8+4 Piercing',
+        notes: 'Finesse',
+        description: 'Elegant dueling rapier.'
+      },
+      {
+        name: 'Shortbow',
+        type: 'ranged',
+        hitBonus: '+6',
+        damage: '1d6+3 Piercing',
+        notes: 'Range 80/320',
+        description: 'Light ranged bow.'
+      }
+    ],
+    bonusActions: [
+      {
+        name: 'Bardic Inspiration (d8)',
+        source: 'Bard (4/Short Rest)',
+        description: 'Inspire a creature within 60 ft with a d8 Bardic Inspiration die.'
+      }
+    ],
     features: ['Bardic Inspiration (d8)', 'Jack of All Trades', 'Song of Rest (d6)', 'Font of Inspiration', 'Countercharm'],
-    spells: ['Vicious Mockery', 'Dissonant Whispers', 'Healing Word', 'Invisibility', 'Hypnotic Pattern', 'Polymorph'],
+    spells: ['Vicious Mockery', 'Minor Illusion', 'Message', 'Prestidigitation', 'Dissonant Whispers', 'Healing Word', 'Cure Wounds', 'Faerie Fire', 'Silvery Barbs', 'Thunderwave', 'Shatter', 'Hold Person', 'Invisibility', 'Hypnotic Pattern', 'Dispel Magic', 'Polymorph', 'Dimension Door', 'Greater Invisibility'],
     notes: 'Campaign: Keys from the Golden Vault. Player: Perethorn. Synced from D&D Beyond.',
     createdAt: Date.now(),
     updatedAt: Date.now()
@@ -470,6 +632,16 @@ export const DEFAULT_CHARACTERS: Character[] = [
     defenses: {
       resistances: ['Poison (Dwarven Resilience)']
     },
+    actions: [
+      {
+        name: 'Warhammer, +2',
+        type: 'melee',
+        hitBonus: '+10',
+        damage: '1d8+5 Bludgeoning + 2d8 Radiant',
+        notes: 'Divine Strike (+2d8 Radiant)',
+        description: 'Dwarven warhammer blessed with divine radiance.'
+      }
+    ],
     features: [
       'Channel Divinity',
       'Destroy Undead (CR 3)',
@@ -478,27 +650,44 @@ export const DEFAULT_CHARACTERS: Character[] = [
       'Book of Exalted Deeds (Enlightened Magic: Any spell slot expended counts as 1 level higher; Halo of Protection, +1 AC, Advantage on Good Persuasion)'
     ],
     spells: [
+      'Sacred Flame',
+      'Toll the Dead',
+      'Guidance',
+      'Light',
+      'Thaumaturgy',
+      'Cure Wounds',
+      'Bless',
       'Healing Word',
-      'Spirit Guardians',
-      'Revivify',
-      'Mass Cure Wounds',
-      'Heal',
-      'Mass Healing Word',
-      'Holy Weapon',
-      'Stone Shape',
-      'Blade Barrier',
-      'Sunbeam',
-      'Fire Storm',
-      'Holy Aura',
       'Sanctuary',
       'Shield of Faith',
-      'Hold Person',
       'Command',
+      'Spiritual Weapon',
+      'Hold Person',
       'Warding Bond',
-      "Heroes' Feast",
-      'Divine Word',
+      'Silence',
+      'Lesser Restoration',
+      'Aid',
+      'Spirit Guardians',
+      'Revivify',
+      'Mass Healing Word',
+      'Beacon of Hope',
+      'Dispel Magic',
+      'Stone Shape',
+      'Banishment',
+      'Death Ward',
+      'Guardian of Faith',
+      'Mass Cure Wounds',
+      'Holy Weapon',
+      'Flame Strike',
       'Greater Restoration',
-      'Silence'
+      'Heal',
+      'Blade Barrier',
+      'Sunbeam',
+      "Heroes' Feast",
+      'Fire Storm',
+      'Divine Word',
+      'Holy Aura',
+      'Sunburst'
     ],
     notes: 'Campaign: An Unspeakable Power (but this time with a vengeance). Player: SWITCH540. Attuned Artifact: Book of Exalted Deeds (Enlightened Magic grants +1 effective slot level to all cast spells). Synced from D&D Beyond.',
     createdAt: Date.now(),
@@ -521,8 +710,39 @@ export const DEFAULT_CHARACTERS: Character[] = [
     passivePerception: 13,
     stats: { str: 8, dex: 16, con: 12, int: 12, wis: 10, cha: 18 },
     savingThrows: { str: '-1', dex: '+6', con: '+1', int: '+1', wis: '+0', cha: '+7' },
+    actions: [
+      {
+        name: 'Rapier',
+        type: 'melee',
+        hitBonus: '+6',
+        damage: '1d8+3 Piercing',
+        notes: 'Finesse',
+        description: 'Quick feline rapier lunge.'
+      },
+      {
+        name: 'Cat’s Claws',
+        type: 'melee',
+        hitBonus: '+6',
+        damage: '1d4+3 Slashing',
+        notes: 'Tabaxi Natural Weapon',
+        description: 'Sharp retractable claws.'
+      }
+    ],
+    bonusActions: [
+      {
+        name: 'Bardic Inspiration (d8)',
+        source: 'Bard (4/Short Rest)',
+        description: 'Inspire an ally within 60 ft with a d8 Bardic Inspiration die.'
+      }
+    ],
+    reactions: [
+      {
+        name: 'Cutting Words',
+        description: 'Expend one use of Bardic Inspiration (d8) to subtract the roll from an enemy\'s attack roll, ability check, or damage roll within 60 ft.'
+      }
+    ],
     features: ['Bardic Inspiration (d8)', 'Jack of All Trades', 'Song of Rest (d6)', 'College of Lore Cutting Words'],
-    spells: ['Vicious Mockery', 'Dissonant Whispers', 'Healing Word', 'Hypnotic Pattern', 'Shatter'],
+    spells: ['Vicious Mockery', 'Minor Illusion', 'Prestidigitation', 'Dissonant Whispers', 'Healing Word', 'Cure Wounds', 'Faerie Fire', 'Thunderwave', 'Shatter', 'Invisibility', 'Hold Person', 'Hypnotic Pattern', 'Dispel Magic'],
     notes: 'Agile feline minstrel who inspires party members with witty ballads and disorients foes with mockery.',
     createdAt: Date.now(),
     updatedAt: Date.now()
@@ -545,8 +765,38 @@ export const DEFAULT_CHARACTERS: Character[] = [
     passivePerception: 14,
     stats: { str: 8, dex: 16, con: 14, int: 14, wis: 12, cha: 16 },
     savingThrows: { str: '-1', dex: '+6', con: '+2', int: '+5', wis: '+4', cha: '+6' },
+    actions: [
+      {
+        name: 'Crimson Rite Rapier',
+        type: 'melee',
+        hitBonus: '+6',
+        damage: '1d8+3 Piercing + 1d4 Lightning',
+        notes: 'Finesse, Crimson Rite of the Storm',
+        description: 'Rapier imbued with hemocraft lightning energy.'
+      },
+      {
+        name: 'Hand Crossbow',
+        type: 'ranged',
+        hitBonus: '+6',
+        damage: '1d6+3 Piercing + 1d4 Lightning',
+        notes: 'Range 30/120, Light',
+        description: 'Ranged bolt infused with Crimson Rite.'
+      }
+    ],
+    bonusActions: [
+      {
+        name: 'Crimson Rite',
+        source: 'Blood Hunter',
+        description: 'Imbue a weapon with elemental hemocraft energy (+1d4 damage).'
+      },
+      {
+        name: 'Blood Curse of Binding',
+        source: 'Blood Hunter (Blood Maledict)',
+        description: 'Bind a Large or smaller creature within 30 ft (STR save DC 13 or speed reduced to 0).'
+      }
+    ],
     features: ['Crimson Rite', 'Blood Maledict', 'Hunter’s Bane', 'Eldritch Invocations', 'Flight'],
-    spells: ['Eldritch Blast', 'Hex', 'Faerie Fire', 'Enlarge/Reduce'],
+    spells: ['Eldritch Blast', 'Druidcraft', 'Minor Illusion', 'Hex', 'Hellish Rebuke', 'Armor of Agathys', 'Arms of Hadar', 'Faerie Fire', 'Enlarge/Reduce'],
     notes: 'Campaign: Keys from the Golden Vault. Player: Arameng. Synced from D&D Beyond.',
     createdAt: Date.now(),
     updatedAt: Date.now()
@@ -569,6 +819,31 @@ export const DEFAULT_CHARACTERS: Character[] = [
     passivePerception: 17,
     stats: { str: 10, dex: 12, con: 14, int: 13, wis: 18, cha: 10 },
     savingThrows: { str: '+0', dex: '+1', con: '+2', int: '+4', wis: '+7', cha: '+0' },
+    actions: [
+      {
+        name: 'Quarterstaff (Shillelagh)',
+        type: 'melee',
+        hitBonus: '+7',
+        damage: '1d8+4 Bludgeoning',
+        notes: 'Druidic Focus',
+        description: 'Druidic staff strike.'
+      },
+      {
+        name: 'Moon Bear Multiattack (Wild Shape)',
+        type: 'melee',
+        hitBonus: '+7',
+        damage: '2d6+5 Slashing + 1d8 Radiant',
+        notes: 'Circle of the Moon CR 2 Form, Radiant Strikes',
+        description: 'Ferocious lunar beast claw and bite attack.'
+      }
+    ],
+    bonusActions: [
+      {
+        name: 'Wild Shape (Circle of the Moon)',
+        source: 'Druid (3/Long Rest)',
+        description: 'Shape-shift into a Beast up to CR 2 as a Bonus Action, gaining 18 Temporary Hit Points and AC 17.'
+      }
+    ],
     features: [
       'Wild Shape (3/Long Rest, Bonus Action, CR 2 max, 18 Temp HP, AC 17 in beast form)',
       'Circle of the Moon (Circle Forms, Radiant Strikes, +4 WIS to CON saves)',
@@ -623,8 +898,56 @@ export const DEFAULT_CHARACTERS: Character[] = [
     passivePerception: 11,
     stats: { str: 8, dex: 15, con: 14, int: 20, wis: 12, cha: 10 },
     savingThrows: { str: '-1', dex: '+2', con: '+2', int: '+10', wis: '+6', cha: '+0' },
+    actions: [
+      {
+        name: 'Staff of Power',
+        type: 'melee',
+        hitBonus: '+6',
+        damage: '1d6+1 Bludgeoning',
+        notes: 'Arcane Focus, +2 AC & Saves',
+        description: 'Archmage staff.'
+      }
+    ],
     features: ['Arcane Recovery', 'Spellcasting', 'Fey Ancestry', 'Arcane Tradition'],
-    spells: ['Fire Bolt', 'Mage Armor', 'Shield', 'Counterspell', 'Fireball', 'Teleport'],
+    spells: [
+      'Fire Bolt',
+      'Ray of Frost',
+      'Mage Hand',
+      'Prestidigitation',
+      'Light',
+      'Mage Armor',
+      'Shield',
+      'Magic Missile',
+      'Absorb Elements',
+      'Chromatic Orb',
+      'Thunderwave',
+      'Misty Step',
+      'Mirror Image',
+      'Scorching Ray',
+      'Shatter',
+      'Web',
+      'Invisibility',
+      'Counterspell',
+      'Dispel Magic',
+      'Fireball',
+      'Lightning Bolt',
+      'Haste',
+      'Fly',
+      'Dimension Door',
+      'Greater Invisibility',
+      'Polymorph',
+      'Ice Storm',
+      'Wall of Fire',
+      'Banishment',
+      'Cone of Cold',
+      'Wall of Force',
+      'Hold Monster',
+      'Chain Lightning',
+      'Disintegrate',
+      'Teleport',
+      'Crown of Stars',
+      'Sunburst'
+    ],
     notes: 'Campaign: An Unspeakable Power (but this time with a vengeance). Player: Cudder1. Synced from D&D Beyond.',
     createdAt: Date.now(),
     updatedAt: Date.now()
@@ -647,6 +970,37 @@ export const DEFAULT_CHARACTERS: Character[] = [
     passivePerception: 10,
     stats: { str: 13, dex: 19, con: 12, int: 11, wis: 11, cha: 13 },
     savingThrows: { str: '+1', dex: '+9', con: '+1', int: '+5', wis: '+5', cha: '+1' },
+    actions: [
+      {
+        name: 'Rapier, +2 (Sneak Attack)',
+        type: 'melee',
+        hitBonus: '+11',
+        damage: '1d8+6 Piercing + 8d6 Sneak Attack',
+        notes: 'Finesse, Sneak Attack (8d6)',
+        description: 'Master assassin strike dealing +8d6 Sneak Attack damage.'
+      },
+      {
+        name: 'Shortbow, +1 (Sneak Attack)',
+        type: 'ranged',
+        hitBonus: '+10',
+        damage: '1d6+5 Piercing + 8d6 Sneak Attack',
+        notes: 'Range 80/320, Sneak Attack (8d6)',
+        description: 'Deadly ranged ambush shot.'
+      }
+    ],
+    bonusActions: [
+      {
+        name: 'Cunning Action (Dash / Disengage / Hide)',
+        source: 'Rogue',
+        description: 'Take the Dash, Disengage, or Hide action as a bonus action.'
+      }
+    ],
+    reactions: [
+      {
+        name: 'Uncanny Dodge',
+        description: 'When an attacker that you can see hits you with an attack, you can use your reaction to halve the attack\'s damage against you.'
+      }
+    ],
     features: ['Sneak Attack (8d6)', 'Cunning Action', 'Uncanny Dodge', 'Evasion', 'Reliable Talent', 'Blindsense'],
     spells: ['Dancing Lights', 'Faerie Fire', 'Darkness'],
     notes: 'Campaign: An Unspeakable Power (but this time with a vengeance). Player: Arameng. Synced from D&D Beyond.',
@@ -671,8 +1025,49 @@ export const DEFAULT_CHARACTERS: Character[] = [
     passivePerception: 12,
     stats: { str: 8, dex: 10, con: 11, int: 15, wis: 15, cha: 18 },
     savingThrows: { str: '-1', dex: '+0', con: '+0', int: '+2', wis: '+7', cha: '+9' },
+    actions: [
+      {
+        name: 'Rod of the Pact Keeper, +2',
+        type: 'melee',
+        hitBonus: '+6',
+        damage: '1d6+1 Bludgeoning',
+        notes: '+2 Spell Attack & Save DC',
+        description: 'Warlock pact rod.'
+      }
+    ],
     features: ['Pact Magic', 'Eldritch Invocations', 'Mystic Arcanum', 'Hellish Resistance'],
-    spells: ['Eldritch Blast', 'Hellish Rebuke', 'Darkness', 'Hold Monster', 'Crown of Stars'],
+    spells: [
+      'Eldritch Blast',
+      'Toll the Dead',
+      'Minor Illusion',
+      'Prestidigitation',
+      'Mage Hand',
+      'Thaumaturgy',
+      'Hex',
+      'Hellish Rebuke',
+      'Armor of Agathys',
+      'Arms of Hadar',
+      'Darkness',
+      'Misty Step',
+      'Mirror Image',
+      'Shatter',
+      'Hold Person',
+      'Invisibility',
+      'Counterspell',
+      'Dispel Magic',
+      'Hunger of Hadar',
+      'Thunder Step',
+      'Fly',
+      'Hypnotic Pattern',
+      'Dimension Door',
+      'Banishment',
+      'Blight',
+      'Wall of Fire',
+      'Hold Monster',
+      'Circle of Death',
+      'Finger of Death',
+      'Crown of Stars'
+    ],
     notes: 'Campaign: An Unspeakable Power (but this time with a vengeance). Player: TotoMojo. Synced from D&D Beyond.',
     createdAt: Date.now(),
     updatedAt: Date.now()

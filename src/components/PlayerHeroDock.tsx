@@ -55,7 +55,9 @@ interface PlayerHeroDockProps {
   inspectedAuraRequest?: { action: HudActionItem; tick: number } | null;
   onClearInspectedAura?: () => void;
   onOpenWildShape?: () => void;
+  onRevertWildShape?: () => void;
   activeWildShape?: any | null;
+  collapseRequestTick?: number;
 }
 
 export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
@@ -83,7 +85,9 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
   inspectedAuraRequest,
   onClearInspectedAura,
   onOpenWildShape,
-  activeWildShape
+  onRevertWildShape,
+  activeWildShape,
+  collapseRequestTick
 }) => {
   const currentTargetingAction = activeTargetingAction ?? selectedAction ?? (
     activeEquippedAsset ? {
@@ -108,6 +112,17 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
   const [isTrayCollapsed, setIsTrayCollapsed] = useState<boolean>(false);
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState<boolean>(false);
   const [isDockMinimizedWhileAiming, setIsDockMinimizedWhileAiming] = useState<boolean>(false);
+  const [isHoveringWildShapeBtn, setIsHoveringWildShapeBtn] = useState<boolean>(false);
+
+  // Minimize HUD tray and any open action popups when requested (e.g. upon Wild Shape transformation)
+  useEffect(() => {
+    if (!collapseRequestTick) return;
+    setIsTrayCollapsed(true);
+    setIsMobileDrawerOpen(false);
+    setHoveredAction(null);
+    setPinnedAction(null);
+    setInspectedAction(null);
+  }, [collapseRequestTick]);
 
   const handleStartPopoverDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest('button, input, a, [data-no-drag]')) return;
@@ -1127,6 +1142,41 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
 
           {/* Sync & Turn Controls */}
           <div className="flex items-center gap-1 shrink-0">
+            {(characterData?.canWildShape ||
+              characterData?.name?.toLowerCase().includes("g'aiah") ||
+              characterData?.name?.toLowerCase().includes("gaiah") ||
+              characterData?.classLevel?.toLowerCase().includes("druid")) && onOpenWildShape && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (activeWildShape && onRevertWildShape) {
+                    onRevertWildShape();
+                  } else {
+                    onOpenWildShape();
+                  }
+                }}
+                onMouseEnter={() => setIsHoveringWildShapeBtn(true)}
+                onMouseLeave={() => setIsHoveringWildShapeBtn(false)}
+                className={`px-2.5 py-2 rounded-lg font-mono text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 border ${
+                  activeWildShape
+                    ? isHoveringWildShapeBtn
+                      ? 'bg-rose-500/25 border-rose-400 text-rose-200'
+                      : 'bg-amber-500/20 border-amber-400 text-amber-200 animate-pulse'
+                    : 'bg-emerald-950/80 border-emerald-500/60 text-emerald-300'
+                }`}
+                title={activeWildShape ? 'Transform back' : 'Wild Shape'}
+              >
+                <PawPrint className="w-3.5 h-3.5" />
+                <span>
+                  {activeWildShape
+                    ? isHoveringWildShapeBtn
+                      ? 'Transform back'
+                      : activeWildShape.beastName
+                    : 'Wild Shape'}
+                </span>
+              </button>
+            )}
+
             {onRefreshDdb && (
               <button
                 type="button"
@@ -1641,20 +1691,36 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
               characterData?.classLevel?.toLowerCase().includes("druid")) && onOpenWildShape && (
               <button
                 type="button"
-                onClick={onOpenWildShape}
+                onClick={() => {
+                  if (activeWildShape && onRevertWildShape) {
+                    onRevertWildShape();
+                  } else {
+                    onOpenWildShape();
+                  }
+                }}
+                onMouseEnter={() => setIsHoveringWildShapeBtn(true)}
+                onMouseLeave={() => setIsHoveringWildShapeBtn(false)}
                 className={`px-3 py-1.5 rounded-xl font-mono text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
                   activeWildShape
-                    ? 'bg-amber-500/20 border-amber-400 text-amber-200 shadow-[0_0_12px_rgba(245,158,11,0.3)] animate-pulse'
+                    ? isHoveringWildShapeBtn
+                      ? 'bg-rose-500/25 border-rose-400 text-rose-200 shadow-[0_0_12px_rgba(244,63,94,0.35)]'
+                      : 'bg-amber-500/20 border-amber-400 text-amber-200 shadow-[0_0_12px_rgba(245,158,11,0.3)] animate-pulse'
                     : 'bg-emerald-950/80 hover:bg-emerald-900 border-emerald-500/60 text-emerald-300 hover:text-white shadow-sm'
                 }`}
                 title={
                   activeWildShape
-                    ? `Wild Shape Active: Transformed as ${activeWildShape.beastName}. Click to View/Revert Form.`
-                    : "Wild Shape (Bonus Action): Transform into a CR <= 2 Beast Form (Circle of the Moon)"
+                    ? 'Transform back'
+                    : 'Wild Shape (Bonus Action): Transform into a CR <= 2 Beast Form (Circle of the Moon)'
                 }
               >
                 <PawPrint className="w-3.5 h-3.5" />
-                <span>{activeWildShape ? activeWildShape.beastName : 'Wild Shape'}</span>
+                <span>
+                  {activeWildShape
+                    ? isHoveringWildShapeBtn
+                      ? 'Transform back'
+                      : activeWildShape.beastName
+                    : 'Wild Shape'}
+                </span>
               </button>
             )}
 
