@@ -235,6 +235,8 @@ export interface HudCharacterData {
   spellSaveDc?: number;
   spellAttackBonus?: number;
   hasBookOfExaltedDeeds?: boolean;
+  canWildShape?: boolean;
+  wildShapeState?: any;
   deathSaves: {
     successes: number;
     failures: number;

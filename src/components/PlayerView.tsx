@@ -108,6 +108,8 @@ import { PlayerStationModal, PlayerStationMode } from './PlayerStationModal';
 import { PlayerCharacterSelectModal, PlayerCharacterChoiceItem } from './PlayerCharacterSelectModal';
 import { PlayerDdbPrivacyModal } from './PlayerDdbPrivacyModal';
 import { PlayerHeroDock } from './PlayerHeroDock';
+import { WildShapeModal } from './WildShapeModal';
+import { WildShapeBeastForm, ActiveWildShapeState } from '../types/wildShape';
 import { DndRuleInspectionModal } from './DndRuleInspectionModal';
 import { canTokenHaveHalo } from '../effects/db/tokenFxMap';
 import { DndRuleEntry, lookupDndRuleDetails } from '../data/dndRulesCompendium';
@@ -1428,6 +1430,33 @@ const buildFallbackHudData = (token: Token, stats: any, customChars?: Character[
     });
   }
 
+  // If character is G'aiah or a Druid, add Wild Shape to Bonus Actions and Special Features
+  if (
+    lowerCharName.includes("g'aiah") ||
+    lowerCharName.includes("gaiah") ||
+    (matchedChar?.classLevel && matchedChar.classLevel.toLowerCase().includes("druid"))
+  ) {
+    const wildShapeAction: HudActionItem = {
+      id: 'druid-wild-shape',
+      name: 'Wild Shape (Circle of the Moon)',
+      category: 'bonus_actions',
+      type: 'bonus_action',
+      subCategory: 'class',
+      sourceLabel: 'Druid 6 (PHB 2024)',
+      castingTime: '1 Bonus Action',
+      rangeFt: 0,
+      isSelfAction: true,
+      uses: { available: 3, total: 3, resetType: 'Long Rest' },
+      description: 'Transform into a known Beast Form (CR <= 2, 3 hours duration). In 2024 Circle of the Moon: gain 18 Temp HP, AC becomes 17 (13 + WIS), attacks can deal Radiant damage, and you add +4 WIS to CON saves. Click Wild Shape in the toolbar to choose your form.'
+    };
+    if (!bonusActions.some(b => b.name.toLowerCase().includes('wild shape'))) {
+      bonusActions.push(wildShapeAction);
+    }
+    if (!special.some(s => s.name.toLowerCase().includes('wild shape'))) {
+      special.push({ ...wildShapeAction, category: 'special' });
+    }
+  }
+
   bonusActions.forEach((ba, idx) => {
     if (!special.some(s => s.name.toLowerCase() === ba.name.toLowerCase())) {
       special.push({ ...ba, id: `fallback-spec-ba-${idx}`, category: 'special' });
@@ -1518,6 +1547,11 @@ const buildFallbackHudData = (token: Token, stats: any, customChars?: Character[
       2: { level: 2, total: 3, used: 0, available: 3 }
     } : {},
     resources: [],
+    canWildShape: Boolean(
+      (token.name && (token.name.toLowerCase().includes("g'aiah") || token.name.toLowerCase().includes("gaiah"))) ||
+      (matchedChar?.name && (matchedChar.name.toLowerCase().includes("g'aiah") || matchedChar.name.toLowerCase().includes("gaiah"))) ||
+      (matchedChar?.classLevel && matchedChar.classLevel.toLowerCase().includes("druid"))
+    ),
     hasBookOfExaltedDeeds: Boolean(
       (token.name && token.name.toLowerCase().includes('stavros')) ||
       (matchedChar?.name && matchedChar.name.toLowerCase().includes('stavros'))
@@ -1625,6 +1659,8 @@ export default function PlayerView() {
   const [isSyncingHudDdb, setIsSyncingHudDdb] = useState<boolean>(false);
   const [showCharacterSelectModal, setShowCharacterSelectModal] = useState<boolean>(false);
   const [isCurrentCharacterPrivate, setIsCurrentCharacterPrivate] = useState<boolean>(false);
+  const [showWildShapeModal, setShowWildShapeModal] = useState<boolean>(false);
+  const [activeWildShape, setActiveWildShape] = useState<ActiveWildShapeState | null>(null);
   const [privacyModalState, setPrivacyModalState] = useState<{
     isOpen: boolean;
     characterId: string;
@@ -3942,6 +3978,12 @@ export default function PlayerView() {
       return;
     }
 
+    // Intercept Wild Shape activation
+    if (lowerName.includes('wild shape') || action.id === 'druid-wild-shape') {
+      setShowWildShapeModal(true);
+      return;
+    }
+
     const isManeuver = [
       'dash', 'dodge', 'disengage', 'hide', 'rage', 'action surge', 'second wind',
       'harness divine power', 'channel divinity', 'divine intervention', 'blessed strikes',
@@ -4085,6 +4127,17 @@ export default function PlayerView() {
       return;
     }
 
+    // Intercept Beast Form Attacks (Wild Shape) to allow Radiant strikes or standard damage
+    if (activeWildShape && action.sourceLabel?.includes('Wild Shape')) {
+      setActiveTargetingAction(action);
+      if (matchedAsset) setActiveEquippedAsset(matchedAsset);
+      if (claimedToken) {
+        const tokenRadius = ((claimedToken.size || 1) * gridSize) / 2;
+        setAimOrigin({ x: claimedToken.x + tokenRadius, y: claimedToken.y + tokenRadius });
+      }
+      return;
+    }
+
     setActiveTargetingAction(action);
 
     if (matchedAsset) {
@@ -4210,6 +4263,166 @@ export default function PlayerView() {
       description: `Rolled ${rolledTotal} ${action.damageType || (action.isHeal ? 'HP' : 'damage')} (${rawFormula})`
     });
   }, [hudCharacterData, claimedToken, selectedDicePreset]);
+
+  // Wild Shape Transform & Revert Handlers for Druids (e.g. G'aiah)
+  const handleTransformWildShape = useCallback((form: WildShapeBeastForm) => {
+    if (!claimedToken) {
+      toast.error('No character token claimed on board.');
+      return;
+    }
+
+    const druidLevel = 6;
+    const wisModifier = 4;
+    const tempHpGranted = druidLevel * 3; // 18 Temp HP in 2024 Circle of the Moon
+    const calculatedAc = Math.max(form.baseAc, 13 + wisModifier); // 17 AC
+
+    // Save previous state for revert
+    const prevState: ActiveWildShapeState = activeWildShape || {
+      originalName: claimedToken.name || "G'aiah",
+      originalAvatarUrl: claimedToken.url || claimedToken.avatarUrl || getCharacterTokenUrl(claimedToken.name),
+      originalSize: claimedToken.size || 1,
+      originalAc: claimedToken.ac || 12,
+      originalSpeed: hudCharacterData?.speed || '35 ft.',
+      originalWalkSpeedFt: hudCharacterData?.walkSpeedFt || 35,
+      beastFormId: form.id,
+      beastName: form.name,
+      tempHpGranted,
+      startedAt: Date.now(),
+      durationHours: 3,
+      canRadiantStrikes: true
+    };
+    setActiveWildShape(prevState);
+
+    // 1. Play Druid Bloom / Nature Swirl SFX
+    soundCatalog.play('druid_bloom', 1.0);
+
+    // 2. Spawn Nature Transformation Effect on Token position
+    const tokenRadius = ((claimedToken.size || 1) * gridSize) / 2;
+    const burstEffect: VttEffectInstance = {
+      id: `eff_ws_${Date.now()}`,
+      name: 'Wild Shape Transformation',
+      label: 'Druid Wild Shape Bloom',
+      assetKey: 'druidcraft',
+      videoUrl: '/jb2a/Library/Generic/Nature/PlantGrowthRing02_01_Regular_GreenRed_500x500.webm',
+      thumbUrl: '/jb2a/Library/Generic/Nature/PlantGrowthRing02_01_Regular_GreenRed_Thumb.webp',
+      paradigm: 'emanation',
+      x: claimedToken.x + tokenRadius,
+      y: claimedToken.y + tokenRadius,
+      sizeFt: form.sizeMultiplier * 10,
+      rotation: 0,
+      opacity: 1.0,
+      blendMode: 'screen',
+      isPersistent: false,
+      durationMs: 3500,
+      soundKey: 'druid_bloom',
+      casterTokenId: claimedToken.id,
+      createdAt: Date.now()
+    };
+    setEffects(prev => [...prev, burstEffect]);
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('EFFECT_SPAWN', burstEffect);
+    }
+
+    // 3. Update Token on Map (Footprint Size, Avatar, Temp HP, AC)
+    const nextTempHp = Math.max(claimedToken.tempHp || 0, tempHpGranted);
+    handleUpdateToken(claimedToken.id, {
+      name: `${prevState.originalName} (${form.name})`,
+      url: form.avatarUrl,
+      avatarUrl: form.avatarUrl,
+      size: form.sizeMultiplier,
+      tempHp: nextTempHp,
+      ac: calculatedAc
+    } as any);
+
+    // 4. Ingest Beast Attacks & Traits into HUD
+    setHudCharacterData(prev => {
+      if (!prev) return prev;
+      const filteredAttacks = (prev.attacks || []).filter(a => !a.sourceLabel?.includes('Wild Shape'));
+      return {
+        ...prev,
+        name: `${prevState.originalName} (${form.name})`,
+        avatarUrl: form.avatarUrl,
+        ac: calculatedAc,
+        tempHp: nextTempHp,
+        speed: form.speed,
+        walkSpeedFt: form.walkSpeedFt,
+        wildShapeState: prevState,
+        attacks: [...form.attacks, ...filteredAttacks]
+      };
+    });
+
+    toast.success(`🌿 Wild Shape: Transformed into ${form.name}!`, {
+      description: `Gained +${tempHpGranted} Temp HP • AC ${calculatedAc} • Size: ${form.size} (${form.sizeMultiplier}x${form.sizeMultiplier}) • Speed: ${form.speed}`
+    });
+  }, [claimedToken, activeWildShape, hudCharacterData, gridSize, handleUpdateToken]);
+
+  const handleRevertWildShape = useCallback(() => {
+    if (!claimedToken || !activeWildShape) {
+      toast.info('No active Wild Shape form to revert.');
+      return;
+    }
+
+    soundCatalog.play('nature_rustle', 0.8);
+
+    // Spawn reverting swirl
+    const tokenRadius = ((claimedToken.size || 1) * gridSize) / 2;
+    const revertEffect: VttEffectInstance = {
+      id: `eff_revert_${Date.now()}`,
+      name: 'Revert Wild Shape',
+      label: 'Druid Shape Reversion',
+      assetKey: 'druidcraft',
+      videoUrl: '/jb2a/Library/Generic/Nature/PlantGrowthRing02_01_Regular_GreenRed_500x500.webm',
+      thumbUrl: '/jb2a/Library/Generic/Nature/PlantGrowthRing02_01_Regular_GreenRed_Thumb.webp',
+      paradigm: 'emanation',
+      x: claimedToken.x + tokenRadius,
+      y: claimedToken.y + tokenRadius,
+      sizeFt: 10,
+      rotation: 0,
+      opacity: 0.9,
+      blendMode: 'screen',
+      isPersistent: false,
+      durationMs: 3000,
+      soundKey: 'nature_rustle',
+      casterTokenId: claimedToken.id,
+      createdAt: Date.now()
+    };
+    setEffects(prev => [...prev, revertEffect]);
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('EFFECT_SPAWN', revertEffect);
+    }
+
+    // Revert token properties
+    handleUpdateToken(claimedToken.id, {
+      name: activeWildShape.originalName,
+      url: activeWildShape.originalAvatarUrl,
+      avatarUrl: activeWildShape.originalAvatarUrl,
+      size: activeWildShape.originalSize,
+      ac: activeWildShape.originalAc
+    } as any);
+
+    // Revert HUD data
+    setHudCharacterData(prev => {
+      if (!prev) return prev;
+      const cleanAttacks = (prev.attacks || []).filter(a => !a.sourceLabel?.includes('Wild Shape'));
+      return {
+        ...prev,
+        name: activeWildShape.originalName,
+        avatarUrl: activeWildShape.originalAvatarUrl,
+        ac: activeWildShape.originalAc,
+        speed: activeWildShape.originalSpeed,
+        walkSpeedFt: activeWildShape.originalWalkSpeedFt,
+        wildShapeState: null,
+        attacks: cleanAttacks
+      };
+    });
+
+    const revertedBeastName = activeWildShape.beastName;
+    setActiveWildShape(null);
+
+    toast.success(`Reverted from ${revertedBeastName} back to Wood Elf!`, {
+      description: `Normal stats, token size, and humanoid form restored.`
+    });
+  }, [claimedToken, activeWildShape, gridSize, handleUpdateToken]);
 
   const handleInspectEffect = useCallback((effect: VttEffectInstance) => {
     const cleanName = (effect.name || '').replace(/\s*\([^)]*\)\s*$/, '').trim();
@@ -7548,8 +7761,23 @@ export default function PlayerView() {
           onDispelEffect={handleDispelEffect}
           inspectedAuraRequest={inspectedAuraRequest}
           onClearInspectedAura={() => setInspectedAuraRequest(null)}
+          onOpenWildShape={() => setShowWildShapeModal(true)}
+          activeWildShape={activeWildShape}
         />
       )}
+
+      {/* ========================================================= */}
+      {/* Druid Wild Shape Modal (Circle of the Moon)               */}
+      {/* ========================================================= */}
+      <WildShapeModal
+        isOpen={showWildShapeModal}
+        onClose={() => setShowWildShapeModal(false)}
+        onSelectForm={handleTransformWildShape}
+        onRevertForm={handleRevertWildShape}
+        activeWildShape={activeWildShape}
+        druidLevel={6}
+        wisModifier={4}
+      />
 
       {/* ========================================================= */}
       {/* Player Station Mode Modal (Digital TV Table / Remote)     */}

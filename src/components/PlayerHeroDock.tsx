@@ -22,7 +22,8 @@ import {
   Footprints,
   Lock,
   Users,
-  GripHorizontal
+  GripHorizontal,
+  PawPrint
 } from 'lucide-react';
 import { HudCharacterData, HudActionItem, HudActionCategory, computeUpcastFormula } from '../types/hud';
 import { findJb2aAsset } from '../effects/db/jb2aRegistry';
@@ -53,6 +54,8 @@ interface PlayerHeroDockProps {
   onDispelEffect?: (effectId: string) => void;
   inspectedAuraRequest?: { action: HudActionItem; tick: number } | null;
   onClearInspectedAura?: () => void;
+  onOpenWildShape?: () => void;
+  activeWildShape?: any | null;
 }
 
 export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
@@ -78,7 +81,9 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
   activeEffects = [],
   onDispelEffect,
   inspectedAuraRequest,
-  onClearInspectedAura
+  onClearInspectedAura,
+  onOpenWildShape,
+  activeWildShape
 }) => {
   const currentTargetingAction = activeTargetingAction ?? selectedAction ?? (
     activeEquippedAsset ? {
@@ -1627,6 +1632,30 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
               >
                 <ExternalLink className="w-4 h-4" />
               </a>
+            )}
+
+            {/* Wild Shape Button (Visible for Druids like G'aiah) */}
+            {(characterData?.canWildShape ||
+              characterData?.name?.toLowerCase().includes("g'aiah") ||
+              characterData?.name?.toLowerCase().includes("gaiah") ||
+              characterData?.classLevel?.toLowerCase().includes("druid")) && onOpenWildShape && (
+              <button
+                type="button"
+                onClick={onOpenWildShape}
+                className={`px-3 py-1.5 rounded-xl font-mono text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
+                  activeWildShape
+                    ? 'bg-amber-500/20 border-amber-400 text-amber-200 shadow-[0_0_12px_rgba(245,158,11,0.3)] animate-pulse'
+                    : 'bg-emerald-950/80 hover:bg-emerald-900 border-emerald-500/60 text-emerald-300 hover:text-white shadow-sm'
+                }`}
+                title={
+                  activeWildShape
+                    ? `Wild Shape Active: Transformed as ${activeWildShape.beastName}. Click to View/Revert Form.`
+                    : "Wild Shape (Bonus Action): Transform into a CR <= 2 Beast Form (Circle of the Moon)"
+                }
+              >
+                <PawPrint className="w-3.5 h-3.5" />
+                <span>{activeWildShape ? activeWildShape.beastName : 'Wild Shape'}</span>
+              </button>
             )}
 
             {onSwitchCharacter && (

@@ -2103,6 +2103,10 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
     spellSlots,
     resources,
     hasBookOfExaltedDeeds,
+    canWildShape: Boolean(
+      (c.name && (c.name.toLowerCase().includes("g'aiah") || c.name.toLowerCase().includes("gaiah"))) ||
+      (Array.isArray(c.classes) && c.classes.some((cl: any) => (cl.definition?.name || '').toLowerCase().includes('druid')))
+    ),
     readonlyUrl: c.readonlyUrl || `https://www.dndbeyond.com/characters/${charId}`,
     lastUpdated: Date.now()
   };
