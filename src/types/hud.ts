@@ -14,6 +14,7 @@ export type HudActionSubCategory =
   | 'feat'
   | 'spell'
   | 'item'
+  | 'special'
   | 'standard';
 
 export interface HudActionUses {

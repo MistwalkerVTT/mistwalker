@@ -138,25 +138,37 @@ export function pxToGrid(x: number, y: number, gridSize: number): GridCoord {
 }
 
 /**
- * Chebyshev (5e standard 5ft diagonal) distance in feet between two footprints
+ * Chebyshev (5e standard 5ft diagonal) distance in feet between two footprints or coords
  */
 export function computeGridDistanceFt(
-  colA: number,
-  rowA: number,
-  sizeA: number,
-  colB: number,
-  rowB: number,
-  sizeB: number
+  colAOrCoordA: number | GridCoord,
+  rowAOrCoordB: number | GridCoord,
+  sizeA?: number,
+  colB?: number,
+  rowB?: number,
+  sizeB?: number
 ): number {
-  const minColA = colA;
-  const maxColA = colA + Math.max(1, sizeA) - 1;
-  const minRowA = rowA;
-  const maxRowA = rowA + Math.max(1, sizeA) - 1;
+  if (typeof colAOrCoordA === 'object' && typeof rowAOrCoordB === 'object') {
+    const dx = Math.abs(colAOrCoordA.col - rowAOrCoordB.col);
+    const dy = Math.abs(colAOrCoordA.row - rowAOrCoordB.row);
+    return Math.max(dx, dy) * 5;
+  }
+  const colA = typeof colAOrCoordA === 'number' ? colAOrCoordA : 0;
+  const rowA = typeof rowAOrCoordB === 'number' ? rowAOrCoordB : 0;
+  const sA = sizeA || 1;
+  const cB = colB || 0;
+  const rB = rowB || 0;
+  const sB = sizeB || 1;
 
-  const minColB = colB;
-  const maxColB = colB + Math.max(1, sizeB) - 1;
-  const minRowB = rowB;
-  const maxRowB = rowB + Math.max(1, sizeB) - 1;
+  const minColA = colA;
+  const maxColA = colA + Math.max(1, sA) - 1;
+  const minRowA = rowA;
+  const maxRowA = rowA + Math.max(1, sA) - 1;
+
+  const minColB = cB;
+  const maxColB = cB + Math.max(1, sB) - 1;
+  const minRowB = rB;
+  const maxRowB = rB + Math.max(1, sB) - 1;
 
   const dx = Math.max(0, minColA - maxColB, minColB - maxColA);
   const dy = Math.max(0, minRowA - maxRowB, minRowB - maxRowA);
@@ -215,14 +227,13 @@ function canTokenFitAt(
 }
 
 /**
- * Finds the A* path from actor's current cell to `(destCol, destRow)` and clamps to `maxSteps`
+ * Finds the complete A* path from actor's current cell to `(destCol, destRow)` without step clamping
  */
-export function findAStarPathSteps(
+export function findFullAStarPath(
   startCol: number,
   startRow: number,
   destCol: number,
   destRow: number,
-  maxSteps: number,
   walkGrid: PF.Grid
 ): GridCoord[] {
   if (startCol === destCol && startRow === destRow) return [];
@@ -233,14 +244,27 @@ export function findAStarPathSteps(
   });
 
   const cloned = walkGrid.clone();
-  // Ensure start is walkable
   cloned.setWalkableAt(startCol, startRow, true);
 
   const rawPath = finder.findPath(startCol, startRow, destCol, destRow, cloned);
   if (!rawPath || rawPath.length <= 1) return [];
 
-  // Slice off the starting cell [0] and clamp to maxSteps
-  return rawPath.slice(1, 1 + Math.max(0, maxSteps)).map(([c, r]) => ({ col: c, row: r }));
+  return rawPath.slice(1).map(([c, r]) => ({ col: c, row: r }));
+}
+
+/**
+ * Finds the A* path from actor's current cell to `(destCol, destRow)` and clamps to `maxSteps`
+ */
+export function findAStarPathSteps(
+  startCol: number,
+  startRow: number,
+  destCol: number,
+  destRow: number,
+  maxSteps: number,
+  walkGrid: PF.Grid
+): GridCoord[] {
+  const full = findFullAStarPath(startCol, startRow, destCol, destRow, walkGrid);
+  return full.slice(0, Math.max(0, maxSteps));
 }
 
 /**

@@ -11,6 +11,7 @@ import {
   computeGridDistanceFt,
   buildArenaWalkabilityGrid,
   findAStarPathSteps,
+  findFullAStarPath,
   estimateAverageDiceFormula
 } from '../arenaTacticalAi';
 import { decomposeMonsterMultiattack } from './arenaCombatMachine';
@@ -331,7 +332,7 @@ export class YukaArenaMonsterBrain {
         };
       }
 
-      // Find adjacent cell to target
+      // Find adjacent cell to target that is reachable within this turn's walk speed
       let bestEngageCell: GridCoord | null = null;
       let shortestStepsToReach = Infinity;
 
@@ -341,15 +342,16 @@ export class YukaArenaMonsterBrain {
           const candC = targetCell.col + dc;
           const candR = targetCell.row + dr;
           if (candC >= 0 && candC < cols && candR >= 0 && candR < rows) {
-            const steps = findAStarPathSteps(startCell.col, startCell.row, candC, candR, maxWalkSteps, walkGrid);
-            if (steps.length > 0 && steps.length < shortestStepsToReach) {
-              shortestStepsToReach = steps.length;
+            const fullPath = findFullAStarPath(startCell.col, startCell.row, candC, candR, walkGrid);
+            if (fullPath.length > 0 && fullPath.length < shortestStepsToReach) {
+              shortestStepsToReach = fullPath.length;
               bestEngageCell = { col: candC, row: candR };
             }
           }
         }
       }
 
+      // ONLY execute multiattack if the target is ACTUALLY reachable within this turn's walk speed!
       if (bestEngageCell && shortestStepsToReach <= maxWalkSteps) {
         const steps = findAStarPathSteps(startCell.col, startCell.row, bestEngageCell.col, bestEngageCell.row, maxWalkSteps, walkGrid);
         const waypoints = steps.map((s) => ({ x: s.col * gridSize, y: s.row * gridSize }));
@@ -374,20 +376,21 @@ export class YukaArenaMonsterBrain {
     }
 
     // =========================================================================
-    // CASE E: Standard Single Action Attack or Leveled Spell
+    // CASE E: Standard Single Action Attack, Ranged Spell, or Dash Advance
     // =========================================================================
-    const bestOffensive = hud.attacks[0] || hud.spells.find((s) => !s.isHeal) || hud.actions[0];
-    const reachFt = bestOffensive?.rangeFt || 5;
-
-    if (currentDistFt <= reachFt) {
+    // 1. Check if monster can attack immediately with any available weapon/spell
+    const immediateOffensive = [...hud.attacks, ...hud.spells, ...hud.actions].find(
+      (a) => !a.isHeal && currentDistFt <= (a.rangeFt || 5)
+    );
+    if (immediateOffensive) {
       return {
         type: 'melee_charge',
         desirability: 0.8,
-        reason: `🎯 Targeting ${targetEnemy.name} with ${bestOffensive?.name || 'Attack'}!`,
+        reason: `🎯 In range of ${targetEnemy.name} (${currentDistFt} ft)! Attacking with ${immediateOffensive.name}!`,
         targetId: targetEnemy.id,
         targetName: targetEnemy.name,
-        attacksQueue: [bestOffensive],
-        actionItem: bestOffensive,
+        attacksQueue: [immediateOffensive],
+        actionItem: immediateOffensive,
         bonusActionItem: null,
         plannedMovementFt: 0,
         useDisengage: false,
@@ -397,24 +400,52 @@ export class YukaArenaMonsterBrain {
       };
     }
 
-    // Out of range: Dash advance along A* path towards target
-    const steps = findAStarPathSteps(startCell.col, startCell.row, targetCell.col, targetCell.row, maxWalkSteps * 2, walkGrid);
-    const waypoints = steps.map((s) => ({ x: s.col * gridSize, y: s.row * gridSize }));
-    const finalCell = steps.length > 0 ? steps[steps.length - 1] : startCell;
+    // 2. Check if moving normal walk speed allows casting a ranged attack/spell
+    const rangedOffensive = [...hud.attacks, ...hud.spells].find(
+      (a) => !a.isHeal && (a.rangeFt || 5) > 5
+    );
+    if (rangedOffensive) {
+      const rFt = rangedOffensive.rangeFt || 60;
+      const walkSteps = findAStarPathSteps(startCell.col, startCell.row, targetCell.col, targetCell.row, maxWalkSteps, walkGrid);
+      const finalWalkCell = walkSteps.length > 0 ? walkSteps[walkSteps.length - 1] : startCell;
+      const distAfterWalkFt = computeGridDistanceFt(finalWalkCell, targetCell);
+      if (distAfterWalkFt <= rFt) {
+        return {
+          type: 'melee_charge',
+          desirability: 0.78,
+          reason: `🏹 Advancing ${walkSteps.length * 5} ft into range (${distAfterWalkFt} ft) and casting ${rangedOffensive.name} on ${targetEnemy.name}!`,
+          targetId: targetEnemy.id,
+          targetName: targetEnemy.name,
+          attacksQueue: [rangedOffensive],
+          actionItem: rangedOffensive,
+          bonusActionItem: null,
+          plannedMovementFt: walkSteps.length * 5,
+          useDisengage: false,
+          useDash: false,
+          finalPositionPx: { x: finalWalkCell.col * gridSize, y: finalWalkCell.row * gridSize },
+          pathWaypointsPx: walkSteps.map((s) => ({ x: s.col * gridSize, y: s.row * gridSize }))
+        };
+      }
+    }
+
+    // 3. Out of melee/ranged reach: Use Dash action to advance up to 2× speed towards target
+    const dashSteps = findAStarPathSteps(startCell.col, startCell.row, targetCell.col, targetCell.row, maxWalkSteps * 2, walkGrid);
+    const waypoints = dashSteps.map((s) => ({ x: s.col * gridSize, y: s.row * gridSize }));
+    const finalDashCell = dashSteps.length > 0 ? dashSteps[dashSteps.length - 1] : startCell;
 
     return {
       type: 'dash_advance',
       desirability: 0.65,
-      reason: `⏩ Out of range (${currentDistFt} ft). Using Dash to advance ${steps.length * 5} ft towards ${targetEnemy.name}!`,
+      reason: `⏩ Out of reach (${currentDistFt} ft). Using Dash action to advance ${dashSteps.length * 5} ft towards ${targetEnemy.name}!`,
       targetId: targetEnemy.id,
       targetName: targetEnemy.name,
       attacksQueue: [],
       actionItem: null,
       bonusActionItem: null,
-      plannedMovementFt: steps.length * 5,
+      plannedMovementFt: dashSteps.length * 5,
       useDisengage: false,
       useDash: true,
-      finalPositionPx: { x: finalCell.col * gridSize, y: finalCell.row * gridSize },
+      finalPositionPx: { x: finalDashCell.col * gridSize, y: finalDashCell.row * gridSize },
       pathWaypointsPx: waypoints
     };
   }

@@ -2591,160 +2591,200 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
     [combatants, addCombatLog, onTrigger3dDice, spawnArenaVisualEffect, arenaConfig.enforceWalls, arenaConfig.monsterDamageMultiplier, activeMapWalls]
   );
 
+  // Synchronized refs for async AI turn execution
+  const combatantsRef = useRef(combatants);
+  combatantsRef.current = combatants;
+
+  const executeCombatActionRef = useRef(executeCombatAction);
+  executeCombatActionRef.current = executeCombatAction;
+
+  const handleAdvanceTurnRef = useRef(handleAdvanceTurn);
+  handleAdvanceTurnRef.current = handleAdvanceTurn;
+
+  const addCombatLogRef = useRef(addCombatLog);
+  addCombatLogRef.current = addCombatLog;
+
+  const runningAiTurnKeyRef = useRef<string | null>(null);
+
   // ============================================================================
   // AUTONOMOUS TACTICAL NPC / AI TURN CONTROLLER
   // Powered by YUKA Goal-Oriented AI + XState 5e Action Economy + ROT.js
   // ============================================================================
   useEffect(() => {
-    if (phase !== 'battle' || !activeCombatant || !activeCombatant.isAI || winnerTeam) {
+    const currentActor = combatantsRef.current[turnIndex] || null;
+
+    if (phase !== 'battle' || !currentActor || !currentActor.isAI || winnerTeam) {
+      runningAiTurnKeyRef.current = null;
       setAiTacticalBanner(null);
       setAiPathPreviewPx([]);
       return;
     }
-    if (activeCombatant.currentHp <= 0) {
-      handleAdvanceTurn();
+
+    const currentTurnKey = `turn-${round}-${turnIndex}-${currentActor.id}`;
+    if (runningAiTurnKeyRef.current === currentTurnKey) {
+      return; // Already executing this AI turn
+    }
+    runningAiTurnKeyRef.current = currentTurnKey;
+
+    if (currentActor.currentHp <= 0) {
+      runningAiTurnKeyRef.current = null;
+      handleAdvanceTurnRef.current();
       return;
     }
 
     let cancelled = false;
     const timers: number[] = [];
 
+    // Safety Watchdog: If anything stalls for more than 7.5 seconds, force end turn so the match never hangs
+    const watchdogTimer = window.setTimeout(() => {
+      if (cancelled) return;
+      console.warn(`[AI Watchdog] Turn for ${currentActor.name} exceeded safety time limit. Force-advancing turn.`);
+      setAiTacticalBanner(null);
+      setAiPathPreviewPx([]);
+      runningAiTurnKeyRef.current = null;
+      handleAdvanceTurnRef.current();
+    }, 7500);
+    timers.push(watchdogTimer);
+
     const aiStartTimer = window.setTimeout(() => {
       if (cancelled) return;
 
-      const aiHud = buildArenaCombatantHudData(activeCombatant);
+      try {
+        const liveActor = combatantsRef.current.find((c) => c.id === currentActor.id) || currentActor;
+        const liveCombatants = combatantsRef.current;
+        const aiHud = buildArenaCombatantHudData(liveActor);
 
-      // 1. D&D 5e Monster Recharge Check (e.g., Breath Weapon Recharge 5-6)
-      const currentRechargeMap: Record<string, boolean> = { ...(activeCombatant.rechargeStatus || {}) };
-      const rechargeEligibleActions = aiHud.actions.filter(
-        (a) =>
-          a.description.toLowerCase().includes('recharge') ||
-          a.name.toLowerCase().includes('breath')
-      );
-      const rechargedAbilities: string[] = [];
+        // 1. D&D 5e Monster Recharge Check (e.g., Breath Weapon Recharge 5-6)
+        const currentRechargeMap: Record<string, boolean> = { ...(liveActor.rechargeStatus || {}) };
+        const rechargeEligibleActions = aiHud.actions.filter(
+          (a) =>
+            a.description.toLowerCase().includes('recharge') ||
+            a.name.toLowerCase().includes('breath')
+        );
+        const rechargedAbilities: string[] = [];
 
-      for (const ra of rechargeEligibleActions) {
-        if (currentRechargeMap[ra.name] === false) {
-          const notation =
-            ra.description.toLowerCase().includes('recharge 6') &&
-            !ra.description.toLowerCase().includes('5-6')
-              ? '6'
-              : '5-6';
-          const { recharged, roll } = roll5eRechargeCheck(notation);
-          if (recharged) {
-            currentRechargeMap[ra.name] = true;
-            rechargedAbilities.push(ra.name);
-            addCombatLog(
-              activeCombatant.name,
-              activeCombatant.team,
-              `🎲 Recharge Check (1d6 = ${roll}): ${ra.name} is RECHARGED!`
-            );
-            soundCatalog.play('spell_buff', 0.6);
+        for (const ra of rechargeEligibleActions) {
+          if (currentRechargeMap[ra.name] === false) {
+            const notation =
+              ra.description.toLowerCase().includes('recharge 6') &&
+              !ra.description.toLowerCase().includes('5-6')
+                ? '6'
+                : '5-6';
+            const { recharged, roll } = roll5eRechargeCheck(notation);
+            if (recharged) {
+              currentRechargeMap[ra.name] = true;
+              rechargedAbilities.push(ra.name);
+              addCombatLogRef.current(
+                liveActor.name,
+                liveActor.team,
+                `🎲 Recharge Check (1d6 = ${roll}): ${ra.name} is RECHARGED!`
+              );
+              soundCatalog.play('spell_buff', 0.6);
+            } else {
+              addCombatLogRef.current(
+                liveActor.name,
+                liveActor.team,
+                `🎲 Recharge Check (1d6 = ${roll}): ${ra.name} failed to recharge this round.`
+              );
+            }
           } else {
-            addCombatLog(
-              activeCombatant.name,
-              activeCombatant.team,
-              `🎲 Recharge Check (1d6 = ${roll}): ${ra.name} failed to recharge this round.`
-            );
+            rechargedAbilities.push(ra.name);
           }
-        } else {
-          rechargedAbilities.push(ra.name);
         }
-      }
 
-      // Update monster's recharge state if changed
-      setCombatants((prev) =>
-        prev.map((c) =>
-          c.id === activeCombatant.id ? { ...c, rechargeStatus: currentRechargeMap } : c
-        )
-      );
-
-      // 2. Plan Turn using YUKA Goal-Oriented AI Brain
-      const yukaBrain = new YukaArenaMonsterBrain();
-      const goal = yukaBrain.planTurn(
-        activeCombatant,
-        combatants,
-        aiHud,
-        ARENA_COLS,
-        ARENA_ROWS,
-        ARENA_GRID_SIZE,
-        rechargedAbilities
-      );
-
-      setAiTacticalBanner(goal.reason);
-
-      // 3. Build A* trail preview points
-      if (goal.pathWaypointsPx.length > 0) {
-        setAiPathPreviewPx([
-          { x: activeCombatant.x, y: activeCombatant.y },
-          ...goal.pathWaypointsPx
-        ]);
-      } else {
-        setAiPathPreviewPx([]);
-      }
-
-      if (goal.useDash) {
-        addCombatLog(
-          activeCombatant.name,
-          activeCombatant.team,
-          `used Dash (+${activeCombatant.speedFt} ft) along A* path!`,
-          goal.reason
+        // Update monster's recharge state if changed
+        setCombatants((prev) =>
+          prev.map((c) =>
+            c.id === liveActor.id ? { ...c, rechargeStatus: currentRechargeMap } : c
+          )
         );
-        soundCatalog.play('wind_whoosh', 0.65);
-      }
 
-      if (goal.useDisengage) {
-        addCombatLog(
-          activeCombatant.name,
-          activeCombatant.team,
-          `used Disengage to avoid opportunity attacks while repositioning!`,
-          goal.reason
+        // 2. Plan Turn using YUKA Goal-Oriented AI Brain
+        const yukaBrain = new YukaArenaMonsterBrain();
+        const goal = yukaBrain.planTurn(
+          liveActor,
+          liveCombatants,
+          aiHud,
+          ARENA_COLS,
+          ARENA_ROWS,
+          ARENA_GRID_SIZE,
+          rechargedAbilities
         );
-      }
 
-      // 4. Step-by-step grid movement animation (155ms per square)
-      const stepDelayMs = 155;
-      goal.pathWaypointsPx.forEach((wp, idx) => {
-        const t = window.setTimeout(() => {
-          if (cancelled) return;
-          setCombatants((prev) =>
-            prev.map((c) =>
-              c.id === activeCombatant.id
-                ? {
-                    ...c,
-                    x: wp.x,
-                    y: wp.y,
-                    remainingMoveFt: Math.max(0, c.speedFt - (idx + 1) * 5)
-                  }
-                : c
-            )
+        setAiTacticalBanner(goal.reason);
+
+        // 3. Build A* trail preview points
+        if (goal.pathWaypointsPx.length > 0) {
+          setAiPathPreviewPx([
+            { x: liveActor.x, y: liveActor.y },
+            ...goal.pathWaypointsPx
+          ]);
+        } else {
+          setAiPathPreviewPx([]);
+        }
+
+        if (goal.useDash) {
+          addCombatLogRef.current(
+            liveActor.name,
+            liveActor.team,
+            `used Dash (+${liveActor.speedFt} ft) along A* path!`,
+            goal.reason
           );
-        }, (idx + 1) * stepDelayMs);
-        timers.push(t);
-      });
+          soundCatalog.play('wind_whoosh', 0.65);
+        }
 
-      const totalMoveMs = goal.pathWaypointsPx.length * stepDelayMs + 320;
-      const updatedActor: ArenaCombatant = {
-        ...activeCombatant,
-        x: goal.finalPositionPx.x,
-        y: goal.finalPositionPx.y,
-        remainingMoveFt: Math.max(0, activeCombatant.speedFt - goal.plannedMovementFt)
-      };
+        if (goal.useDisengage) {
+          addCombatLogRef.current(
+            liveActor.name,
+            liveActor.team,
+            `used Disengage to avoid opportunity attacks while repositioning!`,
+            goal.reason
+          );
+        }
 
-      // 5. Execute Action Sequence after movement completes
-      const actionTimer = window.setTimeout(() => {
-        if (cancelled) return;
-        setAiPathPreviewPx([]);
+        // 4. Step-by-step grid movement animation (155ms per square)
+        const stepDelayMs = 155;
+        goal.pathWaypointsPx.forEach((wp, idx) => {
+          const t = window.setTimeout(() => {
+            if (cancelled) return;
+            setCombatants((prev) =>
+              prev.map((c) =>
+                c.id === liveActor.id
+                  ? {
+                      ...c,
+                      x: wp.x,
+                      y: wp.y,
+                      remainingMoveFt: Math.max(0, c.speedFt - (idx + 1) * 5)
+                    }
+                  : c
+              )
+            );
+          }, (idx + 1) * stepDelayMs);
+          timers.push(t);
+        });
 
-        // CASE A: Multiattack sequence with dynamic target splitting
-        if (goal.type === 'multiattack' && goal.attacksQueue.length > 0) {
-          let currentTargetId = goal.targetId;
+        const totalMoveMs = goal.pathWaypointsPx.length * stepDelayMs + 320;
+        const updatedActor: ArenaCombatant = {
+          ...liveActor,
+          x: goal.finalPositionPx.x,
+          y: goal.finalPositionPx.y,
+          remainingMoveFt: Math.max(0, liveActor.speedFt - goal.plannedMovementFt)
+        };
 
-          goal.attacksQueue.forEach((strikeAction, strikeIdx) => {
-            const strikeTimer = window.setTimeout(() => {
-              if (cancelled) return;
+        // 5. Execute Action Sequence after movement completes
+        const actionTimer = window.setTimeout(() => {
+          if (cancelled) return;
+          setAiPathPreviewPx([]);
 
-              setCombatants((currentCombatants) => {
+          // CASE A: Multiattack sequence with dynamic target splitting
+          if (goal.type === 'multiattack' && goal.attacksQueue.length > 0) {
+            let currentTargetId = goal.targetId;
+
+            goal.attacksQueue.forEach((strikeAction, strikeIdx) => {
+              const strikeTimer = window.setTimeout(() => {
+                if (cancelled) return;
+
+                const currentCombatants = combatantsRef.current;
                 const latestActor = currentCombatants.find((c) => c.id === updatedActor.id) || updatedActor;
                 let targetObj = currentCombatants.find(
                   (c) => c.id === currentTargetId && c.currentHp > 0
@@ -2763,7 +2803,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                   if (nextEnemy) {
                     currentTargetId = nextEnemy.id;
                     targetObj = nextEnemy;
-                    addCombatLog(
+                    addCombatLogRef.current(
                       latestActor.name,
                       latestActor.team,
                       `Target eliminated! Redirecting strike #${strikeIdx + 1} (${strikeAction.name}) to ${nextEnemy.name}!`
@@ -2772,60 +2812,65 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                 }
 
                 if (targetObj) {
-                  executeCombatAction(latestActor, targetObj, strikeAction);
+                  executeCombatActionRef.current(latestActor, targetObj, strikeAction);
                 }
-                return currentCombatants;
-              });
-            }, strikeIdx * 480);
-            timers.push(strikeTimer);
-          });
-        } else if (goal.type === 'breath_weapon' && goal.actionItem) {
-          // Signature recharge breath weapon used -> mark uncharged
-          currentRechargeMap[goal.actionItem.name] = false;
-          setCombatants((prev) =>
-            prev.map((c) =>
-              c.id === updatedActor.id ? { ...c, rechargeStatus: currentRechargeMap } : c
-            )
-          );
-          const targetObj = combatants.find((c) => c.id === goal.targetId && c.currentHp > 0);
-          if (targetObj) {
-            executeCombatAction(updatedActor, targetObj, goal.actionItem);
+              }, strikeIdx * 480);
+              timers.push(strikeTimer);
+            });
+          } else if (goal.type === 'breath_weapon' && goal.actionItem) {
+            currentRechargeMap[goal.actionItem.name] = false;
+            setCombatants((prev) =>
+              prev.map((c) =>
+                c.id === updatedActor.id ? { ...c, rechargeStatus: currentRechargeMap } : c
+              )
+            );
+            const targetObj = combatantsRef.current.find((c) => c.id === goal.targetId && c.currentHp > 0);
+            if (targetObj) {
+              executeCombatActionRef.current(updatedActor, targetObj, goal.actionItem);
+            }
+          } else if (goal.type === 'emergency_heal' && goal.actionItem) {
+            executeCombatActionRef.current(updatedActor, updatedActor, goal.actionItem);
+          } else if (goal.actionItem) {
+            const targetObj = combatantsRef.current.find((c) => c.id === goal.targetId && c.currentHp > 0);
+            if (targetObj) {
+              executeCombatActionRef.current(updatedActor, targetObj, goal.actionItem);
+            }
           }
-        } else if (goal.type === 'emergency_heal' && goal.actionItem) {
-          executeCombatAction(updatedActor, updatedActor, goal.actionItem);
-        } else if (goal.actionItem) {
-          const targetObj = combatants.find((c) => c.id === goal.targetId && c.currentHp > 0);
-          if (targetObj) {
-            executeCombatAction(updatedActor, targetObj, goal.actionItem);
+
+          // 6. Execute Bonus Action if planned
+          const strikeCount = goal.type === 'multiattack' ? Math.max(1, goal.attacksQueue.length) : 1;
+          const strikesTotalMs = strikeCount * 480;
+
+          if (goal.bonusActionItem) {
+            const bonusTimer = window.setTimeout(() => {
+              if (cancelled) return;
+              const bTarget =
+                goal.bonusActionItem?.isSelfAction || goal.bonusActionItem?.isHeal
+                  ? updatedActor
+                  : combatantsRef.current.find((c) => c.id === goal.targetId && c.currentHp > 0) || updatedActor;
+              executeCombatActionRef.current(updatedActor, bTarget, goal.bonusActionItem!);
+            }, strikesTotalMs + 200);
+            timers.push(bonusTimer);
           }
-        }
 
-        // 6. Execute Bonus Action if planned
-        const strikeCount = goal.type === 'multiattack' ? Math.max(1, goal.attacksQueue.length) : 1;
-        const strikesTotalMs = strikeCount * 480;
-
-        if (goal.bonusActionItem) {
-          const bonusTimer = window.setTimeout(() => {
+          const bonusDelay = goal.bonusActionItem ? 750 : 0;
+          const endTurnTimer = window.setTimeout(() => {
             if (cancelled) return;
-            const bTarget =
-              goal.bonusActionItem?.isSelfAction || goal.bonusActionItem?.isHeal
-                ? updatedActor
-                : combatants.find((c) => c.id === goal.targetId && c.currentHp > 0) || updatedActor;
-            executeCombatAction(updatedActor, bTarget, goal.bonusActionItem!);
-          }, strikesTotalMs + 200);
-          timers.push(bonusTimer);
-        }
+            setAiTacticalBanner(null);
+            runningAiTurnKeyRef.current = null;
+            handleAdvanceTurnRef.current();
+          }, strikesTotalMs + bonusDelay + 850);
+          timers.push(endTurnTimer);
+        }, totalMoveMs);
 
-        const bonusDelay = goal.bonusActionItem ? 750 : 0;
-        const endTurnTimer = window.setTimeout(() => {
-          if (cancelled) return;
-          setAiTacticalBanner(null);
-          handleAdvanceTurn();
-        }, strikesTotalMs + bonusDelay + 850);
-        timers.push(endTurnTimer);
-      }, totalMoveMs);
-
-      timers.push(actionTimer);
+        timers.push(actionTimer);
+      } catch (err) {
+        console.error('[AI Turn Controller] Encountered an error during AI turn:', err);
+        setAiTacticalBanner(null);
+        setAiPathPreviewPx([]);
+        runningAiTurnKeyRef.current = null;
+        handleAdvanceTurnRef.current();
+      }
     }, 650);
 
     timers.push(aiStartTimer);
@@ -2834,7 +2879,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       cancelled = true;
       timers.forEach((id) => window.clearTimeout(id));
     };
-  }, [phase, activeCombatant, turnIndex, winnerTeam, combatants, executeCombatAction, handleAdvanceTurn, addCombatLog]);
+  }, [phase, turnIndex, round, winnerTeam]);
 
   // Handle Player dragging or tapping their active token on the Arena grid
   const handleMoveArenaToken = useCallback(
