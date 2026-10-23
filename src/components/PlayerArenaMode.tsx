@@ -44,7 +44,7 @@ import { DEFAULT_CHARACTERS, getCharacterTokenUrl, isDdbMatch } from '../data/de
 import { DEFAULT_MONSTERS } from '../data/defaultMonsters';
 import { PRESET_BATTLEMAPS, PresetBattlemap } from '../data/presetBattlemaps';
 import { HudCharacterData, HudActionItem, computeUpcastFormula, evaluateDiceFormula } from '../types/hud';
-import { WallSegment, DoorState } from '../types';
+import { WallSegment, DoorState, AURA_PRESETS, AuraPreset } from '../types';
 import { PlayerHeroDock } from './PlayerHeroDock';
 import { GridLayer } from './GridLayer';
 import { buildDmMonsterHudData } from '../services/monsterHudService';
@@ -108,6 +108,12 @@ export interface ArenaCombatant {
   size: number; // grid squares (1 = Medium, 2 = Large, 3 = Huge)
   isFlying?: boolean;
   elevation?: number;
+  haloActive?: boolean;
+  auraRadius?: number;
+  auraColor?: string;
+  auraName?: string;
+  auraOpacity?: number;
+  videoUrl?: string;
   conditions: string[];
   actionUsed: boolean;
   bonusActionUsed: boolean;
@@ -576,6 +582,66 @@ function buildArenaCombatantHudData(
           jb2aAssetId: matchedFeat?.id
         });
       });
+    }
+
+    // Stavros / Cleric Life Domain Class Features & Signature Weapons
+    const isStavrosOrCleric =
+      combatant.name.toLowerCase().includes('stavros') ||
+      char.name.toLowerCase().includes('stavros') ||
+      (char.classLevel || '').toLowerCase().includes('cleric');
+
+    if (isStavrosOrCleric) {
+      if (!special.some((s) => s.id === 'special-blessed-healer' || s.name.toLowerCase().includes('blessed healer'))) {
+        special.push({
+          id: 'special-blessed-healer',
+          name: 'Blessed Healer',
+          category: 'special',
+          type: 'passive',
+          subCategory: 'class',
+          sourceLabel: 'PHB, pg. 60',
+          castingTime: '(No Action)',
+          isSelfAction: true,
+          description:
+            'When you cast a spell of 1st level or higher that restores HP to a creature other than you, you regain HP equal to 2 + the spell’s level.'
+        });
+      }
+      if (!special.some((s) => s.id === 'special-devotees-censer' || s.name.toLowerCase().includes('healing incense'))) {
+        special.push({
+          id: 'special-devotees-censer',
+          name: "Devotee's Censer: Healing Incense",
+          category: 'special',
+          type: 'bonus_action',
+          subCategory: 'item',
+          sourceLabel: "Rare Flail • Devotee's Censer",
+          castingTime: '1 Bonus Action',
+          rangeFt: 10,
+          duration: '1 minute',
+          damageFormula: '1d4',
+          damageType: 'healing',
+          isHeal: true,
+          isSelfAction: true,
+          uses: { available: 1, total: 1, resetType: 'Dawn' },
+          description:
+            'Speak the command word as a bonus action to cause the flail to emanate a thin cloud of incense out to 10 feet for 1 minute. At the start of each of your turns, you and any other creatures in the incense each regain 1d4 hit points.',
+          jb2aAssetId: 'healing_incense'
+        });
+      }
+      if (!special.some((s) => s.id === 'special-halo-glow' || s.name.toLowerCase().includes('divine halo'))) {
+        special.push({
+          id: 'special-halo-glow',
+          name: 'Illuminate Self: Divine Halo & Holy Glow',
+          category: 'special',
+          type: 'special',
+          subCategory: 'class',
+          sourceLabel: 'Divine Illumination • Book of Exalted Deeds',
+          castingTime: 'Special (Toggle Glow)',
+          rangeFt: 20,
+          isSelfAction: true,
+          description:
+            'Illuminate yourself with a radiant golden halo and holy light, shedding Bright Light in a 20-foot radius. Click to toggle your token halo on the battlemap.',
+          jb2aAssetId: 'bless'
+        });
+      }
     }
   } else if (mon) {
     const monHud = buildDmMonsterHudData(
@@ -1634,6 +1700,10 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
   const [tokenMenuPinned, setTokenMenuPinned] = useState<boolean>(false);
   const [tokenMenuPos, setTokenMenuPos] = useState<{ x: number; y: number } | null>(null);
 
+  // Manual HP & Spell Slot Overrides (synced with PlayerHeroDock +/- controls)
+  const manualHpOverrideRef = useRef<Record<string, number>>({});
+  const manualSpellSlotsRef = useRef<Record<string, Record<number, { available: number; total: number }>>>({});
+
   // Druid Circle of the Moon Wild Shape State
   const [showWildShapeModal, setShowWildShapeModal] = useState<boolean>(false);
   const [activeWildShape, setActiveWildShape] = useState<ActiveWildShapeState | null>(null);
@@ -2127,6 +2197,22 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           ? { ...c, bonusActionUsed: true }
           : { ...c, actionUsed: true };
 
+      // Deduct spell slot if this was a leveled spell cast by a human combatant
+      const spellSlotLevelToDeduct = action.castAtLevel ?? action.level ?? (action.spellSlotRequired ? Number(action.spellSlotRequired) : 0);
+      if (!actor.isAI && spellSlotLevelToDeduct >= 1 && (action.category === 'spells' || action.subCategory === 'spell')) {
+        const charKey = String(actor.sourceCharacter?.ddbCharacterId || actor.id || actor.name);
+        const existingSlots = manualSpellSlotsRef.current[charKey] || {};
+        const curSlot = activeHeroHudData?.spellSlots?.[spellSlotLevelToDeduct];
+        if (curSlot) {
+          const nextAvail = Math.max(0, curSlot.available - 1);
+          manualSpellSlotsRef.current[charKey] = {
+            ...existingSlots,
+            [spellSlotLevelToDeduct]: { available: nextAvail, total: curSlot.total }
+          };
+          toast.info(`Spent 1 Level ${spellSlotLevelToDeduct} spell slot (${nextAvail}/${curSlot.total} remaining)`);
+        }
+      }
+
       // 1. Special Self Utility Actions: Dash / Disengage / Dodge
       if (action.id === 'arena-dash' || lowerName.startsWith('dash')) {
         setCombatants((prev) =>
@@ -2144,6 +2230,86 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         setCombatants((prev) => prev.map((c) => (c.id === actor.id ? markActorUsed(c) : c)));
         addCombatLog(actor.name, actor.team, `used ${action.name}!`, action.description);
         soundCatalog.play('wind_whoosh', 0.65);
+        return true;
+      }
+
+      // 1b. Halo / Self-Illumination Glow Toggle
+      if (action.id === 'special-halo-glow' || lowerName.includes('divine halo') || lowerName.includes('halo & holy glow')) {
+        const nextHalo = !Boolean(actor.haloActive);
+        setCombatants((prev) =>
+          prev.map((c) => (c.id === actor.id ? { ...c, haloActive: nextHalo } : c))
+        );
+        soundCatalog.play('magic_chime', 0.85);
+        toast.success(
+          nextHalo
+            ? `✨ ${actor.name} is now illuminated with a radiant golden halo!`
+            : `${actor.name}'s halo illumination deactivated.`
+        );
+        addCombatLog(actor.name, actor.team, nextHalo ? 'activated Divine Halo illumination' : 'deactivated halo');
+        return true;
+      }
+
+      // 1c. Devotee's Censer: Healing Incense (10ft Green Smoke Aura + 1d4 Healing)
+      if (action.id === 'special-devotees-censer' || lowerName.includes('healing incense')) {
+        const incenseRoll = rollDiceFormula('1d4', false);
+        soundCatalog.play('radiant_heal', 0.85);
+
+        const incenseEffect: VttEffectInstance = {
+          id: `eff_censer_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          name: "Devotee's Censer: Healing Incense",
+          label: 'Healing Incense (10ft Green Smoke Aura)',
+          assetKey: 'healing_incense',
+          videoUrl: '/jb2a/Community/JAA/cloudKill.webm',
+          loopVideoUrl: '/jb2a/Community/JAA/cloudKill.webm',
+          paradigm: 'aura',
+          x: actorCx,
+          y: actorCy,
+          sizeFt: 20,
+          rotation: 0,
+          opacity: 0.85,
+          blendMode: 'screen',
+          isPersistent: true,
+          loop: true,
+          castTime: Date.now(),
+          durationMs: 600000,
+          soundKey: 'radiant_heal',
+          color: '#22c55e',
+          attachedTokenId: actor.id,
+          casterName: actor.name
+        };
+
+        setArenaEffects((prev) => [
+          ...prev.filter((f) => f.name !== "Devotee's Censer: Healing Incense" || f.attachedTokenId !== actor.id),
+          incenseEffect
+        ]);
+
+        const healedComps: string[] = [];
+        setCombatants((prev) =>
+          prev.map((c) => {
+            const cx = c.x + ((c.size || 1) * ARENA_GRID_SIZE) / 2;
+            const cy = c.y + ((c.size || 1) * ARENA_GRID_SIZE) / 2;
+            const d = Math.round((Math.hypot(cx - actorCx, cy - actorCy) / ARENA_GRID_SIZE) * 5);
+            if (d <= 10 && c.currentHp > 0) {
+              const newHp = Math.min(c.maxHp, c.currentHp + incenseRoll.total);
+              healedComps.push(c.name);
+              return {
+                ...c,
+                currentHp: newHp,
+                ...(c.id === actor.id ? markActorUsed(c) : {})
+              };
+            }
+            if (c.id === actor.id) return markActorUsed(c);
+            return c;
+          })
+        );
+
+        toast.success(`✨ Healing Incense emanates 10ft! Restored +${incenseRoll.total} HP to ${healedComps.join(', ')}.`);
+        addCombatLog(
+          actor.name,
+          actor.team,
+          `activated Devotee's Censer: Healing Incense (+${incenseRoll.total} HP to all within 10ft)!`,
+          incenseRoll.breakdown
+        );
         return true;
       }
 
@@ -2268,6 +2434,67 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         } else {
           toast.success(
             `💚 Restored +${healRoll.total} HP to ${healedNames.length > 1 ? healedNames.join(', ') : target.name}!`
+          );
+        }
+
+        // Blessed Healer Automatic Trigger (Life Domain Cleric / Stavros)
+        // "When you cast a spell of 1st level or higher that restores HP to a creature other than you, you regain HP equal to 2 + the spell's level."
+        const effectiveCastSpellLevel = action.castAtLevel ?? action.level ?? 0;
+        const isLeveledHealingSpell = Boolean(
+          effectiveCastSpellLevel >= 1 &&
+          (action.category === 'spells' || action.subCategory === 'spell' || (action.level ?? 0) >= 1) &&
+          (action.isHeal || isHeal)
+        );
+        const casterHasBlessedHealer = Boolean(
+          actor.name.toLowerCase().includes('stavros') ||
+          actor.sourceCharacter?.name?.toLowerCase().includes('stavros') ||
+          (actor.sourceCharacter?.classLevel || '').toLowerCase().includes('cleric')
+        );
+
+        if (casterHasBlessedHealer && isLeveledHealingSpell && target.id !== actor.id) {
+          const blessedHealAmount = 2 + effectiveCastSpellLevel;
+          setCombatants((prev) =>
+            prev.map((c) =>
+              c.id === actor.id
+                ? { ...c, currentHp: Math.min(c.maxHp, c.currentHp + blessedHealAmount) }
+                : c
+            )
+          );
+
+          // Green healing shimmer on caster for Blessed Healer
+          const bhEffect: VttEffectInstance = {
+            id: `eff_bh_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+            name: `Blessed Healer (+${blessedHealAmount} HP)`,
+            label: 'Blessed Healer Self-Restoration',
+            assetKey: 'cure_wounds',
+            videoUrl: '/jb2a/Library/1st_Level/Cure_Wounds/CureWounds_01_Green_400x400.webm',
+            thumbUrl: '/jb2a/Library/1st_Level/Cure_Wounds/CureWounds_01_Green_Thumb.webp',
+            paradigm: 'point',
+            x: actorCx,
+            y: actorCy,
+            sizeFt: 5,
+            rotation: 0,
+            opacity: 0.95,
+            blendMode: 'screen',
+            isPersistent: false,
+            loop: false,
+            castTime: Date.now(),
+            durationMs: 2800,
+            soundKey: 'radiant_heal',
+            color: '#4ade80',
+            attachedTokenId: actor.id,
+            casterName: actor.name
+          };
+          setArenaEffects((prev) => [...prev, bhEffect]);
+
+          toast.success(`✨ Blessed Healer: ${actor.name} regained +${blessedHealAmount} HP!`, {
+            description: `Cast a Level ${effectiveCastSpellLevel} healing spell on ${target.name} (2 + ${effectiveCastSpellLevel} = +${blessedHealAmount} HP to self).`
+          });
+          addCombatLog(
+            actor.name,
+            actor.team,
+            `regained +${blessedHealAmount} HP from Blessed Healer!`,
+            `2 + Level ${effectiveCastSpellLevel} spell`
           );
         }
 
@@ -2988,7 +3215,27 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
     if (!activeCombatant) return null;
     const ddbId = activeCombatant.sourceCharacter?.ddbCharacterId;
     const liveHud = ddbId ? liveDdbHudMap[String(ddbId)] : null;
-    return buildArenaCombatantHudData(activeCombatant, liveHud, activeWildShape, arenaConfig);
+    const baseHud = buildArenaCombatantHudData(activeCombatant, liveHud, activeWildShape, arenaConfig);
+
+    // Apply manual spell slot & HP overrides so dock steppers and spell expenditure reflect instantly
+    const charKey = String(ddbId || activeCombatant.id || activeCombatant.name);
+    let nextHud = { ...baseHud };
+    const savedSlots = manualSpellSlotsRef.current[charKey];
+    if (savedSlots && nextHud.spellSlots) {
+      const mergedSlots: Record<number, { level: number; total: number; used: number; available: number }> = { ...nextHud.spellSlots };
+      Object.entries(savedSlots).forEach(([lvlStr, slotOverride]) => {
+        const lvl = Number(lvlStr);
+        if (mergedSlots[lvl]) {
+          mergedSlots[lvl] = {
+            ...mergedSlots[lvl],
+            available: Math.max(0, Math.min(mergedSlots[lvl].total, slotOverride.available)),
+            used: mergedSlots[lvl].total - Math.max(0, Math.min(mergedSlots[lvl].total, slotOverride.available))
+          };
+        }
+      });
+      nextHud.spellSlots = mergedSlots;
+    }
+    return nextHud;
   }, [activeCombatant, liveDdbHudMap, activeWildShape, arenaConfig]);
 
   // Compute reachable 5ft grid cells for Tap-to-Move on Mobile & Desktop when it's a human player's turn
@@ -3053,6 +3300,37 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
     }
     return cells;
   }, [phase, activeCombatant, winnerTeam, activeTargetingAction, combatants, arenaConfig.enforceWalls, activeMapWalls]);
+
+  // Handle manual HP adjustments (+/-) from PlayerHeroDock
+  const handleAdjustHp = useCallback((delta: number) => {
+    if (!delta || !activeCombatant) return;
+    const nextHp = Math.max(0, Math.min(activeCombatant.maxHp, activeCombatant.currentHp + delta));
+    setCombatants((prev) =>
+      prev.map((c) => (c.id === activeCombatant.id ? { ...c, currentHp: nextHp } : c))
+    );
+    if (delta > 0) {
+      toast.success(`Healed +${delta} HP (${nextHp}/${activeCombatant.maxHp})`);
+    } else {
+      toast.info(`Adjusted HP ${delta} (${nextHp}/${activeCombatant.maxHp})`);
+    }
+  }, [activeCombatant]);
+
+  // Handle manual Spell Slot adjustments (+/-) from PlayerHeroDock
+  const handleAdjustSpellSlot = useCallback((level: number, delta: number) => {
+    if (!delta || !activeCombatant) return;
+    const charKey = String(activeCombatant.sourceCharacter?.ddbCharacterId || activeCombatant.id || activeCombatant.name);
+    const existingSlots = manualSpellSlotsRef.current[charKey] || {};
+    const curSlot = activeHeroHudData?.spellSlots?.[level];
+    if (curSlot) {
+      const nextAvail = Math.max(0, Math.min(curSlot.total, curSlot.available + delta));
+      manualSpellSlotsRef.current[charKey] = {
+        ...existingSlots,
+        [level]: { available: nextAvail, total: curSlot.total }
+      };
+      setCombatants((prev) => [...prev]); // trigger state update to re-render memo
+      toast.info(`Level ${level} slots: ${nextAvail}/${curSlot.total}`);
+    }
+  }, [activeCombatant, activeHeroHudData]);
 
   if (!isOpen) return null;
 
@@ -3781,6 +4059,15 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             );
             setStageScale(nextScale);
           }}
+          onMouseMove={(e) => {
+            if (!activeTargetingAction) return;
+            const stage = e.target.getStage();
+            const ptr = stage?.getPointerPosition();
+            if (!ptr) return;
+            const worldX = (ptr.x - stagePos.x) / stageScale;
+            const worldY = (ptr.y - stagePos.y) / stageScale;
+            setAimCurrent({ x: worldX, y: worldY });
+          }}
         >
           {/* Arena Map Floor */}
           <Layer
@@ -4283,6 +4570,8 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           activeWildShape={activeWildShape}
           onClearInspectedAura={() => setInspectedAuraRequest(null)}
           collapseRequestTick={hudCollapseTick}
+          onAdjustHp={handleAdjustHp}
+          onAdjustSpellSlot={handleAdjustSpellSlot}
         />
       )}
 
@@ -4568,6 +4857,30 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                     </div>
                   </div>
 
+                  {/* Special Effects: Glowing Halo (for Stavros or characters with Halo capability) */}
+                  {canTokenHaveHalo(currentToken.name) && (
+                    <div className="bg-zinc-900/90 border border-amber-400/30 rounded-xl p-2.5 flex items-center justify-between">
+                      <span className="text-[9px] text-amber-300 uppercase font-bold tracking-wider font-mono flex items-center gap-1">
+                        <span>✨</span> Special Effects
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextHalo = !currentToken.haloActive;
+                          handleUpdateCombatant(currentToken.id, { haloActive: nextHalo });
+                          toast.success(nextHalo ? `😇 Halo activated on ${currentToken.name}!` : `Halo deactivated.`);
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold font-mono transition-all cursor-pointer flex items-center gap-1 border ${
+                          currentToken.haloActive
+                            ? 'bg-amber-400/25 text-amber-100 border-amber-300/80 shadow-[0_0_12px_rgba(251,191,36,0.5)]'
+                            : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border-zinc-700'
+                        }`}
+                      >
+                        <span>{currentToken.haloActive ? '😇 Halo Active' : 'Activate Halo'}</span>
+                      </button>
+                    </div>
+                  )}
+
                   {/* Flight & Elevation */}
                   <div className="bg-zinc-900/90 border border-sky-500/30 rounded-xl p-2.5 space-y-2">
                     <div className="flex items-center justify-between">
@@ -4665,14 +4978,73 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
 
               {/* TAB 3: Auras & Halos */}
               {tokenMenuTab === 'auras' && (
-                <div className="space-y-2 text-center py-2">
-                  <span className="text-[10px] font-mono text-zinc-400">
-                    Active Effects & Auras
-                  </span>
-                  <div className="text-[9px] font-mono text-zinc-500">
-                    {arenaEffects.length > 0
-                      ? `${arenaEffects.length} active battlemap aura(s)`
-                      : 'No active magical auras on this combatant.'}
+                <div className="space-y-2 py-1">
+                  <div className="flex justify-between items-center px-1">
+                    <span className="text-[9px] font-mono text-zinc-400 uppercase font-bold tracking-tighter">
+                      Equip Token Aura
+                    </span>
+                    {(currentToken.auraRadius || 0) > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleUpdateCombatant(currentToken.id, {
+                            auraRadius: 0,
+                            auraColor: undefined,
+                            auraName: undefined,
+                            auraOpacity: undefined,
+                            videoUrl: undefined
+                          });
+                          toast.info(`Cleared aura from ${currentToken.name}`);
+                        }}
+                        className="text-[9px] font-mono text-rose-400 hover:text-rose-300 cursor-pointer font-bold"
+                      >
+                        Clear Aura
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 gap-1 max-h-56 overflow-y-auto pr-1">
+                    {AURA_PRESETS.map((preset: AuraPreset) => {
+                      const isActive =
+                        currentToken.auraName === preset.name ||
+                        (currentToken.auraRadius === preset.radius && currentToken.auraColor === preset.color);
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const rule = lookupDndRuleDetails(preset.name, 'aura');
+                            if (rule) setInspectedRule(rule);
+                          }}
+                          onClick={() => {
+                            handleUpdateCombatant(currentToken.id, {
+                              auraRadius: preset.radius,
+                              auraColor: preset.color,
+                              auraName: preset.name,
+                              auraOpacity: preset.opacity || 0.35,
+                              videoUrl: preset.videoUrl
+                            });
+                            toast.success(`Equipped ${preset.name} (${preset.radius}ft) on ${currentToken.name}`);
+                          }}
+                          className={`w-full p-1.5 rounded-lg text-left transition-all flex items-center justify-between border cursor-pointer ${
+                            isActive
+                              ? 'bg-indigo-600/30 border-indigo-400/80 text-white shadow-sm'
+                              : 'bg-zinc-900/60 hover:bg-zinc-900 border-zinc-800 text-zinc-300 hover:text-white'
+                          }`}
+                          title={`${preset.description || preset.name} • Right-click to inspect`}
+                        >
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span
+                              className="w-2.5 h-2.5 rounded-full shrink-0 border border-white/40"
+                              style={{ backgroundColor: preset.color }}
+                            />
+                            <span className="text-[10px] font-mono font-bold truncate">{preset.name}</span>
+                          </div>
+                          <span className="text-[9px] font-mono text-zinc-400 shrink-0 ml-1">{preset.radius}ft</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}

@@ -1897,13 +1897,15 @@ export default function PlayerView() {
     let nextHud = { ...baseHud };
     const savedSlots = manualSpellSlotsRef.current[charKey];
     if (savedSlots && nextHud.spellSlots) {
-      const mergedSlots: Record<number, { level: number; total: number; available: number }> = { ...nextHud.spellSlots };
+      const mergedSlots = { ...nextHud.spellSlots };
       Object.entries(savedSlots).forEach(([lvlStr, slotOverride]) => {
         const lvl = Number(lvlStr);
         if (mergedSlots[lvl]) {
+          const avail = Math.max(0, Math.min(mergedSlots[lvl].total, slotOverride.available));
           mergedSlots[lvl] = {
             ...mergedSlots[lvl],
-            available: Math.max(0, Math.min(mergedSlots[lvl].total, slotOverride.available))
+            available: avail,
+            used: Math.max(0, mergedSlots[lvl].total - avail)
           };
         }
       });
@@ -5460,7 +5462,7 @@ export default function PlayerView() {
         assetKey: 'cure_wounds',
         videoUrl: '/jb2a/Library/1st_Level/Cure_Wounds/CureWounds_01_Green_400x400.webm',
         thumbUrl: '/jb2a/Library/1st_Level/Cure_Wounds/CureWounds_01_Green_Thumb.webp',
-        paradigm: 'token_hit',
+        paradigm: 'point',
         x: casterCenter.x,
         y: casterCenter.y,
         sizeFt: 5,
