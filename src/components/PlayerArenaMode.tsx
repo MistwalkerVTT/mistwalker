@@ -29,8 +29,13 @@ import {
   ZoomIn,
   ZoomOut,
   Maximize2,
-  ScrollText
+  ScrollText,
+  PawPrint,
+  User,
+  GripHorizontal
 } from 'lucide-react';
+import { WildShapeModal } from './WildShapeModal';
+import { WildShapeBeastForm, ActiveWildShapeState, GAIAH_WILD_SHAPE_FORMS } from '../types/wildShape';
 import { toast } from 'sonner';
 import { Character } from '../types/character';
 import { Monster } from '../types/monster';
@@ -200,7 +205,8 @@ function rollDiceFormula(formula: string | undefined, isCrit = false): {
  */
 function buildArenaCombatantHudData(
   combatant: ArenaCombatant,
-  liveDdbHud?: HudCharacterData | null
+  liveDdbHud?: HudCharacterData | null,
+  activeWildShape?: ActiveWildShapeState | null
 ): HudCharacterData {
   const char = combatant.sourceCharacter;
   const mon = combatant.sourceMonster;
@@ -212,6 +218,14 @@ function buildArenaCombatantHudData(
   const reactions: HudActionItem[] = [];
   const items: HudActionItem[] = [];
   const special: HudActionItem[] = [];
+
+  // Ingest Wild Shape Beast Attacks if combatant is currently transformed
+  if (activeWildShape) {
+    const beastForm = GAIAH_WILD_SHAPE_FORMS.find((f) => f.id === activeWildShape.beastFormId);
+    if (beastForm && Array.isArray(beastForm.attacks)) {
+      attacks.push(...beastForm.attacks);
+    }
+  }
 
   const totalLevel =
     liveDdbHud?.totalLevel ||
@@ -604,7 +618,7 @@ function buildArenaCombatantHudData(
           damageFormula: sp.damageFormula || rule?.damageFormula,
           damageType: sp.damageType || rule?.damageType || 'force',
           isHeal: Boolean(sp.isHeal || rule?.isHeal),
-          isAttack: Boolean(sp.isAttack || rule?.isAttack),
+          isAttack: Boolean((sp as any).isAttack || rule?.isAttack),
           isSelfAction: Boolean(sp.isSelfAction || rule?.isSelfAction),
           rangeFt: sp.rangeFt || 60,
           description: rule?.description || sp.description,
@@ -762,6 +776,7 @@ function buildArenaCombatantHudData(
         classLower.includes('druid')
     ),
     hasBookOfExaltedDeeds,
+    wildShapeState: activeWildShape || null,
     readonlyUrl: char?.ddbCharacterId ? `https://www.dndbeyond.com/characters/${char.ddbCharacterId}` : '',
     lastUpdated: Date.now()
   };
@@ -848,7 +863,8 @@ const ArenaTokenNode: React.FC<{
   canDrag: boolean;
   onMove: (id: string, newX: number, newY: number) => void;
   onClickToken: (combatant: ArenaCombatant) => void;
-}> = ({ combatant, isCurrentTurn, isTargetable, canDrag, onMove, onClickToken }) => {
+  onContextMenu?: (combatant: ArenaCombatant, clientX: number, clientY: number) => void;
+}> = ({ combatant, isCurrentTurn, isTargetable, canDrag, onMove, onClickToken, onContextMenu }) => {
   const [img] = useImage(combatant.avatarUrl || '');
   const pixelSize = (combatant.size || 1) * ARENA_GRID_SIZE;
   const radius = pixelSize / 2;
@@ -914,6 +930,13 @@ const ArenaTokenNode: React.FC<{
       onTap={(e) => {
         e.cancelBubble = true;
         onClickToken(combatant);
+      }}
+      onContextMenu={(e) => {
+        e.evt.preventDefault();
+        e.cancelBubble = true;
+        if (onContextMenu) {
+          onContextMenu(combatant, e.evt.clientX, e.evt.clientY);
+        }
       }}
     >
       {/* Ground Footprint when Flying */}
@@ -1455,10 +1478,197 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
 
   const [liveDdbHudMap, setLiveDdbHudMap] = useState<Record<string, HudCharacterData>>({});
   const [inspectedAuraRequest, setInspectedAuraRequest] = useState<{
-    effect: VttEffectInstance;
-    nonce: number;
+    action: HudActionItem;
+    tick: number;
   } | null>(null);
   const [inspectedRule, setInspectedRule] = useState<DndRuleEntry | null>(null);
+
+  // Right-Click Context Menu State on Arena Combatants
+  const [activeTokenMenu, setActiveTokenMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [tokenMenuTab, setTokenMenuTab] = useState<'stats' | 'conditions' | 'auras'>('stats');
+  const [tokenMenuPinned, setTokenMenuPinned] = useState<boolean>(false);
+  const [tokenMenuPos, setTokenMenuPos] = useState<{ x: number; y: number } | null>(null);
+
+  // Druid Circle of the Moon Wild Shape State
+  const [showWildShapeModal, setShowWildShapeModal] = useState<boolean>(false);
+  const [activeWildShape, setActiveWildShape] = useState<ActiveWildShapeState | null>(null);
+
+  // Handle Dragging Pinned Token Context Menu
+  const startTokenMenuDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest('button, input, select, textarea, a, [data-no-drag]')) return;
+    const menuEl = document.getElementById('arena-token-context-menu');
+    if (!menuEl) return;
+    const rect = menuEl.getBoundingClientRect();
+    const offX = e.clientX - rect.left;
+    const offY = e.clientY - rect.top;
+    const handleEl = e.currentTarget;
+    try { handleEl.setPointerCapture(e.pointerId); } catch {}
+    const onMove = (ev: PointerEvent) => {
+      const maxX = Math.max(0, window.innerWidth - rect.width);
+      const maxY = Math.max(0, window.innerHeight - 48);
+      setTokenMenuPos({
+        x: Math.max(0, Math.min(ev.clientX - offX, maxX)),
+        y: Math.max(0, Math.min(ev.clientY - offY, maxY))
+      });
+    };
+    const onUp = () => {
+      handleEl.removeEventListener('pointermove', onMove);
+      handleEl.removeEventListener('pointerup', onUp);
+      handleEl.removeEventListener('pointercancel', onUp);
+    };
+    handleEl.addEventListener('pointermove', onMove);
+    handleEl.addEventListener('pointerup', onUp);
+    handleEl.addEventListener('pointercancel', onUp);
+  }, []);
+
+  // Update Combatant Properties (HP, AC, Conditions, etc.)
+  const handleUpdateCombatant = useCallback((id: string, updates: Partial<ArenaCombatant>) => {
+    setCombatants((prev) => prev.map((c) => (c.id === id ? { ...c, ...updates } : c)));
+  }, []);
+
+  // Wild Shape Transform & Revert Handlers for Druids
+  const handleTransformWildShape = useCallback(
+    (form: WildShapeBeastForm) => {
+      const targetId = activeCombatant?.id || activeTokenMenu?.id;
+      const targetCombatant = combatants.find((c) => c.id === targetId) || activeCombatant;
+      if (!targetCombatant) return;
+
+      const calculatedTempHp = 6 * 3; // 2024 Circle of the Moon: 3 x Druid Level (6) = 18 Temp HP
+      const calculatedAc = Math.max(form.baseAc, 13 + 4); // 13 + WIS (+4) = 17 AC
+      const prevState: ActiveWildShapeState = activeWildShape || {
+        originalName: targetCombatant.name,
+        originalAvatarUrl: targetCombatant.avatarUrl,
+        originalAc: targetCombatant.ac,
+        originalSpeed: form.speed,
+        originalWalkSpeedFt: form.walkSpeedFt,
+        originalSize: targetCombatant.size || 1,
+        beastFormId: form.id,
+        beastName: form.name,
+        tempHpGranted: calculatedTempHp,
+        startedAt: Date.now(),
+        durationHours: 3,
+        canRadiantStrikes: true
+      };
+      setActiveWildShape(prevState);
+      setShowWildShapeModal(false);
+
+      soundCatalog.play('druid_bloom', 1.0);
+
+      // Spawn Nature Transformation Effect on Combatant
+      const tokenRadius = ((targetCombatant.size || 1) * ARENA_GRID_SIZE) / 2;
+      const burstEffect: VttEffectInstance = {
+        id: `arena_eff_ws_${Date.now()}`,
+        name: 'Wild Shape Transformation',
+        label: 'Druid Wild Shape Bloom',
+        assetKey: 'druidcraft',
+        videoUrl: '/jb2a/Library/Generic/Nature/PlantGrowthRing02_01_Regular_GreenRed_500x500.webm',
+        thumbUrl: '/jb2a/Library/Generic/Nature/PlantGrowthRing02_01_Regular_GreenRed_Thumb.webp',
+        paradigm: 'aura',
+        x: targetCombatant.x + tokenRadius,
+        y: targetCombatant.y + tokenRadius,
+        sizeFt: form.sizeMultiplier * 10,
+        rotation: 0,
+        opacity: 1.0,
+        blendMode: 'screen',
+        isPersistent: false,
+      loop: false,
+      durationMs: 3500,
+        soundKey: 'druid_bloom',
+                castTime: Date.now()
+      };
+      setArenaEffects((prev) => [...prev, burstEffect]);
+
+      // Update Combatant on Battlemap
+      setCombatants((prev) =>
+        prev.map((c) => {
+          if (c.id === targetCombatant.id) {
+            return {
+              ...c,
+              name: `${prevState.originalName} (${form.name})`,
+              avatarUrl: form.avatarUrl,
+              size: form.sizeMultiplier,
+              tempHp: Math.max(c.tempHp || 0, calculatedTempHp),
+              ac: calculatedAc,
+              speedFt: form.walkSpeedFt
+            };
+          }
+          return c;
+        })
+      );
+
+      addCombatLog(
+        targetCombatant.name,
+        targetCombatant.team,
+        `🌿 Wild Shape: Transformed into ${form.name}!`,
+        `AC: ${calculatedAc} • +${calculatedTempHp} Temp HP • Size: ${form.size} (${form.sizeMultiplier}x${form.sizeMultiplier}) • Speed: ${form.speed}`
+      );
+      toast.success(`🌿 Wild Shape: Transformed into ${form.name}!`, {
+        description: `AC ${calculatedAc} • +${calculatedTempHp} Temp HP • Speed ${form.speed}`
+      });
+    },
+    [activeCombatant, activeTokenMenu, combatants, activeWildShape, addCombatLog]
+  );
+
+  const handleRevertWildShape = useCallback(() => {
+    if (!activeWildShape) {
+      toast.info('No active Wild Shape form to revert.');
+      return;
+    }
+    const targetId = activeCombatant?.id || activeTokenMenu?.id;
+    const targetCombatant = combatants.find((c) => c.id === targetId) || activeCombatant;
+    if (!targetCombatant) return;
+
+    soundCatalog.play('nature_rustle', 0.8);
+
+    const tokenRadius = ((targetCombatant.size || 1) * ARENA_GRID_SIZE) / 2;
+    const revertEffect: VttEffectInstance = {
+      id: `arena_eff_revert_${Date.now()}`,
+      name: 'Revert Wild Shape',
+      label: 'Druid Shape Reversion',
+      assetKey: 'druidcraft',
+      videoUrl: '/jb2a/Library/Generic/Nature/PlantGrowthRing02_01_Regular_GreenRed_500x500.webm',
+      thumbUrl: '/jb2a/Library/Generic/Nature/PlantGrowthRing02_01_Regular_GreenRed_Thumb.webp',
+      paradigm: 'aura',
+      x: targetCombatant.x + tokenRadius,
+      y: targetCombatant.y + tokenRadius,
+      sizeFt: 10,
+      rotation: 0,
+      opacity: 0.9,
+      blendMode: 'screen',
+      isPersistent: false,
+      loop: false,
+      durationMs: 3000,
+      soundKey: 'nature_rustle',
+            castTime: Date.now()
+    };
+    setArenaEffects((prev) => [...prev, revertEffect]);
+
+    setCombatants((prev) =>
+      prev.map((c) => {
+        if (c.id === targetCombatant.id) {
+          return {
+            ...c,
+            name: activeWildShape.originalName,
+            avatarUrl: activeWildShape.originalAvatarUrl,
+            size: activeWildShape.originalSize,
+            ac: activeWildShape.originalAc,
+            speedFt: activeWildShape.originalWalkSpeedFt
+          };
+        }
+        return c;
+      })
+    );
+
+    const revertedBeastName = activeWildShape.beastName;
+    setActiveWildShape(null);
+
+    addCombatLog(
+      targetCombatant.name,
+      targetCombatant.team,
+      `Reverted from ${revertedBeastName} back to Wood Elf humanoid form.`
+    );
+    toast.success(`Reverted from ${revertedBeastName} back to Wood Elf!`);
+  }, [activeWildShape, activeCombatant, activeTokenMenu, combatants, addCombatLog]);
 
   // Fetch live D&D Beyond HUD data for the active combatant if they have a ddbCharacterId
   useEffect(() => {
@@ -1507,7 +1717,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       const lowerName = action.name.toLowerCase();
       const auraRule = lookupDndRuleDetails(action.name, 'aura');
       const isPersistentAura = Boolean(
-        asset.defaultPersistent ||
+        asset.isPersistent ||
           lowerName.includes('spirit guardians') ||
           lowerName.includes('aura of') ||
           lowerName.includes('holy aura') ||
@@ -1537,7 +1747,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       const isDirectional =
         asset.paradigm === 'cone' ||
         asset.paradigm === 'line' ||
-        asset.paradigm === 'beam' ||
+        (asset.paradigm as any) === 'beam' ||
         asset.paradigm === 'projectile';
 
       const sizeFt =
@@ -1553,7 +1763,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         name: action.name,
         videoUrl: asset.webm,
         loopVideoUrl: asset.loopWebm || (isPersistentAura ? asset.webm : undefined),
-        paradigm: isPersistentAura && attachToTokenId ? 'token_aura' : asset.paradigm,
+        paradigm: isPersistentAura && attachToTokenId ? 'aura' : asset.paradigm,
         x: isProjectile ? casterCenter.x : targetCenter.x,
         y: isProjectile ? casterCenter.y : targetCenter.y,
         originX: casterCenter.x,
@@ -1561,32 +1771,30 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         targetX: targetCenter.x,
         targetY: targetCenter.y,
         sizeFt,
-        widthFt: asset.defaultWidthFt,
-        rotation: isDirectional ? angleDeg : 0,
+                rotation: isDirectional ? angleDeg : 0,
         opacity: 1,
         blendMode: asset.blendMode || 'screen',
         isPersistent: isPersistentAura,
-        durationMs: isPersistentAura ? 600000 : asset.defaultDurationMs || 1800,
+        durationMs: isPersistentAura ? 600000 : (asset as any).defaultDurationMs || 1800,
         loop: isPersistentAura,
         castTime: Date.now(),
         soundKey: asset.soundKey,
         casterName: caster.name,
         attachedTokenId: attachToTokenId,
         castAtLevel: action.castAtLevel ?? action.level,
-        baseSpellLevel: action.baseSpellLevel ?? action.level,
+        baseLevel: (action as any).baseSpellLevel ?? action.level,
         damageFormula: action.damageFormula,
         damageType: action.damageType,
         saveDc: action.saveDc,
         saveAbility: action.saveAbility,
-        isHeal: action.isHeal,
-        actionSnapshot: action,
+                actionSnapshot: action,
         trajectory: isProjectile
           ? {
-              currentX: casterCenter.x,
-              currentY: casterCenter.y,
-              targetX: targetCenter.x,
-              targetY: targetCenter.y,
-              speedPxPerSec: 950
+              startX: casterCenter.x,
+              startY: casterCenter.y,
+              endX: targetCenter.x,
+              endY: targetCenter.y,
+              speedPxSec: 950
             }
           : undefined
       };
@@ -2387,8 +2595,8 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
     if (!activeCombatant) return null;
     const ddbId = activeCombatant.sourceCharacter?.ddbCharacterId;
     const liveHud = ddbId ? liveDdbHudMap[String(ddbId)] : null;
-    return buildArenaCombatantHudData(activeCombatant, liveHud);
-  }, [activeCombatant, liveDdbHudMap]);
+    return buildArenaCombatantHudData(activeCombatant, liveHud, activeWildShape);
+  }, [activeCombatant, liveDdbHudMap, activeWildShape]);
 
   // Compute reachable 5ft grid cells for Tap-to-Move on Mobile & Desktop when it's a human player's turn
   const reachableMoveSquares = useMemo<Array<{ col: number; row: number }>>(() => {
@@ -3285,6 +3493,9 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                   isTargetable={isTargetable}
                   canDrag={canDrag}
                   onMove={handleMoveArenaToken}
+                  onContextMenu={(clicked, clientX, clientY) => {
+                    setActiveTokenMenu({ id: clicked.id, x: clientX, y: clientY });
+                  }}
                   onClickToken={(clicked) => {
                     if (!activeCombatant || activeCombatant.isAI) return;
                     if (activeTargetingAction) {
@@ -3312,7 +3523,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           aimCurrent={null}
           onEffectComplete={(id) => setArenaEffects((prev) => prev.filter((f) => f.id !== id))}
           onDispelEffect={(id) => setArenaEffects((prev) => prev.filter((f) => f.id !== id))}
-          onInspectEffect={(eff) => setInspectedAuraRequest({ effect: eff, nonce: Date.now() })}
+          onInspectEffect={(eff) => setInspectedAuraRequest(eff.actionSnapshot ? { action: eff.actionSnapshot, tick: Date.now() } : null)}
         />
       </div>
 
@@ -3435,37 +3646,411 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           onSwitchCharacter={() => setPhase('lobby')}
           activeEffects={arenaEffects}
           inspectedAuraRequest={inspectedAuraRequest}
+          onOpenWildShape={() => setShowWildShapeModal(true)}
+          onRevertWildShape={handleRevertWildShape}
+          activeWildShape={activeWildShape}
         />
       )}
 
+      {/* Druid Wild Shape Transformation Modal */}
+      <WildShapeModal
+        isOpen={showWildShapeModal}
+        onClose={() => setShowWildShapeModal(false)}
+        onSelectForm={handleTransformWildShape}
+        onRevertForm={handleRevertWildShape}
+        activeWildShape={activeWildShape}
+        druidLevel={6}
+        wisModifier={4}
+      />
+
+      {/* Right-Click Token Context Menu for Arena Combatants */}
+      {activeTokenMenu && (() => {
+        const currentToken = combatants.find((c) => c.id === activeTokenMenu.id);
+        if (!currentToken) return null;
+
+        const isDruid =
+          (currentToken.sourceCharacter?.classLevel || currentToken.classOrCr || '').toLowerCase().includes('druid') ||
+          currentToken.name.toLowerCase().includes("g'aiah") ||
+          currentToken.name.toLowerCase().includes('gaiah');
+
+        const menuX = tokenMenuPos ? tokenMenuPos.x : Math.max(16, Math.min(activeTokenMenu.x, window.innerWidth - 300));
+        const menuY = tokenMenuPos ? tokenMenuPos.y : Math.max(16, Math.min(activeTokenMenu.y, window.innerHeight - 440));
+
+        const DND_CONDITIONS = [
+          'Blinded', 'Charmed', 'Deafened', 'Frightened', 'Grappled',
+          'Incapacitated', 'Invisible', 'Paralyzed', 'Petrified', 'Poisoned',
+          'Prone', 'Restrained', 'Stunned', 'Unconscious', 'Exhaustion'
+        ];
+
+        return (
+          <>
+            {/* Backdrop to dismiss menu when clicking outside (unless pinned) */}
+            {!tokenMenuPinned && (
+              <div
+                className="fixed inset-0 z-[299]"
+                onClick={() => setActiveTokenMenu(null)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setActiveTokenMenu(null);
+                }}
+              />
+            )}
+
+            <div
+              id="arena-token-context-menu"
+              onPointerDown={startTokenMenuDrag}
+              className={`fixed z-[300] bg-zinc-950/95 backdrop-blur-xl border rounded-xl shadow-2xl p-3.5 w-72 animate-in fade-in zoom-in-95 select-none cursor-move ${
+                tokenMenuPinned ? 'border-amber-500/70 shadow-[0_0_25px_rgba(245,158,11,0.2)]' : 'border-zinc-700/80'
+              }`}
+              style={{ left: menuX, top: menuY }}
+              onClick={(e) => e.stopPropagation()}
+              onContextMenu={(e) => e.preventDefault()}
+            >
+              {/* Header / Drag Handle */}
+              <div
+                className="flex justify-between items-center mb-2.5 pb-2 border-b border-zinc-800 cursor-move touch-none"
+                title="Click and drag to move menu"
+              >
+                <div className="flex items-center gap-2 overflow-hidden">
+                  <div className="w-5 h-5 rounded-full overflow-hidden border border-zinc-700 shrink-0 bg-zinc-800">
+                    <img src={currentToken.avatarUrl} alt={currentToken.name} className="w-full h-full object-cover" />
+                  </div>
+                  <span className="text-[10px] font-bold text-zinc-300 uppercase tracking-widest truncate font-mono">
+                    {currentToken.name}
+                  </span>
+                  <GripHorizontal className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!tokenMenuPinned && !tokenMenuPos) {
+                        setTokenMenuPos({ x: menuX, y: menuY });
+                      }
+                      setTokenMenuPinned((p) => !p);
+                    }}
+                    className={`text-xs leading-none p-0.5 cursor-pointer ${
+                      tokenMenuPinned ? 'text-amber-400' : 'text-zinc-500 hover:text-white'
+                    }`}
+                    title={tokenMenuPinned ? 'Unpin menu' : 'Pin menu open'}
+                  >
+                    {tokenMenuPinned ? '📌' : '📍'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTokenMenuPinned(false);
+                      setActiveTokenMenu(null);
+                      setTokenMenuPos(null);
+                    }}
+                    className="text-zinc-500 hover:text-white text-base leading-none p-0.5 cursor-pointer"
+                    title="Close"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+
+              {/* Tab Navigation */}
+              <div className="flex items-center gap-1 mb-2.5 bg-zinc-900/90 p-1 rounded-lg border border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setTokenMenuTab('stats')}
+                  className={`flex-1 py-1 rounded-md text-[10px] font-bold font-mono transition-all cursor-pointer ${
+                    tokenMenuTab === 'stats'
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-xs'
+                      : 'text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  Stats
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTokenMenuTab('conditions')}
+                  className={`flex-1 py-1 rounded-md text-[10px] font-bold font-mono transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                    tokenMenuTab === 'conditions'
+                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-xs'
+                      : 'text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  Conditions
+                  {(currentToken.conditions?.length || 0) > 0 && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse shrink-0" />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTokenMenuTab('auras')}
+                  className={`flex-1 py-1 rounded-md text-[10px] font-bold font-mono transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                    tokenMenuTab === 'auras'
+                      ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 shadow-xs'
+                      : 'text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  <Sparkles className="w-2.5 h-2.5 text-indigo-400" />
+                  <span>Auras</span>
+                </button>
+              </div>
+
+              {/* TAB 1: Stats & Info */}
+              {tokenMenuTab === 'stats' && (
+                <div className="space-y-2.5">
+                  {/* Druid Wild Shape Button if Druid */}
+                  {isDruid && (
+                    <div className="bg-emerald-950/40 border border-emerald-500/40 rounded-xl p-2.5 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-emerald-300 uppercase font-bold tracking-wider font-mono flex items-center gap-1.5">
+                          <PawPrint className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Wild Shape (Moon Druid)</span>
+                        </span>
+                        {activeWildShape && (
+                          <span className="text-[9px] font-mono text-emerald-400 font-bold bg-emerald-500/20 px-1.5 py-0.5 rounded">
+                            {activeWildShape.beastName}
+                          </span>
+                        )}
+                      </div>
+                      {activeWildShape ? (
+                        <button
+                          type="button"
+                          onClick={handleRevertWildShape}
+                          className="w-full py-1.5 px-3 rounded-lg text-xs font-bold font-mono transition-all border border-emerald-500/60 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 cursor-pointer flex items-center justify-center gap-2 shadow-xs"
+                        >
+                          <PawPrint className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Revert to Wood Elf</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setShowWildShapeModal(true)}
+                          className="w-full py-1.5 px-3 rounded-lg text-xs font-bold font-mono transition-all border border-emerald-500/70 bg-gradient-to-r from-emerald-600/40 to-teal-600/40 hover:from-emerald-600/60 hover:to-teal-600/60 text-white cursor-pointer flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(16,185,129,0.25)]"
+                        >
+                          <PawPrint className="w-3.5 h-3.5 text-emerald-300" />
+                          <span>Wild Shape (Transform)</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* AC, HP, Max HP */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[9px] text-blue-400 uppercase font-bold tracking-tighter">AC</label>
+                      <input
+                        type="number"
+                        className="bg-zinc-900 border border-zinc-700 rounded-lg text-xs text-blue-400 px-2 py-1.5 focus:outline-none focus:border-blue-500 font-mono"
+                        value={currentToken.ac}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10);
+                          handleUpdateCombatant(currentToken.id, { ac: isNaN(val) ? 10 : val });
+                        }}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[9px] text-emerald-400 uppercase font-bold tracking-tighter">HP</label>
+                      <input
+                        type="number"
+                        className="bg-zinc-900 border border-zinc-700 rounded-lg text-xs text-emerald-400 px-2 py-1.5 focus:outline-none focus:border-emerald-500 font-mono"
+                        value={currentToken.currentHp}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10);
+                          handleUpdateCombatant(currentToken.id, { currentHp: isNaN(val) ? 0 : val });
+                        }}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[9px] text-zinc-400 uppercase font-bold tracking-tighter">Max</label>
+                      <input
+                        type="number"
+                        className="bg-zinc-900 border border-zinc-700 rounded-lg text-xs text-zinc-200 px-2 py-1.5 focus:outline-none focus:border-amber-500 font-mono"
+                        value={currentToken.maxHp}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10);
+                          handleUpdateCombatant(currentToken.id, { maxHp: isNaN(val) ? 10 : val });
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Quick HP Adjustment Buttons */}
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateCombatant(currentToken.id, { currentHp: Math.max(0, currentToken.currentHp - 5) })}
+                      className="flex-1 py-1 bg-red-950/60 hover:bg-red-900/60 text-red-300 border border-red-800/60 rounded-md text-[10px] font-bold font-mono cursor-pointer"
+                    >
+                      -5 HP
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateCombatant(currentToken.id, { currentHp: Math.max(0, currentToken.currentHp - 1) })}
+                      className="flex-1 py-1 bg-red-950/40 hover:bg-red-900/40 text-red-400 border border-red-800/40 rounded-md text-[10px] font-bold font-mono cursor-pointer"
+                    >
+                      -1 HP
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateCombatant(currentToken.id, { currentHp: Math.min(currentToken.maxHp, currentToken.currentHp + 1) })}
+                      className="flex-1 py-1 bg-emerald-950/40 hover:bg-emerald-900/40 text-emerald-400 border border-emerald-800/40 rounded-md text-[10px] font-bold font-mono cursor-pointer"
+                    >
+                      +1 HP
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateCombatant(currentToken.id, { currentHp: Math.min(currentToken.maxHp, currentToken.currentHp + 5) })}
+                      className="flex-1 py-1 bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-800/60 rounded-md text-[10px] font-bold font-mono cursor-pointer"
+                    >
+                      +5 HP
+                    </button>
+                  </div>
+
+                  {/* Temp HP adjustment */}
+                  <div className="flex items-center justify-between bg-zinc-900/90 border border-amber-500/30 rounded-xl p-2">
+                    <span className="text-[9px] text-amber-300 uppercase font-bold tracking-wider font-mono">
+                      Temp HP: {currentToken.tempHp || 0}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateCombatant(currentToken.id, { tempHp: 0 })}
+                        className="px-1.5 py-0.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 rounded text-[9px] font-mono cursor-pointer"
+                      >
+                        Clear
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateCombatant(currentToken.id, { tempHp: (currentToken.tempHp || 0) + 5 })}
+                        className="px-1.5 py-0.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded text-[9px] font-mono font-bold cursor-pointer"
+                      >
+                        +5
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateCombatant(currentToken.id, { tempHp: (currentToken.tempHp || 0) + 18 })}
+                        className="px-1.5 py-0.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 rounded text-[9px] font-mono font-bold cursor-pointer"
+                        title="+18 Moon Druid Temp HP"
+                      >
+                        +18
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Flight & Elevation */}
+                  <div className="bg-zinc-900/90 border border-sky-500/30 rounded-xl p-2.5 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9px] text-sky-400 uppercase font-bold tracking-wider font-mono flex items-center gap-1">
+                        <span>🪽</span> Flight & Height
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const curFly = Boolean(currentToken.isFlying);
+                          const curElev = Number(currentToken.elevation) || 0;
+                          const nextFly = !curFly;
+                          const nextElev = nextFly && curElev === 0 ? 15 : !nextFly ? 0 : curElev;
+                          handleUpdateCombatant(currentToken.id, { isFlying: nextFly, elevation: nextElev });
+                        }}
+                        className={`px-2 py-0.5 rounded-lg text-[9px] font-bold font-mono transition-all cursor-pointer border ${
+                          currentToken.isFlying
+                            ? 'bg-sky-500/25 text-sky-200 border-sky-400/70 shadow-xs'
+                            : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border-zinc-700'
+                        }`}
+                      >
+                        {currentToken.isFlying ? '🪽 Flying' : 'Grounded'}
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-5 gap-1">
+                      {[0, 10, 15, 30, 60].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => {
+                            handleUpdateCombatant(currentToken.id, {
+                              elevation: preset,
+                              isFlying: preset > 0
+                            });
+                          }}
+                          className={`py-0.5 rounded text-[9px] font-mono font-bold transition-all cursor-pointer border ${
+                            (currentToken.elevation || 0) === preset
+                              ? 'bg-sky-500/30 text-sky-200 border-sky-400/70'
+                              : 'bg-zinc-950 hover:bg-zinc-800 text-zinc-400 border-zinc-800'
+                          }`}
+                        >
+                          {preset}ft
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: Conditions */}
+              {tokenMenuTab === 'conditions' && (
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center px-1">
+                    <span className="text-[9px] font-mono text-zinc-400 uppercase font-bold tracking-tighter">
+                      5e Status Conditions
+                    </span>
+                    <span className="text-[9px] font-mono text-rose-400 font-bold">
+                      {(currentToken.conditions || []).length} Active
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1 max-h-56 overflow-y-auto pr-1">
+                    {DND_CONDITIONS.map((cond) => {
+                      const isActive = (currentToken.conditions || []).includes(cond);
+                      return (
+                        <button
+                          key={cond}
+                          type="button"
+                          onClick={() => {
+                            const cur = currentToken.conditions || [];
+                            const next = isActive ? cur.filter((c) => c !== cond) : [...cur, cond];
+                            handleUpdateCombatant(currentToken.id, { conditions: next });
+                          }}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const rule = lookupDndRuleDetails(cond, 'condition');
+                            if (rule) setInspectedRule(rule);
+                          }}
+                          className={`text-[10px] py-1 px-1.5 rounded-md font-mono text-left truncate transition-all cursor-pointer border flex items-center justify-between ${
+                            isActive
+                              ? 'bg-rose-500/20 text-rose-200 border-rose-500/50 shadow-xs'
+                              : 'bg-zinc-900/60 hover:bg-zinc-900 text-zinc-400 border-zinc-800/80 hover:text-zinc-200'
+                          }`}
+                          title="Click to toggle • Right-click to inspect rule"
+                        >
+                          <span className="truncate">{cond}</span>
+                          {isActive && <span className="w-1.5 h-1.5 rounded-full bg-rose-400 shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 3: Auras & Halos */}
+              {tokenMenuTab === 'auras' && (
+                <div className="space-y-2 text-center py-2">
+                  <span className="text-[10px] font-mono text-zinc-400">
+                    Active Effects & Auras
+                  </span>
+                  <div className="text-[9px] font-mono text-zinc-500">
+                    {arenaEffects.length > 0
+                      ? `${arenaEffects.length} active battlemap aura(s)`
+                      : 'No active magical auras on this combatant.'}
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        );
+      })()}
+
       {/* D&D 5e Rule / Aura Inspection Modal */}
       <DndRuleInspectionModal
-        rule={inspectedRule}
+        entry={inspectedRule}
         onClose={() => setInspectedRule(null)}
-        onRollFormula={(formula, label, isHeal) => {
-          if (!activeCombatant) return;
-          const r = rollDiceFormula(formula, false);
-          if (onTrigger3dDice) {
-            onTrigger3dDice({
-              id: `arena-inspect-${Date.now()}`,
-              characterName: activeCombatant.name,
-              action: label,
-              rollType: isHeal ? 'heal' : 'damage',
-              formula: `${formula} = ${r.total}`,
-              diceNotation: formula,
-              dice: r.rolls.map((v) => ({ sides: r.sides, result: v, type: `d${r.sides}` })),
-              total: r.total,
-              timestamp: Date.now(),
-              source: 'player'
-            });
-          }
-          addCombatLog(
-            activeCombatant.name,
-            activeCombatant.team,
-            `rolled ${label}: ${r.total}!`,
-            r.breakdown
-          );
-        }}
       />
 
       {/* Victory / Defeat Modal */}

@@ -4057,7 +4057,7 @@ export default function PlayerView() {
           assetKey: 'druidcraft',
           videoUrl: '/jb2a/Library/Generic/Nature/PlantGrowthRing02_01_Regular_GreenRed_500x500.webm',
           thumbUrl: '/jb2a/Library/Generic/Nature/PlantGrowthRing02_01_Regular_GreenRed_Thumb.webp',
-          paradigm: 'emanation',
+          paradigm: 'aura',
           x: claimedToken.x + tokenRadius,
           y: claimedToken.y + tokenRadius,
           sizeFt: 10,
@@ -4065,10 +4065,10 @@ export default function PlayerView() {
           opacity: 0.9,
           blendMode: 'screen',
           isPersistent: false,
-          durationMs: 3000,
+      loop: false,
+      durationMs: 3000,
           soundKey: 'nature_rustle',
-          casterTokenId: claimedToken.id,
-          createdAt: Date.now()
+                    castTime: Date.now()
         };
         setEffects(prev => [...prev, revertEffect]);
         if (socketRef.current?.connected) {
@@ -4439,7 +4439,7 @@ export default function PlayerView() {
       assetKey: 'druidcraft',
       videoUrl: '/jb2a/Library/Generic/Nature/PlantGrowthRing02_01_Regular_GreenRed_500x500.webm',
       thumbUrl: '/jb2a/Library/Generic/Nature/PlantGrowthRing02_01_Regular_GreenRed_Thumb.webp',
-      paradigm: 'emanation',
+      paradigm: 'aura',
       x: claimedToken.x + tokenRadius,
       y: claimedToken.y + tokenRadius,
       sizeFt: form.sizeMultiplier * 10,
@@ -4447,10 +4447,10 @@ export default function PlayerView() {
       opacity: 1.0,
       blendMode: 'screen',
       isPersistent: false,
+      loop: false,
       durationMs: 3500,
       soundKey: 'druid_bloom',
-      casterTokenId: claimedToken.id,
-      createdAt: Date.now()
+            castTime: Date.now()
     };
     setEffects(prev => [...prev, burstEffect]);
     if (socketRef.current?.connected) {
@@ -4507,7 +4507,7 @@ export default function PlayerView() {
       assetKey: 'druidcraft',
       videoUrl: '/jb2a/Library/Generic/Nature/PlantGrowthRing02_01_Regular_GreenRed_500x500.webm',
       thumbUrl: '/jb2a/Library/Generic/Nature/PlantGrowthRing02_01_Regular_GreenRed_Thumb.webp',
-      paradigm: 'emanation',
+      paradigm: 'aura',
       x: claimedToken.x + tokenRadius,
       y: claimedToken.y + tokenRadius,
       sizeFt: 10,
@@ -4515,10 +4515,10 @@ export default function PlayerView() {
       opacity: 0.9,
       blendMode: 'screen',
       isPersistent: false,
+      loop: false,
       durationMs: 3000,
       soundKey: 'nature_rustle',
-      casterTokenId: claimedToken.id,
-      createdAt: Date.now()
+            castTime: Date.now()
     };
     setEffects(prev => [...prev, revertEffect]);
     if (socketRef.current?.connected) {
