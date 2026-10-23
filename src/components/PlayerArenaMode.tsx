@@ -37,6 +37,7 @@ import { HudCharacterData, HudActionItem, computeUpcastFormula } from '../types/
 import { PlayerHeroDock } from './PlayerHeroDock';
 import { GridLayer } from './GridLayer';
 import { buildDmMonsterHudData } from '../services/monsterHudService';
+import { computeTacticalAiTurnPlan, classifyCombatantRole } from '../services/arenaTacticalAi';
 import {
   VttEffectInstance,
   DomEffectOverlay,
@@ -818,6 +819,8 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
   const [winnerTeam, setWinnerTeam] = useState<'gold' | 'crimson' | null>(null);
   const [activeTargetingAction, setActiveTargetingAction] = useState<HudActionItem | null>(null);
   const [arenaEffects, setArenaEffects] = useState<VttEffectInstance[]>([]);
+  const [aiTacticalBanner, setAiTacticalBanner] = useState<string | null>(null);
+  const [aiPathPreviewPx, setAiPathPreviewPx] = useState<Array<{ x: number; y: number }>>([]);
 
   // Viewport Pan & Zoom
   const [dimensions, setDimensions] = useState({
@@ -1347,99 +1350,135 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
 
   // ============================================================================
   // AUTONOMOUS TACTICAL NPC / AI TURN CONTROLLER
+  // Powered by Mistreevous Behavior Trees + Utility AI Scorer + Pathfinding.js A*
   // ============================================================================
   useEffect(() => {
-    if (phase !== 'battle' || !activeCombatant || !activeCombatant.isAI || winnerTeam) return;
+    if (phase !== 'battle' || !activeCombatant || !activeCombatant.isAI || winnerTeam) {
+      setAiTacticalBanner(null);
+      setAiPathPreviewPx([]);
+      return;
+    }
     if (activeCombatant.currentHp <= 0) {
       handleAdvanceTurn();
       return;
     }
 
-    const aiTimer = window.setTimeout(() => {
-      // 1. Find all living enemies
-      const enemies = combatants.filter(
-        (c) => c.team !== activeCombatant.team && c.currentHp > 0
-      );
-      if (enemies.length === 0) return;
+    let cancelled = false;
+    const timers: number[] = [];
 
-      // Pick closest enemy (with tie-breaker for lowest HP)
-      const sortedEnemies = [...enemies].sort((a, b) => {
-        const distA = Math.hypot(a.x - activeCombatant.x, a.y - activeCombatant.y);
-        const distB = Math.hypot(b.x - activeCombatant.x, b.y - activeCombatant.y);
-        if (Math.abs(distA - distB) > ARENA_GRID_SIZE) return distA - distB;
-        return a.currentHp - b.currentHp;
-      });
-      const primaryTarget = sortedEnemies[0];
+    const aiStartTimer = window.setTimeout(() => {
+      if (cancelled) return;
 
-      // 2. Build NPC's available actions via our HUD builder
       const aiHud = buildArenaCombatantHudData(activeCombatant);
-      const offensiveOptions = [...aiHud.attacks, ...aiHud.spells.filter((s) => !s.isHeal)];
-      const chosenAction =
-        offensiveOptions.find((a) => (a.rangeFt || 5) >= 30) ||
-        offensiveOptions[0] ||
-        aiHud.attacks[0];
-
-      // 3. Move AI token toward primaryTarget if out of range
-      const distPx = Math.hypot(
-        primaryTarget.x - activeCombatant.x,
-        primaryTarget.y - activeCombatant.y
+      const plan = computeTacticalAiTurnPlan(
+        activeCombatant,
+        combatants,
+        aiHud,
+        ARENA_COLS,
+        ARENA_ROWS,
+        ARENA_GRID_SIZE
       );
-      const currentDistFt = (distPx / ARENA_GRID_SIZE) * 5;
-      const desiredRangeFt = chosenAction?.rangeFt || 5;
 
-      let updatedActor = { ...activeCombatant };
+      setAiTacticalBanner(plan.tacticalThought);
 
-      if (currentDistFt > desiredRangeFt) {
-        const maxSteps = Math.floor(activeCombatant.speedFt / 5);
-        const dx = primaryTarget.x - activeCombatant.x;
-        const dy = primaryTarget.y - activeCombatant.y;
-        const totalStepsNeeded = Math.max(
-          1,
-          Math.round(distPx / ARENA_GRID_SIZE) - 1
-        );
-        const stepsToTake = Math.min(maxSteps, totalStepsNeeded);
-        const ratio = Math.min(1, (stepsToTake * ARENA_GRID_SIZE) / Math.max(1, distPx));
-
-        const nextX = Math.max(
-          0,
-          Math.min(
-            ARENA_WIDTH - activeCombatant.size * ARENA_GRID_SIZE,
-            Math.round((activeCombatant.x + dx * ratio) / ARENA_GRID_SIZE) * ARENA_GRID_SIZE
-          )
-        );
-        const nextY = Math.max(
-          0,
-          Math.min(
-            ARENA_HEIGHT - activeCombatant.size * ARENA_GRID_SIZE,
-            Math.round((activeCombatant.y + dy * ratio) / ARENA_GRID_SIZE) * ARENA_GRID_SIZE
-          )
-        );
-
-        updatedActor = {
-          ...activeCombatant,
-          x: nextX,
-          y: nextY,
-          remainingMoveFt: Math.max(0, activeCombatant.speedFt - stepsToTake * 5)
-        };
-
-        setCombatants((prev) =>
-          prev.map((c) => (c.id === updatedActor.id ? updatedActor : c))
-        );
+      // Build A* trail preview points (including start cell)
+      if (plan.pathWaypointsPx.length > 0) {
+        setAiPathPreviewPx([
+          { x: activeCombatant.x, y: activeCombatant.y },
+          ...plan.pathWaypointsPx
+        ]);
+      } else {
+        setAiPathPreviewPx([]);
       }
 
-      // 4. Execute AI Attack after movement beat
-      window.setTimeout(() => {
-        if (chosenAction) {
-          executeCombatAction(updatedActor, primaryTarget, chosenAction);
-        }
-        window.setTimeout(() => {
-          handleAdvanceTurn();
-        }, 1250);
-      }, 550);
-    }, 850);
+      if (plan.useDash) {
+        addCombatLog(
+          activeCombatant.name,
+          activeCombatant.team,
+          `used Dash (+${activeCombatant.speedFt} ft) along A* path!`,
+          plan.tacticalThought
+        );
+        soundCatalog.play('wind_whoosh', 0.65);
+      }
 
-    return () => window.clearTimeout(aiTimer);
-  }, [phase, activeCombatant, turnIndex, winnerTeam, combatants, executeCombatAction, handleAdvanceTurn]);
+      // Step-by-step A* grid movement animation (150ms per square)
+      const stepDelayMs = 155;
+      plan.pathWaypointsPx.forEach((wp, idx) => {
+        const t = window.setTimeout(() => {
+          if (cancelled) return;
+          setCombatants((prev) =>
+            prev.map((c) =>
+              c.id === activeCombatant.id
+                ? {
+                    ...c,
+                    x: wp.x,
+                    y: wp.y,
+                    remainingMoveFt: Math.max(0, c.speedFt - (idx + 1) * 5)
+                  }
+                : c
+            )
+          );
+        }, (idx + 1) * stepDelayMs);
+        timers.push(t);
+      });
+
+      const totalMoveMs = plan.pathWaypointsPx.length * stepDelayMs + 320;
+      const updatedActor: ArenaCombatant = {
+        ...activeCombatant,
+        x: plan.finalPositionPx.x,
+        y: plan.finalPositionPx.y,
+        remainingMoveFt: Math.max(0, activeCombatant.speedFt - plan.movementSpentFt)
+      };
+
+      // Execute Primary Action (Attack / Spell / Emergency Heal) after A* movement completes
+      const actionTimer = window.setTimeout(() => {
+        if (cancelled) return;
+        setAiPathPreviewPx([]);
+
+        if (plan.primaryAction) {
+          const targetObj =
+            plan.primaryAction.targetId === updatedActor.id
+              ? updatedActor
+              : combatants.find((c) => c.id === plan.primaryAction?.targetId);
+          if (targetObj && targetObj.currentHp > 0) {
+            executeCombatAction(updatedActor, targetObj, plan.primaryAction.action);
+          }
+        }
+
+        // Execute Bonus Action (e.g. Potion of Greater Healing or Bonus Strike) if planned
+        const bonusDelay = plan.bonusAction ? 750 : 0;
+        if (plan.bonusAction) {
+          const bonusTimer = window.setTimeout(() => {
+            if (cancelled) return;
+            const bTarget =
+              plan.bonusAction?.targetId === updatedActor.id
+                ? updatedActor
+                : combatants.find((c) => c.id === plan.bonusAction?.targetId);
+            if (bTarget) {
+              executeCombatAction(updatedActor, bTarget, plan.bonusAction.action);
+            }
+          }, 600);
+          timers.push(bonusTimer);
+        }
+
+        const endTurnTimer = window.setTimeout(() => {
+          if (cancelled) return;
+          setAiTacticalBanner(null);
+          handleAdvanceTurn();
+        }, 1150 + bonusDelay);
+        timers.push(endTurnTimer);
+      }, totalMoveMs);
+
+      timers.push(actionTimer);
+    }, 650);
+
+    timers.push(aiStartTimer);
+
+    return () => {
+      cancelled = true;
+      timers.forEach((id) => window.clearTimeout(id));
+    };
+  }, [phase, activeCombatant, turnIndex, winnerTeam, combatants, executeCombatAction, handleAdvanceTurn, addCombatLog]);
 
   // Handle Player dragging their active token on the Arena grid
   const handleMoveArenaToken = useCallback(
@@ -2001,8 +2040,8 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           <span className="text-xs font-mono text-zinc-200">
             {activeCombatant.isAI ? (
               <span className="text-rose-300 font-bold flex items-center gap-1.5">
-                <Bot className="w-4 h-4 animate-spin" />
-                {activeCombatant.name} (AI) is calculating tactical move...
+                <Bot className="w-4 h-4 animate-spin text-amber-400" />
+                <span>{aiTacticalBanner || `${activeCombatant.name} (AI) is evaluating Behavior Tree & A* paths...`}</span>
               </span>
             ) : activeTargetingAction ? (
               <span className="text-amber-300 font-bold flex items-center gap-2">
@@ -2112,6 +2151,22 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
 
           {/* Arena Tokens Layer */}
           <Layer>
+            {/* AI Live A* Pathfinding Trail Visualization */}
+            {aiPathPreviewPx.length >= 2 && (
+              <Line
+                points={aiPathPreviewPx.flatMap((pt) => [
+                  pt.x + ARENA_GRID_SIZE / 2,
+                  pt.y + ARENA_GRID_SIZE / 2
+                ])}
+                stroke="#f43f5e"
+                strokeWidth={4}
+                dash={[10, 6]}
+                lineCap="round"
+                lineJoin="round"
+                opacity={0.85}
+                listening={false}
+              />
+            )}
             {combatants.map((c, idx) => {
               const isCurr = idx === turnIndex;
               const canDrag = isCurr && !c.isAI && !winnerTeam;
