@@ -1709,6 +1709,35 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
   const [activeWildShape, setActiveWildShape] = useState<ActiveWildShapeState | null>(null);
   const [hudCollapseTick, setHudCollapseTick] = useState<number>(0);
 
+  // Automatic Dice Rolling Toggle State (persisted in localStorage)
+  const [isAutoRollDiceEnabled, setIsAutoRollDiceEnabled] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('mistwalker_player_auto_roll_dice') !== 'false';
+    } catch {
+      return true;
+    }
+  });
+  const isAutoRollDiceEnabledRef = useRef<boolean>(isAutoRollDiceEnabled);
+  useEffect(() => {
+    isAutoRollDiceEnabledRef.current = isAutoRollDiceEnabled;
+    try {
+      localStorage.setItem('mistwalker_player_auto_roll_dice', String(isAutoRollDiceEnabled));
+    } catch {}
+  }, [isAutoRollDiceEnabled]);
+  const handleToggleAutoRollDice = useCallback((nextEnabled: boolean) => {
+    isAutoRollDiceEnabledRef.current = nextEnabled;
+    setIsAutoRollDiceEnabled(nextEnabled);
+    if (nextEnabled) {
+      toast.success('🎲 Automatic Dice Rolling turned ON', {
+        description: 'Casting spells and actions from the HUD will automatically roll 3D dice.'
+      });
+    } else {
+      toast.info('✨ Automatic Dice Rolling turned OFF', {
+        description: 'Casting spells and actions from the HUD will play spell animations only.'
+      });
+    }
+  }, []);
+
   // Real-time Movement Drag Ruler State (Identical to standard Player View)
   const [tokenDragState, setTokenDragState] = useState<TokenDragState | null>(null);
 
@@ -2283,6 +2312,18 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           incenseEffect
         ]);
 
+        if (!actor.isAI && !isAutoRollDiceEnabledRef.current) {
+          setCombatants((prev) => prev.map((c) => (c.id === actor.id ? markActorUsed(c) : c)));
+          toast.success(`✨ Healing Incense emanates 10ft around ${actor.name}!`);
+          addCombatLog(
+            actor.name,
+            actor.team,
+            `activated Devotee's Censer: Healing Incense (10ft Green Smoke Aura)!`,
+            action.description
+          );
+          return true;
+        }
+
         const healedComps: string[] = [];
         setCombatants((prev) =>
           prev.map((c) => {
@@ -2351,6 +2392,23 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
 
       // Play JB2A visual effect (including persistent token-locked auras!)
       spawnArenaVisualEffect(actor, target, action, targetPointPx);
+
+      // If Automatic Dice Rolling is toggled OFF for the player HUD, only play the spell/action animation!
+      if (!actor.isAI && !isAutoRollDiceEnabledRef.current) {
+        const upcastSuffix =
+          action.castAtLevel && action.castAtLevel > (action.level ?? 0)
+            ? ` (L${action.castAtLevel})`
+            : '';
+        setCombatants((prev) => prev.map((c) => (c.id === actor.id ? markActorUsed(c) : c)));
+        toast.success(`✨ Cast ${action.name}${upcastSuffix}!`);
+        addCombatLog(
+          actor.name,
+          actor.team,
+          `cast ${action.name}${upcastSuffix}${target.id !== actor.id ? ` on ${target.name}` : ''}!`,
+          'Spell animation played (Auto Roll OFF)'
+        );
+        return true;
+      }
 
       // 3. Healing Action / Spell
       const isHeal = isActionHealing(action);
@@ -4572,6 +4630,8 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           collapseRequestTick={hudCollapseTick}
           onAdjustHp={handleAdjustHp}
           onAdjustSpellSlot={handleAdjustSpellSlot}
+          isAutoRollDiceEnabled={isAutoRollDiceEnabled}
+          onToggleAutoRollDice={handleToggleAutoRollDice}
         />
       )}
 

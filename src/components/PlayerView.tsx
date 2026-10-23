@@ -1758,6 +1758,33 @@ export default function PlayerView() {
   useEffect(() => {
     isDdbSyncEnabledRef.current = isDdbSyncEnabled;
   }, [isDdbSyncEnabled]);
+  const [isAutoRollDiceEnabled, setIsAutoRollDiceEnabled] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('mistwalker_player_auto_roll_dice') !== 'false';
+    } catch {
+      return true;
+    }
+  });
+  const isAutoRollDiceEnabledRef = useRef<boolean>(isAutoRollDiceEnabled);
+  useEffect(() => {
+    isAutoRollDiceEnabledRef.current = isAutoRollDiceEnabled;
+    try {
+      localStorage.setItem('mistwalker_player_auto_roll_dice', String(isAutoRollDiceEnabled));
+    } catch {}
+  }, [isAutoRollDiceEnabled]);
+  const handleToggleAutoRollDice = useCallback((nextEnabled: boolean) => {
+    isAutoRollDiceEnabledRef.current = nextEnabled;
+    setIsAutoRollDiceEnabled(nextEnabled);
+    if (nextEnabled) {
+      toast.success('🎲 Automatic Dice Rolling turned ON', {
+        description: 'Casting spells and actions from the HUD will automatically roll 3D dice.'
+      });
+    } else {
+      toast.info('✨ Automatic Dice Rolling turned OFF', {
+        description: 'Casting spells and actions from the HUD will play spell animations only.'
+      });
+    }
+  }, []);
   const [showCharacterSelectModal, setShowCharacterSelectModal] = useState<boolean>(false);
   const [isCurrentCharacterPrivate, setIsCurrentCharacterPrivate] = useState<boolean>(false);
   const [showWildShapeModal, setShowWildShapeModal] = useState<boolean>(false);
@@ -4040,7 +4067,7 @@ export default function PlayerView() {
           : ` (Level ${aimedAction.castAtLevel} Slot)`
         : '';
 
-    if (rawFormula) {
+    if (rawFormula && isAutoRollDiceEnabledRef.current) {
       const evaluated = evaluateDiceFormula(rawFormula, false);
       const rolledTotal = evaluated.total;
       const diceResults = evaluated.dice;
@@ -4370,51 +4397,57 @@ export default function PlayerView() {
         socketRef.current.emit('EFFECT_SPAWN', incenseEffect);
       }
 
-      const formula = action.damageFormula || '1d4';
-      const evaluated = evaluateDiceFormula(formula, false);
-      const rolledTotal = evaluated.total;
-      const diceResults = evaluated.dice;
+      if (isAutoRollDiceEnabledRef.current) {
+        const formula = action.damageFormula || '1d4';
+        const evaluated = evaluateDiceFormula(formula, false);
+        const rolledTotal = evaluated.total;
+        const diceResults = evaluated.dice;
 
-      const diceEvent: DdbDiceRollEvent = {
-        id: `roll-${Date.now()}`,
-        characterId: String(hudCharacterData?.id || claimedToken.id || ''),
-        characterName: claimedToken.name || 'Hero',
-        avatarUrl: hudCharacterData?.avatarUrl || claimedToken.avatarUrl || claimedToken.url,
-        action: `${action.name} (10ft Aura Healing)`,
-        rollType: 'heal',
-        formula: `${formula} → ${evaluated.breakdown}`,
-        diceNotation: formula,
-        dice: diceResults.length > 0 ? diceResults : [{ sides: 4, result: rolledTotal, type: 'd4' }],
-        modifier: evaluated.bonus,
-        total: rolledTotal,
-        isCritical: false,
-        isFumble: false,
-        theme: selectedDicePreset.id,
-        themeColor: '#10b981',
-        timestamp: Date.now(),
-        source: 'player'
-      };
-      if (socketRef.current?.connected) {
-        socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', diceEvent);
-      }
-      if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
-        (window as any).__mistwalkerRoll3d(diceEvent);
-      }
-      if (rolledTotal > 0 && socketRef.current?.connected) {
-        socketRef.current.emit('REQUEST_TOKEN_MUTATION', {
-          sourceTokenId: claimedToken.id,
-          sourceName: claimedToken.name || 'Hero',
-          targetTokenId: claimedToken.id,
-          targetName: claimedToken.name || 'Hero',
-          actionName: action.name,
-          deltaHp: rolledTotal,
-          requiresApproval: false,
-          requestId: `req_incense_${Date.now()}`
+        const diceEvent: DdbDiceRollEvent = {
+          id: `roll-${Date.now()}`,
+          characterId: String(hudCharacterData?.id || claimedToken.id || ''),
+          characterName: claimedToken.name || 'Hero',
+          avatarUrl: hudCharacterData?.avatarUrl || claimedToken.avatarUrl || claimedToken.url,
+          action: `${action.name} (10ft Aura Healing)`,
+          rollType: 'heal',
+          formula: `${formula} → ${evaluated.breakdown}`,
+          diceNotation: formula,
+          dice: diceResults.length > 0 ? diceResults : [{ sides: 4, result: rolledTotal, type: 'd4' }],
+          modifier: evaluated.bonus,
+          total: rolledTotal,
+          isCritical: false,
+          isFumble: false,
+          theme: selectedDicePreset.id,
+          themeColor: '#10b981',
+          timestamp: Date.now(),
+          source: 'player'
+        };
+        if (socketRef.current?.connected) {
+          socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', diceEvent);
+        }
+        if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+          (window as any).__mistwalkerRoll3d(diceEvent);
+        }
+        if (rolledTotal > 0 && socketRef.current?.connected) {
+          socketRef.current.emit('REQUEST_TOKEN_MUTATION', {
+            sourceTokenId: claimedToken.id,
+            sourceName: claimedToken.name || 'Hero',
+            targetTokenId: claimedToken.id,
+            targetName: claimedToken.name || 'Hero',
+            actionName: action.name,
+            deltaHp: rolledTotal,
+            requiresApproval: false,
+            requestId: `req_incense_${Date.now()}`
+          });
+        }
+        toast.success(`🌿 ${claimedToken.name}: Devotee's Censer Healing Incense Active!`, {
+          description: `10 ft green smoke aura emanated for 1 minute • Restored +${rolledTotal} HP (${evaluated.breakdown}).`
+        });
+      } else {
+        toast.success(`🌿 ${claimedToken.name}: Devotee's Censer Healing Incense Active!`, {
+          description: `10 ft green smoke aura emanated for 1 minute.`
         });
       }
-      toast.success(`🌿 ${claimedToken.name}: Devotee's Censer Healing Incense Active!`, {
-        description: `10 ft green smoke aura emanated for 1 minute • Restored +${rolledTotal} HP (${evaluated.breakdown}).`
-      });
       setActiveTargetingAction(null);
       setActiveEquippedAsset(null);
       setAimOrigin(null);
@@ -4530,7 +4563,7 @@ export default function PlayerView() {
         }
       }
 
-      if (action.damageFormula) {
+      if (action.damageFormula && isAutoRollDiceEnabledRef.current) {
         const evaluated = evaluateDiceFormula(action.damageFormula, false);
         const rolledTotal = evaluated.total;
         const diceResults = evaluated.dice;
@@ -5093,6 +5126,11 @@ export default function PlayerView() {
         }
       }
 
+      if (!isAutoRollDiceEnabledRef.current) {
+        toast.success(`Spiritual Weapon strikes ${targetToken.name}!`);
+        return;
+      }
+
       emitDice({
         id: `roll-sw-atk-${Date.now()}`,
         characterId: String(hudCharacterData?.id || claimedToken.id || ''),
@@ -5128,7 +5166,7 @@ export default function PlayerView() {
     }, strikeDelay);
 
     // Step 3: damage roll on a hit (1d8 + spellcasting modifier force, doubled dice on a crit)
-    if (isHit) {
+    if (isHit && isAutoRollDiceEnabledRef.current) {
       window.setTimeout(() => {
         const evaluated = evaluateDiceFormula(sw.damageFormula, isCrit);
         const dmg = evaluated.total;
@@ -5348,7 +5386,7 @@ export default function PlayerView() {
     }
 
     let calculatedDeltaHp = 0;
-    if (formula) {
+    if (formula && isAutoRollDiceEnabledRef.current) {
       const evaluated = evaluateDiceFormula(formula, false);
       const rolledTotal = evaluated.total;
       const diceResults = evaluated.dice;
@@ -5402,6 +5440,15 @@ export default function PlayerView() {
           ? `${action.name} (Level ${action.castAtLevel} • Uses Lvl ${expendedActionSlot} Slot)`
           : `${action.name} (Level ${action.castAtLevel} Slot)`
         : action.name;
+
+    if (!isAutoRollDiceEnabledRef.current) {
+      toast.success(`Cast ${upcastActionLabel} on ${targetToken.name}!`);
+      setActiveTargetingAction(null);
+      setActiveEquippedAsset(null);
+      setAimOrigin(null);
+      setAimCurrent(null);
+      return;
+    }
 
     const payload = {
       sourceTokenId: caster.id,
@@ -8535,6 +8582,8 @@ export default function PlayerView() {
           isSyncingDdb={isSyncingHudDdb}
           isDdbSyncEnabled={isDdbSyncEnabled}
           onToggleDdbSync={handleToggleDdbSync}
+          isAutoRollDiceEnabled={isAutoRollDiceEnabled}
+          onToggleAutoRollDice={handleToggleAutoRollDice}
           activeEffects={effects}
           onDispelEffect={handleDispelEffect}
           inspectedAuraRequest={inspectedAuraRequest}

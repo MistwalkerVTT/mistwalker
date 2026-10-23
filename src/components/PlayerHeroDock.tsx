@@ -23,7 +23,8 @@ import {
   Lock,
   Users,
   GripHorizontal,
-  PawPrint
+  PawPrint,
+  Dices
 } from 'lucide-react';
 import { HudCharacterData, HudActionItem, HudActionCategory, computeUpcastFormula, evaluateDiceFormula } from '../types/hud';
 import { findJb2aAsset } from '../effects/db/jb2aRegistry';
@@ -50,6 +51,8 @@ interface PlayerHeroDockProps {
   isSyncingDdb?: boolean;
   isDdbSyncEnabled?: boolean;
   onToggleDdbSync?: (enabled: boolean) => void;
+  isAutoRollDiceEnabled?: boolean;
+  onToggleAutoRollDice?: (enabled: boolean) => void;
   isMobile?: boolean;
   onTargetSelf?: () => void;
   activeEffects?: any[];
@@ -85,6 +88,8 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
   isSyncingDdb = false,
   isDdbSyncEnabled = true,
   onToggleDdbSync,
+  isAutoRollDiceEnabled = true,
+  onToggleAutoRollDice,
   onTargetSelf,
   activeEffects = [],
   onDispelEffect,
@@ -1205,6 +1210,37 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
               </button>
             )}
 
+            {onToggleAutoRollDice && (
+              <button
+                type="button"
+                onClick={() => onToggleAutoRollDice(!isAutoRollDiceEnabled)}
+                role="switch"
+                aria-checked={isAutoRollDiceEnabled}
+                className={`px-2.5 py-1.5 rounded-xl border transition-all cursor-pointer flex items-center gap-2 text-[11px] font-mono font-bold ${
+                  isAutoRollDiceEnabled
+                    ? 'bg-amber-950/70 hover:bg-amber-900/80 text-amber-300 border-amber-500/50 shadow-sm'
+                    : 'bg-zinc-950 hover:bg-zinc-900 text-zinc-400 hover:text-zinc-200 border-zinc-800'
+                }`}
+                title={
+                  isAutoRollDiceEnabled
+                    ? 'Automatic Dice Rolling is ON — casting spells/actions rolls 3D dice automatically (Click to turn OFF for spell animations only)'
+                    : 'Automatic Dice Rolling is OFF — casting spells/actions plays spell animations only without rolling dice (Click to turn ON)'
+                }
+              >
+                <Dices className={`w-3.5 h-3.5 ${isAutoRollDiceEnabled ? 'text-amber-400' : 'text-zinc-500'}`} />
+                <div
+                  className={`w-6 h-3.5 rounded-full p-0.5 transition-colors flex items-center ${
+                    isAutoRollDiceEnabled ? 'bg-amber-500 justify-end' : 'bg-zinc-700 justify-start'
+                  }`}
+                >
+                  <div className="w-2.5 h-2.5 rounded-full bg-white shadow-xs" />
+                </div>
+                <span className="hidden lg:inline">
+                  Auto Roll: {isAutoRollDiceEnabled ? 'ON' : 'OFF'}
+                </span>
+              </button>
+            )}
+
             {onToggleDdbSync && (
               <button
                 type="button"
@@ -1316,6 +1352,25 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
             </div>
 
             <div className="flex items-center gap-1.5">
+              {onToggleAutoRollDice && (
+                <button
+                  type="button"
+                  onClick={() => onToggleAutoRollDice(!isAutoRollDiceEnabled)}
+                  className={`px-2.5 py-1.5 rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 text-[10px] font-mono font-bold ${
+                    isAutoRollDiceEnabled
+                      ? 'bg-amber-950/80 border-amber-500/50 text-amber-300'
+                      : 'bg-zinc-900 border-zinc-700 text-zinc-400'
+                  }`}
+                  title={
+                    isAutoRollDiceEnabled
+                      ? 'Automatic Dice Rolling is ON (Tap to turn OFF and play spell animations only)'
+                      : 'Automatic Dice Rolling is OFF — Animations Only (Tap to turn ON)'
+                  }
+                >
+                  <Dices className="w-3.5 h-3.5" />
+                  <span>Auto Roll: {isAutoRollDiceEnabled ? 'ON' : 'OFF'}</span>
+                </button>
+              )}
               {onToggleDdbSync && (
                 <button
                   type="button"
@@ -1826,6 +1881,37 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                   </button>
                 )}
               </div>
+            )}
+
+            {onToggleAutoRollDice && (
+              <button
+                type="button"
+                onClick={() => onToggleAutoRollDice(!isAutoRollDiceEnabled)}
+                role="switch"
+                aria-checked={isAutoRollDiceEnabled}
+                className={`px-2.5 py-1.5 rounded-xl border transition-all cursor-pointer flex items-center gap-2 text-[11px] font-mono font-bold ${
+                  isAutoRollDiceEnabled
+                    ? 'bg-amber-950/70 hover:bg-amber-900/80 text-amber-300 border-amber-500/50 shadow-sm'
+                    : 'bg-zinc-950 hover:bg-zinc-900 text-zinc-400 hover:text-zinc-200 border-zinc-800'
+                }`}
+                title={
+                  isAutoRollDiceEnabled
+                    ? 'Automatic Dice Rolling is ON — casting spells/actions rolls 3D dice automatically (Click to turn OFF for spell animations only)'
+                    : 'Automatic Dice Rolling is OFF — casting spells/actions plays spell animations only without rolling dice (Click to turn ON)'
+                }
+              >
+                <Dices className={`w-3.5 h-3.5 ${isAutoRollDiceEnabled ? 'text-amber-400' : 'text-zinc-500'}`} />
+                <div
+                  className={`w-6 h-3.5 rounded-full p-0.5 transition-colors flex items-center ${
+                    isAutoRollDiceEnabled ? 'bg-amber-500 justify-end' : 'bg-zinc-700 justify-start'
+                  }`}
+                >
+                  <div className="w-2.5 h-2.5 rounded-full bg-white shadow-xs" />
+                </div>
+                <span className="hidden lg:inline">
+                  Auto Roll: {isAutoRollDiceEnabled ? 'ON' : 'OFF'}
+                </span>
+              </button>
             )}
 
             {onToggleDdbSync && (
