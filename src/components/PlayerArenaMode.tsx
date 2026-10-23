@@ -40,7 +40,7 @@ import { WildShapeBeastForm, ActiveWildShapeState, GAIAH_WILD_SHAPE_FORMS } from
 import { toast } from 'sonner';
 import { Character } from '../types/character';
 import { Monster } from '../types/monster';
-import { DEFAULT_CHARACTERS, getCharacterTokenUrl, isDdbMatch } from '../data/defaultCharacters';
+import { DEFAULT_CHARACTERS, getCharacterTokenUrl, isDdbMatch, resolveTokenDdbCharacterId } from '../data/defaultCharacters';
 import { DEFAULT_MONSTERS } from '../data/defaultMonsters';
 import { PRESET_BATTLEMAPS, PresetBattlemap } from '../data/presetBattlemaps';
 import {
@@ -258,7 +258,7 @@ function buildArenaCombatantHudData(
       .match(/\d+/g)
       ?.reduce((acc, n) => acc + parseInt(n, 10), 0) ||
     5;
-  const profBonus = char?.proficiencyBonus || Math.ceil(totalLevel / 4) + 1;
+  const profBonus = (liveDdbHud as any)?.proficiencyBonus || char?.proficiencyBonus || Math.ceil(totalLevel / 4) + 1;
   const charStats = char?.stats || { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
   const classLower = (char?.classLevel || combatant.classOrCr || '').toLowerCase();
   const spellAbilityScore =
@@ -276,8 +276,8 @@ function buildArenaCombatantHudData(
       ? charStats.cha
       : Math.max(charStats.int, charStats.wis, charStats.cha);
   const spellMod = Math.floor(((spellAbilityScore || 10) - 10) / 2);
-  const spellAttackBonus = profBonus + spellMod;
-  const spellSaveDc = 8 + profBonus + spellMod;
+  const spellAttackBonus = liveDdbHud?.spellAttackBonus !== undefined ? liveDdbHud.spellAttackBonus : profBonus + spellMod;
+  const spellSaveDc = liveDdbHud?.spellSaveDc !== undefined ? liveDdbHud.spellSaveDc : 8 + profBonus + spellMod;
 
   if (char) {
     // 1. Seed from live D&D Beyond HUD if available
@@ -291,8 +291,8 @@ function buildArenaCombatantHudData(
       (liveDdbHud.special || []).forEach((a) => special.push({ ...a, isHeal: isActionHealing(a) ? true : a.isHeal }));
     }
 
-    // 2. Ensure all local compendium weapons/actions are present
-    if (Array.isArray(char.actions) && char.actions.length > 0) {
+    // 2. Ensure local compendium weapons/actions are present ONLY if live DDB did not supply attacks
+    if ((!liveDdbHud || liveDdbHud.attacks.length === 0) && Array.isArray(char.actions) && char.actions.length > 0) {
       char.actions.forEach((act, idx) => {
         if (attacks.some((a) => a.name.toLowerCase() === act.name.toLowerCase())) return;
         const dmgParts = (act.damage || '').split(' ');
@@ -336,8 +336,8 @@ function buildArenaCombatantHudData(
       });
     }
 
-    // 3. Ensure all local compendium bonus actions are present
-    if (Array.isArray(char.bonusActions) && char.bonusActions.length > 0) {
+    // 3. Ensure local compendium bonus actions are present ONLY if not already present
+    if ((!liveDdbHud || liveDdbHud.bonusActions.length === 0) && Array.isArray(char.bonusActions) && char.bonusActions.length > 0) {
       char.bonusActions.forEach((ba, idx) => {
         if (bonusActions.some((b) => b.name.toLowerCase() === ba.name.toLowerCase())) return;
         const lower = ba.name.toLowerCase();
@@ -369,8 +369,8 @@ function buildArenaCombatantHudData(
       });
     }
 
-    // 4. Ensure all local compendium reactions are present
-    if (Array.isArray(char.reactions) && char.reactions.length > 0) {
+    // 4. Ensure local compendium reactions are present ONLY if not already present
+    if ((!liveDdbHud || liveDdbHud.reactions.length === 0) && Array.isArray(char.reactions) && char.reactions.length > 0) {
       char.reactions.forEach((rx, idx) => {
         if (reactions.some((r) => r.name.toLowerCase() === rx.name.toLowerCase())) return;
         const matchedRxAsset = findJb2aAsset(rx.name);
@@ -390,8 +390,8 @@ function buildArenaCombatantHudData(
       });
     }
 
-    // 5. Ensure all local compendium spells are present with full D&D 5e rules, animations, and upcasting
-    if (Array.isArray(char.spells) && char.spells.length > 0) {
+    // 5. Ensure local compendium spells are present ONLY if live DDB did not supply spells
+    if ((!liveDdbHud || liveDdbHud.spells.length === 0) && Array.isArray(char.spells) && char.spells.length > 0) {
       char.spells.forEach((spName, idx) => {
         const lower = spName.toLowerCase();
         const rule = lookupDndRuleDetails(spName, 'spell');
@@ -806,8 +806,7 @@ function buildArenaCombatantHudData(
     Object.entries(liveDdbHud.spellSlots).forEach(([k, v]) => {
       spellSlots[Number(k)] = { ...v };
     });
-  }
-  if (spells.length > 0) {
+  } else if (spells.length > 0) {
     const maxSpellLvl = Math.max(
       3,
       ...spells.map((s) => s.level || 0),
@@ -843,9 +842,11 @@ function buildArenaCombatantHudData(
     tempHp: combatant.tempHp,
     speed: `${combatant.speedFt} ft.`,
     walkSpeedFt: combatant.speedFt,
-    passivePerception: char?.passivePerception || liveDdbHud?.passivePerception || 14,
-    passiveInsight: char?.passiveInsight || liveDdbHud?.passiveInsight || 12,
-    passiveInvestigation: char?.passiveInvestigation || liveDdbHud?.passiveInvestigation || 12,
+    passivePerception: liveDdbHud?.passivePerception || char?.passivePerception || 14,
+    passiveInsight: liveDdbHud?.passiveInsight || char?.passiveInsight || 12,
+    passiveInvestigation: liveDdbHud?.passiveInvestigation || char?.passiveInvestigation || 12,
+    spellSaveDc,
+    spellAttackBonus,
     deathSaves: { successes: 0, failures: 0 },
     attacks,
     actions,
@@ -2029,23 +2030,67 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
     toast.success(`Reverted from ${revertedBeastName} back to Wood Elf!`);
   }, [activeWildShape, activeCombatant, activeTokenMenu, combatants, addCombatLog]);
 
-  // Fetch live D&D Beyond HUD data for the active combatant if they have a ddbCharacterId
+  // Helper to resolve D&D Beyond Character ID for any Arena Combatant or Hero
+  const getCombatantDdbId = useCallback((c?: ArenaCombatant | Character | null): string | undefined => {
+    if (!c) return undefined;
+    const direct = (c as any).sourceCharacter?.ddbCharacterId || (c as any).ddbCharacterId;
+    if (direct) return String(direct).replace(/^char_ddb_/, '').trim();
+    return resolveTokenDdbCharacterId(
+      {
+        id: c.id,
+        name: (c as any).sourceCharacter?.name || c.name,
+        ddbCharacterId: (c as any).sourceCharacter?.ddbCharacterId || (c as any).ddbCharacterId
+      },
+      heroPool
+    );
+  }, [heroPool]);
+
+  // Fetch live D&D Beyond HUD data for combatants with a resolvable DDB Character ID
   useEffect(() => {
-    const ddbId = activeCombatant?.sourceCharacter?.ddbCharacterId;
-    if (!ddbId || liveDdbHudMap[String(ddbId)]) return;
+    // Collect all candidates needing live DDB HUD data: active combatant, all human combatants, and roster heroes
+    const candidateDdbIds = new Set<string>();
+
+    const activeDdbId = getCombatantDdbId(activeCombatant);
+    if (activeDdbId && !liveDdbHudMap[activeDdbId]) {
+      candidateDdbIds.add(activeDdbId);
+    }
+
+    combatants.forEach((c) => {
+      const id = getCombatantDdbId(c);
+      if (id && !liveDdbHudMap[id]) {
+        candidateDdbIds.add(id);
+      }
+    });
+
+    goldHeroIds.forEach((heroId) => {
+      const hero = heroPool.find((h) => h.id === heroId);
+      const id = getCombatantDdbId(hero);
+      if (id && !liveDdbHudMap[id]) {
+        candidateDdbIds.add(id);
+      }
+    });
+
+    if (candidateDdbIds.size === 0) return;
+
     let cancelled = false;
-    fetch(`/api/ddb/characters/${ddbId}/hud-data`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((json) => {
-        if (!cancelled && json?.hudData) {
-          setLiveDdbHudMap((prev) => ({ ...prev, [String(ddbId)]: json.hudData }));
-        }
-      })
-      .catch(() => {});
+    candidateDdbIds.forEach((ddbId) => {
+      fetch(`/api/ddb/characters/${ddbId}/hud-data`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((json) => {
+          if (!cancelled && json) {
+            const hudData: HudCharacterData | null = json.hudData || (json.name ? json : null);
+            if (hudData && hudData.name) {
+              setLiveDdbHudMap((prev) => ({ ...prev, [String(ddbId)]: hudData }));
+            }
+          }
+        })
+        .catch(() => {});
+    });
+
     return () => {
       cancelled = true;
     };
-  }, [activeCombatant, liveDdbHudMap]);
+  }, [activeCombatant, combatants, goldHeroIds, heroPool, liveDdbHudMap, getCombatantDdbId]);
 
   // Spawn a JB2A Visual Effect between caster and target (or targetPointPx)
   const spawnArenaVisualEffect = useCallback(
@@ -3319,7 +3364,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
   // Build `<PlayerHeroDock />` data for the currently active human-controlled fighter
   const activeHeroHudData = useMemo(() => {
     if (!activeCombatant) return null;
-    const ddbId = activeCombatant.sourceCharacter?.ddbCharacterId;
+    const ddbId = getCombatantDdbId(activeCombatant);
     const liveHud = ddbId ? liveDdbHudMap[String(ddbId)] : null;
     const baseHud = buildArenaCombatantHudData(activeCombatant, liveHud, activeWildShape, arenaConfig);
 
@@ -3342,7 +3387,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       nextHud.spellSlots = mergedSlots;
     }
     return nextHud;
-  }, [activeCombatant, liveDdbHudMap, activeWildShape, arenaConfig]);
+  }, [activeCombatant, getCombatantDdbId, liveDdbHudMap, activeWildShape, arenaConfig]);
 
   // Compute reachable 5ft grid cells for Tap-to-Move on Mobile & Desktop when it's a human player's turn
   const reachableMoveSquares = useMemo<Array<{ col: number; row: number }>>(() => {
@@ -4281,10 +4326,16 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           {activeMapWalls.length > 0 && (
             <Layer>
               {activeMapWalls.map((wall) => {
-                if (!wall.points || wall.points.length < 4) return null;
-                const isDoor = wall.type === 'door';
-                const isWindow = wall.type === 'window';
-                const isOpen = Boolean(wall.isOpen);
+                const wx1 = wall.x1 ?? wall.p1?.x ?? wall.points?.[0];
+                const wy1 = wall.y1 ?? wall.p1?.y ?? wall.points?.[1];
+                const wx2 = wall.x2 ?? wall.p2?.x ?? wall.points?.[2];
+                const wy2 = wall.y2 ?? wall.p2?.y ?? wall.points?.[3];
+                if (wx1 === undefined || wy1 === undefined || wx2 === undefined || wy2 === undefined) return null;
+                const pts = wall.points && wall.points.length >= 4 ? wall.points : [wx1, wy1, wx2, wy2];
+                const wType = wall.type || wall.wallType || 'solid';
+                const isDoor = wType === 'door' || wType === 'secret_door' || wType === 'secret';
+                const isWindow = wType === 'window' || wType === 'terrain';
+                const isOpen = Boolean(wall.isOpen || wall.doorState === 'open');
                 const strokeColor = isDoor
                   ? isOpen
                     ? '#10b981'
@@ -4292,8 +4343,8 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                   : isWindow
                   ? '#38bdf8'
                   : '#f43f5e';
-                const midX = (wall.points[0] + wall.points[wall.points.length - 2]) / 2;
-                const midY = (wall.points[1] + wall.points[wall.points.length - 1]) / 2;
+                const midX = (pts[0] + pts[pts.length - 2]) / 2;
+                const midY = (pts[1] + pts[pts.length - 1]) / 2;
 
                 return (
                   <Group
@@ -4313,7 +4364,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                     }}
                   >
                     <Line
-                      points={wall.points}
+                      points={pts}
                       stroke={strokeColor}
                       strokeWidth={isDoor ? 9 : isWindow ? 6 : 8}
                       dash={isDoor && isOpen ? [10, 10] : isWindow ? [8, 6] : undefined}

@@ -57,9 +57,70 @@ export const DEFAULT_ARENA_CONFIG: ArenaConfig = {
   updatedAt: 0
 };
 
+export function normalizeArenaWallSegment(w: WallSegment): WallSegment {
+  const wx1 = Math.round(w.x1 ?? w.p1?.x ?? w.points?.[0] ?? 0);
+  const wy1 = Math.round(w.y1 ?? w.p1?.y ?? w.points?.[1] ?? 0);
+  const wx2 = Math.round(w.x2 ?? w.p2?.x ?? w.points?.[2] ?? 0);
+  const wy2 = Math.round(w.y2 ?? w.p2?.y ?? w.points?.[3] ?? 0);
+
+  const rawType = (w.wallType || w.type || 'normal') as string;
+  const vttWallType =
+    rawType === 'door'
+      ? 'door'
+      : rawType === 'secret_door' || rawType === 'secret'
+      ? 'secret_door'
+      : rawType === 'window'
+      ? 'window'
+      : rawType === 'terrain'
+      ? 'terrain'
+      : 'normal';
+
+  const arenaType =
+    vttWallType === 'door'
+      ? 'door'
+      : vttWallType === 'secret_door'
+      ? 'secret_door'
+      : vttWallType === 'window'
+      ? 'window'
+      : vttWallType === 'terrain'
+      ? 'terrain'
+      : 'solid';
+
+  const isOpen = Boolean(w.isOpen || w.doorState === 'open');
+  const doorState = (
+    w.doorState || (vttWallType === 'door' || vttWallType === 'secret_door' ? (isOpen ? 'open' : 'closed') : undefined)
+  ) as any;
+
+  return {
+    ...w,
+    id: w.id || `arena_wall_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    p1: { x: wx1, y: wy1 },
+    p2: { x: wx2, y: wy2 },
+    x1: wx1,
+    y1: wy1,
+    x2: wx2,
+    y2: wy2,
+    points: [wx1, wy1, wx2, wy2],
+    wallType: vttWallType as any,
+    type: arenaType,
+    doorState,
+    isOpen,
+    blocksLight: w.blocksLight !== undefined ? w.blocksLight : vttWallType !== 'window' && vttWallType !== 'terrain',
+    blocksMovement: w.blocksMovement !== undefined ? w.blocksMovement : true
+  };
+}
+
 export function normalizeArenaConfig(raw: any): ArenaConfig {
   if (!raw || typeof raw !== 'object') {
     return { ...DEFAULT_ARENA_CONFIG };
+  }
+  const normalizedMapWalls: Record<string, WallSegment[]> = {};
+  if (raw.mapWalls && typeof raw.mapWalls === 'object') {
+    for (const [mId, list] of Object.entries(raw.mapWalls)) {
+      if (Array.isArray(list)) {
+        normalizedMapWalls[mId] = list.map((w) => normalizeArenaWallSegment(w));
+      }
+    }
   }
   return {
     defaultMatchMode: ['1v1', '2v2', 'vs_npcs', 'random_encounter'].includes(raw.defaultMatchMode)
@@ -73,7 +134,7 @@ export function normalizeArenaConfig(raw: any): ArenaConfig {
       : DEFAULT_ARENA_CONFIG.defaultMapId,
     disabledMapIds: Array.isArray(raw.disabledMapIds) ? raw.disabledMapIds : [],
     customMaps: Array.isArray(raw.customMaps) ? raw.customMaps : [],
-    mapWalls: raw.mapWalls && typeof raw.mapWalls === 'object' ? raw.mapWalls : {},
+    mapWalls: normalizedMapWalls,
     enforceWalls: typeof raw.enforceWalls === 'boolean' ? raw.enforceWalls : true,
     gridOpacity: typeof raw.gridOpacity === 'number' ? Math.max(0, Math.min(1, raw.gridOpacity)) : 0.38,
     monsterHpMultiplier: typeof raw.monsterHpMultiplier === 'number' ? Math.max(0.25, Math.min(5, raw.monsterHpMultiplier)) : 1.0,
@@ -244,7 +305,8 @@ export function doesArenaWallBlockMovement(
   const p2 = { x: x2, y: y2 };
 
   for (const w of walls) {
-    if ((w.type === 'door' || w.type === 'secret') && (w.doorState === 'open' || w.isOpen)) {
+    const wType = w.type || w.wallType || 'solid';
+    if ((wType === 'door' || wType === 'secret' || wType === 'secret_door') && (w.doorState === 'open' || w.isOpen)) {
       continue;
     }
     if (w.blocksMovement === false) {
@@ -290,10 +352,11 @@ export function doesArenaWallBlockSight(
   const p2 = { x: x2, y: y2 };
 
   for (const w of walls) {
-    if (w.type === 'window' || w.type === 'terrain') {
+    const wType = w.type || w.wallType || 'solid';
+    if (wType === 'window' || wType === 'terrain') {
       continue; // Windows and cover allow line of sight
     }
-    if ((w.type === 'door' || w.type === 'secret') && (w.doorState === 'open' || w.isOpen)) {
+    if ((wType === 'door' || wType === 'secret' || wType === 'secret_door') && (w.doorState === 'open' || w.isOpen)) {
       continue;
     }
     if (w.blocksLight === false) {
