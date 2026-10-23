@@ -43,6 +43,12 @@ import { GridLayer } from './GridLayer';
 import { buildDmMonsterHudData } from '../services/monsterHudService';
 import { computeTacticalAiTurnPlan, classifyCombatantRole } from '../services/arenaTacticalAi';
 import {
+  YukaArenaMonsterBrain,
+  roll5eRechargeCheck,
+  checkThreatenedInMelee,
+  ArenaLineOfSightEngine
+} from '../services/ai';
+import {
   VttEffectInstance,
   DomEffectOverlay,
   findJb2aAsset,
@@ -85,6 +91,7 @@ export interface ArenaCombatant {
   sourceCharacter?: Character;
   sourceMonster?: Monster;
   ownerPlayerName?: string;
+  rechargeStatus?: Record<string, boolean>;
 }
 
 export interface ArenaLogEntry {
@@ -1299,20 +1306,49 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
 
       // Offensive Attack Roll or Saving Throw
       const rawHitBonus = parseInt(String(action.hitBonus || '+6').replace('+', ''), 10) || 6;
-      const d20 = Math.floor(Math.random() * 20) + 1;
+
+      // D&D 5e Close Combat Disadvantage: Ranged attacks have Disadvantage when a hostile enemy is within 5ft melee reach
+      const isRanged = (action.rangeFt && action.rangeFt >= 20) || action.description?.toLowerCase().includes('ranged');
+      let isThreatened = false;
+      if (isRanged) {
+        isThreatened = combatants.some((other) => {
+          if (other.id === actor.id || other.team === actor.team || other.currentHp <= 0) return false;
+          const ocx = other.x + ((other.size || 1) * ARENA_GRID_SIZE) / 2;
+          const ocy = other.y + ((other.size || 1) * ARENA_GRID_SIZE) / 2;
+          const distFromOther = Math.max(
+            0,
+            Math.round((Math.hypot(ocx - actorCx, ocy - actorCy) / ARENA_GRID_SIZE) * 5) -
+              ((actor.size - 1 + (other.size - 1)) * 2.5)
+          );
+          return distFromOther <= 5;
+        });
+      }
+
+      const d20Roll1 = Math.floor(Math.random() * 20) + 1;
+      const d20Roll2 = Math.floor(Math.random() * 20) + 1;
+      const d20 = isThreatened ? Math.min(d20Roll1, d20Roll2) : d20Roll1;
       const isCrit = d20 === 20;
       const isFumble = d20 === 1;
       const attackTotal = d20 + rawHitBonus;
+
+      const rollFormula = isThreatened
+        ? `1d20 Disadvantage [${d20Roll1}, ${d20Roll2}] (${d20}) + ${rawHitBonus} = ${attackTotal}`
+        : `1d20 (${d20}) + ${rawHitBonus} = ${attackTotal}`;
 
       if (onTrigger3dDice) {
         onTrigger3dDice({
           id: `arena-atk-${Date.now()}`,
           characterName: actor.name,
-          action: action.name,
+          action: isThreatened ? `${action.name} (Disadvantage)` : action.name,
           rollType: 'attack',
-          formula: `1d20 (${d20}) + ${rawHitBonus} = ${attackTotal}`,
-          diceNotation: '1d20',
-          dice: [{ sides: 20, result: d20, type: 'd20' }],
+          formula: rollFormula,
+          diceNotation: isThreatened ? '2d20kl1' : '1d20',
+          dice: isThreatened
+            ? [
+                { sides: 20, result: d20Roll1, type: 'd20' },
+                { sides: 20, result: d20Roll2, type: 'd20' }
+              ]
+            : [{ sides: 20, result: d20, type: 'd20' }],
           total: attackTotal,
           isCritical: isCrit,
           isFumble,
@@ -1336,8 +1372,8 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         addCombatLog(
           actor.name,
           actor.team,
-          `attacked ${target.name} with ${action.name} — MISS!`,
-          `Rolled ${attackTotal} (1d20[${d20}] + ${rawHitBonus}) vs AC ${target.ac}`
+          `attacked ${target.name} with ${action.name}${isThreatened ? ' (Disadvantage: enemy in 5ft melee)' : ''} — MISS!`,
+          `Rolled ${attackTotal} (${rollFormula}) vs AC ${target.ac}`
         );
         soundCatalog.play('shield_clash', 0.65);
         return true;
@@ -1363,18 +1399,18 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       addCombatLog(
         actor.name,
         actor.team,
-        `${isCrit ? '💥 CRITICAL HIT!' : 'hit'} ${target.name} with ${action.name} for ${dmgRoll.total} ${action.damageType || ''} damage!`,
-        `To Hit: ${attackTotal} vs AC ${target.ac} • Damage: ${dmgRoll.breakdown}`,
+        `${isCrit ? '💥 CRITICAL HIT!' : 'hit'} ${target.name} with ${action.name}${isThreatened ? ' (Disadvantage)' : ''} for ${dmgRoll.total} ${action.damageType || ''} damage!`,
+        `To Hit: ${attackTotal} (${rollFormula}) vs AC ${target.ac} • Damage: ${dmgRoll.breakdown}`,
         isCrit
       );
       return true;
     },
-    [addCombatLog, onTrigger3dDice, spawnArenaVisualEffect]
+    [combatants, addCombatLog, onTrigger3dDice, spawnArenaVisualEffect]
   );
 
   // ============================================================================
   // AUTONOMOUS TACTICAL NPC / AI TURN CONTROLLER
-  // Powered by Mistreevous Behavior Trees + Utility AI Scorer + Pathfinding.js A*
+  // Powered by YUKA Goal-Oriented AI + XState 5e Action Economy + ROT.js
   // ============================================================================
   useEffect(() => {
     if (phase !== 'battle' || !activeCombatant || !activeCombatant.isAI || winnerTeam) {
@@ -1394,40 +1430,98 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       if (cancelled) return;
 
       const aiHud = buildArenaCombatantHudData(activeCombatant);
-      const plan = computeTacticalAiTurnPlan(
+
+      // 1. D&D 5e Monster Recharge Check (e.g., Breath Weapon Recharge 5-6)
+      const currentRechargeMap: Record<string, boolean> = { ...(activeCombatant.rechargeStatus || {}) };
+      const rechargeEligibleActions = aiHud.actions.filter(
+        (a) =>
+          a.description.toLowerCase().includes('recharge') ||
+          a.name.toLowerCase().includes('breath')
+      );
+      const rechargedAbilities: string[] = [];
+
+      for (const ra of rechargeEligibleActions) {
+        if (currentRechargeMap[ra.name] === false) {
+          const notation =
+            ra.description.toLowerCase().includes('recharge 6') &&
+            !ra.description.toLowerCase().includes('5-6')
+              ? '6'
+              : '5-6';
+          const { recharged, roll } = roll5eRechargeCheck(notation);
+          if (recharged) {
+            currentRechargeMap[ra.name] = true;
+            rechargedAbilities.push(ra.name);
+            addCombatLog(
+              activeCombatant.name,
+              activeCombatant.team,
+              `🎲 Recharge Check (1d6 = ${roll}): ${ra.name} is RECHARGED!`
+            );
+            soundCatalog.play('spell_buff', 0.6);
+          } else {
+            addCombatLog(
+              activeCombatant.name,
+              activeCombatant.team,
+              `🎲 Recharge Check (1d6 = ${roll}): ${ra.name} failed to recharge this round.`
+            );
+          }
+        } else {
+          rechargedAbilities.push(ra.name);
+        }
+      }
+
+      // Update monster's recharge state if changed
+      setCombatants((prev) =>
+        prev.map((c) =>
+          c.id === activeCombatant.id ? { ...c, rechargeStatus: currentRechargeMap } : c
+        )
+      );
+
+      // 2. Plan Turn using YUKA Goal-Oriented AI Brain
+      const yukaBrain = new YukaArenaMonsterBrain();
+      const goal = yukaBrain.planTurn(
         activeCombatant,
         combatants,
         aiHud,
         ARENA_COLS,
         ARENA_ROWS,
-        ARENA_GRID_SIZE
+        ARENA_GRID_SIZE,
+        rechargedAbilities
       );
 
-      setAiTacticalBanner(plan.tacticalThought);
+      setAiTacticalBanner(goal.reason);
 
-      // Build A* trail preview points (including start cell)
-      if (plan.pathWaypointsPx.length > 0) {
+      // 3. Build A* trail preview points
+      if (goal.pathWaypointsPx.length > 0) {
         setAiPathPreviewPx([
           { x: activeCombatant.x, y: activeCombatant.y },
-          ...plan.pathWaypointsPx
+          ...goal.pathWaypointsPx
         ]);
       } else {
         setAiPathPreviewPx([]);
       }
 
-      if (plan.useDash) {
+      if (goal.useDash) {
         addCombatLog(
           activeCombatant.name,
           activeCombatant.team,
           `used Dash (+${activeCombatant.speedFt} ft) along A* path!`,
-          plan.tacticalThought
+          goal.reason
         );
         soundCatalog.play('wind_whoosh', 0.65);
       }
 
-      // Step-by-step A* grid movement animation (150ms per square)
+      if (goal.useDisengage) {
+        addCombatLog(
+          activeCombatant.name,
+          activeCombatant.team,
+          `used Disengage to avoid opportunity attacks while repositioning!`,
+          goal.reason
+        );
+      }
+
+      // 4. Step-by-step grid movement animation (155ms per square)
       const stepDelayMs = 155;
-      plan.pathWaypointsPx.forEach((wp, idx) => {
+      goal.pathWaypointsPx.forEach((wp, idx) => {
         const t = window.setTimeout(() => {
           if (cancelled) return;
           setCombatants((prev) =>
@@ -1446,50 +1540,105 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         timers.push(t);
       });
 
-      const totalMoveMs = plan.pathWaypointsPx.length * stepDelayMs + 320;
+      const totalMoveMs = goal.pathWaypointsPx.length * stepDelayMs + 320;
       const updatedActor: ArenaCombatant = {
         ...activeCombatant,
-        x: plan.finalPositionPx.x,
-        y: plan.finalPositionPx.y,
-        remainingMoveFt: Math.max(0, activeCombatant.speedFt - plan.movementSpentFt)
+        x: goal.finalPositionPx.x,
+        y: goal.finalPositionPx.y,
+        remainingMoveFt: Math.max(0, activeCombatant.speedFt - goal.plannedMovementFt)
       };
 
-      // Execute Primary Action (Attack / Spell / Emergency Heal) after A* movement completes
+      // 5. Execute Action Sequence after movement completes
       const actionTimer = window.setTimeout(() => {
         if (cancelled) return;
         setAiPathPreviewPx([]);
 
-        if (plan.primaryAction) {
-          const targetObj =
-            plan.primaryAction.targetId === updatedActor.id
-              ? updatedActor
-              : combatants.find((c) => c.id === plan.primaryAction?.targetId);
-          if (targetObj && targetObj.currentHp > 0) {
-            executeCombatAction(updatedActor, targetObj, plan.primaryAction.action);
+        // CASE A: Multiattack sequence with dynamic target splitting
+        if (goal.type === 'multiattack' && goal.attacksQueue.length > 0) {
+          let currentTargetId = goal.targetId;
+
+          goal.attacksQueue.forEach((strikeAction, strikeIdx) => {
+            const strikeTimer = window.setTimeout(() => {
+              if (cancelled) return;
+
+              setCombatants((currentCombatants) => {
+                const latestActor = currentCombatants.find((c) => c.id === updatedActor.id) || updatedActor;
+                let targetObj = currentCombatants.find(
+                  (c) => c.id === currentTargetId && c.currentHp > 0
+                );
+
+                // D&D 5e Dynamic Retargeting: If primary target is eliminated, split remaining attacks to next closest enemy
+                if (!targetObj) {
+                  const nextEnemy = currentCombatants
+                    .filter((c) => c.team !== latestActor.team && c.currentHp > 0)
+                    .sort((a, b) => {
+                      const distA = Math.hypot(a.x - latestActor.x, a.y - latestActor.y);
+                      const distB = Math.hypot(b.x - latestActor.x, b.y - latestActor.y);
+                      return distA - distB;
+                    })[0] || null;
+
+                  if (nextEnemy) {
+                    currentTargetId = nextEnemy.id;
+                    targetObj = nextEnemy;
+                    addCombatLog(
+                      latestActor.name,
+                      latestActor.team,
+                      `Target eliminated! Redirecting strike #${strikeIdx + 1} (${strikeAction.name}) to ${nextEnemy.name}!`
+                    );
+                  }
+                }
+
+                if (targetObj) {
+                  executeCombatAction(latestActor, targetObj, strikeAction);
+                }
+                return currentCombatants;
+              });
+            }, strikeIdx * 480);
+            timers.push(strikeTimer);
+          });
+        } else if (goal.type === 'breath_weapon' && goal.actionItem) {
+          // Signature recharge breath weapon used -> mark uncharged
+          currentRechargeMap[goal.actionItem.name] = false;
+          setCombatants((prev) =>
+            prev.map((c) =>
+              c.id === updatedActor.id ? { ...c, rechargeStatus: currentRechargeMap } : c
+            )
+          );
+          const targetObj = combatants.find((c) => c.id === goal.targetId && c.currentHp > 0);
+          if (targetObj) {
+            executeCombatAction(updatedActor, targetObj, goal.actionItem);
+          }
+        } else if (goal.type === 'emergency_heal' && goal.actionItem) {
+          executeCombatAction(updatedActor, updatedActor, goal.actionItem);
+        } else if (goal.actionItem) {
+          const targetObj = combatants.find((c) => c.id === goal.targetId && c.currentHp > 0);
+          if (targetObj) {
+            executeCombatAction(updatedActor, targetObj, goal.actionItem);
           }
         }
 
-        // Execute Bonus Action (e.g. Potion of Greater Healing or Bonus Strike) if planned
-        const bonusDelay = plan.bonusAction ? 750 : 0;
-        if (plan.bonusAction) {
+        // 6. Execute Bonus Action if planned
+        const strikeCount = goal.type === 'multiattack' ? Math.max(1, goal.attacksQueue.length) : 1;
+        const strikesTotalMs = strikeCount * 480;
+
+        if (goal.bonusActionItem) {
           const bonusTimer = window.setTimeout(() => {
             if (cancelled) return;
             const bTarget =
-              plan.bonusAction?.targetId === updatedActor.id
+              goal.bonusActionItem?.isSelfAction || goal.bonusActionItem?.isHeal
                 ? updatedActor
-                : combatants.find((c) => c.id === plan.bonusAction?.targetId);
-            if (bTarget) {
-              executeCombatAction(updatedActor, bTarget, plan.bonusAction.action);
-            }
-          }, 600);
+                : combatants.find((c) => c.id === goal.targetId && c.currentHp > 0) || updatedActor;
+            executeCombatAction(updatedActor, bTarget, goal.bonusActionItem!);
+          }, strikesTotalMs + 200);
           timers.push(bonusTimer);
         }
 
+        const bonusDelay = goal.bonusActionItem ? 750 : 0;
         const endTurnTimer = window.setTimeout(() => {
           if (cancelled) return;
           setAiTacticalBanner(null);
           handleAdvanceTurn();
-        }, 1150 + bonusDelay);
+        }, strikesTotalMs + bonusDelay + 850);
         timers.push(endTurnTimer);
       }, totalMoveMs);
 
