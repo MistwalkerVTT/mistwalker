@@ -113,7 +113,15 @@ import { WildShapeBeastForm, ActiveWildShapeState, GAIAH_WILD_SHAPE_FORMS } from
 import { DndRuleInspectionModal } from './DndRuleInspectionModal';
 import { canTokenHaveHalo } from '../effects/db/tokenFxMap';
 import { DndRuleEntry, lookupDndRuleDetails } from '../data/dndRulesCompendium';
-import { HudCharacterData, HudActionItem, computeUpcastFormula, evaluateDiceFormula } from '../types/hud';
+import {
+  HudCharacterData,
+  HudActionItem,
+  computeUpcastFormula,
+  evaluateDiceFormula,
+  normalizePlayerAutoRollKey,
+  loadPlayerAutoRollMap,
+  savePlayerAutoRollPreference
+} from '../types/hud';
 import { TokenDragRuler, TokenDragState, parseSpeedFt } from './TokenDragRuler';
 import { RoomHotspotLayer } from './RoomHotspotLayer';
 import {
@@ -1758,33 +1766,10 @@ export default function PlayerView() {
   useEffect(() => {
     isDdbSyncEnabledRef.current = isDdbSyncEnabled;
   }, [isDdbSyncEnabled]);
-  const [isAutoRollDiceEnabled, setIsAutoRollDiceEnabled] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('mistwalker_player_auto_roll_dice') !== 'false';
-    } catch {
-      return true;
-    }
-  });
-  const isAutoRollDiceEnabledRef = useRef<boolean>(isAutoRollDiceEnabled);
-  useEffect(() => {
-    isAutoRollDiceEnabledRef.current = isAutoRollDiceEnabled;
-    try {
-      localStorage.setItem('mistwalker_player_auto_roll_dice', String(isAutoRollDiceEnabled));
-    } catch {}
-  }, [isAutoRollDiceEnabled]);
-  const handleToggleAutoRollDice = useCallback((nextEnabled: boolean) => {
-    isAutoRollDiceEnabledRef.current = nextEnabled;
-    setIsAutoRollDiceEnabled(nextEnabled);
-    if (nextEnabled) {
-      toast.success('🎲 Automatic Dice Rolling turned ON', {
-        description: 'Casting spells and actions from the HUD will automatically roll 3D dice.'
-      });
-    } else {
-      toast.info('✨ Automatic Dice Rolling turned OFF', {
-        description: 'Casting spells and actions from the HUD will play spell animations only.'
-      });
-    }
-  }, []);
+  const [autoRollByPlayerMap, setAutoRollByPlayerMap] = useState<Record<string, boolean>>(() =>
+    loadPlayerAutoRollMap()
+  );
+  const isAutoRollDiceEnabledRef = useRef<boolean>(true);
   const [showCharacterSelectModal, setShowCharacterSelectModal] = useState<boolean>(false);
   const [isCurrentCharacterPrivate, setIsCurrentCharacterPrivate] = useState<boolean>(false);
   const [showWildShapeModal, setShowWildShapeModal] = useState<boolean>(false);
@@ -1915,6 +1900,57 @@ export default function PlayerView() {
     }
     return null;
   }, [claimedToken, compendiumCharacters]);
+
+  // Player-specific Automatic Dice Rolling state (keyed per character/player)
+  const activePlayerAutoRollKey = useMemo(
+    () =>
+      normalizePlayerAutoRollKey(
+        activeWildShape?.originalName || claimedToken?.name || hudCharacterData?.name,
+        resolvedClaimedDdbId || hudCharacterData?.ddbCharacterId,
+        claimedToken?.id || hudCharacterData?.id
+      ),
+    [
+      activeWildShape?.originalName,
+      claimedToken?.name,
+      claimedToken?.id,
+      hudCharacterData?.name,
+      hudCharacterData?.ddbCharacterId,
+      hudCharacterData?.id,
+      resolvedClaimedDdbId
+    ]
+  );
+
+  const isAutoRollDiceEnabled = useMemo(
+    () => autoRollByPlayerMap[activePlayerAutoRollKey] !== false,
+    [autoRollByPlayerMap, activePlayerAutoRollKey]
+  );
+
+  useEffect(() => {
+    isAutoRollDiceEnabledRef.current = isAutoRollDiceEnabled;
+  }, [isAutoRollDiceEnabled]);
+
+  const handleToggleAutoRollDice = useCallback(
+    (nextEnabled: boolean) => {
+      isAutoRollDiceEnabledRef.current = nextEnabled;
+      const updated = savePlayerAutoRollPreference(activePlayerAutoRollKey, nextEnabled);
+      setAutoRollByPlayerMap(updated);
+      const heroLabel =
+        activeWildShape?.originalName ||
+        claimedToken?.name ||
+        hudCharacterData?.name ||
+        'This character';
+      if (nextEnabled) {
+        toast.success(`🎲 Auto Roll turned ON for ${heroLabel}`, {
+          description: `${heroLabel}'s HUD spells and actions will automatically roll 3D dice.`
+        });
+      } else {
+        toast.info(`✨ Auto Roll turned OFF for ${heroLabel}`, {
+          description: `${heroLabel}'s HUD spells and actions will play spell animations only.`
+        });
+      }
+    },
+    [activePlayerAutoRollKey, activeWildShape?.originalName, claimedToken?.name, hudCharacterData?.name]
+  );
 
   const promptedPrivateCharIdRef = useRef<string | null>(null);
   const manualSpellSlotsRef = useRef<Record<string, Record<number, { available: number; total: number }>>>({});

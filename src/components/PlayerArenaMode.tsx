@@ -43,7 +43,15 @@ import { Monster } from '../types/monster';
 import { DEFAULT_CHARACTERS, getCharacterTokenUrl, isDdbMatch } from '../data/defaultCharacters';
 import { DEFAULT_MONSTERS } from '../data/defaultMonsters';
 import { PRESET_BATTLEMAPS, PresetBattlemap } from '../data/presetBattlemaps';
-import { HudCharacterData, HudActionItem, computeUpcastFormula, evaluateDiceFormula } from '../types/hud';
+import {
+  HudCharacterData,
+  HudActionItem,
+  computeUpcastFormula,
+  evaluateDiceFormula,
+  normalizePlayerAutoRollKey,
+  loadPlayerAutoRollMap,
+  savePlayerAutoRollPreference
+} from '../types/hud';
 import { WallSegment, DoorState, AURA_PRESETS, AuraPreset } from '../types';
 import { PlayerHeroDock } from './PlayerHeroDock';
 import { GridLayer } from './GridLayer';
@@ -1709,34 +1717,74 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
   const [activeWildShape, setActiveWildShape] = useState<ActiveWildShapeState | null>(null);
   const [hudCollapseTick, setHudCollapseTick] = useState<number>(0);
 
-  // Automatic Dice Rolling Toggle State (persisted in localStorage)
-  const [isAutoRollDiceEnabled, setIsAutoRollDiceEnabled] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('mistwalker_player_auto_roll_dice') !== 'false';
-    } catch {
-      return true;
-    }
-  });
-  const isAutoRollDiceEnabledRef = useRef<boolean>(isAutoRollDiceEnabled);
+  // Player-specific Automatic Dice Rolling Toggle State (persisted per character/player in localStorage)
+  const [autoRollByPlayerMap, setAutoRollByPlayerMap] = useState<Record<string, boolean>>(() =>
+    loadPlayerAutoRollMap()
+  );
+  const autoRollByPlayerMapRef = useRef<Record<string, boolean>>(autoRollByPlayerMap);
   useEffect(() => {
-    isAutoRollDiceEnabledRef.current = isAutoRollDiceEnabled;
-    try {
-      localStorage.setItem('mistwalker_player_auto_roll_dice', String(isAutoRollDiceEnabled));
-    } catch {}
-  }, [isAutoRollDiceEnabled]);
-  const handleToggleAutoRollDice = useCallback((nextEnabled: boolean) => {
-    isAutoRollDiceEnabledRef.current = nextEnabled;
-    setIsAutoRollDiceEnabled(nextEnabled);
-    if (nextEnabled) {
-      toast.success('🎲 Automatic Dice Rolling turned ON', {
-        description: 'Casting spells and actions from the HUD will automatically roll 3D dice.'
-      });
-    } else {
-      toast.info('✨ Automatic Dice Rolling turned OFF', {
-        description: 'Casting spells and actions from the HUD will play spell animations only.'
-      });
-    }
+    autoRollByPlayerMapRef.current = autoRollByPlayerMap;
+  }, [autoRollByPlayerMap]);
+
+  const activePlayerAutoRollKey = useMemo(
+    () =>
+      normalizePlayerAutoRollKey(
+        activeWildShape?.originalName ||
+          activeCombatant?.sourceCharacter?.name ||
+          activeCombatant?.name,
+        activeCombatant?.sourceCharacter?.ddbCharacterId,
+        activeCombatant?.id
+      ),
+    [
+      activeWildShape?.originalName,
+      activeCombatant?.sourceCharacter?.name,
+      activeCombatant?.sourceCharacter?.ddbCharacterId,
+      activeCombatant?.name,
+      activeCombatant?.id
+    ]
+  );
+
+  const isAutoRollDiceEnabled = useMemo(
+    () => autoRollByPlayerMap[activePlayerAutoRollKey] !== false,
+    [autoRollByPlayerMap, activePlayerAutoRollKey]
+  );
+
+  const isCombatantAutoRollEnabled = useCallback((combatant: ArenaCombatant) => {
+    const key = normalizePlayerAutoRollKey(
+      combatant.sourceCharacter?.name || combatant.name,
+      combatant.sourceCharacter?.ddbCharacterId,
+      combatant.id
+    );
+    return autoRollByPlayerMapRef.current[key] !== false;
   }, []);
+
+  const handleToggleAutoRollDice = useCallback(
+    (nextEnabled: boolean) => {
+      const updated = savePlayerAutoRollPreference(activePlayerAutoRollKey, nextEnabled);
+      autoRollByPlayerMapRef.current = updated;
+      setAutoRollByPlayerMap(updated);
+      const heroLabel =
+        activeWildShape?.originalName ||
+        activeCombatant?.sourceCharacter?.name ||
+        activeCombatant?.name ||
+        'This character';
+      if (nextEnabled) {
+        toast.success(`🎲 Auto Roll turned ON for ${heroLabel}`, {
+          description: `${heroLabel}'s HUD spells and actions will automatically roll 3D dice.`
+        });
+      } else {
+        toast.info(`✨ Auto Roll turned OFF for ${heroLabel}`, {
+          description: `${heroLabel}'s HUD spells and actions will play spell animations only.`
+        });
+      }
+    },
+    [
+      activePlayerAutoRollKey,
+      activeWildShape?.originalName,
+      activeCombatant?.sourceCharacter?.name,
+      activeCombatant?.name
+    ]
+  );
 
   // Real-time Movement Drag Ruler State (Identical to standard Player View)
   const [tokenDragState, setTokenDragState] = useState<TokenDragState | null>(null);
@@ -2312,7 +2360,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           incenseEffect
         ]);
 
-        if (!actor.isAI && !isAutoRollDiceEnabledRef.current) {
+        if (!actor.isAI && !isCombatantAutoRollEnabled(actor)) {
           setCombatants((prev) => prev.map((c) => (c.id === actor.id ? markActorUsed(c) : c)));
           toast.success(`✨ Healing Incense emanates 10ft around ${actor.name}!`);
           addCombatLog(
@@ -2393,8 +2441,8 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       // Play JB2A visual effect (including persistent token-locked auras!)
       spawnArenaVisualEffect(actor, target, action, targetPointPx);
 
-      // If Automatic Dice Rolling is toggled OFF for the player HUD, only play the spell/action animation!
-      if (!actor.isAI && !isAutoRollDiceEnabledRef.current) {
+      // If Automatic Dice Rolling is toggled OFF for this player's HUD, only play the spell/action animation!
+      if (!actor.isAI && !isCombatantAutoRollEnabled(actor)) {
         const upcastSuffix =
           action.castAtLevel && action.castAtLevel > (action.level ?? 0)
             ? ` (L${action.castAtLevel})`

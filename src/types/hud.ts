@@ -346,6 +346,50 @@ export function evaluateDiceFormula(
   };
 }
 
+const AUTO_ROLL_STORAGE_KEY = 'mistwalker_player_auto_roll_by_hero';
+
+/**
+ * Normalizes a character/player name or ID into a stable per-player preference key
+ * (strips Wild Shape suffixes like "(Brown Bear)" so the setting stays consistent for that player).
+ */
+export function normalizePlayerAutoRollKey(
+  characterName?: string | null,
+  ddbCharacterId?: string | number | null,
+  fallbackId?: string | null
+): string {
+  const cleanName = String(characterName || '')
+    .replace(/\s*\([^)]*\)\s*$/, '')
+    .trim()
+    .toLowerCase();
+  if (cleanName) return `name:${cleanName}`;
+  if (ddbCharacterId) return `ddb:${String(ddbCharacterId).replace(/^char_ddb_/, '').trim()}`;
+  if (fallbackId) return `id:${String(fallbackId).trim().toLowerCase()}`;
+  return 'default';
+}
+
+export function loadPlayerAutoRollMap(): Record<string, boolean> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(AUTO_ROLL_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') return parsed;
+    }
+  } catch {}
+  return {};
+}
+
+export function savePlayerAutoRollPreference(playerKey: string, enabled: boolean): Record<string, boolean> {
+  const current = loadPlayerAutoRollMap();
+  const next = { ...current, [playerKey]: enabled };
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(AUTO_ROLL_STORAGE_KEY, JSON.stringify(next));
+    } catch {}
+  }
+  return next;
+}
+
 export interface HudSpellSlot {
   level: number;
   total: number;
