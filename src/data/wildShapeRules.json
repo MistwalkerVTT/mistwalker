@@ -1,0 +1,34 @@
+{
+  "character": "G'aiah",
+  "subclass": "Circle of the Moon",
+  "rulesVersion": "2024",
+  "wisdomModifier": 4,
+  "levelProgression": [
+    { "level": 2, "maxCR": 0.25, "knownForms": 4, "uses": 2, "tempHP": 6, "minAC": 17, "flyAllowed": false, "movement": "Land, Climb, Swim", "features": "Base Wild Shape, Wild Companion" },
+    { "level": 3, "maxCR": 1.0,  "knownForms": 4, "uses": 2, "tempHP": 9, "minAC": 17, "flyAllowed": false, "movement": "Land, Climb, Swim", "features": "Circle of the Moon: Max CR floor(Lvl/3), AC 17, 3xLvl THP" },
+    { "level": 4, "maxCR": 1.0,  "knownForms": 6, "uses": 2, "tempHP": 12, "minAC": 17, "flyAllowed": false, "movement": "Land, Climb, Swim", "features": "+2 Known Forms (ASI / Feat)" },
+    { "level": 5, "maxCR": 1.0,  "knownForms": 6, "uses": 2, "tempHP": 15, "minAC": 17, "flyAllowed": false, "movement": "Land, Climb, Swim", "features": "Wild Resurgence (convert spell slot <-> Wild Shape)" },
+    { "level": 6, "maxCR": 2.0,  "knownForms": 6, "uses": 3, "tempHP": 18, "minAC": 17, "flyAllowed": false, "movement": "Land, Climb, Swim", "features": "Improved Circle Forms: Attacks deal Radiant; +4 to CON saves" },
+    { "level": 7, "maxCR": 2.0,  "knownForms": 6, "uses": 3, "tempHP": 21, "minAC": 17, "flyAllowed": false, "movement": "Land, Climb, Swim", "features": "Elemental Fury (+1d8 cold/fire/lightning/thunder 1/turn)" },
+    { "level": 8, "maxCR": 2.0,  "knownForms": 8, "uses": 3, "tempHP": 24, "minAC": 17, "flyAllowed": true,  "movement": "Fly Unlocked", "features": "Fly Speed Available; +2 Known Forms (8 max)" },
+    { "level": 9, "maxCR": 3.0,  "knownForms": 8, "uses": 3, "tempHP": 27, "minAC": 17, "flyAllowed": true,  "movement": "All (Fly/Swim/Burrow)", "features": "CR 3 Forms Unlocked; Mass Cure Wounds prepared" },
+    { "level": 10, "maxCR": 3.0, "knownForms": 8, "uses": 3, "tempHP": 30, "minAC": 17, "flyAllowed": true,  "movement": "All", "features": "Moonlight Step (30 ft. bonus action teleport + attack advantage)" },
+    { "level": 11, "maxCR": 3.0, "knownForms": 8, "uses": 3, "tempHP": 33, "minAC": 17, "flyAllowed": true,  "movement": "All", "features": "6th-level spell casting" },
+    { "level": 12, "maxCR": 4.0, "knownForms": 8, "uses": 3, "tempHP": 36, "minAC": 17, "flyAllowed": true,  "movement": "All", "features": "CR 4 Forms Unlocked" },
+    { "level": 13, "maxCR": 4.0, "knownForms": 8, "uses": 3, "tempHP": 39, "minAC": 17, "flyAllowed": true,  "movement": "All", "features": "7th-level spell casting" },
+    { "level": 14, "maxCR": 4.0, "knownForms": 8, "uses": 3, "tempHP": 42, "minAC": 17, "flyAllowed": true,  "movement": "All", "features": "Lunar Form (+2d10 Radiant 1/turn; share Moonlight Step)" },
+    { "level": 15, "maxCR": 5.0, "knownForms": 8, "uses": 3, "tempHP": 45, "minAC": 17, "flyAllowed": true,  "movement": "All", "features": "CR 5 Forms Unlocked; Improved Elemental Fury (+2d8)" },
+    { "level": 16, "maxCR": 5.0, "knownForms": 8, "uses": 3, "tempHP": 48, "minAC": 17, "flyAllowed": true,  "movement": "All", "features": "Ability Score Improvement / Epic Feat" },
+    { "level": 17, "maxCR": 5.0, "knownForms": 8, "uses": 4, "tempHP": 51, "minAC": 17, "flyAllowed": true,  "movement": "All", "features": "4 Wild Shape uses per rest; 9th-level spells" },
+    { "level": 18, "maxCR": 6.0, "knownForms": 8, "uses": 4, "tempHP": 54, "minAC": 17, "flyAllowed": true,  "movement": "All", "features": "CR 6 Forms Unlocked; Beast Spells (cast nearly all spells in form)" },
+    { "level": 19, "maxCR": 6.0, "knownForms": 8, "uses": 4, "tempHP": 57, "minAC": 17, "flyAllowed": true,  "movement": "All", "features": "Epic Boon Feat" },
+    { "level": 20, "maxCR": 6.0, "knownForms": 8, "uses": 4, "tempHP": 60, "minAC": 17, "flyAllowed": true,  "movement": "All", "features": "Archdruid (regain 1 Wild Shape when rolling Initiative at 0)" }
+  ],
+  "runtimeCalculators": {
+    "maxCR": "Math.floor(druidLevel / 3)",
+    "tempHP": "druidLevel * 3",
+    "armorClass": "Math.max(beastAC, 13 + wisdomModifier)",
+    "canFly": "druidLevel >= 8",
+    "formsKnownLimit": "druidLevel >= 8 ? 8 : (druidLevel >= 4 ? 6 : 4)"
+  }
+}

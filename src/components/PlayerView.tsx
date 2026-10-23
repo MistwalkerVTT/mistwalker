@@ -4380,15 +4380,15 @@ export default function PlayerView() {
   }, [hudCharacterData, claimedToken, selectedDicePreset]);
 
   // Wild Shape Transform & Revert Handlers for Druids (e.g. G'aiah)
-  const handleTransformWildShape = useCallback((form: WildShapeBeastForm) => {
+  const handleTransformWildShape = useCallback((form: WildShapeBeastForm, effectiveDruidLevel?: number) => {
     if (!claimedToken) {
       toast.error('No character token claimed on board.');
       return;
     }
 
-    const druidLevel = 6;
+    const druidLevel = effectiveDruidLevel || hudCharacterData?.totalLevel || 6;
     const wisModifier = 4;
-    const tempHpGranted = druidLevel * 3; // 18 Temp HP in 2024 Circle of the Moon
+    const tempHpGranted = druidLevel >= 3 ? druidLevel * 3 : 2; // 2024 Circle of the Moon: 3 x Druid Level (18 THP at Lv 6)
     const calculatedAc = Math.max(form.baseAc, 13 + wisModifier); // 17 AC
 
     // Save previous state for revert
@@ -7889,7 +7889,7 @@ export default function PlayerView() {
         onSelectForm={handleTransformWildShape}
         onRevertForm={handleRevertWildShape}
         activeWildShape={activeWildShape}
-        druidLevel={6}
+        druidLevel={hudCharacterData?.totalLevel || 6}
         wisModifier={4}
       />
 
