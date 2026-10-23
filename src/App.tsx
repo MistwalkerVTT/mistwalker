@@ -2855,6 +2855,19 @@ export default function App() {
       }
     });
 
+    socket.on('ADD_TOKEN', (newToken: any) => {
+      if (!newToken?.id) return;
+      const liveSlot = liveMapIdRef.current;
+      const repaired = repairMonsterToken(newToken) as any;
+      if (mapsDataRef.current[liveSlot]?.tokens && !mapsDataRef.current[liveSlot].tokens.some((t: any) => t.id === repaired.id)) {
+        mapsDataRef.current[liveSlot].tokens = [...mapsDataRef.current[liveSlot].tokens, repaired];
+      }
+      if (activeMapIdRef.current === liveSlot) {
+        isRemoteTokenUpdateRef.current = true;
+        setTokens(prev => prev.some(t => t.id === repaired.id) ? prev : [...prev, repaired as Token]);
+      }
+    });
+
     socket.on('DELETE_TOKEN', (data: { id: string }) => {
       if (data?.id) {
         const liveSlot = liveMapIdRef.current;
@@ -3904,6 +3917,9 @@ export default function App() {
         if (typeof t.elevation === 'number' && !isNaN(t.elevation)) (tok as any).elevation = t.elevation;
         if (typeof t.isFlying === 'boolean') (tok as any).isFlying = t.isFlying;
         if (typeof (t as any).haloActive === 'boolean') (tok as any).haloActive = (t as any).haloActive;
+        if ((t as any).spiritualWeapon) (tok as any).spiritualWeapon = (t as any).spiritualWeapon;
+        if ((t as any).allyId) (tok as any).allyId = (t as any).allyId;
+        if (typeof (t as any).speed === 'number') (tok as any).speed = (t as any).speed;
         return tok;
       });
 
@@ -5868,6 +5884,9 @@ export default function App() {
         if (typeof t.elevation === 'number' && !isNaN(t.elevation)) (tok as any).elevation = t.elevation;
         if (typeof t.isFlying === 'boolean') (tok as any).isFlying = t.isFlying;
         if (typeof (t as any).haloActive === 'boolean') (tok as any).haloActive = (t as any).haloActive;
+        if ((t as any).spiritualWeapon) (tok as any).spiritualWeapon = (t as any).spiritualWeapon;
+        if ((t as any).allyId) (tok as any).allyId = (t as any).allyId;
+        if (typeof (t as any).speed === 'number') (tok as any).speed = (t as any).speed;
         return tok;
       });
 

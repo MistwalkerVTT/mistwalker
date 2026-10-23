@@ -191,6 +191,12 @@ function normalizeToken(t: any): Token {
   };
 }
 
+/** Finds the active Spiritual Weapon token owned by the given caster token id. */
+function findSpiritualWeapon(list: Token[], ownerId?: string | null): Token | undefined {
+  if (!ownerId) return undefined;
+  return list.find(t => (t as any).spiritualWeapon && (t as any).spiritualWeapon.ownerId === ownerId);
+}
+
 interface SyncState {
   reveals?: { x: number; y: number; radius: number }[];
   polygonReveals?: number[][];
@@ -3191,6 +3197,10 @@ export default function PlayerView() {
     const target = tokensRef.current.find(t => t.id === tokenId);
     if (target) {
       if (target.isCondition) return;
+      if ((target as any).spiritualWeapon) {
+        toast.info('Spiritual Weapon: drag it to move, or select the spell again to strike.');
+        return;
+      }
       const isAlly = target.category === 'ally' || !!(target as any).allyId;
       const isMonster = !isAlly && (isMonsterToken(target) || target.isMonster === true || target.category === 'monster' || target.isPlayer === false);
       if (isMonster) return;
@@ -3225,11 +3235,12 @@ export default function PlayerView() {
     activeDraggingTokenIdRef.current = token.id;
     setIsDraggingToken(true);
     if (!tokenMenuPinnedRef.current) setActiveTokenMenu(null);
-    if (claimedTokenIdRef.current !== token.id) {
+    const isOwnedSummon = Boolean((token as any).spiritualWeapon && (token as any).spiritualWeapon.ownerId === claimedTokenIdRef.current);
+    if (!isOwnedSummon && claimedTokenIdRef.current !== token.id) {
       claimedTokenIdRef.current = token.id;
       setClaimedTokenId(token.id);
     }
-    if (typeof window !== 'undefined') {
+    if (!isOwnedSummon && typeof window !== 'undefined') {
       localStorage.setItem('mistwalker_player_claimed_token', token.id);
       if (token.name) {
         localStorage.setItem('mistwalker_player_claimed_name', token.name);
@@ -3652,6 +3663,118 @@ export default function PlayerView() {
                          (Boolean(activeEquippedAsset.projectileWebm) && dist > 25);
     const isPointAoe = activeEquippedAsset.paradigm === 'point' || activeEquippedAsset.paradigm === 'aura';
 
+    // Spiritual Weapon: the first cast manifests a movable spectral weapon token where it is placed
+    const isSpiritualWeaponCast = activeEquippedAsset.id === 'spiritual_weapon' ||
+      activeEquippedAsset.name.toLowerCase().includes('spiritual weapon');
+
+    if (isSpiritualWeaponCast && claimedToken) {
+      const previousWeapon = findSpiritualWeapon(tokensRef.current, claimedToken.id);
+      const wSnapX = Math.floor((target.x - gridOffsetX) / gridSize) * gridSize + gridOffsetX;
+      const wSnapY = Math.floor((target.y - gridOffsetY) / gridSize) * gridSize + gridOffsetY;
+      const wCenterX = wSnapX + gridSize / 2;
+      const wCenterY = wSnapY + gridSize / 2;
+      const swAction = activeTargetingAction;
+      const swHitBonus = swAction?.hitBonus ?? (hudCharacterData?.spellAttackBonus !== undefined ? `+${hudCharacterData.spellAttackBonus}` : '+5');
+      const swFormula = swAction?.damageFormula || '1d8 + 3';
+      const swSlot = swAction?.spellSlotRequired ?? swAction?.level ?? activeEquippedAsset.level ?? 2;
+      const swThumb = activeEquippedAsset.thumb || '/jb2a/Library/2nd_Level/Spiritual_Weapon/SpiritualWeapon_Club01_02_Spectral_Green_Thumb.webp';
+      const ownerFirstName = (claimedToken.name || 'Caster').split(/[\s"(]+/)[0];
+      const weaponId = `spiritual_weapon_${claimedToken.id}_${Date.now()}`;
+
+      const weaponToken: any = {
+        id: weaponId,
+        name: `Spiritual Weapon (${ownerFirstName})`,
+        url: swThumb,
+        avatarUrl: swThumb,
+        x: wSnapX,
+        y: wSnapY,
+        size: 1,
+        hp: 20,
+        maxHp: 20,
+        currentHp: 20,
+        ac: 15,
+        speed: 20,
+        category: 'ally',
+        allyId: 'ally_spiritual_weapon',
+        isPlayer: false,
+        spiritualWeapon: {
+          ownerId: claimedToken.id,
+          hitBonus: swHitBonus,
+          damageFormula: swFormula,
+          castLevel: swAction?.castAtLevel ?? swAction?.level ?? 2
+        }
+      };
+
+      const swNextTokens = [...tokensRef.current.filter(t => t.id !== previousWeapon?.id), weaponToken as Token];
+      tokensRef.current = swNextTokens;
+      setTokens(swNextTokens);
+      if (socketRef.current?.connected) {
+        if (previousWeapon) socketRef.current.emit('DELETE_TOKEN', { id: previousWeapon.id });
+        socketRef.current.emit('ADD_TOKEN', weaponToken);
+      }
+
+      const weaponEffect: VttEffectInstance = {
+        id: `eff_spiritual_weapon_${Date.now()}`,
+        name: 'Spiritual Weapon',
+        label: activeEquippedAsset.label || 'Spiritual Weapon',
+        assetKey: 'spiritual_weapon',
+        videoUrl: activeEquippedAsset.webm,
+        thumbUrl: activeEquippedAsset.thumb,
+        paradigm: 'point',
+        x: wCenterX,
+        y: wCenterY,
+        sizeFt: 4,
+        rotation: 0,
+        opacity: 1.0,
+        blendMode: activeEquippedAsset.blendMode,
+        isPersistent: true,
+        loop: true,
+        attachedTokenId: weaponId,
+        castTime: Date.now(),
+        durationMs: 60000,
+        soundKey: activeEquippedAsset.soundKey,
+        color: activeEquippedAsset.color,
+        ownerId: claimedToken.id,
+        casterName: claimedToken.name || 'Hero'
+      } as VttEffectInstance;
+      setEffects(prev => [...prev.filter(e => !(e.assetKey === 'spiritual_weapon' && e.ownerId === claimedToken.id)), weaponEffect]);
+      if (activeEquippedAsset.soundKey) soundCatalog.play(activeEquippedAsset.soundKey);
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('EFFECT_SPAWN', weaponEffect);
+      }
+
+      // Casting expends a spell slot (later strikes are free bonus-action commands)
+      if (swSlot >= 1) {
+        setHudCharacterData(prev => {
+          if (!prev?.spellSlots?.[swSlot]) return prev;
+          const cur = prev.spellSlots[swSlot];
+          const nextAvail = Math.max(0, cur.available - 1);
+          const charKey = String(prev.ddbCharacterId || prev.id || claimedToken.id || prev.name);
+          manualSpellSlotsRef.current[charKey] = {
+            ...(manualSpellSlotsRef.current[charKey] || {}),
+            [swSlot]: { available: nextAvail, total: cur.total }
+          };
+          return {
+            ...prev,
+            spellSlots: {
+              ...prev.spellSlots,
+              [swSlot]: { ...cur, available: nextAvail }
+            }
+          };
+        });
+      }
+
+      toast.success(`${claimedToken.name || 'Caster'} conjured a Spiritual Weapon!`, {
+        description: `Drag it to move (20 ft). Select Spiritual Weapon again as a bonus action to strike (${swHitBonus} to hit, ${swFormula} force).`
+      });
+
+      setAimOrigin(null);
+      setAimCurrent(null);
+      setActiveEquippedAsset(null);
+      setActiveTargetingAction(null);
+      return;
+    }
+
     // Teleportation Spells (Misty Step, Dimension Door, Arcane Gate, Thunder Step, etc.)
     const isTeleportSpell = activeEquippedAsset.targetType === 'teleport' ||
       activeEquippedAsset.id === 'misty_step' ||
@@ -3962,7 +4085,7 @@ export default function PlayerView() {
     setAimCurrent(null);
     setActiveEquippedAsset(null);
     setActiveTargetingAction(null);
-  }, [activeEquippedAsset, activeTargetingAction, tokens, claimedToken, gridSize, hudCharacterData, selectedDicePreset]);
+  }, [activeEquippedAsset, activeTargetingAction, tokens, claimedToken, gridSize, gridOffsetX, gridOffsetY, hudCharacterData, selectedDicePreset]);
 
   const handleEquipAsset = useCallback((asset: Jb2aAssetDefinition) => {
     setActiveEquippedAsset(asset);
@@ -4045,6 +4168,21 @@ export default function PlayerView() {
     });
   }, [claimedToken, targetMapW, targetMapH, gridSize]);
 
+  // Remove Spiritual Weapon animations whose weapon token was dismissed / deleted
+  useEffect(() => {
+    if (tokens.length === 0) return;
+    const orphans = effects.filter(e =>
+      e.assetKey === 'spiritual_weapon' &&
+      e.attachedTokenId &&
+      !tokens.some(t => t.id === e.attachedTokenId)
+    );
+    if (orphans.length === 0) return;
+    setEffects(prev => prev.filter(e => !orphans.some(o => o.id === e.id)));
+    if (socketRef.current?.connected) {
+      orphans.forEach(o => socketRef.current?.emit('EFFECT_REMOVE', { id: o.id }));
+    }
+  }, [tokens, effects]);
+
   const handleClearEffects = useCallback(() => {
     setEffects([]);
     if (socketRef.current?.connected) {
@@ -4059,10 +4197,13 @@ export default function PlayerView() {
       socketRef.current.emit('EFFECT_REMOVE', { id: effectId });
     }
     soundCatalog.play('magic_shatter');
+    if (target?.assetKey === 'spiritual_weapon' && target.attachedTokenId) {
+      handleDeleteToken(target.attachedTokenId);
+    }
     toast.success(`Dispelled ${target?.name || 'spell animation'}!`, {
       description: 'The visual effect has been removed without clearing other spells.'
     });
-  }, [effects]);
+  }, [effects, handleDeleteToken]);
 
   const handleEffectComplete = useCallback((effectId: string) => {
     setEffects(prev => prev.filter(e => e.id !== effectId));
@@ -4152,6 +4293,21 @@ export default function PlayerView() {
     // Immediate execution for pure physical combat maneuvers (e.g., Rage, Dash, Dodge, Disengage)
     // Spells (like Shield, Cure Wounds, Healing Word, Bless, etc.) enter active targeting so the player can aim/select onto tokens or self!
     const lowerName = action.name.toLowerCase();
+
+    // Spiritual Weapon already manifested: selecting the spell again commands it to move & strike
+    if (lowerName.includes('spiritual weapon') && claimedToken) {
+      const existingWeapon = findSpiritualWeapon(tokensRef.current, claimedToken.id);
+      if (existingWeapon) {
+        setActiveEquippedAsset(null);
+        setAimOrigin(null);
+        setAimCurrent(null);
+        setActiveTargetingAction({ ...action, isSpiritualStrike: true } as HudActionItem);
+        toast.info('⚔️ Spiritual Weapon: click a creature to move up to 20 ft and strike', {
+          description: 'Drag the weapon token to reposition it without attacking. Press Esc to cancel.'
+        });
+        return;
+      }
+    }
 
     // Handle Halo / Self-Illumination Glow Toggle from the Special tab
     if ((action.isHaloToggle || action.id === 'special-halo-glow') && claimedToken) {
@@ -4837,6 +4993,189 @@ export default function PlayerView() {
     toast.info(`Removed ${auraName || 'aura'} from ${targetTok?.name || 'token'}`);
   }, [handleUpdateToken]);
 
+  // Spiritual Weapon bonus-action strike: move up to 20 ft, then make a melee spell attack + damage roll
+  const handleSpiritualWeaponStrike = useCallback((targetToken: Token, action: HudActionItem) => {
+    if (!claimedToken) return;
+    const weapon = findSpiritualWeapon(tokensRef.current, claimedToken.id);
+    if (!weapon) {
+      toast.warning('No active Spiritual Weapon. Cast the spell first to manifest it.');
+      setActiveTargetingAction(null);
+      return;
+    }
+    if (targetToken.id === weapon.id || targetToken.id === claimedToken.id) {
+      toast.info('Choose a creature to strike with your Spiritual Weapon.');
+      return;
+    }
+
+    const sw = (weapon as any).spiritualWeapon as { ownerId: string; hitBonus: string | number; damageFormula: string; castLevel?: number };
+    const wRadius = ((weapon.size || 1) * gridSize) / 2;
+    const tRadius = ((targetToken.size || 1) * gridSize) / 2;
+    const wCenter = { x: weapon.x + wRadius, y: weapon.y + wRadius };
+    const tCenter = { x: targetToken.x + tRadius, y: targetToken.y + tRadius };
+    const centerDistPx = Math.hypot(tCenter.x - wCenter.x, tCenter.y - wCenter.y);
+    const edgeFt = Math.max(0, ((centerDistPx - wRadius - tRadius) / gridSize) * 5);
+    const MOVE_FT = 20;
+    const REACH_FT = 5;
+    if (edgeFt > MOVE_FT + REACH_FT + 2) {
+      toast.error(`Out of reach! Target is ${Math.round(edgeFt)} ft from the weapon (it moves 20 ft, then strikes within 5 ft). Drag the weapon closer first.`);
+      return;
+    }
+
+    // Step 1: weapon flies adjacent to the target
+    let movedFt = 0;
+    if (edgeFt > REACH_FT + 1 && centerDistPx > 0) {
+      const ux = (wCenter.x - tCenter.x) / centerDistPx;
+      const uy = (wCenter.y - tCenter.y) / centerDistPx;
+      const destCenterX = tCenter.x + ux * (tRadius + wRadius);
+      const destCenterY = tCenter.y + uy * (tRadius + wRadius);
+      const destX = Math.round((destCenterX - wRadius - gridOffsetX) / gridSize) * gridSize + gridOffsetX;
+      const destY = Math.round((destCenterY - wRadius - gridOffsetY) / gridSize) * gridSize + gridOffsetY;
+      movedFt = Math.round((Math.hypot(destX - weapon.x, destY - weapon.y) / gridSize) * 5);
+      handleMoveToken(weapon.id, destX, destY, movedFt);
+    }
+
+    // Step 2: attack roll (d20 + spell attack bonus)
+    const rawHit = typeof sw.hitBonus === 'number'
+      ? sw.hitBonus
+      : (parseInt(String(sw.hitBonus).replace('+', ''), 10) || 0);
+    const modStr = rawHit >= 0 ? `+${rawHit}` : `${rawHit}`;
+    const d20 = Math.floor(Math.random() * 20) + 1;
+    const attackTotal = d20 + rawHit;
+    const isCrit = d20 === 20;
+    const isFumble = d20 === 1;
+    const targetAc = typeof targetToken.ac === 'number' ? targetToken.ac : undefined;
+    const isHit = isCrit || (!isFumble && (targetAc === undefined || attackTotal >= targetAc));
+    const charName = hudCharacterData?.name || claimedToken.name || 'Hero';
+    const strikeDelay = movedFt > 0 ? 700 : 150;
+
+    const emitDice = (evt: DdbDiceRollEvent) => {
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', evt);
+      }
+      if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+        (window as any).__mistwalkerRoll3d(evt);
+      }
+    };
+
+    window.setTimeout(() => {
+      // Strike animation on the target
+      const swAsset = JB2A_REGISTRY.find(a => a.id === 'spiritual_weapon');
+      if (swAsset) {
+        const strikeEffect: VttEffectInstance = {
+          id: `eff_sw_strike_${Date.now()}`,
+          name: 'Spiritual Weapon Strike',
+          label: 'Spiritual Weapon Strike',
+          assetKey: 'spiritual_weapon_strike',
+          videoUrl: swAsset.webm,
+          thumbUrl: swAsset.thumb,
+          paradigm: 'point',
+          x: tCenter.x,
+          y: tCenter.y,
+          sizeFt: 4,
+          rotation: 0,
+          opacity: 1.0,
+          blendMode: swAsset.blendMode,
+          isPersistent: false,
+          loop: false,
+          castTime: Date.now(),
+          durationMs: 2500,
+          soundKey: swAsset.soundKey,
+          color: swAsset.color,
+          ownerId: claimedToken.id,
+          casterName: claimedToken.name || 'Hero'
+        } as VttEffectInstance;
+        setEffects(prev => [...prev, strikeEffect]);
+        if (swAsset.soundKey) soundCatalog.play(swAsset.soundKey);
+        if (socketRef.current?.connected) {
+          socketRef.current.emit('EFFECT_SPAWN', strikeEffect);
+        }
+      }
+
+      emitDice({
+        id: `roll-sw-atk-${Date.now()}`,
+        characterId: String(hudCharacterData?.id || claimedToken.id || ''),
+        characterName: charName,
+        avatarUrl: hudCharacterData?.avatarUrl || claimedToken.avatarUrl || claimedToken.url,
+        action: 'Spiritual Weapon (To Hit)',
+        rollType: 'attack',
+        formula: `1d20 ${modStr}`,
+        diceNotation: '1d20',
+        dice: [{ sides: 20, result: d20, type: 'd20' }],
+        modifier: rawHit,
+        total: attackTotal,
+        isCritical: isCrit,
+        isFumble: isFumble,
+        theme: selectedDicePreset.id,
+        themeColor: isCrit ? '#10b981' : isFumble ? '#ef4444' : selectedDicePreset.theme.primaryColor,
+        timestamp: Date.now(),
+        source: 'player'
+      } as DdbDiceRollEvent);
+
+      toast[isHit ? 'success' : 'error'](
+        isCrit
+          ? `Spiritual Weapon CRITICAL HIT on ${targetToken.name}! (Nat 20 ${modStr} = ${attackTotal})`
+          : isFumble
+          ? `Spiritual Weapon missed ${targetToken.name} (Natural 1)`
+          : isHit
+          ? `Spiritual Weapon hits ${targetToken.name}! (${d20} ${modStr} = ${attackTotal}${targetAc !== undefined ? ` vs AC ${targetAc}` : ''})`
+          : `Spiritual Weapon misses ${targetToken.name} (${d20} ${modStr} = ${attackTotal} vs AC ${targetAc})`,
+        targetAc === undefined && isHit && !isCrit
+          ? { description: 'Target AC is hidden - the DM confirms the hit.' }
+          : undefined
+      );
+    }, strikeDelay);
+
+    // Step 3: damage roll on a hit (1d8 + spellcasting modifier force, doubled dice on a crit)
+    if (isHit) {
+      window.setTimeout(() => {
+        const evaluated = evaluateDiceFormula(sw.damageFormula, isCrit);
+        const dmg = evaluated.total;
+        emitDice({
+          id: `roll-sw-dmg-${Date.now()}`,
+          characterId: String(hudCharacterData?.id || claimedToken.id || ''),
+          characterName: charName,
+          avatarUrl: hudCharacterData?.avatarUrl || claimedToken.avatarUrl || claimedToken.url,
+          action: `Spiritual Weapon (Force Damage${isCrit ? ' - Critical' : ''})`,
+          rollType: 'damage',
+          formula: `${sw.damageFormula} → ${evaluated.breakdown}`,
+          diceNotation: sw.damageFormula,
+          dice: evaluated.dice.length > 0 ? evaluated.dice : [{ sides: 8, result: dmg, type: 'd8' }],
+          modifier: evaluated.bonus,
+          total: dmg,
+          isCritical: isCrit,
+          isFumble: false,
+          theme: selectedDicePreset.id,
+          themeColor: selectedDicePreset.theme.primaryColor,
+          timestamp: Date.now(),
+          source: 'player'
+        } as DdbDiceRollEvent);
+
+        const isTargetAlly = targetToken.category === 'ally' || Boolean((targetToken as any).allyId);
+        const isTargetMonster = !isTargetAlly && (isMonsterToken(targetToken) || targetToken.isMonster === true || targetToken.category === 'monster' || targetToken.isPlayer === false);
+        const isTargetOtherPlayer = Boolean(targetToken.isPlayer);
+        const requiresApproval = isTargetOtherPlayer || (isTargetMonster && !autoApplyMonsterDamage) || targetAc === undefined;
+        if (socketRef.current?.connected) {
+          socketRef.current.emit('REQUEST_TOKEN_MUTATION', {
+            sourceTokenId: claimedToken.id,
+            sourceName: claimedToken.name || 'Hero',
+            targetTokenId: targetToken.id,
+            targetName: targetToken.name || 'Target',
+            actionName: `Spiritual Weapon${isCrit ? ' (Critical)' : ''}`,
+            deltaHp: -dmg,
+            requiresApproval,
+            isMonster: isTargetMonster,
+            requestId: `req_sw_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
+          });
+        }
+      }, strikeDelay + 1800);
+    }
+
+    setActiveTargetingAction(null);
+    setActiveEquippedAsset(null);
+    setAimOrigin(null);
+    setAimCurrent(null);
+  }, [claimedToken, gridSize, gridOffsetX, gridOffsetY, handleMoveToken, hudCharacterData, selectedDicePreset, autoApplyMonsterDamage]);
+
   const handleTargetToken = useCallback((targetToken: Token) => {
     if (!activeTargetingAction) return;
     const now = Date.now();
@@ -4847,6 +5186,11 @@ export default function PlayerView() {
     const caster = claimedToken;
     if (!caster) {
       toast.warning('Claim a character first before executing actions.');
+      return;
+    }
+
+    if ((action as any).isSpiritualStrike) {
+      handleSpiritualWeaponStrike(targetToken, action);
       return;
     }
 
@@ -5165,7 +5509,7 @@ export default function PlayerView() {
     setActiveEquippedAsset(null);
     setAimOrigin(null);
     setAimCurrent(null);
-  }, [activeTargetingAction, claimedToken, gridSize, activeEquippedAsset, selectedDicePreset, hudCharacterData]);
+  }, [activeTargetingAction, claimedToken, gridSize, activeEquippedAsset, selectedDicePreset, hudCharacterData, handleSpiritualWeaponStrike]);
 
   const handleApproveMutation = useCallback(() => {
     if (!incomingMutationPrompt) return;
@@ -7017,7 +7361,7 @@ export default function PlayerView() {
                 characters={compendiumCharacters}
                 combatants={combatState.combatants}
                 isClaimed={claimedTokenId === token.id}
-                canDrag={stationMode === 'tv_table' ? true : claimedTokenId === token.id}
+                canDrag={stationMode === 'tv_table' ? true : (claimedTokenId === token.id || (Boolean(claimedTokenId) && (token as any).spiritualWeapon?.ownerId === claimedTokenId))}
                 isTargetingActive={Boolean(activeTargetingAction)}
                 onTargetToken={handleTargetToken}
                 onMoveToken={handleMoveToken}
