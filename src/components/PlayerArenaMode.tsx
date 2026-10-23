@@ -198,7 +198,10 @@ function rollDiceFormula(formula: string | undefined, isCrit = false): {
 /**
  * Builds the exact HudCharacterData used by <PlayerHeroDock /> for any Arena Combatant
  */
-function buildArenaCombatantHudData(combatant: ArenaCombatant): HudCharacterData {
+function buildArenaCombatantHudData(
+  combatant: ArenaCombatant,
+  liveDdbHud?: HudCharacterData | null
+): HudCharacterData {
   const char = combatant.sourceCharacter;
   const mon = combatant.sourceMonster;
 
@@ -208,10 +211,51 @@ function buildArenaCombatantHudData(combatant: ArenaCombatant): HudCharacterData
   const spells: HudActionItem[] = [];
   const reactions: HudActionItem[] = [];
   const items: HudActionItem[] = [];
+  const special: HudActionItem[] = [];
+
+  const totalLevel =
+    liveDdbHud?.totalLevel ||
+    (char?.classLevel || combatant.classOrCr || '')
+      .match(/\d+/g)
+      ?.reduce((acc, n) => acc + parseInt(n, 10), 0) ||
+    5;
+  const profBonus = char?.proficiencyBonus || Math.ceil(totalLevel / 4) + 1;
+  const charStats = char?.stats || { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
+  const classLower = (char?.classLevel || combatant.classOrCr || '').toLowerCase();
+  const spellAbilityScore =
+    classLower.includes('cleric') || classLower.includes('druid') || classLower.includes('ranger')
+      ? charStats.wis
+      : classLower.includes('wizard') ||
+        classLower.includes('artificer') ||
+        classLower.includes('fighter') ||
+        classLower.includes('rogue')
+      ? charStats.int
+      : classLower.includes('bard') ||
+        classLower.includes('warlock') ||
+        classLower.includes('paladin') ||
+        classLower.includes('sorcerer')
+      ? charStats.cha
+      : Math.max(charStats.int, charStats.wis, charStats.cha);
+  const spellMod = Math.floor(((spellAbilityScore || 10) - 10) / 2);
+  const spellAttackBonus = profBonus + spellMod;
+  const spellSaveDc = 8 + profBonus + spellMod;
 
   if (char) {
+    // 1. Seed from live D&D Beyond HUD if available
+    if (liveDdbHud) {
+      liveDdbHud.attacks.forEach((a) => attacks.push({ ...a }));
+      liveDdbHud.actions.forEach((a) => actions.push({ ...a }));
+      liveDdbHud.bonusActions.forEach((a) => bonusActions.push({ ...a }));
+      liveDdbHud.spells.forEach((a) => spells.push({ ...a }));
+      liveDdbHud.reactions.forEach((a) => reactions.push({ ...a }));
+      liveDdbHud.items.forEach((a) => items.push({ ...a }));
+      (liveDdbHud.special || []).forEach((a) => special.push({ ...a }));
+    }
+
+    // 2. Ensure all local compendium weapons/actions are present
     if (Array.isArray(char.actions) && char.actions.length > 0) {
       char.actions.forEach((act, idx) => {
+        if (attacks.some((a) => a.name.toLowerCase() === act.name.toLowerCase())) return;
         const dmgParts = (act.damage || '').split(' ');
         const formula = dmgParts[0] || '1d8 + 4';
         const dmgType = (dmgParts.slice(1).join(' ') || 'slashing').toLowerCase();
@@ -219,7 +263,9 @@ function buildArenaCombatantHudData(combatant: ArenaCombatant): HudCharacterData
           act.type?.toLowerCase().includes('ranged') ||
           act.name.toLowerCase().includes('bow') ||
           act.name.toLowerCase().includes('crossbow') ||
+          act.name.toLowerCase().includes('launcher') ||
           act.name.toLowerCase().includes('blast');
+        const matchedWpnAsset = findJb2aAsset(act.name);
         const item: HudActionItem = {
           id: `arena-char-atk-${idx}`,
           name: act.name,
@@ -229,6 +275,7 @@ function buildArenaCombatantHudData(combatant: ArenaCombatant): HudCharacterData
           isAttack: true,
           isEquipped: true,
           sourceLabel: 'Equipped Weapon',
+          castingTime: '1 Action',
           hitBonus: act.hitBonus || '+7',
           damageFormula: formula,
           damageType: dmgType,
@@ -236,23 +283,28 @@ function buildArenaCombatantHudData(combatant: ArenaCombatant): HudCharacterData
           description: act.description || `Attack with ${act.name}.`,
           rangeFt: isRanged ? 80 : 5,
           jb2aAssetId:
-            act.name.toLowerCase().includes('greataxe') || act.name.toLowerCase().includes('greatsword')
+            matchedWpnAsset?.id ||
+            (act.name.toLowerCase().includes('greataxe') || act.name.toLowerCase().includes('greatsword')
               ? 'attack_greatsword'
               : act.name.toLowerCase().includes('hammer') || act.name.toLowerCase().includes('mace')
               ? 'attack_hammer'
               : isRanged
               ? 'attack_bow'
-              : 'attack_slash'
+              : 'attack_slash')
         };
         attacks.push(item);
         actions.push({ ...item, category: 'actions' });
       });
     }
 
+    // 3. Ensure all local compendium bonus actions are present
     if (Array.isArray(char.bonusActions) && char.bonusActions.length > 0) {
       char.bonusActions.forEach((ba, idx) => {
+        if (bonusActions.some((b) => b.name.toLowerCase() === ba.name.toLowerCase())) return;
         const lower = ba.name.toLowerCase();
-        const isHeal = lower.includes('wind') || lower.includes('heal');
+        const isHeal = lower.includes('wind') || lower.includes('heal') || lower.includes('lay on hands');
+        const isTeleport = lower.includes('jaunt') || lower.includes('step');
+        const matchedBaAsset = findJb2aAsset(ba.name);
         bonusActions.push({
           id: `arena-char-ba-${idx}`,
           name: ba.name,
@@ -261,70 +313,242 @@ function buildArenaCombatantHudData(combatant: ArenaCombatant): HudCharacterData
           subCategory: 'class',
           sourceLabel: ba.source || 'Class Feature',
           castingTime: '1 Bonus Action',
-          isSelfAction: true,
+          isSelfAction: !isTeleport && !lower.includes('smite') && !lower.includes('curse'),
           isHeal,
-          damageFormula: isHeal ? '1d10 + 5' : undefined,
-          rangeFt: 0,
-          description: ba.description
+          damageFormula: lower.includes('second wind')
+            ? `1d10 + ${totalLevel}`
+            : lower.includes('lay on hands')
+            ? '25'
+            : lower.includes('smite')
+            ? '2d8'
+            : undefined,
+          damageType: isHeal ? 'healing' : lower.includes('smite') ? 'radiant' : undefined,
+          rangeFt: isTeleport ? 30 : lower.includes('smite') || lower.includes('lay on hands') ? 5 : 0,
+          description: ba.description,
+          jb2aAssetId: matchedBaAsset?.id || (isTeleport ? 'misty_step' : isHeal ? 'cure_wounds' : undefined)
         });
       });
     }
 
+    // 4. Ensure all local compendium reactions are present
+    if (Array.isArray(char.reactions) && char.reactions.length > 0) {
+      char.reactions.forEach((rx, idx) => {
+        if (reactions.some((r) => r.name.toLowerCase() === rx.name.toLowerCase())) return;
+        const matchedRxAsset = findJb2aAsset(rx.name);
+        reactions.push({
+          id: `arena-char-rx-${idx}`,
+          name: rx.name,
+          category: 'reactions',
+          type: 'reaction',
+          subCategory: 'class',
+          sourceLabel: 'Reaction',
+          castingTime: '1 Reaction',
+          isSelfAction: !rx.name.toLowerCase().includes('opportunity'),
+          rangeFt: rx.name.toLowerCase().includes('opportunity') ? 5 : 30,
+          description: rx.description,
+          jb2aAssetId: matchedRxAsset?.id
+        });
+      });
+    }
+
+    // 5. Ensure all local compendium spells are present with full D&D 5e rules, animations, and upcasting
     if (Array.isArray(char.spells) && char.spells.length > 0) {
       char.spells.forEach((spName, idx) => {
         const lower = spName.toLowerCase();
-        const isHeal = lower.includes('cure') || lower.includes('heal') || lower.includes('aid');
-        const isCantrip =
-          lower.includes('blast') ||
-          lower.includes('bolt') ||
-          lower.includes('mockery') ||
-          lower.includes('flame') ||
-          lower.includes('frost') ||
-          lower.includes('spray');
+        const rule = lookupDndRuleDetails(spName, 'spell');
+        const canonicalName = (rule?.name || spName).toLowerCase();
+        if (spells.some((s) => s.name.toLowerCase() === canonicalName || s.name.toLowerCase() === lower)) {
+          return;
+        }
         const matchedAsset = findJb2aAsset(spName);
-        const baseLvl = isCantrip ? 0 : lower.includes('fireball') || lower.includes('lightning bolt') || lower.includes('spirit guardians') ? 3 : 1;
-        const baseFormula = isHeal
-          ? '2d8 + 4'
-          : lower.includes('fireball') || lower.includes('lightning bolt')
-          ? '8d6'
-          : lower.includes('guiding bolt')
-          ? '4d6'
-          : lower.includes('scorching ray')
-          ? '6d6'
-          : isCantrip
-          ? '2d10'
-          : '3d8';
-        const upcastOptions =
-          baseLvl >= 1
-            ? Array.from({ length: 5 - baseLvl + 1 }, (_, i) => {
-                const slotLvl = baseLvl + i;
-                return {
-                  slotLevel: slotLvl,
-                  ...computeUpcastFormula(baseFormula, baseLvl, slotLvl, spName)
-                };
-              })
-            : undefined;
+        const baseLvl =
+          rule?.level !== undefined
+            ? rule.level
+            : lower.includes('blast') ||
+              lower.includes('bolt') ||
+              lower.includes('mockery') ||
+              lower.includes('flame') ||
+              lower.includes('guidance') ||
+              lower.includes('light') ||
+              lower.includes('prestidigitation') ||
+              lower.includes('mage hand') ||
+              lower.includes('minor illusion') ||
+              lower.includes('thaumaturgy') ||
+              lower.includes('druidcraft') ||
+              lower.includes('frostbite') ||
+              lower.includes('starry wisp') ||
+              lower.includes('elementalism') ||
+              lower.includes('message') ||
+              lower.includes('spare the dying') ||
+              lower.includes('blade ward') ||
+              lower.includes('booming blade') ||
+              lower.includes('toll the dead')
+            ? 0
+            : 1;
+        const isHeal = Boolean(
+          rule?.isHeal ||
+            lower.includes('cure') ||
+            lower.includes('heal') ||
+            lower.includes('revivify') ||
+            lower.includes('restoration') ||
+            lower.includes('aid') ||
+            lower.includes('goodberry') ||
+            lower.includes("heroes' feast")
+        );
 
-        spells.push({
+        let baseFormula = rule?.damageFormula;
+        if (baseFormula && baseLvl === 0) {
+          const cantripMult = totalLevel >= 17 ? 4 : totalLevel >= 11 ? 3 : totalLevel >= 5 ? 2 : 1;
+          baseFormula = baseFormula.replace(/^1(d\d+)/i, `${cantripMult}$1`);
+        } else if (
+          baseFormula &&
+          isHeal &&
+          (lower.includes('cure wounds') || lower.includes('healing word'))
+        ) {
+          baseFormula = `${baseFormula} + ${Math.max(1, spellMod)}`;
+        } else if (baseFormula && lower.includes('spiritual weapon')) {
+          baseFormula = `${baseFormula} + ${Math.max(1, spellMod)}`;
+        }
+
+        const castingTime =
+          rule?.castingTime ||
+          (lower.includes('healing word') ||
+          lower.includes('mark') ||
+          lower.includes('hex') ||
+          lower.includes('misty step') ||
+          lower.includes('shield of faith') ||
+          lower.includes('sanctuary') ||
+          lower.includes('spiritual weapon') ||
+          lower.includes('holy weapon') ||
+          lower.includes('divine word') ||
+          lower.includes('smite')
+            ? '1 Bonus Action'
+            : lower.includes('counterspell') ||
+              lower === 'shield' ||
+              lower.includes('absorb elements') ||
+              lower.includes('hellish rebuke') ||
+              lower.includes('silvery barbs')
+            ? '1 Reaction'
+            : '1 Action');
+        const isBonus = castingTime.toLowerCase().includes('bonus');
+        const isRx = castingTime.toLowerCase().includes('reaction');
+        const isAtk = Boolean(
+          rule?.isAttack ||
+            lower.includes('blast') ||
+            lower.includes('bolt') ||
+            lower.includes('ray') ||
+            lower.includes('orb') ||
+            lower.includes('spiritual weapon') ||
+            lower.includes('starry wisp') ||
+            lower.includes('crown of stars') ||
+            lower.includes('booming blade')
+        );
+        const saveAbil = rule?.saveAbility;
+        const canUpcast = baseLvl >= 1 && baseLvl <= 8 && Boolean(rule?.higherLevels || baseFormula);
+        const upcastOptions = canUpcast
+          ? Array.from({ length: 9 - baseLvl + 1 }, (_, i) => {
+              const slotLvl = baseLvl + i;
+              return {
+                slotLevel: slotLvl,
+                ...computeUpcastFormula(baseFormula, baseLvl, slotLvl, spName)
+              };
+            })
+          : undefined;
+        const rangeNum = rule?.range
+          ? rule.range.toLowerCase().includes('self')
+            ? rule.radiusFeet || 0
+            : rule.range.toLowerCase().includes('touch')
+            ? 5
+            : parseInt(rule.range.match(/\d+/)?.[0] || '60', 10) || 60
+          : matchedAsset?.defaultSizeFt || (isHeal ? 30 : 60);
+
+        const hudSpell: HudActionItem = {
           id: `arena-char-spell-${idx}`,
-          name: spName,
+          name: rule?.name || spName,
           category: 'spells',
-          type: lower.includes('healing word') || lower.includes('misty step') ? 'bonus_action' : 'action',
+          type: isBonus ? 'bonus_action' : isRx ? 'reaction' : 'action',
           subCategory: 'spell',
+          sourceLabel: baseLvl === 0 ? 'Cantrip' : `Level ${baseLvl} ${rule?.school || 'Evocation'}`,
           level: baseLvl,
-          canUpcast: baseLvl >= 1,
+          canUpcast,
           upcastOptions,
-          school: (matchedAsset?.school as any) || 'evocation',
-          castingTime: lower.includes('healing word') || lower.includes('misty step') ? '1 Bonus Action' : '1 Action',
-          hitBonus: '+7',
-          saveDc: 15,
-          saveAbility: lower.includes('fireball') || lower.includes('lightning') ? 'DEX' : undefined,
+          school: ((rule?.school || matchedAsset?.school || 'evocation').toLowerCase()) as any,
+          castingTime,
+          duration: rule?.duration,
+          components: rule?.components,
+          atHigherLevels: rule?.higherLevels,
+          hitBonus: isAtk ? `+${spellAttackBonus}` : undefined,
+          saveDc: saveAbil ? spellSaveDc : undefined,
+          saveAbility: saveAbil,
           damageFormula: baseFormula,
-          damageType: isHeal ? 'radiant' : lower.includes('fire') ? 'fire' : lower.includes('cold') || lower.includes('frost') ? 'cold' : 'force',
+          damageType: rule?.damageType || (isHeal ? 'healing' : undefined),
           isHeal,
-          description: `Cast ${spName} in the Arena.`,
-          rangeFt: isHeal ? 30 : 90,
-          jb2aAssetId: matchedAsset?.id || (isHeal ? 'cure_wounds' : lower.includes('eldritch') ? 'eldritch_blast' : 'fire_bolt')
+          isAttack: isAtk,
+          isSelfAction: Boolean(rule?.isSelfAction || (rangeNum === 0 && !isAtk && !saveAbil)),
+          spellSlotRequired: baseLvl > 0 ? baseLvl : undefined,
+          description: rule?.description || `Cast ${spName}.`,
+          rangeFt: rangeNum,
+          jb2aAssetId:
+            matchedAsset?.id ||
+            (isHeal ? 'cure_wounds' : lower.includes('eldritch') ? 'eldritch_blast' : 'fire_bolt'),
+          iconUrl:
+            matchedAsset?.thumb && !matchedAsset.thumb.endsWith('.webm')
+              ? matchedAsset.thumb
+              : undefined,
+          isPrepared: true
+        };
+
+        spells.push(hudSpell);
+
+        if (isBonus && !bonusActions.some((b) => b.name.toLowerCase() === hudSpell.name.toLowerCase())) {
+          bonusActions.push({ ...hudSpell, id: `arena-ba-spell-${idx}`, category: 'bonus_actions' });
+        }
+        if (isRx && !reactions.some((r) => r.name.toLowerCase() === hudSpell.name.toLowerCase())) {
+          reactions.push({ ...hudSpell, id: `arena-rx-spell-${idx}`, category: 'reactions' });
+        }
+        if (isAtk && !attacks.some((a) => a.name.toLowerCase() === hudSpell.name.toLowerCase())) {
+          attacks.push({ ...hudSpell, id: `arena-atk-spell-${idx}`, category: 'attacks' });
+        }
+      });
+    }
+
+    spells.sort((a, b) => (a.level ?? 0) - (b.level ?? 0) || a.name.localeCompare(b.name));
+
+    // 6. Populate Special Features & Traits
+    if (Array.isArray(char.specialFeatures)) {
+      char.specialFeatures.forEach((sf, idx) => {
+        if (special.some((s) => s.name.toLowerCase() === sf.name.toLowerCase())) return;
+        const matchedSf = findJb2aAsset(sf.name);
+        special.push({
+          id: `arena-spec-sf-${idx}`,
+          name: sf.name,
+          category: 'special',
+          type: 'special',
+          subCategory: 'class',
+          sourceLabel: sf.category || 'Special Feature',
+          castingTime: 'Special',
+          isSelfAction: true,
+          description: sf.description,
+          jb2aAssetId: matchedSf?.id
+        });
+      });
+    }
+    if (Array.isArray(char.features)) {
+      char.features.forEach((f, idx) => {
+        const fName = String(f);
+        if (special.some((s) => s.name.toLowerCase() === fName.toLowerCase())) return;
+        const matchedFeat = findJb2aAsset(fName);
+        special.push({
+          id: `arena-spec-feat-${idx}`,
+          name: fName,
+          category: 'special',
+          type: 'special',
+          subCategory: 'class',
+          sourceLabel: 'Feature & Trait',
+          castingTime: 'Special',
+          isSelfAction: true,
+          description: fName,
+          jb2aAssetId: matchedFeat?.id
         });
       });
     }
@@ -360,21 +584,31 @@ function buildArenaCombatantHudData(combatant: ArenaCombatant): HudCharacterData
         actions.push({ ...item, category: 'actions' });
       });
       monHud.spells.forEach((sp, idx) => {
+        const rule = lookupDndRuleDetails(sp.name, 'spell');
+        const matchedAsset = findJb2aAsset(sp.name);
         spells.push({
           id: `arena-mon-sp-${idx}`,
-          name: sp.name,
+          name: rule?.name || sp.name,
           category: 'spells',
           type: 'action',
           subCategory: 'spell',
-          level: sp.level || 0,
-          hitBonus: sp.hitBonus ?? '+7',
-          saveDc: sp.saveDc ?? 15,
-          saveAbility: sp.saveAbility,
-          damageFormula: sp.damageFormula || '3d8',
-          damageType: sp.damageType || 'force',
+          level: sp.level ?? rule?.level ?? 0,
+          school: ((rule?.school || matchedAsset?.school || 'evocation').toLowerCase()) as any,
+          castingTime: rule?.castingTime || '1 Action',
+          duration: rule?.duration,
+          components: rule?.components,
+          atHigherLevels: rule?.higherLevels,
+          hitBonus: sp.hitBonus ?? (rule?.isAttack ? '+7' : undefined),
+          saveDc: sp.saveDc ?? (rule?.saveAbility ? 15 : undefined),
+          saveAbility: sp.saveAbility || rule?.saveAbility,
+          damageFormula: sp.damageFormula || rule?.damageFormula,
+          damageType: sp.damageType || rule?.damageType || 'force',
+          isHeal: Boolean(sp.isHeal || rule?.isHeal),
+          isAttack: Boolean(sp.isAttack || rule?.isAttack),
+          isSelfAction: Boolean(sp.isSelfAction || rule?.isSelfAction),
           rangeFt: sp.rangeFt || 60,
-          description: sp.description,
-          jb2aAssetId: sp.jb2aAssetId || 'eldritch_blast'
+          description: rule?.description || sp.description,
+          jb2aAssetId: sp.jb2aAssetId || matchedAsset?.id || 'eldritch_blast'
         });
       });
     }
@@ -401,8 +635,8 @@ function buildArenaCombatantHudData(combatant: ArenaCombatant): HudCharacterData
   }
 
   // Standard tactical actions available to all Arena fighters
-  actions.push(
-    {
+  if (!actions.some((a) => a.name.toLowerCase().startsWith('dash'))) {
+    actions.push({
       id: 'arena-dash',
       name: 'Dash (+Speed)',
       category: 'actions',
@@ -411,8 +645,10 @@ function buildArenaCombatantHudData(combatant: ArenaCombatant): HudCharacterData
       isSelfAction: true,
       description: 'Double your movement speed for this turn.',
       rangeFt: 0
-    },
-    {
+    });
+  }
+  if (!actions.some((a) => a.id === 'arena-second-wind')) {
+    actions.push({
       id: 'arena-second-wind',
       name: 'Arena Surge (Heal)',
       category: 'actions',
@@ -424,41 +660,91 @@ function buildArenaCombatantHudData(combatant: ArenaCombatant): HudCharacterData
       description: 'Catch your breath and rally for 2d8 + 4 HP.',
       rangeFt: 0,
       jb2aAssetId: 'cure_wounds'
-    }
-  );
+    });
+  }
 
-  items.push({
-    id: 'arena-potion-greater',
-    name: 'Potion of Greater Healing',
-    category: 'items',
-    type: 'bonus_action',
-    subCategory: 'item',
-    castingTime: '1 Bonus Action',
-    quantity: 2,
-    isSelfAction: true,
-    isHeal: true,
-    damageFormula: '4d4 + 4',
-    description: 'Drink a crimson healing draught to restore 4d4 + 4 HP.',
-    rangeFt: 5,
-    jb2aAssetId: 'cure_wounds'
-  });
+  if (!reactions.some((r) => r.name.toLowerCase().includes('opportunity'))) {
+    reactions.unshift({
+      id: 'arena-opp-attack',
+      name: 'Opportunity Attack',
+      category: 'reactions',
+      type: 'reaction',
+      subCategory: 'standard',
+      castingTime: '1 Reaction',
+      isAttack: true,
+      hitBonus: attacks[0]?.hitBonus || '+6',
+      damageFormula: attacks[0]?.damageFormula || '1d8 + 3',
+      damageType: attacks[0]?.damageType || 'slashing',
+      description: 'Make one melee weapon attack when a hostile creature leaves your reach.',
+      rangeFt: 5,
+      jb2aAssetId: attacks[0]?.jb2aAssetId || 'attack_slash'
+    });
+  }
+
+  if (!items.some((i) => i.name.toLowerCase().includes('potion'))) {
+    items.push({
+      id: 'arena-potion-greater',
+      name: 'Potion of Greater Healing',
+      category: 'items',
+      type: 'bonus_action',
+      subCategory: 'item',
+      castingTime: '1 Bonus Action',
+      quantity: 2,
+      isSelfAction: true,
+      isHeal: true,
+      damageFormula: '4d4 + 4',
+      description: 'Drink a crimson healing draught to restore 4d4 + 4 HP.',
+      rangeFt: 5,
+      jb2aAssetId: 'cure_wounds'
+    });
+  }
+
+  // Build full 5e Spell Slots based on character level / live DDB slots
+  const spellSlots: Record<number, { level: number; total: number; used: number; available: number }> = {};
+  if (liveDdbHud?.spellSlots && Object.keys(liveDdbHud.spellSlots).length > 0) {
+    Object.entries(liveDdbHud.spellSlots).forEach(([k, v]) => {
+      spellSlots[Number(k)] = { ...v };
+    });
+  }
+  if (spells.length > 0) {
+    const maxSpellLvl = Math.max(
+      3,
+      ...spells.map((s) => s.level || 0),
+      totalLevel >= 17 ? 9 : totalLevel >= 15 ? 8 : totalLevel >= 13 ? 7 : totalLevel >= 11 ? 6 : totalLevel >= 9 ? 5 : totalLevel >= 7 ? 4 : 3
+    );
+    const countsByLvl: Record<number, number> = { 1: 4, 2: 3, 3: 3, 4: 3, 5: 2, 6: 1, 7: 1, 8: 1, 9: 1 };
+    for (let l = 1; l <= maxSpellLvl; l++) {
+      if (!spellSlots[l]) {
+        const tot = countsByLvl[l] || 1;
+        spellSlots[l] = { level: l, total: tot, used: 0, available: tot };
+      }
+    }
+  }
+
+  const hasBookOfExaltedDeeds = Boolean(
+    liveDdbHud?.hasBookOfExaltedDeeds ||
+      combatant.name.toLowerCase().includes('stavros') ||
+      char?.name?.toLowerCase().includes('stavros')
+  );
 
   return {
     id: combatant.id,
+    ddbCharacterId: char?.ddbCharacterId ? String(char.ddbCharacterId) : liveDdbHud?.ddbCharacterId,
+    isLiveSynced: Boolean(liveDdbHud?.isLiveSynced),
     name: combatant.name,
     avatarUrl: combatant.avatarUrl,
     race: combatant.raceOrType,
     classLevel: combatant.classOrCr,
-    totalLevel: 5,
+    totalLevel,
     ac: combatant.ac,
     currentHp: combatant.currentHp,
     maxHp: combatant.maxHp,
     tempHp: combatant.tempHp,
     speed: `${combatant.speedFt} ft.`,
     walkSpeedFt: combatant.speedFt,
-    passivePerception: 14,
-    passiveInsight: 12,
-    passiveInvestigation: 12,
+    passivePerception: char?.passivePerception || liveDdbHud?.passivePerception || 14,
+    passiveInsight: char?.passiveInsight || liveDdbHud?.passiveInsight || 12,
+    passiveInvestigation: char?.passiveInvestigation || liveDdbHud?.passiveInvestigation || 12,
     deathSaves: { successes: 0, failures: 0 },
     attacks,
     actions,
@@ -466,13 +752,17 @@ function buildArenaCombatantHudData(combatant: ArenaCombatant): HudCharacterData
     spells,
     reactions,
     items,
-    spellSlots: {
-      1: { level: 1, total: 4, used: 0, available: 4 },
-      2: { level: 2, total: 3, used: 0, available: 3 },
-      3: { level: 3, total: 2, used: 0, available: 2 }
-    },
-    resources: [],
-    readonlyUrl: '',
+    special,
+    spellSlots,
+    resources: liveDdbHud?.resources || [],
+    canWildShape: Boolean(
+      liveDdbHud?.canWildShape ||
+        combatant.name.toLowerCase().includes("g'aiah") ||
+        combatant.name.toLowerCase().includes('gaiah') ||
+        classLower.includes('druid')
+    ),
+    hasBookOfExaltedDeeds,
+    readonlyUrl: char?.ddbCharacterId ? `https://www.dndbeyond.com/characters/${char.ddbCharacterId}` : '',
     lastUpdated: Date.now()
   };
 }
@@ -1163,13 +1453,45 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
     });
   }, [turnIndex]);
 
-  // Spawn a JB2A Visual Effect between caster and target
+  const [liveDdbHudMap, setLiveDdbHudMap] = useState<Record<string, HudCharacterData>>({});
+  const [inspectedAuraRequest, setInspectedAuraRequest] = useState<{
+    effect: VttEffectInstance;
+    nonce: number;
+  } | null>(null);
+  const [inspectedRule, setInspectedRule] = useState<DndRuleEntry | null>(null);
+
+  // Fetch live D&D Beyond HUD data for the active combatant if they have a ddbCharacterId
+  useEffect(() => {
+    const ddbId = activeCombatant?.sourceCharacter?.ddbCharacterId;
+    if (!ddbId || liveDdbHudMap[String(ddbId)]) return;
+    let cancelled = false;
+    fetch(`/api/ddb/characters/${ddbId}/hud-data`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => {
+        if (!cancelled && json?.hudData) {
+          setLiveDdbHudMap((prev) => ({ ...prev, [String(ddbId)]: json.hudData }));
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [activeCombatant, liveDdbHudMap]);
+
+  // Spawn a JB2A Visual Effect between caster and target (or targetPointPx)
   const spawnArenaVisualEffect = useCallback(
-    (caster: ArenaCombatant, target: ArenaCombatant, action: HudActionItem) => {
+    (
+      caster: ArenaCombatant,
+      target: ArenaCombatant,
+      action: HudActionItem,
+      targetPointPx?: { x: number; y: number }
+    ) => {
       const asset =
         findJb2aAsset(action.jb2aAssetId || '') ||
         findJb2aAsset(action.name) ||
-        findJb2aAsset(action.isHeal ? 'cure_wounds' : (action.rangeFt || 5) > 10 ? 'fire_bolt' : 'attack_slash');
+        findJb2aAsset(
+          action.isHeal ? 'cure_wounds' : (action.rangeFt || 5) > 10 ? 'fire_bolt' : 'attack_slash'
+        );
 
       if (!asset) return;
 
@@ -1177,37 +1499,112 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         x: caster.x + ((caster.size || 1) * ARENA_GRID_SIZE) / 2,
         y: caster.y + ((caster.size || 1) * ARENA_GRID_SIZE) / 2
       };
-      const targetCenter = {
+      const targetCenter = targetPointPx || {
         x: target.x + ((target.size || 1) * ARENA_GRID_SIZE) / 2,
         y: target.y + ((target.size || 1) * ARENA_GRID_SIZE) / 2
       };
+
+      const lowerName = action.name.toLowerCase();
+      const auraRule = lookupDndRuleDetails(action.name, 'aura');
+      const isPersistentAura = Boolean(
+        asset.defaultPersistent ||
+          lowerName.includes('spirit guardians') ||
+          lowerName.includes('aura of') ||
+          lowerName.includes('holy aura') ||
+          lowerName.includes('pass without trace') ||
+          lowerName.includes('beacon of hope') ||
+          lowerName.includes('shield of faith') ||
+          lowerName.includes('sanctuary') ||
+          lowerName.includes('haste') ||
+          lowerName.includes('mirror image') ||
+          lowerName.includes('armor of agathys') ||
+          lowerName.includes('fire shield') ||
+          lowerName.includes('darkness') ||
+          lowerName.includes('silence') ||
+          lowerName.includes('fog cloud')
+      );
+
+      const attachToTokenId =
+        isPersistentAura && !targetPointPx
+          ? action.isSelfAction
+            ? caster.id
+            : target.id
+          : undefined;
+
+      const dx = targetCenter.x - casterCenter.x;
+      const dy = targetCenter.y - casterCenter.y;
+      const angleDeg = dx === 0 && dy === 0 ? 0 : (Math.atan2(dy, dx) * 180) / Math.PI;
+      const isDirectional =
+        asset.paradigm === 'cone' ||
+        asset.paradigm === 'line' ||
+        asset.paradigm === 'beam' ||
+        asset.paradigm === 'projectile';
+
+      const sizeFt =
+        auraRule?.radiusFeet && isPersistentAura
+          ? auraRule.radiusFeet * 2
+          : asset.defaultSizeFt || 10;
+
+      const isProjectile = asset.paradigm === 'projectile' && caster.id !== target.id;
 
       const newFx: VttEffectInstance = {
         id: `arena_fx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         assetKey: asset.id,
         name: action.name,
         videoUrl: asset.webm,
-        loopVideoUrl: asset.loopWebm,
-        paradigm: asset.paradigm,
-        x: targetCenter.x,
-        y: targetCenter.y,
+        loopVideoUrl: asset.loopWebm || (isPersistentAura ? asset.webm : undefined),
+        paradigm: isPersistentAura && attachToTokenId ? 'token_aura' : asset.paradigm,
+        x: isProjectile ? casterCenter.x : targetCenter.x,
+        y: isProjectile ? casterCenter.y : targetCenter.y,
         originX: casterCenter.x,
         originY: casterCenter.y,
         targetX: targetCenter.x,
         targetY: targetCenter.y,
-        sizeFt: asset.defaultSizeFt || 10,
-        rotation: 0,
+        sizeFt,
+        widthFt: asset.defaultWidthFt,
+        rotation: isDirectional ? angleDeg : 0,
         opacity: 1,
         blendMode: asset.blendMode || 'screen',
-        isPersistent: false,
-        durationMs: 1800,
-        loop: false,
+        isPersistent: isPersistentAura,
+        durationMs: isPersistentAura ? 600000 : asset.defaultDurationMs || 1800,
+        loop: isPersistentAura,
         castTime: Date.now(),
         soundKey: asset.soundKey,
-        casterName: caster.name
+        casterName: caster.name,
+        attachedTokenId: attachToTokenId,
+        castAtLevel: action.castAtLevel ?? action.level,
+        baseSpellLevel: action.baseSpellLevel ?? action.level,
+        damageFormula: action.damageFormula,
+        damageType: action.damageType,
+        saveDc: action.saveDc,
+        saveAbility: action.saveAbility,
+        isHeal: action.isHeal,
+        actionSnapshot: action,
+        trajectory: isProjectile
+          ? {
+              currentX: casterCenter.x,
+              currentY: casterCenter.y,
+              targetX: targetCenter.x,
+              targetY: targetCenter.y,
+              speedPxPerSec: 950
+            }
+          : undefined
       };
 
-      setArenaEffects((prev) => [...prev, newFx]);
+      setArenaEffects((prev) => {
+        // If replacing an existing persistent aura of the same name on the same token, replace it cleanly
+        const filtered = isPersistentAura
+          ? prev.filter(
+              (f) =>
+                !(
+                  f.isPersistent &&
+                  f.attachedTokenId === attachToTokenId &&
+                  f.name.toLowerCase() === action.name.toLowerCase()
+                )
+            )
+          : prev;
+        return [...filtered, newFx];
+      });
       if (asset.soundKey) {
         soundCatalog.play(asset.soundKey, 0.8);
       } else {
@@ -1217,32 +1614,47 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
     []
   );
 
-  // Execute an Attack, Spell, or Heal from `actor` onto `target`
+  // Execute an Attack, Spell, Aura, Teleport, or Heal from `actor` onto `target` (or `targetPointPx`)
   const executeCombatAction = useCallback(
-    (actor: ArenaCombatant, target: ArenaCombatant, action: HudActionItem) => {
-      // Check range in feet
+    (
+      actor: ArenaCombatant,
+      target: ArenaCombatant,
+      action: HudActionItem,
+      targetPointPx?: { x: number; y: number }
+    ) => {
       const actorCx = actor.x + ((actor.size || 1) * ARENA_GRID_SIZE) / 2;
       const actorCy = actor.y + ((actor.size || 1) * ARENA_GRID_SIZE) / 2;
-      const targetCx = target.x + ((target.size || 1) * ARENA_GRID_SIZE) / 2;
-      const targetCy = target.y + ((target.size || 1) * ARENA_GRID_SIZE) / 2;
+      const targetCx = targetPointPx
+        ? targetPointPx.x
+        : target.x + ((target.size || 1) * ARENA_GRID_SIZE) / 2;
+      const targetCy = targetPointPx
+        ? targetPointPx.y
+        : target.y + ((target.size || 1) * ARENA_GRID_SIZE) / 2;
       const distFt = Math.max(
         0,
         Math.round((Math.hypot(targetCx - actorCx, targetCy - actorCy) / ARENA_GRID_SIZE) * 5) -
-          ((actor.size - 1 + (target.size - 1)) * 2.5)
+          (actor.size - 1 + (target.size - 1)) * 2.5
       );
 
       const maxRangeFt = action.rangeFt && action.rangeFt > 0 ? action.rangeFt : 5;
       if (!action.isSelfAction && actor.id !== target.id && distFt > maxRangeFt + 5) {
-        if (!actor.isAI) {
-          toast.warning(
-            `Target is ${distFt} ft away, but ${action.name} has a range of ${maxRangeFt} ft! Move closer first.`
-          );
+        if (actor.isAI) {
+          return false;
         }
-        return false;
+        // Never prevent human players from attacking/casting due to distance — show advisory note only!
+        toast.info(
+          `📏 Note: ${target.name} is ${distFt} ft away (normal range ${maxRangeFt} ft) — resolving ${action.name}!`
+        );
       }
 
-      // Special Self Utility Actions: Dash
-      if (action.id === 'arena-dash' || action.name.toLowerCase().startsWith('dash')) {
+      const lowerName = action.name.toLowerCase();
+      const markActorUsed = (c: ArenaCombatant) =>
+        action.type === 'bonus_action'
+          ? { ...c, bonusActionUsed: true }
+          : { ...c, actionUsed: true };
+
+      // 1. Special Self Utility Actions: Dash / Disengage / Dodge
+      if (action.id === 'arena-dash' || lowerName.startsWith('dash')) {
         setCombatants((prev) =>
           prev.map((c) =>
             c.id === actor.id
@@ -1254,14 +1666,56 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         soundCatalog.play('wind_whoosh', 0.7);
         return true;
       }
+      if (lowerName === 'disengage' || lowerName === 'dodge' || lowerName === 'hide') {
+        setCombatants((prev) => prev.map((c) => (c.id === actor.id ? markActorUsed(c) : c)));
+        addCombatLog(actor.name, actor.team, `used ${action.name}!`, action.description);
+        soundCatalog.play('wind_whoosh', 0.65);
+        return true;
+      }
 
-      // Play JB2A visual effect
-      spawnArenaVisualEffect(actor, target, action);
+      // 2. Teleport Spells & Abilities (Misty Step, Dimension Door, Teleport, Thunder Step, Cloud's Jaunt, Arcane Charge)
+      const isSelfTeleport =
+        lowerName.includes('misty step') ||
+        lowerName.includes('dimension door') ||
+        lowerName === 'teleport' ||
+        lowerName.includes('thunder step') ||
+        lowerName.includes('jaunt') ||
+        lowerName.includes('arcane charge');
 
-      // Healing Action
+      if (isSelfTeleport) {
+        const destX = targetPointPx
+          ? Math.floor(targetPointPx.x / ARENA_GRID_SIZE) * ARENA_GRID_SIZE
+          : target.x;
+        const destY = targetPointPx
+          ? Math.floor(targetPointPx.y / ARENA_GRID_SIZE) * ARENA_GRID_SIZE
+          : target.y;
+        spawnArenaVisualEffect(actor, actor, action);
+        setCombatants((prev) =>
+          prev.map((c) =>
+            c.id === actor.id ? { ...markActorUsed(c), x: destX, y: destY } : c
+          )
+        );
+        spawnArenaVisualEffect(
+          { ...actor, x: destX, y: destY },
+          { ...actor, x: destX, y: destY },
+          action
+        );
+        addCombatLog(
+          actor.name,
+          actor.team,
+          `cast ${action.name} and teleported across the Arena!`,
+          action.description
+        );
+        return true;
+      }
+
+      // Play JB2A visual effect (including persistent token-locked auras!)
+      spawnArenaVisualEffect(actor, target, action, targetPointPx);
+
+      // 3. Healing Action / Spell
       if (action.isHeal) {
         const healRoll = rollDiceFormula(action.damageFormula || '2d8 + 4', false);
-        if (onTrigger3dDice) {
+        if (onTrigger3dDice && action.damageFormula) {
           onTrigger3dDice({
             id: `arena-heal-${Date.now()}`,
             characterName: actor.name,
@@ -1269,7 +1723,11 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             rollType: 'heal',
             formula: `${action.damageFormula} = ${healRoll.total}`,
             diceNotation: action.damageFormula || '2d8',
-            dice: healRoll.rolls.map((r) => ({ sides: healRoll.sides, result: r, type: `d${healRoll.sides}` })),
+            dice: healRoll.rolls.map((r) => ({
+              sides: healRoll.sides,
+              result: r,
+              type: `d${healRoll.sides}`
+            })),
             total: healRoll.total,
             timestamp: Date.now(),
             source: 'player'
@@ -1282,17 +1740,11 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
               return {
                 ...c,
                 currentHp: Math.min(c.maxHp, c.currentHp + healRoll.total),
-                ...(c.id === actor.id
-                  ? action.type === 'bonus_action'
-                    ? { bonusActionUsed: true }
-                    : { actionUsed: true }
-                  : {})
+                ...(c.id === actor.id ? markActorUsed(c) : {})
               };
             }
             if (c.id === actor.id) {
-              return action.type === 'bonus_action'
-                ? { ...c, bonusActionUsed: true }
-                : { ...c, actionUsed: true };
+              return markActorUsed(c);
             }
             return c;
           })
@@ -1307,21 +1759,277 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         return true;
       }
 
-      // Offensive Attack Roll or Saving Throw
+      // 4. Auto-Hit Spells (Magic Missile)
+      if (lowerName.includes('magic missile')) {
+        const dmgRoll = rollDiceFormula(action.damageFormula || '3d4 + 3', false);
+        if (onTrigger3dDice) {
+          onTrigger3dDice({
+            id: `arena-mm-${Date.now()}`,
+            characterName: actor.name,
+            action: `${action.name} (Force Darts)`,
+            rollType: 'damage',
+            formula: `${action.damageFormula || '3d4 + 3'} = ${dmgRoll.total}`,
+            diceNotation: action.damageFormula || '3d4+3',
+            dice: dmgRoll.rolls.map((r) => ({
+              sides: dmgRoll.sides,
+              result: r,
+              type: `d${dmgRoll.sides}`
+            })),
+            total: dmgRoll.total,
+            timestamp: Date.now(),
+            source: 'player'
+          });
+        }
+        setCombatants((prev) =>
+          prev.map((c) => {
+            if (c.id === target.id) {
+              return { ...c, currentHp: Math.max(0, c.currentHp - dmgRoll.total) };
+            }
+            if (c.id === actor.id) return markActorUsed(c);
+            return c;
+          })
+        );
+        addCombatLog(
+          actor.name,
+          actor.team,
+          `struck ${target.name} with unerring ${action.name} darts for ${dmgRoll.total} force damage!`,
+          `Auto-Hit • Damage: ${dmgRoll.breakdown}`
+        );
+        return true;
+      }
+
+      // 5. Persistent Damaging Auras cast on Self (e.g., Spirit Guardians)
+      if (lowerName.includes('spirit guardians')) {
+        const dmgRoll = rollDiceFormula(action.damageFormula || '3d8', false);
+        const dc = Number(action.saveDc) || 16;
+        if (onTrigger3dDice) {
+          onTrigger3dDice({
+            id: `arena-sg-${Date.now()}`,
+            characterName: actor.name,
+            action: `${action.name}${action.castAtLevel ? ` (L${action.castAtLevel})` : ''}`,
+            rollType: 'damage',
+            formula: `${action.damageFormula || '3d8'} = ${dmgRoll.total}`,
+            diceNotation: action.damageFormula || '3d8',
+            dice: dmgRoll.rolls.map((r) => ({
+              sides: dmgRoll.sides,
+              result: r,
+              type: `d${dmgRoll.sides}`
+            })),
+            total: dmgRoll.total,
+            timestamp: Date.now(),
+            source: 'player'
+          });
+        }
+
+        const hitSummaries: string[] = [];
+        setCombatants((prev) =>
+          prev.map((c) => {
+            if (c.id === actor.id) return markActorUsed(c);
+            if (c.team !== actor.team && c.currentHp > 0) {
+              const ecx = c.x + ((c.size || 1) * ARENA_GRID_SIZE) / 2;
+              const ecy = c.y + ((c.size || 1) * ARENA_GRID_SIZE) / 2;
+              const d = Math.round((Math.hypot(ecx - actorCx, ecy - actorCy) / ARENA_GRID_SIZE) * 5);
+              if (d <= 15) {
+                const saveRoll = Math.floor(Math.random() * 20) + 1 + 2;
+                const saved = saveRoll >= dc;
+                const applied = saved ? Math.floor(dmgRoll.total / 2) : dmgRoll.total;
+                hitSummaries.push(
+                  `${c.name} WIS Save ${saveRoll} vs DC ${dc} (${saved ? 'Half' : 'Full'}: ${applied} dmg)`
+                );
+                return { ...c, currentHp: Math.max(0, c.currentHp - applied) };
+              }
+            }
+            return c;
+          })
+        );
+
+        addCombatLog(
+          actor.name,
+          actor.team,
+          `activated ${action.name}${action.castAtLevel ? ` (Slot Level ${action.castAtLevel})` : ''} — 15ft Radiant Aura (${action.damageFormula || '3d8'})!`,
+          hitSummaries.length > 0
+            ? `${hitSummaries.join(' • ')} • Roll: ${dmgRoll.breakdown}`
+            : `Rolled ${dmgRoll.total} (${dmgRoll.breakdown}) radiant aura damage • Click aura title on token to inspect!`
+        );
+        return true;
+      }
+
+      // 6. Saving Throw Spells (Fireball, Sacred Flame, Toll the Dead, Thunderwave, Shatter, Lightning Bolt, Sunbeam, Hold Person, etc.)
+      if (action.saveDc && !action.isAttack) {
+        const dc = Number(action.saveDc) || 15;
+        const saveAbil = action.saveAbility || 'DEX';
+        const isCantrip = (action.level ?? 0) === 0;
+        const rule = lookupDndRuleDetails(action.name, 'spell');
+        const aoeRadiusFt = rule?.radiusFeet || (lowerName.includes('fireball') ? 20 : lowerName.includes('shatter') || lowerName.includes('flame strike') ? 10 : 0);
+
+        const dmgRoll = action.damageFormula
+          ? rollDiceFormula(action.damageFormula, false)
+          : null;
+
+        if (dmgRoll && onTrigger3dDice) {
+          onTrigger3dDice({
+            id: `arena-save-dmg-${Date.now()}`,
+            characterName: actor.name,
+            action: `${action.name} (${saveAbil} DC ${dc})`,
+            rollType: 'damage',
+            formula: `${action.damageFormula} = ${dmgRoll.total}`,
+            diceNotation: action.damageFormula || '3d8',
+            dice: dmgRoll.rolls.map((r) => ({
+              sides: dmgRoll.sides,
+              result: r,
+              type: `d${dmgRoll.sides}`
+            })),
+            total: dmgRoll.total,
+            timestamp: Date.now(),
+            source: 'player'
+          });
+        }
+
+        const affectedTargets =
+          aoeRadiusFt >= 10
+            ? combatants.filter((c) => {
+                if (c.team === actor.team || c.currentHp <= 0) return false;
+                const cx = c.x + ((c.size || 1) * ARENA_GRID_SIZE) / 2;
+                const cy = c.y + ((c.size || 1) * ARENA_GRID_SIZE) / 2;
+                const distFromCenterFt = Math.round(
+                  (Math.hypot(cx - targetCx, cy - targetCy) / ARENA_GRID_SIZE) * 5
+                );
+                return distFromCenterFt <= aoeRadiusFt;
+              })
+            : [target];
+
+        const targetsToProcess = affectedTargets.length > 0 ? affectedTargets : [target];
+        const saveSummaries: string[] = [];
+        const damageMap = new Map<string, number>();
+        const conditionMap = new Map<string, string>();
+
+        targetsToProcess.forEach((t) => {
+          const saveD20 = Math.floor(Math.random() * 20) + 1;
+          const saveBonus = 2;
+          const saveTotal = saveD20 + saveBonus;
+          const saved = saveTotal >= dc;
+
+          if (dmgRoll) {
+            const dmgTaken = saved
+              ? isCantrip || lowerName.includes('disintegrate')
+                ? 0
+                : Math.floor(dmgRoll.total / 2)
+              : dmgRoll.total;
+            damageMap.set(t.id, dmgTaken);
+            saveSummaries.push(
+              `${t.name}: ${saveAbil} Save ${saveTotal} (${saved ? 'SAVED' : 'FAILED'}) → ${dmgTaken} ${action.damageType || ''} dmg`
+            );
+          } else {
+            if (!saved) {
+              const cond =
+                lowerName.includes('hold')
+                  ? 'Paralyzed'
+                  : lowerName.includes('hypnotic')
+                  ? 'Incapacitated'
+                  : lowerName.includes('entangle') || lowerName.includes('web')
+                  ? 'Restrained'
+                  : lowerName.includes('faerie fire')
+                  ? 'Outlined (Adv)'
+                  : lowerName.includes('banishment')
+                  ? 'Banished'
+                  : 'Affected';
+              conditionMap.set(t.id, cond);
+            }
+            saveSummaries.push(
+              `${t.name}: ${saveAbil} Save ${saveTotal} vs DC ${dc} (${saved ? 'SAVED' : 'FAILED!'})`
+            );
+          }
+        });
+
+        setCombatants((prev) =>
+          prev.map((c) => {
+            let updated = c;
+            if (damageMap.has(c.id)) {
+              updated = {
+                ...updated,
+                currentHp: Math.max(0, updated.currentHp - (damageMap.get(c.id) || 0))
+              };
+            }
+            if (conditionMap.has(c.id)) {
+              const cond = conditionMap.get(c.id)!;
+              if (!updated.conditions.includes(cond)) {
+                updated = { ...updated, conditions: [...updated.conditions, cond] };
+              }
+            }
+            if (c.id === actor.id) {
+              updated = markActorUsed(updated);
+            }
+            return updated;
+          })
+        );
+
+        addCombatLog(
+          actor.name,
+          actor.team,
+          `cast ${action.name}${action.castAtLevel ? ` (L${action.castAtLevel})` : ''} (${saveAbil} Save DC ${dc})!`,
+          `${saveSummaries.join(' • ')}${dmgRoll ? ` • Roll: ${dmgRoll.breakdown}` : ''}`
+        );
+        return true;
+      }
+
+      // 7. Buff / Utility / Ward / Feature Actions without Attack Roll or Saving Throw (Shield, Bless, Haste, Mirror Image, Rage, etc.)
+      if (!action.isAttack && !action.hitBonus) {
+        const tempHpGain = lowerName.includes('armor of agathys')
+          ? (action.castAtLevel || 1) * 5
+          : lowerName.includes('wild shape')
+          ? 18
+          : 0;
+        const acBonus =
+          lowerName === 'shield'
+            ? 5
+            : lowerName.includes('shield of faith') || lowerName === 'haste'
+            ? 2
+            : 0;
+
+        setCombatants((prev) =>
+          prev.map((c) => {
+            let updated = c;
+            if (c.id === target.id && (tempHpGain > 0 || acBonus > 0)) {
+              updated = {
+                ...updated,
+                tempHp: Math.max(updated.tempHp, tempHpGain),
+                ac: updated.ac + acBonus
+              };
+            }
+            if (c.id === actor.id) {
+              updated = markActorUsed(updated);
+            }
+            return updated;
+          })
+        );
+
+        addCombatLog(
+          actor.name,
+          actor.team,
+          `activated ${action.name}${target.id !== actor.id ? ` on ${target.name}` : ''}!`,
+          action.description
+        );
+        return true;
+      }
+
+      // 8. Offensive Weapon or Spell Attack Roll
       const rawHitBonus = parseInt(String(action.hitBonus || '+6').replace('+', ''), 10) || 6;
 
       // D&D 5e Close Combat Disadvantage: Ranged attacks have Disadvantage when a hostile enemy is within 5ft melee reach
-      const isRanged = (action.rangeFt && action.rangeFt >= 20) || action.description?.toLowerCase().includes('ranged');
+      const isRanged =
+        (action.rangeFt && action.rangeFt >= 20) ||
+        action.description?.toLowerCase().includes('ranged');
       let isThreatened = false;
       if (isRanged) {
         isThreatened = combatants.some((other) => {
-          if (other.id === actor.id || other.team === actor.team || other.currentHp <= 0) return false;
+          if (other.id === actor.id || other.team === actor.team || other.currentHp <= 0)
+            return false;
           const ocx = other.x + ((other.size || 1) * ARENA_GRID_SIZE) / 2;
           const ocy = other.y + ((other.size || 1) * ARENA_GRID_SIZE) / 2;
           const distFromOther = Math.max(
             0,
             Math.round((Math.hypot(ocx - actorCx, ocy - actorCy) / ARENA_GRID_SIZE) * 5) -
-              ((actor.size - 1 + (other.size - 1)) * 2.5)
+              (actor.size - 1 + (other.size - 1)) * 2.5
           );
           return distFromOther <= 5;
         });
@@ -1363,15 +2071,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       const hitsTarget = isCrit || (!isFumble && attackTotal >= target.ac);
 
       if (!hitsTarget) {
-        setCombatants((prev) =>
-          prev.map((c) =>
-            c.id === actor.id
-              ? action.type === 'bonus_action'
-                ? { ...c, bonusActionUsed: true }
-                : { ...c, actionUsed: true }
-              : c
-          )
-        );
+        setCombatants((prev) => prev.map((c) => (c.id === actor.id ? markActorUsed(c) : c)));
         addCombatLog(
           actor.name,
           actor.team,
@@ -1391,9 +2091,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             return { ...c, currentHp: nextHp };
           }
           if (c.id === actor.id) {
-            return action.type === 'bonus_action'
-              ? { ...c, bonusActionUsed: true }
-              : { ...c, actionUsed: true };
+            return markActorUsed(c);
           }
           return c;
         })
@@ -1687,8 +2385,10 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
   // Build `<PlayerHeroDock />` data for the currently active human-controlled fighter
   const activeHeroHudData = useMemo(() => {
     if (!activeCombatant) return null;
-    return buildArenaCombatantHudData(activeCombatant);
-  }, [activeCombatant]);
+    const ddbId = activeCombatant.sourceCharacter?.ddbCharacterId;
+    const liveHud = ddbId ? liveDdbHudMap[String(ddbId)] : null;
+    return buildArenaCombatantHudData(activeCombatant, liveHud);
+  }, [activeCombatant, liveDdbHudMap]);
 
   // Compute reachable 5ft grid cells for Tap-to-Move on Mobile & Desktop when it's a human player's turn
   const reachableMoveSquares = useMemo<Array<{ col: number; row: number }>>(() => {
@@ -2444,7 +3144,55 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           }}
         >
           {/* Arena Map Floor */}
-          <Layer listening={false}>
+          <Layer
+            listening={Boolean(activeTargetingAction)}
+            onClick={(e) => {
+              if (!activeCombatant || activeCombatant.isAI || !activeTargetingAction) return;
+              const stage = e.target.getStage();
+              const ptr = stage?.getPointerPosition();
+              if (!ptr) return;
+              const worldX = (ptr.x - stagePos.x) / stageScale;
+              const worldY = (ptr.y - stagePos.y) / stageScale;
+              if (worldX < 0 || worldX > ARENA_WIDTH || worldY < 0 || worldY > ARENA_HEIGHT) return;
+              const snapCenter = {
+                x: Math.floor(worldX / ARENA_GRID_SIZE) * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2,
+                y: Math.floor(worldY / ARENA_GRID_SIZE) * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2
+              };
+              const nearestEnemy =
+                combatants
+                  .filter((c) => c.team !== activeCombatant.team && c.currentHp > 0)
+                  .sort(
+                    (a, b) =>
+                      Math.hypot(a.x - snapCenter.x, a.y - snapCenter.y) -
+                      Math.hypot(b.x - snapCenter.x, b.y - snapCenter.y)
+                  )[0] || activeCombatant;
+              executeCombatAction(activeCombatant, nearestEnemy, activeTargetingAction, snapCenter);
+              setActiveTargetingAction(null);
+            }}
+            onTap={(e) => {
+              if (!activeCombatant || activeCombatant.isAI || !activeTargetingAction) return;
+              const stage = e.target.getStage();
+              const ptr = stage?.getPointerPosition();
+              if (!ptr) return;
+              const worldX = (ptr.x - stagePos.x) / stageScale;
+              const worldY = (ptr.y - stagePos.y) / stageScale;
+              if (worldX < 0 || worldX > ARENA_WIDTH || worldY < 0 || worldY > ARENA_HEIGHT) return;
+              const snapCenter = {
+                x: Math.floor(worldX / ARENA_GRID_SIZE) * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2,
+                y: Math.floor(worldY / ARENA_GRID_SIZE) * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2
+              };
+              const nearestEnemy =
+                combatants
+                  .filter((c) => c.team !== activeCombatant.team && c.currentHp > 0)
+                  .sort(
+                    (a, b) =>
+                      Math.hypot(a.x - snapCenter.x, a.y - snapCenter.y) -
+                      Math.hypot(b.x - snapCenter.x, b.y - snapCenter.y)
+                  )[0] || activeCombatant;
+              executeCombatAction(activeCombatant, nearestEnemy, activeTargetingAction, snapCenter);
+              setActiveTargetingAction(null);
+            }}
+          >
             <Rect
               width={ARENA_WIDTH}
               height={ARENA_HEIGHT}
@@ -2564,6 +3312,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           aimCurrent={null}
           onEffectComplete={(id) => setArenaEffects((prev) => prev.filter((f) => f.id !== id))}
           onDispelEffect={(id) => setArenaEffects((prev) => prev.filter((f) => f.id !== id))}
+          onInspectEffect={(eff) => setInspectedAuraRequest({ effect: eff, nonce: Date.now() })}
         />
       </div>
 
@@ -2590,15 +3339,86 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
               executeCombatAction(activeCombatant, activeCombatant, action);
             } else {
               setActiveTargetingAction(action);
-              toast.info(`🎯 Tap a target token on the grid for ${action.name}`);
+              toast.info(`🎯 Tap a target token or grid square for ${action.name}`);
             }
           }}
           onRollToHit={(action) => {
-            setActiveTargetingAction(action);
-            toast.info(`🎯 Tap a target token on the grid to roll ${action.name}!`);
+            const nearestEnemy =
+              combatants
+                .filter((c) => c.team !== activeCombatant.team && c.currentHp > 0)
+                .sort(
+                  (a, b) =>
+                    Math.hypot(a.x - activeCombatant.x, a.y - activeCombatant.y) -
+                    Math.hypot(b.x - activeCombatant.x, b.y - activeCombatant.y)
+                )[0] || activeCombatant;
+            executeCombatAction(activeCombatant, nearestEnemy, action);
           }}
           onRollDamage={(action) => {
-            setActiveTargetingAction(action);
+            const formula = action.damageFormula || '2d8';
+            const dmgRoll = rollDiceFormula(formula, false);
+            if (onTrigger3dDice) {
+              onTrigger3dDice({
+                id: `arena-dmg-${Date.now()}`,
+                characterName: activeCombatant.name,
+                action: `${action.name}${action.castAtLevel ? ` (L${action.castAtLevel})` : ''} (${action.isHeal ? 'Heal' : action.damageType || 'Damage'})`,
+                rollType: action.isHeal ? 'heal' : 'damage',
+                formula: `${formula} = ${dmgRoll.total}`,
+                diceNotation: formula,
+                dice: dmgRoll.rolls.map((r) => ({
+                  sides: dmgRoll.sides,
+                  result: r,
+                  type: `d${dmgRoll.sides}`
+                })),
+                total: dmgRoll.total,
+                timestamp: Date.now(),
+                source: 'player'
+              });
+            }
+            if (action.isHeal) {
+              setCombatants((prev) =>
+                prev.map((c) =>
+                  c.id === activeCombatant.id
+                    ? { ...c, currentHp: Math.min(c.maxHp, c.currentHp + dmgRoll.total) }
+                    : c
+                )
+              );
+              addCombatLog(
+                activeCombatant.name,
+                activeCombatant.team,
+                `rolled ${action.name} healing: +${dmgRoll.total} HP!`,
+                dmgRoll.breakdown
+              );
+            } else {
+              const nearestEnemy = combatants
+                .filter((c) => c.team !== activeCombatant.team && c.currentHp > 0)
+                .sort(
+                  (a, b) =>
+                    Math.hypot(a.x - activeCombatant.x, a.y - activeCombatant.y) -
+                    Math.hypot(b.x - activeCombatant.x, b.y - activeCombatant.y)
+                )[0];
+              if (nearestEnemy) {
+                setCombatants((prev) =>
+                  prev.map((c) =>
+                    c.id === nearestEnemy.id
+                      ? { ...c, currentHp: Math.max(0, c.currentHp - dmgRoll.total) }
+                      : c
+                  )
+                );
+                addCombatLog(
+                  activeCombatant.name,
+                  activeCombatant.team,
+                  `rolled ${action.name}${action.castAtLevel ? ` (L${action.castAtLevel})` : ''} damage against ${nearestEnemy.name}: ${dmgRoll.total} ${action.damageType || ''} damage!`,
+                  dmgRoll.breakdown
+                );
+              } else {
+                addCombatLog(
+                  activeCombatant.name,
+                  activeCombatant.team,
+                  `rolled ${action.name}: ${dmgRoll.total} ${action.damageType || ''} damage!`,
+                  dmgRoll.breakdown
+                );
+              }
+            }
           }}
           activeTargetingAction={activeTargetingAction}
           activeEquippedAsset={null}
@@ -2614,8 +3434,39 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           onSwitchStationMode={() => setPhase('lobby')}
           onSwitchCharacter={() => setPhase('lobby')}
           activeEffects={arenaEffects}
+          inspectedAuraRequest={inspectedAuraRequest}
         />
       )}
+
+      {/* D&D 5e Rule / Aura Inspection Modal */}
+      <DndRuleInspectionModal
+        rule={inspectedRule}
+        onClose={() => setInspectedRule(null)}
+        onRollFormula={(formula, label, isHeal) => {
+          if (!activeCombatant) return;
+          const r = rollDiceFormula(formula, false);
+          if (onTrigger3dDice) {
+            onTrigger3dDice({
+              id: `arena-inspect-${Date.now()}`,
+              characterName: activeCombatant.name,
+              action: label,
+              rollType: isHeal ? 'heal' : 'damage',
+              formula: `${formula} = ${r.total}`,
+              diceNotation: formula,
+              dice: r.rolls.map((v) => ({ sides: r.sides, result: v, type: `d${r.sides}` })),
+              total: r.total,
+              timestamp: Date.now(),
+              source: 'player'
+            });
+          }
+          addCombatLog(
+            activeCombatant.name,
+            activeCombatant.team,
+            `rolled ${label}: ${r.total}!`,
+            r.breakdown
+          );
+        }}
+      />
 
       {/* Victory / Defeat Modal */}
       {winnerTeam && (
