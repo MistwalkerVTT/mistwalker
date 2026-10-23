@@ -1492,7 +1492,7 @@ export const AudioMixerJukeboxModal: React.FC<{
                     <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-zinc-200 flex items-center gap-2">
                       <span>Spell &amp; Combat SFX Catalog ({SOUND_EFFECT_CATALOG_META.length} Effects)</span>
                       <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[10px]">
-                        All 21 Missing/Duplicate Effects Upgraded with ElevenLabs
+                        69 ElevenLabs Neural Spell &amp; Weapon SFX Active
                       </span>
                     </h3>
                     <p className="text-[11px] text-zinc-400 mt-0.5">
