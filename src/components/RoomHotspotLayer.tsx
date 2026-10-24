@@ -24,6 +24,7 @@ interface RoomHotspotLayerProps {
   stageScale: number;
   campaignMode: CampaignMode;
   isPlayerView?: boolean;
+  isDrawingPolygon?: boolean;
   selectedAnnotationId: string | null;
   hoveredAnnotationId?: string | null;
   onHoverAnnotation?: (annotationId: string | null) => void;
@@ -38,6 +39,7 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
   stageScale,
   campaignMode,
   isPlayerView = false,
+  isDrawingPolygon = false,
   selectedAnnotationId,
   hoveredAnnotationId,
   onHoverAnnotation,
@@ -68,7 +70,7 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
   if (visibleAnnotations.length === 0) return null;
 
   return (
-    <Group id="room-hotspots-group" name="room-hotspot">
+    <Group id="room-hotspots-group" name="room-hotspot" listening={!isDrawingPolygon}>
       {visibleAnnotations.map((anno) => {
         const isHovered = activeHoveredId === anno.id;
         const baseColor = anno.color || '#f59e0b'; // Default amber

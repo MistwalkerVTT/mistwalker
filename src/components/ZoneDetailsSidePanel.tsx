@@ -19,7 +19,8 @@ import {
   MapPin,
   Tag,
   Radio,
-  Loader2
+  Loader2,
+  RotateCcw
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { RoomAnnotation } from '../types';
@@ -36,6 +37,7 @@ interface ZoneDetailsSidePanelProps {
   onEdit?: (zone: RoomAnnotation) => void;
   onDeleteZone?: (zoneId: string) => void;
   onDelete?: (zoneId: string) => void;
+  onRedrawPolygon?: (zone: RoomAnnotation) => void;
   onSendToChat?: (text: string, title: string) => void;
   onBroadcastReadAloud?: (text: string, title: string, voiceId?: string) => Promise<void> | void;
   loreSources?: { id: string; name: string; type: 'text' | 'pdf'; content: string }[];
@@ -52,6 +54,7 @@ export const ZoneDetailsSidePanel: React.FC<ZoneDetailsSidePanelProps> = ({
   onEdit,
   onDeleteZone,
   onDelete,
+  onRedrawPolygon,
   onSendToChat,
   onBroadcastReadAloud,
   loreSources = [],
@@ -496,6 +499,18 @@ Focus strictly on module lore.`;
             )}
 
             <div className="flex items-center gap-2 ml-auto">
+              {onRedrawPolygon && (
+                <button
+                  type="button"
+                  id="btn-redraw-polygon-from-sidepanel"
+                  onClick={() => onRedrawPolygon(activeZone)}
+                  className="px-3 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40 text-xs font-mono font-bold flex items-center gap-1.5 shadow transition-all cursor-pointer"
+                  title="Redraw this room zone's polygon boundary on the battlemap"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Redraw Polygon</span>
+                </button>
+              )}
               {onOpenBriefing && (
                 <button
                   type="button"

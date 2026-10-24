@@ -89,6 +89,7 @@ export interface RoomBriefingDrawerProps {
   roomAnnotations?: RoomAnnotation[];
   onSelectRoomByNumber?: (roomNumber: string) => void;
   onUpdateDigest?: (updatedDigest: ChapterPdfDigest) => Promise<void> | void;
+  onRedrawPolygon?: (room: RoomAnnotation) => void;
 }
 
 export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
@@ -111,7 +112,8 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
   activeDmNotes,
   roomAnnotations = [],
   onSelectRoomByNumber,
-  onUpdateDigest
+  onUpdateDigest,
+  onRedrawPolygon
 }) => {
   const [activeRoom, setActiveRoom] = useState<RoomAnnotation | null>(room);
   const [drawerTab, setDrawerTab] = useState<'room' | 'flow'>(initialTab);
@@ -1088,22 +1090,53 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
                 </div>
               </div>
 
-              {/* Color Picker */}
-              <div className="flex items-center gap-3 pt-2">
-                <label className="text-[11px] font-mono uppercase text-zinc-400 font-bold">Pin Color:</label>
-                <div className="flex items-center gap-2">
-                  {['#f59e0b', '#ef4444', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899'].map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => setEditColor(c)}
-                      className={`w-6 h-6 rounded-full transition-transform cursor-pointer border ${
-                        editColor === c ? 'scale-125 border-white ring-2 ring-white/30' : 'border-black/40 hover:scale-110'
-                      }`}
-                      style={{ backgroundColor: c }}
-                    />
-                  ))}
+              {/* Color Picker & Redraw Polygon */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+                <div className="flex items-center gap-3">
+                  <label className="text-[11px] font-mono uppercase text-zinc-400 font-bold">Pin Color:</label>
+                  <div className="flex items-center gap-2">
+                    {['#f59e0b', '#ef4444', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899'].map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setEditColor(c)}
+                        className={`w-6 h-6 rounded-full transition-transform cursor-pointer border ${
+                          editColor === c ? 'scale-125 border-white ring-2 ring-white/30' : 'border-black/40 hover:scale-110'
+                        }`}
+                        style={{ backgroundColor: c }}
+                      />
+                    ))}
+                  </div>
                 </div>
+
+                {onRedrawPolygon && activeRoom && (
+                  <button
+                    type="button"
+                    id="btn-drawer-edit-redraw-polygon"
+                    onClick={() => {
+                      const parsedPage = typeof editPdfPage === 'number' ? editPdfPage : editPdfPage ? parseInt(editPdfPage, 10) : undefined;
+                      const currentDraft: RoomAnnotation = {
+                        ...activeRoom,
+                        roomNumber: editRoomNumber.trim(),
+                        roomName: editRoomName.trim(),
+                        label: `${editRoomNumber.trim() ? `${editRoomNumber.trim()} - ` : ''}${editRoomName.trim()}`,
+                        boxedText: editBoxedText,
+                        dmNotes: editDmNotes,
+                        pdfSection: editPdfSection.trim(),
+                        pdfPage: isNaN(parsedPage as number) ? undefined : parsedPage,
+                        color: editColor,
+                        monsters: manualMonsters,
+                        hiddenMonsterNames: hiddenMonsterNames
+                      };
+                      onRedrawPolygon(currentDraft);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40 font-mono text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                    title="Trace a new polygon boundary on the battlemap for this room zone"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Redraw Polygon</span>
+                  </button>
+                )}
               </div>
 
               {/* Save & Cancel Actions */}
@@ -1934,8 +1967,21 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
           );
         })()}
 
-              {/* Delete Zone Confirmation */}
-              <div className="pt-2 flex justify-end">
+              {/* Redraw Polygon & Delete Zone Confirmation */}
+              <div className="pt-2 flex items-center justify-between gap-2">
+                {onRedrawPolygon && activeRoom ? (
+                  <button
+                    type="button"
+                    id="btn-drawer-view-redraw-polygon"
+                    onClick={() => onRedrawPolygon(activeRoom)}
+                    className="px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/35 font-mono text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                    title="Redraw this room zone's polygon boundary on the battlemap"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Redraw Polygon</span>
+                  </button>
+                ) : <div />}
+
                 <button
                   type="button"
                   onClick={handleDelete}

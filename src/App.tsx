@@ -1853,6 +1853,7 @@ export default function App() {
   const [drawerInitialTab, setDrawerInitialTab] = useState<'room' | 'flow'>('room');
   const [hoveredZoneId, setHoveredZoneId] = useState<string | null>(null);
   const [isAssignRoomModalOpen, setIsAssignRoomModalOpen] = useState(false);
+  const [redrawingRoomZone, setRedrawingRoomZone] = useState<RoomAnnotation | null>(null);
   const [pendingZonePolygonData, setPendingZonePolygonData] = useState<{
     pctPolyPoints: number[];
     bounds: { x: number; y: number; width: number; height: number };
@@ -1875,6 +1876,13 @@ export default function App() {
           setIsAssignRoomModalOpen(false);
           setPendingZonePolygonData(null);
         }
+        if (redrawingRoomZone) {
+          setRedrawingRoomZone(null);
+          setCurrentZonePolygonPoints([]);
+          setTool('select');
+          toast.info('Room polygon redraw cancelled');
+          return;
+        }
         if (currentZonePolygonPoints.length > 0) {
           setCurrentZonePolygonPoints([]);
           toast.info('Zone polygon drawing cancelled');
@@ -1883,7 +1891,7 @@ export default function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [boardPlacingAnimatedType, boardPolygonDrawingState, currentZonePolygonPoints.length, isAssignRoomModalOpen]);
+  }, [boardPlacingAnimatedType, boardPolygonDrawingState, currentZonePolygonPoints.length, isAssignRoomModalOpen, redrawingRoomZone]);
 
   // Duplication and stamping handlers for modified animated effects (torches, rivers, lava, runes)
   const handleDuplicateFeature = useCallback((feature: AnimatedFeature) => {
@@ -5402,6 +5410,20 @@ export default function App() {
   }, [activeMenu]);
 
   // Map Zone & Interactive Hotspot Handlers
+  const handleStartRedrawRoomPolygon = (zoneToRedraw: RoomAnnotation) => {
+    setRedrawingRoomZone(zoneToRedraw);
+    setCurrentZonePolygonPoints([]);
+    setIsZoneEditorOpen(false);
+    setEditingZone(null);
+    setIsRoomDrawerOpen(false);
+    setIsZoneSidePanelOpen(false);
+    setTool('polygon_zone');
+    toast.info(
+      `Redrawing polygon for "${zoneToRedraw.label || zoneToRedraw.roomNumber || 'Room'}": Click on the map to place points, then double-click or click the start point to finish.`,
+      { duration: 5000 }
+    );
+  };
+
   const handleCompleteZonePolygon = (rawPixelPoints: number[]) => {
     if (rawPixelPoints.length < 6) {
       toast.warning('A zone polygon requires at least 3 points.');
@@ -5437,6 +5459,35 @@ export default function App() {
       width: Math.max(2, maxX - minX),
       height: Math.max(2, maxY - minY)
     };
+
+    // If redrawing an existing room zone's polygon, update it directly and reopen the room briefing drawer!
+    if (redrawingRoomZone) {
+      let sumX = 0;
+      let sumY = 0;
+      const vCount = pctPolyPoints.length / 2;
+      for (let i = 0; i < pctPolyPoints.length; i += 2) {
+        sumX += pctPolyPoints[i];
+        sumY += pctPolyPoints[i + 1];
+      }
+      const updatedRoom: RoomAnnotation = {
+        ...redrawingRoomZone,
+        x: vCount > 0 ? sumX / vCount : bounds.x + bounds.width / 2,
+        y: vCount > 0 ? sumY / vCount : bounds.y + bounds.height / 2,
+        bounds,
+        polygonPoints: pctPolyPoints
+      };
+
+      setCurrentZonePolygonPoints([]);
+      setRedrawingRoomZone(null);
+      setTool('select');
+      handleSaveZone(updatedRoom);
+      setSelectedRoomAnnotation(updatedRoom);
+      setSelectedZoneForSidePanel(updatedRoom);
+      setDrawerInitialTab('room');
+      setIsRoomDrawerOpen(true);
+      toast.success(`Updated polygon boundary for "${updatedRoom.label || updatedRoom.roomNumber || 'Room'}"!`);
+      return;
+    }
 
     // Stage pending polygon and open the room number assignment modal immediately
     setPendingZonePolygonData({ pctPolyPoints, bounds });
@@ -6097,7 +6148,7 @@ export default function App() {
       clickedNode = clickedNode.getParent?.();
     }
 
-    if (isHotspotClick) {
+    if (isHotspotClick && tool !== 'hotspot' && tool !== 'zone' && tool !== 'polygon_zone') {
       cancelHoldPing();
       if (stage && typeof stage.stopDrag === 'function') {
         stage.stopDrag();
@@ -6136,6 +6187,10 @@ export default function App() {
         if (currentZonePolygonPoints.length > 0) {
           setCurrentZonePolygonPoints([]);
           toast.info('Zone polygon drawing cancelled');
+        } else if (redrawingRoomZone) {
+          setRedrawingRoomZone(null);
+          setTool('select');
+          toast.info('Room polygon redraw cancelled');
         }
         return;
       }
@@ -7855,6 +7910,64 @@ export default function App() {
           activeAudioLoopCount={activeAudioLoopCount}
         />
 
+        {/* Active Room Polygon Redraw Floating HUD Banner */}
+        {redrawingRoomZone && (
+          <div
+            id="redraw-room-polygon-hud"
+            className="absolute top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-2xl bg-zinc-950/95 border border-amber-500/60 shadow-2xl shadow-amber-950/50 backdrop-blur-md flex items-center gap-3 animate-in fade-in slide-in-from-top-2"
+          >
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
+              <div className="flex flex-col">
+                <span className="text-xs font-mono font-bold text-amber-300">
+                  Redrawing Polygon: {redrawingRoomZone.label || redrawingRoomZone.roomNumber || 'Room Zone'}
+                </span>
+                <span className="text-[10px] font-mono text-zinc-400">
+                  {currentZonePolygonPoints.length > 0
+                    ? `${currentZonePolygonPoints.length / 2} points placed — click start point or double-click to finish`
+                    : 'Click on the battlemap to place polygon vertices around the room'}
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 pl-2 border-l border-zinc-800">
+              {currentZonePolygonPoints.length >= 6 && (
+                <button
+                  type="button"
+                  onClick={() => handleCompleteZonePolygon(currentZonePolygonPoints)}
+                  className="px-3 py-1 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-mono text-xs font-bold transition-all cursor-pointer shadow"
+                >
+                  Finish ({currentZonePolygonPoints.length / 2} pts)
+                </button>
+              )}
+              {currentZonePolygonPoints.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setCurrentZonePolygonPoints([])}
+                  className="px-2.5 py-1 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-mono text-xs transition-all cursor-pointer"
+                >
+                  Reset Points
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  const prevRoom = redrawingRoomZone;
+                  setRedrawingRoomZone(null);
+                  setCurrentZonePolygonPoints([]);
+                  setTool('select');
+                  setSelectedRoomAnnotation(prevRoom);
+                  setSelectedZoneForSidePanel(prevRoom);
+                  setIsRoomDrawerOpen(true);
+                  toast.info('Room polygon redraw cancelled');
+                }}
+                className="px-2.5 py-1 rounded-xl bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 border border-rose-800/50 font-mono text-xs font-bold transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Floating Wall & Creator Toolbar (shown when in creator mode or wall/zone tool active) */}
         {false && (tool === 'wall' || tool === 'zone' || tool === 'hotspot' || campaignMode === 'creator') && (
           <div className="absolute top-16 right-4 z-40 max-w-sm">
@@ -8456,10 +8569,12 @@ export default function App() {
                   stageScale={stageScale}
                   campaignMode={campaignMode}
                   isPlayerView={false}
-                  selectedAnnotationId={selectedRoomAnnotation?.id || selectedZoneForSidePanel?.id || null}
-                  hoveredAnnotationId={hoveredZoneId}
+                  isDrawingPolygon={tool === 'hotspot' || tool === 'zone' || tool === 'polygon_zone' || Boolean(redrawingRoomZone)}
+                  selectedAnnotationId={redrawingRoomZone?.id || selectedRoomAnnotation?.id || selectedZoneForSidePanel?.id || null}
+                  hoveredAnnotationId={redrawingRoomZone?.id || hoveredZoneId}
                   onHoverAnnotation={setHoveredZoneId}
                   onSelectAnnotation={(anno) => {
+                    if (tool === 'hotspot' || tool === 'zone' || tool === 'polygon_zone' || redrawingRoomZone) return;
                     cancelHoldPing();
                     if (stageRef.current && typeof stageRef.current.stopDrag === 'function') {
                       stageRef.current.stopDrag();
@@ -8483,6 +8598,7 @@ export default function App() {
                     setIsRoomDrawerOpen(true);
                   }}
                   onOpenBriefing={(anno) => {
+                    if (tool === 'hotspot' || tool === 'zone' || tool === 'polygon_zone' || redrawingRoomZone) return;
                     cancelHoldPing();
                     if (stageRef.current && typeof stageRef.current.stopDrag === 'function') {
                       stageRef.current.stopDrag();
@@ -10714,6 +10830,7 @@ export default function App() {
             }}
             onSave={handleSaveZone}
             onDelete={handleDeleteZone}
+            onRedrawPolygon={handleStartRedrawRoomPolygon}
             chapterPdfDigest={activeChapterPdfDigest}
           />
         );
@@ -10785,6 +10902,7 @@ export default function App() {
           setHoveredZoneId(null);
         }}
         onUpdateRoom={handleUpdateRoomAnnotation}
+        onRedrawPolygon={handleStartRedrawRoomPolygon}
         onDeleteRoom={(roomId) => {
           handleDeleteZone(roomId);
           setIsRoomDrawerOpen(false);
@@ -10931,6 +11049,7 @@ export default function App() {
           setEditingZone(zone);
           setIsZoneEditorOpen(true);
         }}
+        onRedrawPolygon={handleStartRedrawRoomPolygon}
         onDelete={(zoneId) => handleDeleteZone(zoneId)}
         onSendToChat={handleSendBriefingToChat}
         onBroadcastReadAloud={handleBroadcastRoomReadAloud}

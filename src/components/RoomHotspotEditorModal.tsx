@@ -11,7 +11,8 @@ import {
   MapPin,
   FileText,
   Search,
-  Check
+  Check,
+  RotateCcw
 } from 'lucide-react';
 import { RoomAnnotation, ChapterPdfDigest } from '../types';
 import { chatWithLore } from '../services/aiService';
@@ -23,6 +24,7 @@ interface RoomHotspotEditorModalProps {
   onClose: () => void;
   onSave: (updated: RoomAnnotation) => void;
   onDelete?: (id: string) => void;
+  onRedrawPolygon?: (annotation: RoomAnnotation) => void;
   loreSources?: { id: string; name: string; type: 'text' | 'pdf'; content: string }[];
   chapterPdfDigest?: ChapterPdfDigest | null;
 }
@@ -43,6 +45,7 @@ export const RoomHotspotEditorModal: React.FC<RoomHotspotEditorModalProps> = ({
   onClose,
   onSave,
   onDelete,
+  onRedrawPolygon,
   loreSources = [],
   chapterPdfDigest
 }) => {
@@ -507,18 +510,47 @@ Please respond in the following EXACT JSON format (and nothing else, no markdown
           </div>
 
           {/* Actions */}
-          <div className="pt-2 flex items-center justify-between border-t border-zinc-850">
-            {onDelete ? (
-              <button
-                type="button"
-                id="btn-delete-hotspot"
-                onClick={() => onDelete(currentAnno.id)}
-                className="px-3 py-1.5 rounded-xl bg-red-950/40 hover:bg-red-900/60 text-red-400 border border-red-800/50 text-xs font-mono flex items-center gap-1.5 transition-colors"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Delete Hotspot</span>
-              </button>
-            ) : <div />}
+          <div className="pt-2 flex flex-wrap items-center justify-between gap-2 border-t border-zinc-850">
+            <div className="flex items-center gap-2">
+              {onDelete && (
+                <button
+                  type="button"
+                  id="btn-delete-hotspot"
+                  onClick={() => onDelete(currentAnno.id)}
+                  className="px-3 py-1.5 rounded-xl bg-red-950/40 hover:bg-red-900/60 text-red-400 border border-red-800/50 text-xs font-mono flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete</span>
+                </button>
+              )}
+              {onRedrawPolygon && (
+                <button
+                  type="button"
+                  id="btn-redraw-hotspot-polygon"
+                  onClick={() => {
+                    const cleanNum = roomNumber.trim();
+                    const cleanName = roomName.trim();
+                    const combinedLabel = cleanNum && cleanName ? `${cleanNum}: ${cleanName}` : cleanNum || cleanName || 'Room Hotspot';
+                    onRedrawPolygon({
+                      ...currentAnno,
+                      roomNumber: cleanNum || undefined,
+                      roomName: cleanName || undefined,
+                      label: combinedLabel,
+                      boxedText: boxedText.trim(),
+                      dmNotes: dmNotes.trim(),
+                      pdfSection: pdfSection.trim() || undefined,
+                      pdfPage: pdfPage ? parseInt(pdfPage, 10) : undefined,
+                      color: color || '#f59e0b'
+                    });
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40 text-xs font-mono font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="Redraw the polygon boundary for this room zone on the battlemap"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Redraw Polygon</span>
+                </button>
+              )}
+            </div>
 
             <div className="flex items-center gap-2">
               <button
