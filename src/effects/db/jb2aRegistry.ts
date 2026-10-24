@@ -1712,7 +1712,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "thumb": "/jb2a/Community/JAA/cloudKill.webp",
     "isPersistent": true,
     "blendMode": "screen",
-    "soundKey": "radiant_heal",
+    "soundKey": "healing_incense",
     "tags": ["devotees censer", "devotee's censer", "healing incense", "incense", "green smoke"]
   },
   {

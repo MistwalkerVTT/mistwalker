@@ -146,10 +146,15 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onSelectDm, onSelectPl
     audioRef.current?.setMuted(true);
     setLeaving(mode);
 
-    // 1) Transition sound (user's ElevenLabs favorite) starts immediately
-    const sfx = new Audio('/audio/transition.mp3');
+    // 1) ElevenLabs Portal & Runic Shockwave Transition Sound starts immediately
+    const sfxUrl = mode === 'dm' ? '/audio/portal_dm.mp3' : '/audio/portal_player.mp3';
+    const sfx = new Audio(sfxUrl);
     sfx.volume = 1;
-    sfx.play().catch(() => undefined);
+    sfx.play().catch(() => {
+      const fallback = new Audio('/audio/transition.mp3');
+      fallback.volume = 1;
+      fallback.play().catch(() => undefined);
+    });
 
     // 2) Greeting voice starts ~2s into the transition sound
     //    DM = Big Bad Boss voice, Player = Wizard voice

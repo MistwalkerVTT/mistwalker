@@ -49,6 +49,7 @@ export type SoundEffectType =
   | 'circle_of_death'
   | 'angelic_wings'
   | 'radiant_heal'
+  | 'healing_incense'
   | 'radiant_burst'
   | 'holy_radiance'
   | 'divine_chime'
@@ -156,6 +157,7 @@ export const SOUND_FILE_MAP: Record<string, string> = {
 
   // Radiant & Healing
   radiant_heal: 'radiant_heal.ogg',
+  healing_incense: 'healing_incense.mp3',
   radiant_burst: 'radiant_burst.ogg',
   holy_radiance: 'holy_radiance.ogg',
   divine_chime: 'divine_chime.mp3',
@@ -577,6 +579,14 @@ export const SOUND_EFFECT_CATALOG_META: SoundCatalogEntryMeta[] = [
     fileName: SOUND_FILE_MAP.radiant_heal,
     sourceEngine: 'studio',
     defaultPrompt: 'Warm golden celestial healing aura with soothing angelic harp shimmer'
+  },
+  {
+    key: 'healing_incense',
+    label: "Devotee's Censer: Healing Incense",
+    category: 'radiant',
+    fileName: SOUND_FILE_MAP.healing_incense,
+    sourceEngine: 'elevenlabs',
+    defaultPrompt: 'Golden brass censer swinging on chains with gentle metallic clink, releasing a warm billowing cloud of sacred aromatic healing incense smoke and soft divine choral shimmer'
   },
   {
     key: 'radiant_burst',
