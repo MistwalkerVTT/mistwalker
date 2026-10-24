@@ -63,6 +63,9 @@ export interface Monster {
   legendaryActions?: MonsterAction[];
   legendaryDescription?: string;
   source?: string;
+  isCustom?: boolean;
+  isRoomCustom?: boolean;
+  baseMonsterName?: string;
   createdAt?: number;
   updatedAt?: number;
 }

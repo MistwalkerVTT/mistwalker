@@ -440,24 +440,30 @@ export function buildDmMonsterHudData(
 ): DmMonsterHudData | null {
   if (!token) return null;
 
-  const rawName = String(token.name || '').trim();
-  const cleanedName = rawName
-    .replace(/\s+\d+$/, '')
-    .replace(/\s+#[0-9]+$/, '')
-    .replace(/\s+[A-Za-z]$/, '')
-    .trim();
+  let monster: Monster | undefined;
 
-  const allMonsters = [...compendiumMonsters, ...SRD_MONSTERS];
-  const exactMatch = allMonsters.find(m =>
-    m.name.toLowerCase() === cleanedName.toLowerCase() ||
-    m.name.toLowerCase() === rawName.toLowerCase()
-  );
+  if (token.customMonsterData && typeof token.customMonsterData === 'object' && token.customMonsterData.name) {
+    monster = token.customMonsterData as Monster;
+  } else {
+    const rawName = String(token.name || '').trim();
+    const cleanedName = rawName
+      .replace(/\s+\d+$/, '')
+      .replace(/\s+#[0-9]+$/, '')
+      .replace(/\s+[A-Za-z]$/, '')
+      .trim();
 
-  const resolved = exactMatch
-    ? { monster: exactMatch }
-    : (resolveMonster(cleanedName || rawName, compendiumMonsters) || resolveMonster(rawName, compendiumMonsters));
+    const allMonsters = [...compendiumMonsters, ...SRD_MONSTERS];
+    const exactMatch = allMonsters.find(m =>
+      m.name.toLowerCase() === cleanedName.toLowerCase() ||
+      m.name.toLowerCase() === rawName.toLowerCase()
+    );
 
-  const monster: Monster | undefined = resolved?.monster || exactMatch;
+    const resolved = exactMatch
+      ? { monster: exactMatch }
+      : (resolveMonster(cleanedName || rawName, compendiumMonsters) || resolveMonster(rawName, compendiumMonsters));
+
+    monster = resolved?.monster || exactMatch;
+  }
 
   if (!monster) return null;
 

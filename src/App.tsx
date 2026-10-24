@@ -3480,6 +3480,7 @@ export default function App() {
     ac: number;
     size: number;
     polygonPoints?: number[];
+    customMonsterData?: Monster;
   }) => {
     // Start with default position
     let baseSpawnX = 350;
@@ -3526,7 +3527,11 @@ export default function App() {
         isMonster: true,
         category: 'monster',
         visionEnabled: false,
-        visionRadius: 0
+        visionRadius: 0,
+        ...(tokenData.customMonsterData ? {
+          monsterId: tokenData.customMonsterData.monsterId,
+          customMonsterData: tokenData.customMonsterData
+        } : {})
       };
       const repaired = repairMonsterToken(rawToken, compendiumMonsters) as Token;
       return [...prev, repaired];

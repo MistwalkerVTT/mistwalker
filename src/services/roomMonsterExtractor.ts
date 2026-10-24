@@ -405,7 +405,7 @@ export function extractAndResolveRoomMonsters(params: {
     }
   };
 
-  // 1. If the DM has manually edited the room's monster list, respect manualMonsters
+  // 1. If the DM has manually edited the room's monster list, respect manualMonsters first
   if (manualMonsters.length > 0) {
     for (const raw of manualMonsters) {
       if (!raw || isNonCreatureStatOrItem(raw)) continue;
@@ -414,24 +414,23 @@ export function extractAndResolveRoomMonsters(params: {
         addOrMerge({ monster: res.monster, count: res.count, source: 'manual' }, true);
       }
     }
-    return Array.from(monsterMap.values());
-  }
+  } else {
+    // 2. Resolve explicit monsters from room.monsters and digestRoom.monsters
+    // Deduplicate raw strings between roomMonsters and digestMonsters first so an identical
+    // copied array doesn't double the monster count!
+    const explicitSourceList =
+      Array.isArray(roomMonsters) && roomMonsters.length > 0
+        ? roomMonsters
+        : Array.isArray(digestMonsters)
+          ? digestMonsters
+          : [];
 
-  // 2. Resolve explicit monsters from room.monsters and digestRoom.monsters
-  // Deduplicate raw strings between roomMonsters and digestMonsters first so an identical
-  // copied array doesn't double the monster count!
-  const explicitSourceList =
-    Array.isArray(roomMonsters) && roomMonsters.length > 0
-      ? roomMonsters
-      : Array.isArray(digestMonsters)
-        ? digestMonsters
-        : [];
-
-  for (const raw of explicitSourceList) {
-    if (!isValidExplicitMonsterEntry(raw)) continue;
-    const res = resolveMonster(raw, allAvailableMonsters);
-    if (res?.monster?.name && !isNonCreatureStatOrItem(res.monster.name)) {
-      addOrMerge({ monster: res.monster, count: res.count, source: 'digest' }, true);
+    for (const raw of explicitSourceList) {
+      if (!isValidExplicitMonsterEntry(raw)) continue;
+      const res = resolveMonster(raw, allAvailableMonsters);
+      if (res?.monster?.name && !isNonCreatureStatOrItem(res.monster.name)) {
+        addOrMerge({ monster: res.monster, count: res.count, source: 'digest' }, true);
+      }
     }
   }
 
@@ -465,12 +464,20 @@ export function extractAndResolveRoomMonsters(params: {
     }
 
     for (const [key, item] of dmNotesAggregated.entries()) {
-      // Only add if not already defined by the explicit digest list
+      // Only add if not already defined by the explicit digest/manual list
       const baseStatblockName = item.monster.name.replace(/^.*?\((.*?)\)$/, '$1').trim().toLowerCase();
       const alreadyExists =
         monsterMap.has(key) ||
         monsterMap.has(baseStatblockName) ||
-        Array.from(monsterMap.keys()).some(k => isExactMonsterMatch(k, key) || isExactMonsterMatch(k, baseStatblockName));
+        Array.from(monsterMap.values()).some(existing => {
+          const existingKey = existing.monster.name.trim().toLowerCase();
+          const existingBase = (existing.monster.baseMonsterName || '').trim().toLowerCase();
+          return (
+            isExactMonsterMatch(existingKey, key) ||
+            isExactMonsterMatch(existingKey, baseStatblockName) ||
+            (existingBase && (isExactMonsterMatch(existingBase, key) || isExactMonsterMatch(existingBase, baseStatblockName)))
+          );
+        });
 
       if (!alreadyExists) {
         addOrMerge(item, false);

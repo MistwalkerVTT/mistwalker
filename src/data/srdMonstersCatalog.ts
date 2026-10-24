@@ -1528,9 +1528,15 @@ export function resolveMonster(
 
   if (typeof rawInput === 'object' && rawInput !== null && rawInput.name) {
     const count = typeof rawInput.count === 'number' && rawInput.count > 0 ? rawInput.count : 1;
+    const isExplicitlyCustomized =
+      rawInput.isCustom === true ||
+      rawInput.isRoomCustom === true ||
+      rawInput.source === 'Custom Compendium' ||
+      rawInput.source === 'Room Zone Custom';
     const isStaleFallback =
-      rawInput.source === 'Encounter Notes' ||
-      (rawInput.avatarUrl === GENERIC_FALLBACK_AVATAR && !isTrulyGuardType(rawInput.name));
+      !isExplicitlyCustomized &&
+      (rawInput.source === 'Encounter Notes' ||
+        (rawInput.avatarUrl === GENERIC_FALLBACK_AVATAR && !isTrulyGuardType(rawInput.name)));
     if (!isStaleFallback) {
       return { monster: rawInput as Monster, count };
     }
@@ -1599,8 +1605,11 @@ export function resolveMonster(
     ? candidateWords[candidateWords.length - 1]
     : null;
 
-  // Prefer entries with local /uploads/ avatars over external compendium URLs when duplicates exist
+  // Prefer custom monsters first, then entries with local /uploads/ avatars over external compendium URLs when duplicates exist
   const allAvailable = [...compendium, ...SRD_MONSTERS].sort((a, b) => {
+    const aCustom = a.isCustom || a.isRoomCustom || a.source === 'Custom Compendium' || a.source === 'Room Zone Custom' ? 1 : 0;
+    const bCustom = b.isCustom || b.isRoomCustom || b.source === 'Custom Compendium' || b.source === 'Room Zone Custom' ? 1 : 0;
+    if (aCustom !== bCustom) return bCustom - aCustom;
     const aLocal = a.avatarUrl?.startsWith('/uploads/') && a.avatarUrl !== GENERIC_FALLBACK_AVATAR ? 1 : 0;
     const bLocal = b.avatarUrl?.startsWith('/uploads/') && b.avatarUrl !== GENERIC_FALLBACK_AVATAR ? 1 : 0;
     return bLocal - aLocal;
@@ -1700,6 +1709,9 @@ export function repairMonsterToken<T extends Record<string, any>>(
   }
   const isMon = token.isMonster === true || token.category === 'monster' || token.isPlayer === false;
   if (!isMon) return token;
+  if (token.customMonsterData && (token.customMonsterData.isCustom || token.customMonsterData.isRoomCustom)) {
+    return token;
+  }
 
   const rawName = String(token.name || '').replace(/\s+\d+$/, '').trim();
   if (!rawName) return token;

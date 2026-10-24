@@ -25,12 +25,17 @@ import {
   Plus,
   Maximize,
   Minimize,
-  Loader2
+  Loader2,
+  Upload,
+  Swords,
+  Shield,
+  Heart
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { RoomAnnotation, ChapterPdfDigest } from '../types';
 import { Monster } from '../types/monster';
 import { updateRoomAnnotation } from '../lib/updateRoomAnnotation';
+import { saveMonster, uploadAndRegisterAsset } from '../lib/firebase';
 import { resolveMonster, isExactMonsterMatch, isNonCreatureStatOrItem, SRD_MONSTERS } from '../data/srdMonstersCatalog';
 import { extractAndResolveRoomMonsters } from '../services/roomMonsterExtractor';
 import { ChapterFlowPanel } from './ChapterFlowPanel';
@@ -77,7 +82,7 @@ export interface RoomBriefingDrawerProps {
   campaignPdfs?: { id: string; name: string; url?: string; fileType?: string }[];
   chapterPdfDigest?: ChapterPdfDigest | null;
   availableMonsters?: Monster[];
-  onSpawnMonsterToken?: (tokenData: { name: string; avatarUrl: string; hp: number; ac: number; size: number; polygonPoints?: number[] }) => void;
+  onSpawnMonsterToken?: (tokenData: { name: string; avatarUrl: string; hp: number; ac: number; size: number; polygonPoints?: number[]; customMonsterData?: Monster }) => void;
   initialTab?: 'room' | 'flow';
   activeSceneTitle?: string;
   activeDmNotes?: string;
@@ -144,6 +149,17 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
   const [hiddenMonsterNames, setHiddenMonsterNames] = useState<string[]>([]);
   const [selectedVoice, setSelectedVoice] = useState('wizard');
 
+  // Room Zone Monster Customizer Modal State
+  const [editingRoomMonster, setEditingRoomMonster] = useState<{
+    originalName: string;
+    monster: Monster;
+    count: number;
+  } | null>(null);
+  const [alsoSaveToCompendium, setAlsoSaveToCompendium] = useState(true);
+  const [isSavingRoomMonster, setIsSavingRoomMonster] = useState(false);
+  const [isUploadingMonsterAvatar, setIsUploadingMonsterAvatar] = useState(false);
+  const monsterAvatarInputRef = useRef<HTMLInputElement>(null);
+
   // Combined available monsters from compendium and SRD
   const allAvailableMonsters = useMemo(() => {
     const list = [...availableMonsters];
@@ -154,6 +170,29 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
     }
     return list;
   }, [availableMonsters]);
+
+  // Currently resolved monsters for this room zone
+  const currentRoomMonsters = useMemo(() => {
+    if (!activeRoom) return [];
+    const matchedDigestRoom = matchRoomInDigest(
+      activeRoom.roomNumber || '',
+      activeRoom.roomName || '',
+      activeRoom.label || '',
+      chapterPdfDigest?.rooms
+    );
+    return extractAndResolveRoomMonsters({
+      manualMonsters,
+      roomMonsters: activeRoom.monsters,
+      digestMonsters: matchedDigestRoom?.monsters,
+      dmNotes: activeRoom.dmNotes,
+      digestDmNotes: matchedDigestRoom?.dmNotes,
+      roomNumber: activeRoom.roomNumber,
+      roomName: activeRoom.roomName,
+      label: activeRoom.label,
+      allAvailableMonsters,
+      hiddenMonsterNames
+    });
+  }, [activeRoom, manualMonsters, chapterPdfDigest?.rooms, allAvailableMonsters, hiddenMonsterNames]);
 
   // Close monster dropdown on outside click or Escape key
   useEffect(() => {
@@ -217,6 +256,14 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
     });
   };
 
+  // Helper to materialize current resolved room monsters into full objects
+  const materializeCurrentRoomMonsters = () => {
+    return currentRoomMonsters.map(entry => ({
+      ...entry.monster,
+      count: Math.max(1, entry.count || 1)
+    }));
+  };
+
   const handleAddMonster = (monsterOrName: Monster | string, count: number = 1) => {
     if (!monsterOrName) return;
 
@@ -240,24 +287,19 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
     // Remove from hiddenMonsterNames so it's guaranteed visible
     const nextHidden = hiddenMonsterNames.filter(h => h.toLowerCase() !== mName.toLowerCase());
 
-    // Check if monster already exists in manualMonsters
-    const existingIdx = manualMonsters.findIndex(m => {
-      const name = typeof m === 'string' ? m.replace(/^\d+\s*x?\s+/i, '').trim() : m?.name;
-      return name?.toLowerCase() === mName.toLowerCase();
-    });
+    const baseList = materializeCurrentRoomMonsters();
+    const existingIdx = baseList.findIndex(m => m.name?.trim().toLowerCase() === mName.toLowerCase());
 
     let nextMonsters: any[];
     if (existingIdx !== -1) {
-      const existing = manualMonsters[existingIdx];
-      const curCount = typeof existing === 'object' && existing.count ? existing.count : 1;
-      const updatedEntry = typeof existing === 'object'
-        ? { ...existing, count: curCount + targetCount }
-        : `${curCount + targetCount}x ${mName}`;
-      nextMonsters = [...manualMonsters];
-      nextMonsters[existingIdx] = updatedEntry;
+      const existing = baseList[existingIdx];
+      nextMonsters = [...baseList];
+      nextMonsters[existingIdx] = {
+        ...existing,
+        count: (existing.count || 1) + targetCount
+      };
     } else {
-      const entryToAdd = targetCount > 1 ? { ...targetMonster, count: targetCount } : targetMonster;
-      nextMonsters = [...manualMonsters, entryToAdd];
+      nextMonsters = [...baseList, { ...targetMonster, count: targetCount }];
     }
 
     updateMonstersState(nextMonsters, nextHidden);
@@ -270,52 +312,43 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
   const handleIncreaseCount = (monster: Monster) => {
     const mName = monster.name.trim().toLowerCase();
     const nextHidden = hiddenMonsterNames.filter(h => h.toLowerCase() !== mName);
-    const existingIdx = manualMonsters.findIndex(item => {
-      const itemName = typeof item === 'string' ? item.replace(/^\d+\s*x?\s+/i, '').trim() : item?.name;
-      return itemName?.toLowerCase() === mName;
-    });
+    const baseList = materializeCurrentRoomMonsters();
+    const existingIdx = baseList.findIndex(item => item.name?.trim().toLowerCase() === mName);
 
     let nextMonsters: any[];
     if (existingIdx !== -1) {
-      const existing = manualMonsters[existingIdx];
-      const curCount = typeof existing === 'object' && existing.count ? existing.count : 1;
-      const updated = typeof existing === 'object'
-        ? { ...existing, count: curCount + 1 }
-        : `${curCount + 1}x ${monster.name}`;
-      nextMonsters = [...manualMonsters];
-      nextMonsters[existingIdx] = updated;
+      const existing = baseList[existingIdx];
+      nextMonsters = [...baseList];
+      nextMonsters[existingIdx] = {
+        ...existing,
+        count: (existing.count || 1) + 1
+      };
     } else {
-      nextMonsters = [...manualMonsters, { ...monster, count: 2 }];
+      nextMonsters = [...baseList, { ...monster, count: 2 }];
     }
     updateMonstersState(nextMonsters, nextHidden);
   };
 
   const handleDecreaseCount = (monster: Monster, currentCount: number) => {
     const mName = monster.name.trim().toLowerCase();
+    const baseList = materializeCurrentRoomMonsters();
     if (currentCount <= 1) {
       const nextHidden = [...hiddenMonsterNames.filter(h => h.toLowerCase() !== mName), monster.name];
-      const nextMonsters = manualMonsters.filter(item => {
-        const itemName = typeof item === 'string' ? item.replace(/^\d+\s*x?\s+/i, '').trim() : item?.name;
-        return itemName?.toLowerCase() !== mName;
-      });
+      const nextMonsters = baseList.filter(item => item.name?.trim().toLowerCase() !== mName);
       updateMonstersState(nextMonsters, nextHidden);
       toast.info(`Removed ${monster.name} from room`);
     } else {
-      const existingIdx = manualMonsters.findIndex(item => {
-        const itemName = typeof item === 'string' ? item.replace(/^\d+\s*x?\s+/i, '').trim() : item?.name;
-        return itemName?.toLowerCase() === mName;
-      });
+      const existingIdx = baseList.findIndex(item => item.name?.trim().toLowerCase() === mName);
       let nextMonsters: any[];
       if (existingIdx !== -1) {
-        const existing = manualMonsters[existingIdx];
-        const curCount = typeof existing === 'object' && existing.count ? existing.count : currentCount;
-        const updated = typeof existing === 'object'
-          ? { ...existing, count: Math.max(1, curCount - 1) }
-          : `${Math.max(1, curCount - 1)}x ${monster.name}`;
-        nextMonsters = [...manualMonsters];
-        nextMonsters[existingIdx] = updated;
+        const existing = baseList[existingIdx];
+        nextMonsters = [...baseList];
+        nextMonsters[existingIdx] = {
+          ...existing,
+          count: Math.max(1, (existing.count || currentCount) - 1)
+        };
       } else {
-        nextMonsters = [...manualMonsters, { ...monster, count: currentCount - 1 }];
+        nextMonsters = [...baseList, { ...monster, count: currentCount - 1 }];
       }
       updateMonstersState(nextMonsters, hiddenMonsterNames);
     }
@@ -323,13 +356,150 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
 
   const handleRemoveMonster = (monster: Monster) => {
     const mName = monster.name.trim().toLowerCase();
+    const baseList = materializeCurrentRoomMonsters();
     const nextHidden = [...hiddenMonsterNames.filter(h => h.toLowerCase() !== mName), monster.name];
-    const nextMonsters = manualMonsters.filter(item => {
-      const itemName = typeof item === 'string' ? item.replace(/^\d+\s*x?\s+/i, '').trim() : item?.name;
-      return itemName?.toLowerCase() !== mName;
-    });
+    const nextMonsters = baseList.filter(item => item.name?.trim().toLowerCase() !== mName);
     updateMonstersState(nextMonsters, nextHidden);
     toast.info(`Removed ${monster.name} from room display`);
+  };
+
+  const handleOpenRoomMonsterCustomizer = (monster: Monster, count: number) => {
+    const clonedMonster: Monster = {
+      ...monster,
+      traits: Array.isArray(monster.traits) ? monster.traits.map(t => ({ ...t })) : [],
+      actions: Array.isArray(monster.actions) ? monster.actions.map(a => ({ ...a })) : []
+    };
+    setEditingRoomMonster({
+      originalName: monster.name,
+      monster: clonedMonster,
+      count: Math.max(1, count || 1)
+    });
+    setAlsoSaveToCompendium(true);
+  };
+
+  const handleMonsterAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !editingRoomMonster) return;
+    setIsUploadingMonsterAvatar(true);
+    try {
+      const url = await uploadAndRegisterAsset(file, 'token');
+      setEditingRoomMonster(prev => prev ? {
+        ...prev,
+        monster: { ...prev.monster, avatarUrl: url }
+      } : null);
+      toast.success('Monster token avatar uploaded!');
+    } catch (err) {
+      console.error('[RoomBriefingDrawer] Monster avatar upload failed:', err);
+      toast.error('Failed to upload monster token avatar');
+    } finally {
+      setIsUploadingMonsterAvatar(false);
+    }
+  };
+
+  const handleSaveCustomizedRoomMonster = async () => {
+    if (!editingRoomMonster || !activeRoom) return;
+    const trimmedName = (editingRoomMonster.monster.name || '').trim();
+    if (!trimmedName) {
+      toast.error('Monster name cannot be empty.');
+      return;
+    }
+
+    setIsSavingRoomMonster(true);
+    try {
+      const origLower = editingRoomMonster.originalName.trim().toLowerCase();
+      const newLower = trimmedName.toLowerCase();
+      const isRenamed = origLower !== newLower;
+
+      const customId = isRenamed || !editingRoomMonster.monster.monsterId || editingRoomMonster.monster.monsterId.startsWith('srd_')
+        ? `custom_room_${trimmedName.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${Date.now().toString(36)}`
+        : editingRoomMonster.monster.monsterId;
+
+      const updatedMonster: Monster = {
+        ...editingRoomMonster.monster,
+        monsterId: customId,
+        name: trimmedName,
+        baseMonsterName: editingRoomMonster.monster.baseMonsterName || editingRoomMonster.originalName,
+        ac: Number(editingRoomMonster.monster.ac) || 10,
+        hp: Number(editingRoomMonster.monster.hp) || 10,
+        str: Number(editingRoomMonster.monster.str) || 10,
+        dex: Number(editingRoomMonster.monster.dex) || 10,
+        con: Number(editingRoomMonster.monster.con) || 10,
+        int: Number(editingRoomMonster.monster.int) || 10,
+        wis: Number(editingRoomMonster.monster.wis) || 10,
+        cha: Number(editingRoomMonster.monster.cha) || 10,
+        isCustom: true,
+        isRoomCustom: true,
+        source: 'Room Zone Custom',
+        updatedAt: Date.now()
+      };
+
+      const targetCount = Math.max(1, Number(editingRoomMonster.count) || 1);
+      const baseList = materializeCurrentRoomMonsters();
+      const existingIdx = baseList.findIndex(item => item.name?.trim().toLowerCase() === origLower);
+
+      const roomMonsterEntry = {
+        ...updatedMonster,
+        count: targetCount
+      };
+
+      let nextMonsters: any[];
+      if (existingIdx !== -1) {
+        nextMonsters = [...baseList];
+        nextMonsters[existingIdx] = roomMonsterEntry;
+      } else {
+        nextMonsters = [...baseList, roomMonsterEntry];
+      }
+
+      // If renamed, hide the original name so DM Notes / PDF Digest doesn't re-add an unedited duplicate
+      let nextHidden = hiddenMonsterNames.filter(h => h.toLowerCase() !== newLower);
+      if (isRenamed && !nextHidden.some(h => h.toLowerCase() === origLower)) {
+        nextHidden = [...nextHidden, editingRoomMonster.originalName];
+      }
+
+      // Persist directly to this Room Zone in Firestore
+      const updatedRoomData: RoomAnnotation = {
+        ...activeRoom,
+        monsters: nextMonsters,
+        hiddenMonsterNames: nextHidden
+      };
+
+      setManualMonsters(nextMonsters);
+      setHiddenMonsterNames(nextHidden);
+      setActiveRoom(updatedRoomData);
+      if (onUpdateRoom) {
+        onUpdateRoom(updatedRoomData);
+      }
+
+      await updateRoomAnnotation({
+        campaignId,
+        chapterId,
+        sceneId,
+        zone: updatedRoomData,
+        activeSessionId
+      });
+
+      // Optionally also save to the global Custom Monster Compendium
+      if (alsoSaveToCompendium) {
+        const compendiumMonster: Monster = {
+          ...updatedMonster,
+          isCustom: true,
+          source: 'Custom Compendium'
+        };
+        await saveMonster(compendiumMonster);
+      }
+
+      setEditingRoomMonster(null);
+      toast.success(
+        alsoSaveToCompendium
+          ? `Saved "${trimmedName}" to Room Zone & Custom Monster Compendium!`
+          : `Saved customized "${trimmedName}" to Room Zone!`
+      );
+    } catch (err) {
+      console.error('[RoomBriefingDrawer] Failed to save customized room monster:', err);
+      toast.error('Failed to save customized monster');
+    } finally {
+      setIsSavingRoomMonster(false);
+    }
   };
 
   // Synchronize drawerTab when initialTab or room changes
@@ -1256,7 +1426,8 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
                         hp: m.hp || 10,
                         ac: m.ac || 10,
                         size: sizeToNumber(m.size),
-                        polygonPoints: activeRoom?.polygonPoints
+                        polygonPoints: activeRoom?.polygonPoints,
+                        customMonsterData: m
                       });
                       spawnedCount++;
                     }
@@ -1272,7 +1443,8 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
                       hp: m.hp || 10,
                       ac: m.ac || 10,
                       size: sizeToNumber(m.size),
-                      polygonPoints: activeRoom?.polygonPoints
+                      polygonPoints: activeRoom?.polygonPoints,
+                      customMonsterData: m
                     });
                   }
                   toast.success(`Spawned ${count > 1 ? `${count}x ` : ''}${m.name} onto battlemap!`);
@@ -1621,12 +1793,27 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
                       </div>
                     ) : (
                       <div className="flex flex-col gap-2.5">
-                        {uniqueMonsterEntries.map(({ monster: m, count, source, matchedSnippet }, mIdx) => (
+                        {uniqueMonsterEntries.map(({ monster: m, count, source, matchedSnippet }, mIdx) => {
+                          const isMonsterCustomized = Boolean(
+                            m.isCustom ||
+                            m.isRoomCustom ||
+                            m.source === 'Custom Compendium' ||
+                            m.source === 'Room Zone Custom'
+                          );
+                          return (
                           <div
                             key={mIdx}
-                            className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 bg-zinc-900/90 rounded-xl border border-zinc-800/80 hover:border-zinc-700 transition-colors relative group min-w-0 overflow-hidden shadow-sm"
+                            className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-xl border transition-colors relative group min-w-0 overflow-hidden shadow-sm ${
+                              isMonsterCustomized
+                                ? 'bg-amber-950/20 border-amber-500/40 hover:border-amber-400/60'
+                                : 'bg-zinc-900/90 border-zinc-800/80 hover:border-zinc-700'
+                            }`}
                           >
-                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                            <div
+                              className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer"
+                              onClick={() => handleOpenRoomMonsterCustomizer(m, count)}
+                              title={`Click to customize ${m.name} for this room zone`}
+                            >
                               {m.avatarUrl ? (
                                 <img
                                   src={m.avatarUrl}
@@ -1639,13 +1826,18 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
                                 </div>
                               )}
                               <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-2 flex-wrap min-w-0">
-                                  <span className="text-xs font-bold text-zinc-100 font-mono truncate max-w-[180px] sm:max-w-[240px]" title={m.name}>
+                                <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                                  <span className="text-xs font-bold text-zinc-100 group-hover:text-amber-200 transition-colors font-mono truncate max-w-[180px] sm:max-w-[220px]" title={m.name}>
                                     {m.name}
                                   </span>
                                   {count > 1 && (
                                     <span className="px-1.5 py-0.5 rounded-md bg-red-900/50 text-red-300 font-bold text-[10px] font-mono border border-red-800/50 shrink-0">
                                       ×{count}
+                                    </span>
+                                  )}
+                                  {isMonsterCustomized && (
+                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0">
+                                      ★ Custom
                                     </span>
                                   )}
                                   <span
@@ -1661,19 +1853,31 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
                                         ? `Detected in DM Notes: "...${matchedSnippet}..."`
                                         : source === 'digest'
                                           ? 'Verified from Chapter PDF Digest'
-                                          : 'Manually added to room'
+                                          : 'Saved to Room Zone'
                                     }
                                   >
-                                    {source === 'manual' ? 'Manual' : source === 'digest' ? 'PDF Digest' : 'DM Notes'}
+                                    {source === 'manual' ? 'Room Saved' : source === 'digest' ? 'PDF Digest' : 'DM Notes'}
                                   </span>
                                 </div>
                                 <div className="text-[10px] text-zinc-400 font-mono mt-0.5 truncate">
                                   CR {m.challenge} · AC {m.ac} · HP {m.hp}
+                                  {m.actions && m.actions.length > 0 ? ` · ${m.actions.length} action${m.actions.length === 1 ? '' : 's'}` : ''}
                                 </div>
                               </div>
                             </div>
 
-                            <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                            <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+                              {/* Customize Room Monster Button */}
+                              <button
+                                type="button"
+                                onClick={() => handleOpenRoomMonsterCustomizer(m, count)}
+                                className="px-2 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 font-mono text-[10px] font-bold flex items-center gap-1 transition-colors cursor-pointer shrink-0"
+                                title={`Edit & customize ${m.name} stats, attacks, and traits for this Room Zone`}
+                              >
+                                <Pencil className="w-3 h-3" />
+                                <span>Customize</span>
+                              </button>
+
                               {/* Quantity Adjustment */}
                               <div className="flex items-center bg-zinc-800/90 rounded-lg border border-zinc-700/80 overflow-hidden">
                                 <button
@@ -1719,7 +1923,8 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
                               </button>
                             </div>
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -1749,6 +1954,580 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
           )}
         </div>
       </div>
+
+      {/* Room Zone Monster Customizer Modal */}
+      {editingRoomMonster && (
+        <div
+          className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in"
+          onClick={() => setEditingRoomMonster(null)}
+        >
+          <div
+            className="w-full max-w-2xl max-h-[90vh] bg-zinc-950 border border-amber-500/40 rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="px-5 py-4 bg-zinc-900/95 border-b border-zinc-800 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="p-2 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 shrink-0">
+                  <Pencil className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-mono uppercase tracking-widest text-amber-400 font-bold">
+                      Room Zone Monster Customizer
+                    </span>
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700 truncate max-w-[180px]">
+                      {displayTitle}
+                    </span>
+                  </div>
+                  <h3 className="text-sm font-bold text-zinc-100 font-mono truncate">
+                    Customize: {editingRoomMonster.monster.name || editingRoomMonster.originalName}
+                  </h3>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingRoomMonster(null)}
+                className="p-1.5 rounded-xl text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors cursor-pointer"
+                title="Close Customizer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-5 custom-scrollbar">
+              {/* Avatar + Name + Count Row */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-3.5 rounded-xl bg-zinc-900/70 border border-zinc-800">
+                <div
+                  onClick={() => monsterAvatarInputRef.current?.click()}
+                  className="w-16 h-16 rounded-2xl bg-zinc-900 border-2 border-dashed border-zinc-700 hover:border-amber-500 flex flex-col items-center justify-center cursor-pointer overflow-hidden relative group shrink-0"
+                  title="Click to upload custom token art"
+                >
+                  {editingRoomMonster.monster.avatarUrl ? (
+                    <>
+                      <img
+                        src={editingRoomMonster.monster.avatarUrl}
+                        alt={editingRoomMonster.monster.name}
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                        <Upload className="w-4 h-4 text-white" />
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4 text-zinc-500 group-hover:text-amber-400" />
+                      <span className="text-[9px] text-zinc-500 mt-0.5 font-mono">Token</span>
+                    </>
+                  )}
+                  <input
+                    ref={monsterAvatarInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleMonsterAvatarUpload}
+                    className="hidden"
+                  />
+                </div>
+
+                <div className="flex-1 grid grid-cols-1 sm:grid-cols-4 gap-3 w-full">
+                  <div className="sm:col-span-3">
+                    <label className="text-[10px] font-mono uppercase text-zinc-400 font-bold block mb-1">
+                      Monster Name (in this Room Zone)
+                    </label>
+                    <input
+                      type="text"
+                      value={editingRoomMonster.monster.name || ''}
+                      onChange={(e) =>
+                        setEditingRoomMonster((prev) =>
+                          prev ? { ...prev, monster: { ...prev.monster, name: e.target.value } } : null
+                        )
+                      }
+                      placeholder="e.g. Captain Vane (Wight)"
+                      className="w-full px-3 py-2 bg-zinc-950 border border-zinc-750 rounded-xl text-xs font-mono text-zinc-100 focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-mono uppercase text-zinc-400 font-bold block mb-1">
+                      Count in Room
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={99}
+                      value={editingRoomMonster.count}
+                      onChange={(e) =>
+                        setEditingRoomMonster((prev) =>
+                          prev ? { ...prev, count: Math.max(1, parseInt(e.target.value, 10) || 1) } : null
+                        )
+                      }
+                      className="w-full px-3 py-2 bg-zinc-950 border border-zinc-750 rounded-xl text-xs font-mono font-bold text-amber-300 text-center focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Size, Type, Alignment, CR */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div>
+                  <label className="text-[10px] font-mono uppercase text-zinc-400 font-bold block mb-1">Size</label>
+                  <select
+                    value={editingRoomMonster.monster.size || 'Medium'}
+                    onChange={(e) =>
+                      setEditingRoomMonster((prev) =>
+                        prev ? { ...prev, monster: { ...prev.monster, size: e.target.value as any } } : null
+                      )
+                    }
+                    className="w-full px-2.5 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-zinc-200 focus:outline-none focus:border-amber-500"
+                  >
+                    {['Tiny', 'Small', 'Medium', 'Large', 'Huge', 'Gargantuan'].map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-mono uppercase text-zinc-400 font-bold block mb-1">Type</label>
+                  <input
+                    type="text"
+                    value={editingRoomMonster.monster.type || ''}
+                    onChange={(e) =>
+                      setEditingRoomMonster((prev) =>
+                        prev ? { ...prev, monster: { ...prev.monster, type: e.target.value } } : null
+                      )
+                    }
+                    placeholder="Undead, Fiend..."
+                    className="w-full px-2.5 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-zinc-200 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-mono uppercase text-zinc-400 font-bold block mb-1">Alignment</label>
+                  <input
+                    type="text"
+                    value={editingRoomMonster.monster.alignment || ''}
+                    onChange={(e) =>
+                      setEditingRoomMonster((prev) =>
+                        prev ? { ...prev, monster: { ...prev.monster, alignment: e.target.value } } : null
+                      )
+                    }
+                    placeholder="Chaotic Evil"
+                    className="w-full px-2.5 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-zinc-200 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-mono uppercase text-zinc-400 font-bold block mb-1">Challenge (CR)</label>
+                  <input
+                    type="text"
+                    value={editingRoomMonster.monster.challenge || ''}
+                    onChange={(e) =>
+                      setEditingRoomMonster((prev) =>
+                        prev ? { ...prev, monster: { ...prev.monster, challenge: e.target.value } } : null
+                      )
+                    }
+                    placeholder="3 (700 XP)"
+                    className="w-full px-2.5 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-zinc-200 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              {/* Core Combat Stats: AC, HP, HP Formula, Speed */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 rounded-xl bg-zinc-900/50 border border-zinc-800/80">
+                <div>
+                  <label className="text-[10px] font-mono uppercase text-blue-400 font-bold flex items-center gap-1 mb-1">
+                    <Shield className="w-3 h-3" /> Armor Class
+                  </label>
+                  <input
+                    type="number"
+                    value={editingRoomMonster.monster.ac ?? 10}
+                    onChange={(e) =>
+                      setEditingRoomMonster((prev) =>
+                        prev ? { ...prev, monster: { ...prev.monster, ac: parseInt(e.target.value, 10) || 10 } } : null
+                      )
+                    }
+                    className="w-full px-2.5 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs font-mono font-bold text-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-mono uppercase text-emerald-400 font-bold flex items-center gap-1 mb-1">
+                    <Heart className="w-3 h-3" /> Hit Points
+                  </label>
+                  <input
+                    type="number"
+                    value={editingRoomMonster.monster.hp ?? 10}
+                    onChange={(e) =>
+                      setEditingRoomMonster((prev) =>
+                        prev ? { ...prev, monster: { ...prev.monster, hp: parseInt(e.target.value, 10) || 1 } } : null
+                      )
+                    }
+                    className="w-full px-2.5 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs font-mono font-bold text-white focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-mono uppercase text-zinc-400 font-bold block mb-1">
+                    HP Formula
+                  </label>
+                  <input
+                    type="text"
+                    value={editingRoomMonster.monster.hpFormula || ''}
+                    onChange={(e) =>
+                      setEditingRoomMonster((prev) =>
+                        prev ? { ...prev, monster: { ...prev.monster, hpFormula: e.target.value } } : null
+                      )
+                    }
+                    placeholder="(8d8 + 16)"
+                    className="w-full px-2.5 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs font-mono text-zinc-300 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-mono uppercase text-amber-400 font-bold block mb-1">
+                    Speed
+                  </label>
+                  <input
+                    type="text"
+                    value={editingRoomMonster.monster.speed || ''}
+                    onChange={(e) =>
+                      setEditingRoomMonster((prev) =>
+                        prev ? { ...prev, monster: { ...prev.monster, speed: e.target.value } } : null
+                      )
+                    }
+                    placeholder="30 ft., fly 60 ft."
+                    className="w-full px-2.5 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs font-mono text-zinc-200 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              {/* Ability Scores */}
+              <div>
+                <label className="text-[10px] font-mono uppercase text-zinc-400 font-bold block mb-2">
+                  Ability Scores
+                </label>
+                <div className="grid grid-cols-6 gap-2">
+                  {(['str', 'dex', 'con', 'int', 'wis', 'cha'] as const).map((stat) => (
+                    <div key={stat} className="bg-zinc-900 border border-zinc-800 rounded-xl p-2 text-center">
+                      <span className="text-[10px] font-mono uppercase text-zinc-400 font-bold block mb-1">
+                        {stat}
+                      </span>
+                      <input
+                        type="number"
+                        value={(editingRoomMonster.monster as any)[stat] ?? 10}
+                        onChange={(e) =>
+                          setEditingRoomMonster((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  monster: {
+                                    ...prev.monster,
+                                    [stat]: parseInt(e.target.value, 10) || 10
+                                  }
+                                }
+                              : null
+                          )
+                        }
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg py-1 text-center text-xs font-mono font-bold text-zinc-100 focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Secondary Details: Saves, Skills, Resistances, Senses */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-mono uppercase text-zinc-400 font-bold block mb-1">Saving Throws</label>
+                  <input
+                    type="text"
+                    value={editingRoomMonster.monster.savingThrows || ''}
+                    onChange={(e) =>
+                      setEditingRoomMonster((prev) =>
+                        prev ? { ...prev, monster: { ...prev.monster, savingThrows: e.target.value } } : null
+                      )
+                    }
+                    placeholder="Wis +4, Cha +5"
+                    className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-zinc-200 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-mono uppercase text-zinc-400 font-bold block mb-1">Skills</label>
+                  <input
+                    type="text"
+                    value={editingRoomMonster.monster.skills || ''}
+                    onChange={(e) =>
+                      setEditingRoomMonster((prev) =>
+                        prev ? { ...prev, monster: { ...prev.monster, skills: e.target.value } } : null
+                      )
+                    }
+                    placeholder="Perception +4, Stealth +5"
+                    className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-zinc-200 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-mono uppercase text-zinc-400 font-bold block mb-1">Damage Resistances / Immunities</label>
+                  <input
+                    type="text"
+                    value={editingRoomMonster.monster.damageResistances || ''}
+                    onChange={(e) =>
+                      setEditingRoomMonster((prev) =>
+                        prev ? { ...prev, monster: { ...prev.monster, damageResistances: e.target.value } } : null
+                      )
+                    }
+                    placeholder="necrotic; bludgeoning, piercing, slashing"
+                    className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-zinc-200 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-mono uppercase text-zinc-400 font-bold block mb-1">Senses & Languages</label>
+                  <input
+                    type="text"
+                    value={editingRoomMonster.monster.senses || ''}
+                    onChange={(e) =>
+                      setEditingRoomMonster((prev) =>
+                        prev ? { ...prev, monster: { ...prev.monster, senses: e.target.value } } : null
+                      )
+                    }
+                    placeholder="Darkvision 60 ft., Passive Perception 14"
+                    className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-zinc-200 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              {/* Special Traits Editor */}
+              <div className="space-y-2.5 pt-2 border-t border-zinc-800/80">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-mono uppercase text-amber-400 font-bold flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Special Traits & Passive Features
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setEditingRoomMonster((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              monster: {
+                                ...prev.monster,
+                                traits: [...(prev.monster.traits || []), { name: 'New Trait', description: '' }]
+                              }
+                            }
+                          : null
+                      )
+                    }
+                    className="px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-[10px] font-mono font-bold flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3" /> Add Trait
+                  </button>
+                </div>
+                {(editingRoomMonster.monster.traits || []).length === 0 ? (
+                  <p className="text-[11px] text-zinc-500 italic">No special traits configured.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {(editingRoomMonster.monster.traits || []).map((trait, tIdx) => (
+                      <div key={tIdx} className="p-2.5 rounded-xl bg-zinc-900/80 border border-zinc-800 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={trait.name}
+                            onChange={(e) => {
+                              const next = [...(editingRoomMonster.monster.traits || [])];
+                              next[tIdx] = { ...next[tIdx], name: e.target.value };
+                              setEditingRoomMonster((prev) =>
+                                prev ? { ...prev, monster: { ...prev.monster, traits: next } } : null
+                              );
+                            }}
+                            placeholder="Trait Name (e.g. Sunlight Sensitivity)"
+                            className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1 text-xs font-bold text-amber-300 focus:outline-none focus:border-amber-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const next = (editingRoomMonster.monster.traits || []).filter((_, i) => i !== tIdx);
+                              setEditingRoomMonster((prev) =>
+                                prev ? { ...prev, monster: { ...prev.monster, traits: next } } : null
+                              );
+                            }}
+                            className="p-1 text-zinc-500 hover:text-red-400 cursor-pointer"
+                            title="Remove Trait"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        <textarea
+                          rows={2}
+                          value={trait.description}
+                          onChange={(e) => {
+                            const next = [...(editingRoomMonster.monster.traits || [])];
+                            next[tIdx] = { ...next[tIdx], description: e.target.value };
+                            setEditingRoomMonster((prev) =>
+                              prev ? { ...prev, monster: { ...prev.monster, traits: next } } : null
+                            );
+                          }}
+                          placeholder="Trait description..."
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-300 focus:outline-none focus:border-amber-500"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Combat Actions & Attacks Editor */}
+              <div className="space-y-2.5 pt-2 border-t border-zinc-800/80">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-mono uppercase text-red-400 font-bold flex items-center gap-1.5">
+                    <Swords className="w-3.5 h-3.5" />
+                    Combat Actions & Attacks
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setEditingRoomMonster((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              monster: {
+                                ...prev.monster,
+                                actions: [
+                                  ...(prev.monster.actions || []),
+                                  {
+                                    name: 'New Attack',
+                                    type: 'attack',
+                                    attackBonus: 5,
+                                    damage: '1d8 + 3 slashing',
+                                    reachRange: 'reach 5 ft.',
+                                    description: 'Melee Weapon Attack: +5 to hit, reach 5 ft., one target. Hit: 7 (1d8 + 3) slashing damage.'
+                                  }
+                                ]
+                              }
+                            }
+                          : null
+                      )
+                    }
+                    className="px-2.5 py-1 rounded-lg bg-red-500/15 hover:bg-red-500/25 text-red-300 border border-red-500/30 text-[10px] font-mono font-bold flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3" /> Add Action
+                  </button>
+                </div>
+                {(editingRoomMonster.monster.actions || []).length === 0 ? (
+                  <p className="text-[11px] text-zinc-500 italic">No combat actions configured.</p>
+                ) : (
+                  <div className="space-y-2.5">
+                    {(editingRoomMonster.monster.actions || []).map((act, aIdx) => (
+                      <div key={aIdx} className="p-2.5 rounded-xl bg-zinc-900/80 border border-zinc-800 space-y-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
+                          <input
+                            type="text"
+                            value={act.name}
+                            onChange={(e) => {
+                              const next = [...(editingRoomMonster.monster.actions || [])];
+                              next[aIdx] = { ...next[aIdx], name: e.target.value };
+                              setEditingRoomMonster((prev) =>
+                                prev ? { ...prev, monster: { ...prev.monster, actions: next } } : null
+                              );
+                            }}
+                            placeholder="Action Name (e.g. Life Drain)"
+                            className="sm:col-span-5 bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1 text-xs font-bold text-red-300 focus:outline-none focus:border-red-500"
+                          />
+                          <div className="sm:col-span-3 flex items-center gap-1 bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1">
+                            <span className="text-[10px] text-zinc-500 font-mono">Hit +</span>
+                            <input
+                              type="number"
+                              value={act.attackBonus ?? ''}
+                              onChange={(e) => {
+                                const next = [...(editingRoomMonster.monster.actions || [])];
+                                next[aIdx] = {
+                                  ...next[aIdx],
+                                  attackBonus: e.target.value === '' ? undefined : parseInt(e.target.value, 10)
+                                };
+                                setEditingRoomMonster((prev) =>
+                                  prev ? { ...prev, monster: { ...prev.monster, actions: next } } : null
+                                );
+                              }}
+                              placeholder="5"
+                              className="w-full bg-transparent text-xs font-mono text-white focus:outline-none"
+                            />
+                          </div>
+                          <input
+                            type="text"
+                            value={act.damage || ''}
+                            onChange={(e) => {
+                              const next = [...(editingRoomMonster.monster.actions || [])];
+                              next[aIdx] = { ...next[aIdx], damage: e.target.value };
+                              setEditingRoomMonster((prev) =>
+                                prev ? { ...prev, monster: { ...prev.monster, actions: next } } : null
+                              );
+                            }}
+                            placeholder="2d6 + 3 necrotic"
+                            className="sm:col-span-3 bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-xs font-mono text-amber-300 focus:outline-none focus:border-red-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const next = (editingRoomMonster.monster.actions || []).filter((_, i) => i !== aIdx);
+                              setEditingRoomMonster((prev) =>
+                                prev ? { ...prev, monster: { ...prev.monster, actions: next } } : null
+                              );
+                            }}
+                            className="sm:col-span-1 p-1 text-zinc-500 hover:text-red-400 flex justify-center cursor-pointer"
+                            title="Remove Action"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        <textarea
+                          rows={2}
+                          value={act.description}
+                          onChange={(e) => {
+                            const next = [...(editingRoomMonster.monster.actions || [])];
+                            next[aIdx] = { ...next[aIdx], description: e.target.value };
+                            setEditingRoomMonster((prev) =>
+                              prev ? { ...prev, monster: { ...prev.monster, actions: next } } : null
+                            );
+                          }}
+                          placeholder="Full action description..."
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-300 focus:outline-none focus:border-red-500"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-5 py-3.5 bg-zinc-900/95 border-t border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+              <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={alsoSaveToCompendium}
+                  onChange={(e) => setAlsoSaveToCompendium(e.target.checked)}
+                  className="rounded border-zinc-700 bg-zinc-950 text-amber-500 focus:ring-amber-500"
+                />
+                <span>
+                  Also save to <strong className="text-amber-300">★ Custom Monster Compendium</strong>
+                </span>
+              </label>
+
+              <div className="flex items-center gap-2 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setEditingRoomMonster(null)}
+                  className="px-3.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-mono font-bold transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={isSavingRoomMonster || isUploadingMonsterAvatar}
+                  onClick={handleSaveCustomizedRoomMonster}
+                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-mono font-bold flex items-center gap-1.5 shadow-lg shadow-amber-500/20 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>{isSavingRoomMonster ? 'Saving...' : 'Save to Room Zone'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
