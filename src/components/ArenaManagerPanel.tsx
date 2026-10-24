@@ -1461,10 +1461,13 @@ export const ArenaManagerPanel: React.FC<ArenaManagerPanelProps> = ({
                 <div className="grid grid-cols-2 gap-2">
                   {(
                     [
-                      { id: 'random_encounter', label: 'Random Encounter' },
-                      { id: 'vs_npcs', label: 'Party vs NPCs' },
+                      { id: 'random_encounter', label: 'Random Encounter (1–6P)' },
+                      { id: 'vs_npcs', label: 'Party vs NPCs (1–6P)' },
                       { id: '1v1', label: '1v1 Duel' },
-                      { id: '2v2', label: '2v2 Skirmish' }
+                      { id: '2v2', label: '2v2 Skirmish' },
+                      { id: '3v3', label: '3v3 Clash' },
+                      { id: '4v4', label: '4v4 Squad Brawl' },
+                      { id: '6v6', label: '6v6 Grand Melee' }
                     ] as const
                   ).map((m) => (
                     <button

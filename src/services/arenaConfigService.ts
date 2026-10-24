@@ -6,7 +6,15 @@ import { PRESET_BATTLEMAPS, PresetBattlemap } from '../data/presetBattlemaps';
 import { DEFAULT_MONSTERS } from '../data/defaultMonsters';
 import { segmentsIntersect } from '../lib/visionEngine';
 
-export type ArenaMatchModeConfig = '1v1' | '2v2' | 'vs_npcs' | 'random_encounter';
+export type ArenaMatchModeConfig =
+  | '1v1'
+  | '2v2'
+  | '3v3'
+  | '4v4'
+  | '5v5'
+  | '6v6'
+  | 'vs_npcs'
+  | 'random_encounter';
 export type ArenaDifficultyConfig = 'standard' | 'hard' | 'deadly';
 export type ArenaHazardType = 'none' | 'lava_eruption' | 'healing_sanctuary' | 'arcane_storm';
 
@@ -123,7 +131,7 @@ export function normalizeArenaConfig(raw: any): ArenaConfig {
     }
   }
   return {
-    defaultMatchMode: ['1v1', '2v2', 'vs_npcs', 'random_encounter'].includes(raw.defaultMatchMode)
+    defaultMatchMode: ['1v1', '2v2', '3v3', '4v4', '5v5', '6v6', 'vs_npcs', 'random_encounter'].includes(raw.defaultMatchMode)
       ? raw.defaultMatchMode
       : DEFAULT_ARENA_CONFIG.defaultMatchMode,
     defaultDifficulty: ['standard', 'hard', 'deadly'].includes(raw.defaultDifficulty)

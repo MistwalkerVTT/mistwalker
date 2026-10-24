@@ -11183,8 +11183,21 @@ export default function App() {
         isOpen={showDndChatbot}
         onClose={() => setShowDndChatbot(false)}
         currentMapName={activeSceneInfo?.sceneTitle || (imageFile ? 'Tactical Battlemap' : 'Blank Battlemap')}
+        activeCampaignTitle={campaignsList.find(c => c.campaignId === activeSceneInfo?.campaignId)?.campaignTitle}
+        activeChapterTitle={
+          campaignsList
+            .find(c => c.campaignId === activeSceneInfo?.campaignId)
+            ?.chapters?.find(ch => ch.chapterId === activeSceneInfo?.chapterId)?.chapterTitle
+        }
+        activeDmNotes={activeDmNotes}
+        campaigns={campaignsList}
         combatantsCount={combatTrackerCombatants.length}
         activeRound={combatTrackerRound}
+        chapterDigest={
+          campaignsList
+            .find(c => c.campaignId === activeSceneInfo?.campaignId)
+            ?.chapters?.find(ch => ch.chapterId === activeSceneInfo?.chapterId)?.pdfDigest || null
+        }
       />
 
       {/* Bug Report Submission Modal */}

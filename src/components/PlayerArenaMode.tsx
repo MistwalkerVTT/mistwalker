@@ -94,8 +94,46 @@ import {
 } from '../services/arenaConfigService';
 import { subscribeToMonsters } from '../lib/firebase';
 
-export type ArenaMatchMode = '1v1' | '2v2' | 'vs_npcs' | 'random_encounter';
+export type ArenaMatchMode =
+  | '1v1'
+  | '2v2'
+  | '3v3'
+  | '4v4'
+  | '5v5'
+  | '6v6'
+  | 'vs_npcs'
+  | 'random_encounter';
 export type ArenaDifficulty = 'standard' | 'hard' | 'deadly';
+
+export function isPvpOrRivalMatchMode(mode: ArenaMatchMode): boolean {
+  return (
+    mode === '1v1' ||
+    mode === '2v2' ||
+    mode === '3v3' ||
+    mode === '4v4' ||
+    mode === '5v5' ||
+    mode === '6v6'
+  );
+}
+
+export function getMatchModeTeamCap(mode: ArenaMatchMode): number {
+  switch (mode) {
+    case '1v1':
+      return 1;
+    case '2v2':
+      return 2;
+    case '3v3':
+      return 3;
+    case '4v4':
+      return 4;
+    case '5v5':
+      return 5;
+    case '6v6':
+      return 6;
+    default:
+      return 6; // random_encounter & vs_npcs support up to 6 Players
+  }
+}
 
 export interface ArenaCombatant {
   id: string;
@@ -1441,14 +1479,32 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
     }
   }, [matchMode, goldHeroIds.length, difficulty, monsterPool, arenaConfig.lockDmEncounter, arenaConfig.pinnedEncounterMonsters]);
 
-  // Adjust team slot counts automatically when switching between 1v1 and 2v2
+  // Adjust team slot counts automatically when switching between 1v1, 2v2, 3v3, 4v4, 5v5, and 6v6
   useEffect(() => {
-    if (matchMode === '1v1') {
-      setGoldHeroIds((prev) => prev.slice(0, 1));
-      setCrimsonHeroIds((prev) => (prev.length > 0 ? prev.slice(0, 1) : [heroPool[1]?.id || heroPool[0]?.id]));
-    } else if (matchMode === '2v2') {
-      setGoldHeroIds((prev) => (prev.length >= 2 ? prev.slice(0, 2) : heroPool.slice(0, 2).map((h) => h.id)));
-      setCrimsonHeroIds((prev) => (prev.length >= 2 ? prev.slice(0, 2) : heroPool.slice(2, 4).map((h) => h.id)));
+    if (isPvpOrRivalMatchMode(matchMode)) {
+      const cap = getMatchModeTeamCap(matchMode);
+      setGoldHeroIds((prev) => {
+        if (prev.length >= cap) return prev.slice(0, cap);
+        const next = [...prev];
+        for (const h of heroPool) {
+          if (next.length >= cap) break;
+          if (!next.includes(h.id)) next.push(h.id);
+        }
+        return next;
+      });
+      setCrimsonHeroIds((prev) => {
+        if (prev.length >= cap) return prev.slice(0, cap);
+        const next = [...prev];
+        // Prefer picking rivals not already in the first `cap` heroes so teams are distinct
+        const offsetPool = [...heroPool.slice(cap), ...heroPool.slice(0, cap)];
+        for (const h of offsetPool) {
+          if (next.length >= cap) break;
+          if (!next.includes(h.id)) next.push(h.id);
+        }
+        return next;
+      });
+    } else {
+      setGoldHeroIds((prev) => prev.slice(0, 6));
     }
   }, [matchMode, heroPool]);
 
@@ -1510,8 +1566,10 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
   const handleStartArenaMatch = () => {
     const roster: ArenaCombatant[] = [];
 
-    // 1. Spawn Team Gold (Left side of Arena)
+    // 1. Spawn Team Gold (Left side of Arena — up to 6 heroes in a staggered 2-column tactical formation)
+    const maxGold = getMatchModeTeamCap(matchMode);
     const goldHeroes = goldHeroIds
+      .slice(0, maxGold)
       .map((id) => heroPool.find((h) => h.id === id))
       .filter(Boolean) as Character[];
 
@@ -1519,10 +1577,22 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       goldHeroes.push(heroPool[0]);
     }
 
+    const goldSpawnSlots = [
+      { col: 3, row: 4 },
+      { col: 3, row: 7 },
+      { col: 2, row: 3 },
+      { col: 2, row: 6 },
+      { col: 3, row: 10 },
+      { col: 2, row: 9 }
+    ];
+
     goldHeroes.forEach((hero, idx) => {
       const d20 = Math.floor(Math.random() * 20) + 1;
       const initBonus = typeof hero.initiativeBonus === 'number' ? hero.initiativeBonus : 2;
-      const startRow = Math.min(ARENA_ROWS - 2, Math.max(2, 4 + idx * 2));
+      const slot = goldSpawnSlots[idx] || {
+        col: 2 + (idx % 2),
+        row: Math.min(ARENA_ROWS - 2, Math.max(2, 2 + idx * 2))
+      };
       roster.push({
         id: `arena_gold_${idx}_${Date.now()}`,
         name: hero.name,
@@ -1539,8 +1609,8 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         remainingMoveFt: 30,
         initiativeBonus: initBonus,
         initiativeRoll: d20 + initBonus,
-        x: 3 * ARENA_GRID_SIZE,
-        y: startRow * ARENA_GRID_SIZE,
+        x: slot.col * ARENA_GRID_SIZE,
+        y: slot.row * ARENA_GRID_SIZE,
         size: 1,
         conditions: [],
         actionUsed: false,
@@ -1549,18 +1619,30 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       });
     });
 
-    // 2. Spawn Team Crimson (Right side of Arena)
-    if (matchMode === '1v1' || matchMode === '2v2') {
-      const countNeeded = matchMode === '1v1' ? 1 : 2;
+    // 2. Spawn Team Crimson (Right side of Arena — up to 6 Rival Heroes or Scaled Monsters)
+    if (isPvpOrRivalMatchMode(matchMode)) {
+      const countNeeded = getMatchModeTeamCap(matchMode);
       const crimsonHeroes = crimsonHeroIds
         .slice(0, countNeeded)
         .map((id) => heroPool.find((h) => h.id === id))
         .filter(Boolean) as Character[];
 
+      const crimsonSpawnSlots = [
+        { col: ARENA_COLS - 4, row: 4 },
+        { col: ARENA_COLS - 4, row: 7 },
+        { col: ARENA_COLS - 3, row: 3 },
+        { col: ARENA_COLS - 3, row: 6 },
+        { col: ARENA_COLS - 4, row: 10 },
+        { col: ARENA_COLS - 3, row: 9 }
+      ];
+
       crimsonHeroes.forEach((hero, idx) => {
         const d20 = Math.floor(Math.random() * 20) + 1;
         const initBonus = typeof hero.initiativeBonus === 'number' ? hero.initiativeBonus : 2;
-        const startRow = Math.min(ARENA_ROWS - 2, Math.max(2, 4 + idx * 3));
+        const slot = crimsonSpawnSlots[idx] || {
+          col: ARENA_COLS - 4 + (idx % 2),
+          row: Math.min(ARENA_ROWS - 2, Math.max(2, 2 + idx * 2))
+        };
         roster.push({
           id: `arena_crimson_hero_${idx}_${Date.now()}`,
           name: crimsonIsAI ? `${hero.name} (AI Rival)` : hero.name,
@@ -1577,8 +1659,8 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           remainingMoveFt: 30,
           initiativeBonus: initBonus,
           initiativeRoll: d20 + initBonus,
-          x: (ARENA_COLS - 4) * ARENA_GRID_SIZE,
-          y: startRow * ARENA_GRID_SIZE,
+          x: slot.col * ARENA_GRID_SIZE,
+          y: slot.row * ARENA_GRID_SIZE,
           size: 1,
           conditions: [],
           actionUsed: false,
@@ -1596,11 +1678,14 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           : generateScaledRandomEncounter(goldHeroes.length, difficulty, monsterPool);
 
       const hpMult = arenaConfig.monsterHpMultiplier || 1;
+      const monsterSpawnRows = [3, 6, 9, 2, 5, 8, 11, 4, 7, 10];
 
       monstersToSpawn.forEach((mon, idx) => {
         const d20 = Math.floor(Math.random() * 20) + 1;
         const initBonus = mon.initiativeBonus ?? Math.floor(((mon.dex || 12) - 10) / 2);
-        const startRow = Math.min(ARENA_ROWS - 3, Math.max(2, 3 + idx * 2));
+        const startRow = monsterSpawnRows[idx % monsterSpawnRows.length] ?? Math.min(ARENA_ROWS - 3, Math.max(2, 2 + (idx % 5) * 2));
+        const colOffset = Math.floor(idx / 3) * 2 + (idx % 2);
+        const startCol = Math.max(ARENA_COLS - 8, ARENA_COLS - 4 - colOffset);
         const sizeSq = mon.size === 'Huge' || mon.size === 'Gargantuan' ? 3 : mon.size === 'Large' ? 2 : 1;
         const duplicateCount = monstersToSpawn.slice(0, idx).filter((m) => m.name === mon.name).length;
         const displayName = duplicateCount > 0 ? `${mon.name} #${duplicateCount + 1}` : mon.name;
@@ -1622,7 +1707,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           remainingMoveFt: 30,
           initiativeBonus: initBonus,
           initiativeRoll: d20 + initBonus,
-          x: (ARENA_COLS - 5 - (idx % 2)) * ARENA_GRID_SIZE,
+          x: startCol * ARENA_GRID_SIZE,
           y: startRow * ARENA_GRID_SIZE,
           size: sizeSq,
           isFlying: mon.speed?.toLowerCase().includes('fly'),
@@ -3528,7 +3613,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                 </span>
               </div>
               <p className="text-[11px] sm:text-xs text-zinc-400 truncate">
-                1v1 • 2v2 • Scaled Random Encounters • vs NPCs
+                1v1 up to 6v6 • Scaled Random Encounters (1–6P) • vs NPCs
               </p>
             </div>
           </div>
@@ -3561,42 +3646,67 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         <div className="max-w-6xl w-full mx-auto p-3.5 sm:p-6 pb-28 md:pb-8 space-y-5 flex-1">
           {/* Step 1: Select Arena Mode */}
           <div>
-            <h2 className="text-xs font-mono uppercase tracking-wider text-amber-400 font-bold mb-2.5 flex items-center gap-1.5">
-              <Crown className="w-4 h-4" />
-              <span>1. Select Arena Combat Mode</span>
-            </h2>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+              <h2 className="text-xs font-mono uppercase tracking-wider text-amber-400 font-bold flex items-center gap-1.5">
+                <Crown className="w-4 h-4" />
+                <span>1. Select Arena Combat Mode (Up to 6v6)</span>
+              </h2>
+              {/* Quick Team Skirmish Size Pills */}
+              <div className="flex items-center gap-1 bg-zinc-900/90 border border-zinc-800 rounded-xl p-1">
+                <span className="text-[10px] font-mono text-zinc-400 px-2">Hero Clash Size:</span>
+                {(['1v1', '2v2', '3v3', '4v4', '5v5', '6v6'] as const).map((sz) => (
+                  <button
+                    key={sz}
+                    type="button"
+                    onClick={() => setMatchMode(sz)}
+                    className={`px-2 py-0.5 rounded-lg text-[11px] font-mono font-bold transition-all cursor-pointer ${
+                      matchMode === sz
+                        ? 'bg-amber-500 text-zinc-950 shadow'
+                        : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+                    }`}
+                  >
+                    {sz}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5">
               {[
                 {
                   id: 'random_encounter' as const,
                   title: 'Random Encounter',
-                  badge: 'Scaled vs AI',
-                  desc: 'Balanced D&D 5e monster encounter scaled to the number of players.',
+                  badge: '1–6P vs Scaled AI',
+                  desc: 'Balanced D&D 5e monster encounter scaled to 1–6 players.',
                   color: 'emerald'
                 },
                 {
                   id: '1v1' as const,
-                  title: '1v1 Duel',
-                  badge: 'PvP or vs AI',
-                  desc: 'Head-to-head single combat with full D&D Beyond HUD & 3D dice.',
+                  title: '1v1 / 2v2 Duel',
+                  badge: matchMode === '2v2' ? '2v2 Active' : '1v1 or 2v2',
+                  desc: 'Head-to-head single or tag-team combat with full D&D Beyond HUD.',
                   color: 'amber'
                 },
                 {
-                  id: '2v2' as const,
-                  title: '2v2 Skirmish',
-                  badge: '2v2 Tag Team',
-                  desc: 'Tactical tag-team battle with initiative, flanking & healing.',
+                  id: '6v6' as const,
+                  title: '3v3 – 6v6 Party Clash',
+                  badge: ['3v3', '4v4', '5v5', '6v6'].includes(matchMode) ? `${matchMode} Active` : 'Up to 6v6 Squads',
+                  desc: 'Full party vs party colosseum warfare (3v3, 4v4, 5v5, or 6v6).',
                   color: 'blue'
                 },
                 {
                   id: 'vs_npcs' as const,
                   title: 'Party vs NPCs',
-                  badge: 'Custom Pick',
+                  badge: '1–6P Custom Pick',
                   desc: 'Hand-pick specific monsters or bosses from the Bestiary.',
                   color: 'purple'
                 }
               ].map((m) => {
-                const active = matchMode === m.id;
+                const active =
+                  m.id === '1v1'
+                    ? matchMode === '1v1' || matchMode === '2v2'
+                    : m.id === '6v6'
+                    ? matchMode === '3v3' || matchMode === '4v4' || matchMode === '5v5' || matchMode === '6v6'
+                    : matchMode === m.id;
                 return (
                   <button
                     key={m.id}
@@ -3637,10 +3747,10 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                   <Shield className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400 shrink-0" />
                   <div>
                     <h3 className="text-xs sm:text-sm font-mono font-bold text-amber-300">
-                      Team Gold — Players ({goldHeroIds.length})
+                      Team Gold — Players ({goldHeroIds.length}/{getMatchModeTeamCap(matchMode)})
                     </h3>
                     <p className="text-[10px] sm:text-[11px] text-zinc-400">
-                      Tap heroes to select ({matchMode === '1v1' ? 'Max 1' : matchMode === '2v2' ? 'Max 2' : '1–4 Players'})
+                      Tap heroes to select ({isPvpOrRivalMatchMode(matchMode) ? `Max ${getMatchModeTeamCap(matchMode)}` : '1–6 Players'})
                     </p>
                   </div>
                 </div>
@@ -3675,7 +3785,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                   .filter((h) => goldCampaignFilter === 'ALL' || h.ddbCampaignId === goldCampaignFilter || goldHeroIds.includes(h.id))
                   .map((hero) => {
                   const isSelected = goldHeroIds.includes(hero.id);
-                  const maxAllowed = matchMode === '1v1' ? 1 : matchMode === '2v2' ? 2 : 4;
+                  const maxAllowed = getMatchModeTeamCap(matchMode);
                   const avatar = hero.avatarUrl || getCharacterTokenUrl(hero.name);
                   return (
                     <button
@@ -3729,17 +3839,17 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
 
             {/* Right Side: Team Crimson (Opponents / Scaled Random Encounter) */}
             <div className="lg:col-span-6 bg-zinc-900/75 border border-rose-500/30 rounded-3xl p-4 sm:p-5 space-y-3.5">
-              {matchMode === '1v1' || matchMode === '2v2' ? (
+              {isPvpOrRivalMatchMode(matchMode) ? (
                 <>
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-2.5">
                     <div className="flex items-center gap-2">
                       <Swords className="w-4 h-4 sm:w-5 sm:h-5 text-rose-400 shrink-0" />
                       <div>
                         <h3 className="text-xs sm:text-sm font-mono font-bold text-rose-300">
-                          Team Crimson — Rivals ({matchMode === '1v1' ? '1' : '2'})
+                          Team Crimson — Rivals ({crimsonHeroIds.length}/{getMatchModeTeamCap(matchMode)})
                         </h3>
                         <p className="text-[10px] sm:text-[11px] text-zinc-400">
-                          Pass-and-Play or Tactical AI Rivals
+                          Pass-and-Play or Tactical AI Rivals (Max {getMatchModeTeamCap(matchMode)})
                         </p>
                       </div>
                     </div>
@@ -3783,7 +3893,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                       .filter((h) => crimsonCampaignFilter === 'ALL' || h.ddbCampaignId === crimsonCampaignFilter || crimsonHeroIds.includes(h.id))
                       .map((hero) => {
                       const isSelected = crimsonHeroIds.includes(hero.id);
-                      const maxAllowed = matchMode === '1v1' ? 1 : 2;
+                      const maxAllowed = getMatchModeTeamCap(matchMode);
                       const avatar = hero.avatarUrl || getCharacterTokenUrl(hero.name);
                       return (
                         <button

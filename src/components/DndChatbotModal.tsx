@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { 
   Sparkles, 
@@ -8,8 +8,7 @@ import {
   VolumeX, 
   Copy, 
   Check, 
-  Key, 
-  Skull, 
+  Compass, 
   BookOpen, 
   Dices, 
   Bot, 
@@ -18,21 +17,25 @@ import {
   Minimize2, 
   Maximize2, 
   Zap, 
-  ShieldAlert, 
-  Info,
+  Globe,
   ChevronDown
 } from 'lucide-react';
-import { chatWithDndBot, DndChatMessage, generateTTS } from '../services/aiService';
+import { chatWithDndBot, DndChatMessage } from '../services/aiService';
 import { audioNarration } from '../services/audioNarrationService';
-import { ChapterPdfDigest } from '../types';
+import { Campaign, ChapterPdfDigest } from '../types';
+import { KNOWN_DDB_CAMPAIGNS } from '../data/ddbCampaignRegistry';
 
-export type DndMode = 'golden_vault' | 'vecna' | 'rules' | 'dm_copilot';
+export type DndMode = 'dm_copilot' | 'rules' | 'campaign_lore' | 'worldbuilder';
 export type DndModelChoice = 'gemini-2.5-flash' | 'gemini-3.8-flash' | 'gemini-3.5-flash' | 'gemini-3.1-flash-lite';
 
 interface DndChatbotModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentMapName?: string;
+  activeCampaignTitle?: string;
+  activeChapterTitle?: string;
+  activeDmNotes?: string;
+  campaigns?: Campaign[];
   combatantsCount?: number;
   activeRound?: number;
   chapterDigest?: ChapterPdfDigest | null;
@@ -40,86 +43,97 @@ interface DndChatbotModalProps {
 
 const MODE_CONFIGS: Record<DndMode, {
   label: string;
+  shortLabel: string;
   subtitle: string;
-  icon: typeof Key;
+  icon: typeof Dices;
   color: string;
   badgeBg: string;
   badgeText: string;
   quickPrompts: string[];
 }> = {
-  golden_vault: {
-    label: 'Keys from the Golden Vault',
-    subtitle: 'Chapter: Masterpiece Imbroglio (5th Level Heist)',
-    icon: Key,
-    color: 'text-amber-400',
-    badgeBg: 'bg-amber-500/10 border-amber-500/30',
-    badgeText: 'text-amber-300',
-    quickPrompts: [
-      "Where is Constantori's Portrait and what are its magic stats & spells?",
-      "Describe the G27 Tower Peak poison gas trap and how to disarm it.",
-      "How does Gwish the disguised oni in G21 behave if alarmed?",
-      "What does Grinky Brithwort know about the Agile Hand master keys?",
-      "Boxed read-aloud text for sneaking into the Agile Hand Guildhouse (G10)."
-    ]
-  },
-  vecna: {
-    label: 'Vecna: Eve of Ruin',
-    subtitle: 'The Undying King & Multiverse Artifacts',
-    icon: Skull,
-    color: 'text-emerald-400',
-    badgeBg: 'bg-emerald-500/10 border-emerald-500/30',
-    badgeText: 'text-emerald-300',
-    quickPrompts: [
-      "What are Vecna's full CR 26 stats, Rotten Fate, and Dread Counterspell?",
-      "How does Dread Counterspell work against 5th-level and higher spells?",
-      "Explain the Eye and Hand of Vecna powers and curse mechanics.",
-      "What is Kas the Betrayer's secret plot disguised as Mordenkainen?",
-      "Tactical advice for running a high-stakes combat against Vecna."
-    ]
-  },
-  rules: {
-    label: 'Omniscient 5e Sage',
-    subtitle: 'RAW & RAI Rules, Spells, Conditions, Combat',
-    icon: BookOpen,
-    color: 'text-blue-400',
-    badgeBg: 'bg-blue-500/10 border-blue-500/30',
-    badgeText: 'text-blue-300',
-    quickPrompts: [
-      "Can a caster cast a bonus action spell and a leveled action spell in the same turn?",
-      "How does stealth vs passive perception work in dim light?",
-      "What are the exact mechanical penalties of the Poisoned condition?",
-      "Explain half cover, three-quarters cover, and total cover rules.",
-      "How do grappling and shoving interact with the Extra Attack feature?"
-    ]
-  },
   dm_copilot: {
     label: 'Tactical DM Co-Pilot',
-    subtitle: 'Real-time Improvisation, Sensory Descriptions, DCs',
+    shortLabel: 'DM Co-Pilot',
+    subtitle: 'Real-Time Improv, Read-Aloud Narration, NPCs & DCs',
     icon: Dices,
     color: 'text-purple-400',
     badgeBg: 'bg-purple-500/10 border-purple-500/30',
     badgeText: 'text-purple-300',
     quickPrompts: [
-      "Give me a vivid, atmospheric sensory description for entering a creepy dungeon room.",
-      "Generate 3 quirky thieves' guild NPC names with distinctive traits.",
-      "Improvise a fair DC and consequences for jumping across a burning wooden balcony.",
-      "How do I rebalance an encounter if 2 player characters drop unconscious?"
+      "Give me a vivid, atmospheric read-aloud description for the current scene.",
+      "Generate 3 memorable NPCs with distinct voices, secrets, and motivations.",
+      "Improvise skill check DCs and consequences for a risky player stunt.",
+      "How can I dynamically rebalance this combat encounter on the fly?",
+      "Give me dramatic combat narration for a critical hit and a narrow miss."
+    ]
+  },
+  rules: {
+    label: 'Omniscient 5e Rules Sage',
+    shortLabel: '5e Rules',
+    subtitle: 'RAW & RAI Rules, Spells, Conditions & Action Economy',
+    icon: BookOpen,
+    color: 'text-blue-400',
+    badgeBg: 'bg-blue-500/10 border-blue-500/30',
+    badgeText: 'text-blue-300',
+    quickPrompts: [
+      "How do bonus action spells and reaction spells interact on the same turn?",
+      "How does stealth, hiding, and passive perception work in dim light or fog?",
+      "Compare the mechanical effects of Paralyzed, Stunned, Incapacitated, and Restrained.",
+      "Explain half cover, three-quarters cover, and total cover rules.",
+      "How do grappling, shoving, and forced movement interact with Opportunity Attacks?"
+    ]
+  },
+  campaign_lore: {
+    label: 'Campaign & Lore Oracle',
+    shortLabel: 'Campaign & Lore',
+    subtitle: 'Any Official 5e Adventure, Setting, or Active VTT Campaign',
+    icon: Compass,
+    color: 'text-amber-400',
+    badgeBg: 'bg-amber-500/10 border-amber-500/30',
+    badgeText: 'text-amber-300',
+    quickPrompts: [
+      "Summarize the key plot hooks, factions, and secrets for our current campaign.",
+      "What are the key rooms, traps, and NPCs in the active chapter or scene?",
+      "Give me lore, roleplay tips, and villain motivations for this setting's main antagonist.",
+      "Suggest 3 atmospheric side-quests or random encounters that fit our current region.",
+      "Write boxed read-aloud text introducing the party to the next major landmark."
+    ]
+  },
+  worldbuilder: {
+    label: 'World & Encounter Architect',
+    shortLabel: 'Worldbuilder',
+    subtitle: 'Custom Quests, Boss Stat Blocks, Traps, Puzzles & Loot',
+    icon: Zap,
+    color: 'text-emerald-400',
+    badgeBg: 'bg-emerald-500/10 border-emerald-500/30',
+    badgeText: 'text-emerald-300',
+    quickPrompts: [
+      "Design a balanced boss monster stat block with Legendary and Lair Actions.",
+      "Create an interactive dungeon puzzle or riddle with 3 progressive clues.",
+      "Design a multi-stage trap or hazard with detection and disarm DCs.",
+      "Generate a unique magic item with lore and a minor drawback for my party.",
+      "Outline a 5-room dungeon with a twist ending tailored to our campaign."
     ]
   }
 };
 
-const STORAGE_KEY = 'dnd_ai_chatbot_history_v1';
+const STORAGE_KEY = 'dnd_ai_chatbot_history_v2';
 
 export const DndChatbotModal: React.FC<DndChatbotModalProps> = ({
   isOpen,
   onClose,
   currentMapName,
+  activeCampaignTitle,
+  activeChapterTitle,
+  activeDmNotes,
+  campaigns = [],
   combatantsCount = 0,
   activeRound = 1,
   chapterDigest
 }) => {
-  const [mode, setMode] = useState<DndMode>('golden_vault');
+  const [mode, setMode] = useState<DndMode>('dm_copilot');
   const [model, setModel] = useState<DndModelChoice>('gemini-2.5-flash');
+  const [campaignFocus, setCampaignFocus] = useState<string>('auto');
   const [inputMessage, setInputMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
@@ -127,6 +141,49 @@ export const DndChatbotModal: React.FC<DndChatbotModalProps> = ({
   const [playingAudioIndex, setPlayingAudioIndex] = useState<number | null>(null);
   const [includeContext, setIncludeContext] = useState(true);
   const [confirmClearHistory, setConfirmClearHistory] = useState(false);
+
+  // Build deduplicated list of available campaigns/settings for the Campaign Focus selector
+  const campaignOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const list: string[] = [];
+    const addTitle = (t?: string) => {
+      const clean = (t || '').trim();
+      if (!clean || seen.has(clean.toLowerCase())) return;
+      seen.add(clean.toLowerCase());
+      list.push(clean);
+    };
+    if (activeCampaignTitle) addTitle(activeCampaignTitle);
+    if (chapterDigest?.adventureTitle) addTitle(chapterDigest.adventureTitle);
+    campaigns.forEach(c => addTitle(c.campaignTitle));
+    Object.values(KNOWN_DDB_CAMPAIGNS).forEach(title => {
+      if (title !== 'Custom & Pre-Gen Heroes') addTitle(title);
+    });
+    [
+      'Forgotten Realms (Sword Coast)',
+      'Curse of Strahd (Ravenloft)',
+      'Baldur\'s Gate: Descent into Avernus',
+      'Tomb of Annihilation (Chult)',
+      'Waterdeep: Dragon Heist',
+      'Icewind Dale: Rime of the Frostmaiden',
+      'Phandelver and Below: The Shattered Obelisk',
+      'Keys from the Golden Vault',
+      'Vecna: Eve of Ruin',
+      'Eberron: Rising from the Last War',
+      'Planescape: Adventures in the Multiverse',
+      'Homebrew / Custom World'
+    ].forEach(addTitle);
+    return list;
+  }, [activeCampaignTitle, chapterDigest?.adventureTitle, campaigns]);
+
+  const resolvedCampaignLabel = useMemo(() => {
+    if (campaignFocus === 'auto') {
+      return activeCampaignTitle || chapterDigest?.adventureTitle || 'Active VTT Session (Any Campaign)';
+    }
+    if (campaignFocus === 'general') {
+      return 'General D&D 5e (Setting-Agnostic)';
+    }
+    return campaignFocus;
+  }, [campaignFocus, activeCampaignTitle, chapterDigest?.adventureTitle]);
 
   // Load chat history from localStorage
   const [messages, setMessages] = useState<DndChatMessage[]>(() => {
@@ -140,15 +197,20 @@ export const DndChatbotModal: React.FC<DndChatbotModalProps> = ({
     } catch (e) {
       console.warn('Failed to load dnd chat history:', e);
     }
-    // Default initial greeting
+    // Default campaign-agnostic greeting
     return [
       {
         role: 'model',
         text: `### Welcome, Dungeon Master 🎲
-I am your **D&D AI Companion & Rules Oracle**, fully attuned to **Keys from the Golden Vault** (specifically *Masterpiece Imbroglio*), **Vecna: Eve of Ruin**, official 5e rules, and real-time tactical adjudication.
+I am your **D&D 5e AI Companion & Rules Oracle**—attuned to **any campaign, official module, or homebrew world** you are running.
 
-Select your active focus above or choose one of the quick prompts below to begin. How may I assist your table today?`,
-        mode: 'golden_vault',
+- **DM Co-Pilot**: Instant read-aloud narration, NPC improvisation, skill check DCs, and encounter pacing
+- **5e Rules Sage**: Official 2014 & 2024 RAW/RAI rulings, spell interactions, and conditions
+- **Campaign & Lore**: Deep lore for your active VTT campaign, uploaded chapter digests, or any D&D setting
+- **Worldbuilder**: Custom boss stat blocks, traps, puzzles, magic items, and quest hooks
+
+How can I assist your table today?`,
+        mode: 'dm_copilot',
         timestamp: Date.now()
       }
     ];
@@ -195,10 +257,12 @@ Select your active focus above or choose one of the quick prompts below to begin
 
     let contextString = '';
     if (includeContext) {
+      const notesSnippet = activeDmNotes ? activeDmNotes.slice(0, 1500) : '';
       contextString = `Current VTT Session State:
-- Active Map: ${currentMapName || 'Tactical Canvas'}
+- Active Campaign / Setting Focus: ${resolvedCampaignLabel}
+${activeChapterTitle ? `- Active Chapter: ${activeChapterTitle}\n` : ''}- Active Scene / Battlemap: ${currentMapName || 'Tactical Canvas'}
 - Combat Status: ${combatantsCount > 0 ? `Active combat (${combatantsCount} combatants, Round ${activeRound})` : 'Exploration / Roleplay mode'}
-`;
+${notesSnippet ? `- Active Scene DM Notes:\n${notesSnippet}\n` : ''}`;
     }
 
     try {
@@ -208,7 +272,8 @@ Select your active focus above or choose one of the quick prompts below to begin
         mode,
         model,
         contextString,
-        chapterDigest
+        chapterDigest,
+        resolvedCampaignLabel
       );
 
       setMessages(prev => [
@@ -362,6 +427,33 @@ The archives have been cleared. Active Mode: **${currentConfig.label}**. What wo
 
       {!isMinimized && (
         <>
+          {/* Campaign / Setting Focus Bar */}
+          <div className="px-3.5 py-1.5 bg-zinc-900/80 border-b border-zinc-800/80 flex items-center justify-between gap-2 text-[11px]">
+            <div className="flex items-center gap-1.5 text-zinc-400 shrink-0">
+              <Globe className="w-3.5 h-3.5 text-amber-400" />
+              <span className="font-semibold text-zinc-300">Campaign Focus:</span>
+            </div>
+            <div className="relative flex-1 max-w-[380px]">
+              <select
+                value={campaignFocus}
+                onChange={e => setCampaignFocus(e.target.value)}
+                className="w-full bg-zinc-950/90 hover:bg-zinc-900 text-amber-200 text-[11px] px-2.5 py-1 rounded-lg border border-zinc-700/80 outline-none cursor-pointer pr-6 appearance-none font-medium truncate"
+                title="Select Campaign or Setting Context for the AI Companion"
+              >
+                <option value="auto">
+                  🎯 Auto: {activeCampaignTitle || chapterDigest?.adventureTitle || 'Active VTT Session'}
+                </option>
+                <option value="general">🌐 General D&D 5e (Any Setting / Agnostic)</option>
+                {campaignOptions.map(title => (
+                  <option key={title} value={title}>
+                    📖 {title}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="w-3 h-3 text-zinc-400 absolute right-2 top-1.5 pointer-events-none" />
+            </div>
+          </div>
+
           {/* Active Chapter Knowledge Banner */}
           {chapterDigest && (
             <div className="px-3.5 py-1.5 bg-blue-950/70 border-b border-blue-500/30 flex items-center justify-between text-[11px] font-mono">
@@ -398,9 +490,7 @@ The archives have been cleared. Active Mode: **${currentConfig.label}**. What wo
                 >
                   <Icon className={`w-3.5 h-3.5 ${isActive ? cfg.color : 'text-zinc-400'}`} />
                   <span className="truncate max-w-[85px] sm:max-w-none text-[11px]">
-                    {key === 'golden_vault' ? 'Golden Vault' : 
-                     key === 'vecna' ? 'Vecna' : 
-                     key === 'rules' ? '5e Rules' : 'DM Co-Pilot'}
+                    {cfg.shortLabel}
                   </span>
                 </button>
               );
@@ -445,7 +535,7 @@ The archives have been cleared. Active Mode: **${currentConfig.label}**. What wo
                       <>
                         <Bot className="w-3 h-3 text-amber-400" />
                         <span className="text-[10px] font-bold text-amber-300 uppercase tracking-wider">
-                          {msg.mode ? MODE_CONFIGS[msg.mode]?.label.split(':')[0] : 'AI Oracle'}
+                          {(msg.mode && MODE_CONFIGS[msg.mode as DndMode]?.shortLabel) || 'AI Oracle'}
                         </span>
                       </>
                     )}
@@ -522,7 +612,7 @@ The archives have been cleared. Active Mode: **${currentConfig.label}**. What wo
             {isSending && (
               <div className="flex items-center gap-2 self-start bg-zinc-900/90 border border-zinc-800 rounded-2xl px-4 py-3 text-zinc-300 text-xs">
                 <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-                <span>Consulting the Golden Vault & Multiverse archives...</span>
+                <span>Consulting the Arcane Archives & {resolvedCampaignLabel}...</span>
               </div>
             )}
             <div ref={messagesEndRef} />

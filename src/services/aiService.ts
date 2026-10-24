@@ -352,16 +352,17 @@ export interface DndChatMessage {
   role: 'user' | 'model';
   text: string;
   timestamp?: number;
-  mode?: 'golden_vault' | 'vecna' | 'rules' | 'dm_copilot';
+  mode?: 'dm_copilot' | 'rules' | 'campaign_lore' | 'worldbuilder' | 'golden_vault' | 'vecna' | string;
 }
 
 export async function chatWithDndBot(
   history: DndChatMessage[],
   message: string,
-  mode: 'golden_vault' | 'vecna' | 'rules' | 'dm_copilot' = 'golden_vault',
+  mode: 'dm_copilot' | 'rules' | 'campaign_lore' | 'worldbuilder' | 'golden_vault' | 'vecna' | string = 'dm_copilot',
   model: 'gemini-2.5-flash' | 'gemini-3.8-flash' | 'gemini-3.5-flash' | 'gemini-3.1-flash-lite' | string = 'gemini-2.5-flash',
   extraContext?: string,
-  chapterDigest?: ChapterPdfDigest | null
+  chapterDigest?: ChapterPdfDigest | null,
+  campaignFocus?: string
 ): Promise<{ text: string; model: string; mode: string }> {
   try {
     const res = await fetch("/api/ai/dnd-chat", {
@@ -373,7 +374,8 @@ export async function chatWithDndBot(
         mode,
         model,
         extraContext,
-        chapterDigest
+        chapterDigest,
+        campaignFocus
       })
     });
     if (!res.ok) {

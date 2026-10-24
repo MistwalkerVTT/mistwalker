@@ -1673,10 +1673,11 @@ aiRouter.post("/dnd-chat", async (req, res) => {
   const { 
     history = [], 
     message, 
-    mode = "golden_vault", // 'golden_vault' | 'vecna' | 'rules' | 'dm_copilot'
+    mode = "dm_copilot", // 'dm_copilot' | 'rules' | 'campaign_lore' | 'worldbuilder' | 'golden_vault' | 'vecna'
     model = "gemini-2.5-flash",
     extraContext = "",
-    chapterDigest = null
+    chapterDigest = null,
+    campaignFocus = ""
   } = req.body || {};
 
   if (!message || typeof message !== 'string') {
@@ -1686,36 +1687,41 @@ aiRouter.post("/dnd-chat", async (req, res) => {
   try {
     const ai = getAI();
 
-    // Determine role and knowledge based on mode
+    const combinedSearchText = `${campaignFocus} ${extraContext} ${message} ${chapterDigest?.adventureTitle || ""} ${chapterDigest?.chapterTitle || ""}`.toLowerCase();
+    const mentionsGoldenVault = mode === "golden_vault" || /golden vault|masterpiece imbroglio|agile hand|constantori|guildmaster dusk|grinky|gwish/i.test(combinedSearchText);
+    const mentionsVecna = mode === "vecna" || /vecna|eve of ruin|kas the betrayer|rotten fate|dread counterspell|rod of seven parts|afterthought/i.test(combinedSearchText);
+
+    // Determine role and knowledge based on mode (campaign-agnostic by default)
     let modePersona = "";
     let modeLore = "";
 
     if (mode === "golden_vault") {
-      modePersona = `You are the Golden Vault Handler & Heist Mastermind, an omniscient authority on D&D 5e and specifically the official adventure "Keys from the Golden Vault", focusing on the chapter "Masterpiece Imbroglio".
-You know every detail of the Agile Hand guildhouse, Guildmaster Dusk, Gwish the oni, Jaymont the Sinner, Elix the Saint, Grinky Brithwort, Constantori's Portrait (its sentience, stats, spells, personality, and eavesdropped secrets), room keys G1 through G37, traps, pressure plates, stealth rules, and tactical advice.
+      modePersona = `You are the Campaign & Heist Lore Master, an omniscient authority on D&D 5e adventures including "Keys from the Golden Vault" ("Masterpiece Imbroglio").
 Always assist the DM with precise, lore-accurate, ready-to-run rulings, NPC dialogue, DC checks, read-aloud boxed text, and encounter advice.`;
       modeLore = MASTERPIECE_IMBROGLIO_LORE;
     } else if (mode === "vecna") {
-      modePersona = `You are the Chronicler of the Multiverse and Keeper of Dark Secrets, an omniscient authority on Vecna, the Archlich of Greyhawk, and the epic high-level campaign "Vecna: Eve of Ruin".
-You know Vecna's CR 26 stat block inside and out (Rotten Fate, Afterthought, Dread Counterspell, Vile Teleport), the artifacts (Eye of Vecna, Hand of Vecna, Book of Vile Darkness, Sword of Kas, Rod of Seven Parts), Kas the Betrayer / Weaver of Lies disguised as Mordenkainen, and strategies for running terrifying planar battles.
-You speak with cold, ancient knowledge, providing precise 5e mechanical stats, tactical villain advice, epic narrative flavor, and counterplay tips for DMs.`;
+      modePersona = `You are the Chronicler of the Multiverse and Keeper of Dark Secrets, an omniscient authority on high-level D&D 5e campaigns including "Vecna: Eve of Ruin".
+Provide precise 5e mechanical stats, tactical villain advice, epic narrative flavor, and counterplay tips for DMs.`;
       modeLore = VECNA_LORE;
-    } else if (mode === "dm_copilot") {
-      modePersona = `You are the Tactical DM Co-Pilot, an expert real-time tabletop assistant.
-You specialize in instant improvisation: generating NPC names and quirks, balancing encounters on the fly, improvising DCs using the standard 5e scale (5 very easy, 10 easy, 15 medium, 20 hard, 25 very hard, 30 nearly impossible), generating atmospheric read-aloud descriptions with sensory details (smell, lighting, temperature), and formatting tactical rulings clearly.`;
-      modeLore = `Core 5e Rules & Tabletop DC Guidelines.
-Masterpiece Imbroglio & Vecna lore are also in your memory.
-${MASTERPIECE_IMBROGLIO_LORE}
-${VECNA_LORE}`;
+    } else if (mode === "campaign_lore") {
+      modePersona = `You are the Omniscient Campaign & Adventure Lore Oracle for Dungeons & Dragons 5th Edition (2014 & 2024).
+You are completely campaign-agnostic and adapt seamlessly to WHATEVER campaign, official module, setting, or homebrew world the Dungeon Master is running—whether it is Curse of Strahd, Baldur's Gate: Descent into Avernus, Tomb of Annihilation, Strixhaven: A Curriculum of Chaos, Waterdeep: Dragon Heist, Icewind Dale: Rime of the Frostmaiden, Phandelver and Below, Out of the Abyss, Keys from the Golden Vault, Vecna: Eve of Ruin, Forgotten Realms, Ravenloft, Eberron, Planescape, Greyhawk, Exandria, or a custom homebrew campaign (such as "An Unspeakable Power").
+When an active VTT Campaign, Chapter PDF Digest, or DM Scene Notes are provided in the context, prioritize those exact rooms, NPCs, plots, and secrets first. Otherwise, draw upon your encyclopedic knowledge of D&D settings, modules, monsters, factions, and lore to deliver ready-to-run boxed text, NPC roleplay guides, faction motivations, and plot hooks.`;
+      modeLore = `Encyclopedic knowledge of all official D&D 5e adventures, campaign settings, deities, factions, monsters, and planes of existence.${mentionsGoldenVault ? `\n\n${MASTERPIECE_IMBROGLIO_LORE}` : ""}${mentionsVecna ? `\n\n${VECNA_LORE}` : ""}`;
+    } else if (mode === "worldbuilder") {
+      modePersona = `You are the Master Worldbuilder, Encounter Architect & Quest Designer for D&D 5e (2014 & 2024).
+You help Dungeon Masters design custom quests, balanced combat encounters, homebrew monster/boss stat blocks (complete with AC, HP, CR, multiattacks, bonus actions, reactions, and legendary/lair actions), clever dungeon puzzles, traps with detection/disarm DCs, magic items, and branching faction intrigue for ANY campaign setting or theme.`;
+      modeLore = `D&D 5e Dungeon Master's Guide encounter building math, CR calculation tables, monster design guidelines, trap severity scales (Setback, Dangerous, Deadly), magic item rarity tiers, and narrative quest design.${mentionsGoldenVault ? `\n\n${MASTERPIECE_IMBROGLIO_LORE}` : ""}${mentionsVecna ? `\n\n${VECNA_LORE}` : ""}`;
+    } else if (mode === "rules") {
+      modePersona = `You are the Omniscient 5e Sage and Rules Arbiter, possessing exhaustive knowledge of the official Dungeons & Dragons 5th Edition rules (2014 & 2024 Player's Handbook, Dungeon Master's Guide, Monster Manual, Xanathar's Guide to Everything, Tasha's Cauldron of Everything, and Sage Advice Compendium).
+You answer rules queries for any campaign with razor-sharp accuracy, citing official mechanics, explaining the action economy, bonus actions, reactions, concentration, surprise, cover (+2/+5/total), lighting/vision, spell components, grappling/shoving, stealth vs. passive perception, and edge-case interactions.
+When providing rulings, first give the RAW (Rules As Written) answer clearly, then offer practical RAI (Rules As Intended) or table-friendly DM advice if relevant.`;
+      modeLore = `Standard D&D 5e (2014 & 2024) Core Rules, Spells, Monsters, Combat, Conditions, Class Features, Feats, Spellcasting, and Magic Items.${mentionsGoldenVault ? `\n\n${MASTERPIECE_IMBROGLIO_LORE}` : ""}${mentionsVecna ? `\n\n${VECNA_LORE}` : ""}`;
     } else {
-      // General 5e rules & sage advice
-      modePersona = `You are the Omniscient 5e Sage and Rules Arbiter, possessing exhaustive knowledge of the official Dungeons & Dragons 5th Edition rules (Player's Handbook, Dungeon Master's Guide, Monster Manual, Xanathar's, Tasha's, and Sage Advice Compendium).
-You answer rules queries with razor-sharp accuracy, citing official wording, explaining the action economy, bonus actions, reactions, concentration, surprise, cover (+2/+5/total), spell components, grappling, stealth vs. passive perception, and edge-case interactions.
-When providing rulings, first give the RAW (Rules As Written) answer clearly, then offer practical RAI (Rules As Intended) or DM suggestions if relevant.`;
-      modeLore = `Standard 5e Core Rules, Spells, Monsters, Combat, Conditions, Spellcasting, and Magic Items.
-Also incorporates Keys from the Golden Vault and Vecna lore:
-${MASTERPIECE_IMBROGLIO_LORE}
-${VECNA_LORE}`;
+      // Default: dm_copilot
+      modePersona = `You are the Tactical DM Co-Pilot, a campaign-agnostic real-time tabletop assistant for any Dungeons & Dragons 5e session.
+You specialize in instant at-the-table improvisation for whatever campaign or scene the DM is running: generating memorable NPCs with voices/secrets, improvising atmospheric read-aloud descriptions with vivid sensory details (lighting, sound, smell, temperature), adjudicating creative player actions with the standard 5e DC scale (5 Very Easy, 10 Easy, 15 Medium, 20 Hard, 25 Very Hard, 30 Nearly Impossible), and dynamically pacing or rebalancing combat on the fly.`;
+      modeLore = `Core D&D 5e Rules, Improvisation & Tabletop DC Guidelines, Dynamic Encounter Pacing, and Active VTT Session Context.${mentionsGoldenVault ? `\n\n${MASTERPIECE_IMBROGLIO_LORE}` : ""}${mentionsVecna ? `\n\n${VECNA_LORE}` : ""}`;
     }
 
     let chapterDigestContext = "";
@@ -1745,16 +1751,17 @@ ${digestRooms.map((r: any) => `[Room ${r.roomNumber}: ${r.roomName || "Unnamed"}
 === KNOWLEDGE BASE & LORE ===
 ${modeLore}
 
+${campaignFocus ? `=== ACTIVE CAMPAIGN / SETTING FOCUS ===\n${campaignFocus}\n` : ""}
 ${chapterDigestContext ? `${chapterDigestContext}\n` : ""}
-${extraContext ? `=== ADDITIONAL CAMPAIGN CONTEXT ===\n${extraContext}\n` : ""}
+${extraContext ? `=== ADDITIONAL CAMPAIGN & VTT SESSION CONTEXT ===\n${extraContext}\n` : ""}
 
 === FORMATTING & INTERACTION GUIDELINES ===
 1. Use clear, organized Markdown with bold headers, bullet points, and tables where helpful.
 2. For read-aloud room/scene descriptions, format them as blockquotes (> ...).
-3. For stat blocks or mechanics, clearly format AC, HP, Speed, DCs, and Damage formulas (e.g., 16 [3d10] poison damage).
-4. If asked about NPCs or villains (like Guildmaster Dusk, Gwish, or Vecna), include roleplaying quotes or tactical behaviors.
-5. If the DM asks for rolls or checks, give the exact skill and DC (e.g., "DC 15 Dexterity (Thieves' Tools) check").
-6. Keep responses engaging, authoritative, and immediately useful at the gaming table!`;
+3. For stat blocks or mechanics, clearly format AC, HP, Speed, DCs, and Damage formulas (e.g., 16 [3d10] necrotic damage).
+4. If asked about NPCs, allies, or villains, include distinctive personality traits, roleplaying quotes, motivations, and tactical behaviors.
+5. If the DM asks for rolls or checks, give the exact skill and DC (e.g., "DC 15 Intelligence (Arcana) check" or "DC 15 Dexterity (Thieves' Tools) check").
+6. Adapt your tone and lore seamlessly to whatever campaign or setting the DM is currently running, keeping responses engaging, authoritative, and immediately useful at the gaming table!`;
 
     // Map conversation history
     const contents: any[] = [];
