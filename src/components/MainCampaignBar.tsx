@@ -52,6 +52,7 @@ interface MainCampaignBarProps {
   hasUnreadHandouts?: boolean;
   onOpenAudioMixer?: () => void;
   activeAudioLoopCount?: number;
+  onOpenChapterGuide?: () => void;
   isFirebaseConnected?: boolean;
   onRelinkMap?: () => void;
   onForceSync?: () => void;
@@ -167,6 +168,7 @@ export const MainCampaignBar: React.FC<MainCampaignBarProps> = React.memo(({
   hasUnreadHandouts,
   onOpenAudioMixer,
   activeAudioLoopCount = 0,
+  onOpenChapterGuide,
   isFirebaseConnected = true,
   onRelinkMap,
   onForceSync,
@@ -455,8 +457,20 @@ export const MainCampaignBar: React.FC<MainCampaignBarProps> = React.memo(({
 
       <Divider />
 
-      {/* ───── GROUP 5: Session tools (Handouts, Jukebox) ───── */}
+      {/* ───── GROUP 5: Session tools (Guide, Handouts, Jukebox) ───── */}
       <div className="flex items-center gap-1.5 shrink-0">
+        {onOpenChapterGuide && (
+          <button
+            id="btn-main-open-chapter-guide"
+            onClick={onOpenChapterGuide}
+            className="px-2.5 py-1 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 border border-amber-500/40 text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+            title="Open Non-Room Chapter Guide: Story Hooks, Dungeon Rules (Doors/Traps/Light), Roaming Patrols & NPCs"
+          >
+            <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+            <span>Guide</span>
+          </button>
+        )}
+
         {onOpenHandoutsJournal && (
           <button
             id="btn-main-open-handouts-journal"

@@ -303,6 +303,45 @@ export interface ChapterRoomDetail {
   suggestedDimensions?: { widthFeet?: number; heightFeet?: number };
 }
 
+export interface ChapterStoryBeat {
+  id: string;
+  phase: 'hook' | 'arrival' | 'event' | 'climax' | 'conclusion';
+  title: string;
+  trigger?: string; // e.g. "At the start of the adventure", "When the alarm is raised", "At midnight"
+  boxedText?: string; // Verbatim read-aloud player text for this non-room beat
+  dmNotes: string; // Verbatim DM guidance, rules, consequences, or rewards
+  monsters?: string[]; // Any creatures spawned during this story beat
+  relatedRooms?: string[]; // e.g. ["G1", "G14"]
+}
+
+export interface ChapterGeneralFeature {
+  category: 'doors' | 'lighting' | 'ceilings' | 'wards' | 'alarm' | 'environment' | 'other';
+  title: string; // e.g. "Locked Oak Doors", "Arcane Forbiddance Ward"
+  details: string; // Verbatim rule or description
+  mechanics?: string; // e.g. "AC 15, HP 18, DC 15 Dexterity (Thieves' Tools)"
+}
+
+export interface ChapterRoamingEncounter {
+  id: string;
+  name: string; // e.g. "Clockwork Guard Patrol", "Rival Crew Ambush"
+  routeOrTrigger: string; // e.g. "Patrols G2 -> G5 -> G8 every 15 minutes" or "Roll 1d6 every hour"
+  description: string; // Tactical behavior, attitude, or schedule
+  monsters: string[]; // Sanitized monster strings, e.g. ["2x Guard", "1x Veteran"]
+  relatedRooms?: string[]; // e.g. ["G2", "G5", "G8"]
+}
+
+export interface ChapterNpcProfile {
+  id: string;
+  name: string; // e.g. "Guildmaster Dusk", "Dr. Cassee Dannell"
+  role: string; // e.g. "Quest Patron", "Undercover Harper Agent", "Head Butler"
+  statblock?: string; // Canonical 5e statblock name if combat-capable, e.g. "Spy", "Noble", "Mage"
+  appearance?: string;
+  personality?: string; // Ideals, bonds, flaws, mannerisms
+  secretOrMotivation?: string; // What they want or what they know if questioned
+  locationOrSchedule?: string; // Where they can be found or how they move around
+  voicePreset?: string; // Suggested narration voice id
+}
+
 export interface ChapterPdfDigest {
   pdfFilename: string;
   pdfUrl?: string;
@@ -311,6 +350,10 @@ export interface ChapterPdfDigest {
   chapterTitle?: string;
   scenes: ChapterSceneAssociation[];
   rooms: ChapterRoomDetail[];
+  storyBeats?: ChapterStoryBeat[];
+  generalFeatures?: ChapterGeneralFeature[];
+  roamingEncounters?: ChapterRoamingEncounter[];
+  npcs?: ChapterNpcProfile[];
   rawSnippet?: string;
   digestedAt: number;
 }

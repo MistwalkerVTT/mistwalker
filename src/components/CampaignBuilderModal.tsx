@@ -52,7 +52,7 @@ import { isVideoAsset, saveLocalAsset } from '../lib/storageCache';
 import { SceneTokenPlacementCanvas } from './SceneTokenPlacementCanvas';
 import { UploadedAsset, WallSegment, VisionConfig, RoomAnnotation, ChapterPdfDigest, ChapterSceneAssociation, normalizeRoomAnnotation, normalizeRoomAnnotations } from '../types';
 import { PRESET_BATTLEMAPS, PresetBattlemap } from '../data/presetBattlemaps';
-import { digestChapterPdf } from '../services/aiService';
+import { digestChapterPdf, digestChapterFlow } from '../services/aiService';
 import { CampaignPdfImporterModal } from './CampaignPdfImporterModal';
 import { ArenaManagerPanel } from './ArenaManagerPanel';
 import { isUniversalVttFile, parseUniversalVtt } from '../services/universalVttService';
@@ -1388,6 +1388,26 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
         }))
       });
 
+      let finalDigest = digest;
+      try {
+        setDigestProgressText('Extracting non-room story hooks, dungeon rules, patrols & NPCs...');
+        const flowResult = await digestChapterFlow({
+          chapterTitle: digest.chapterTitle || selectedChapter.chapterTitle,
+          digestSummary: digest.digestSummary,
+          scenes: digest.scenes,
+          rooms: digest.rooms
+        });
+        finalDigest = {
+          ...digest,
+          storyBeats: flowResult.storyBeats,
+          generalFeatures: flowResult.generalFeatures,
+          roamingEncounters: flowResult.roamingEncounters,
+          npcs: flowResult.npcs
+        };
+      } catch (flowErr) {
+        console.warn('[CampaignBuilderModal] Optional non-room flow extraction skipped:', flowErr);
+      }
+
       setDigestProgressText('Saving chapter digest and room mappings...');
 
       const updatedChapters = selectedCampaign.chapters.map(ch => {
@@ -1396,7 +1416,7 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
             ...ch,
             pdfUrl,
             pdfFilename: file.name,
-            pdfDigest: digest
+            pdfDigest: finalDigest
           };
         }
         return ch;

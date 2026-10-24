@@ -340,7 +340,13 @@ export async function chatWithAutoDM(
   }
 }
 
-import { ChapterPdfDigest } from '../types';
+import {
+  ChapterPdfDigest,
+  ChapterStoryBeat,
+  ChapterGeneralFeature,
+  ChapterRoamingEncounter,
+  ChapterNpcProfile
+} from '../types';
 
 export interface DndChatMessage {
   role: 'user' | 'model';
@@ -401,4 +407,36 @@ export async function digestChapterPdf(params: {
   const data = await res.json();
   return data.digest;
 }
+
+export async function digestChapterFlow(params: {
+  pdfPath?: string;
+  chapterTitle?: string;
+  campaignTitle?: string;
+  digestSummary?: string;
+  scenes?: any[];
+  rooms?: Array<{ roomNumber: string; roomName: string }>;
+}): Promise<{
+  storyBeats: ChapterStoryBeat[];
+  generalFeatures: ChapterGeneralFeature[];
+  roamingEncounters: ChapterRoamingEncounter[];
+  npcs: ChapterNpcProfile[];
+}> {
+  const res = await fetch("/api/ai/digest-chapter-flow", {
+    method: "POST",
+    headers: getAiHeaders(),
+    body: JSON.stringify(params)
+  });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.error || `Server error (${res.status}) while extracting chapter flow`);
+  }
+  const data = await res.json();
+  return {
+    storyBeats: data.storyBeats || [],
+    generalFeatures: data.generalFeatures || [],
+    roamingEncounters: data.roamingEncounters || [],
+    npcs: data.npcs || []
+  };
+}
+
 

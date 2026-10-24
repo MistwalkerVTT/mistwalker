@@ -132,6 +132,7 @@ import {
   VisionConfig,
   CampaignMode,
   RoomAnnotation,
+  ChapterPdfDigest,
   normalizeRoomAnnotation,
   normalizeRoomAnnotations,
   isMonsterToken,
@@ -1849,6 +1850,7 @@ export default function App() {
   const [selectedZoneForSidePanel, setSelectedZoneForSidePanel] = useState<RoomAnnotation | null>(null);
   const [selectedRoomAnnotation, setSelectedRoomAnnotation] = useState<RoomAnnotation | null>(null);
   const [isRoomDrawerOpen, setIsRoomDrawerOpen] = useState(false);
+  const [drawerInitialTab, setDrawerInitialTab] = useState<'room' | 'flow'>('room');
   const [hoveredZoneId, setHoveredZoneId] = useState<string | null>(null);
   const [isAssignRoomModalOpen, setIsAssignRoomModalOpen] = useState(false);
   const [pendingZonePolygonData, setPendingZonePolygonData] = useState<{
@@ -7997,6 +7999,10 @@ export default function App() {
                 hasUnreadHandouts={hasUnreadHandouts}
                 onOpenAudioMixer={() => setShowAudioMixerModal(true)}
                 activeAudioLoopCount={activeAudioLoopCount}
+                onOpenChapterGuide={() => {
+                  setDrawerInitialTab('flow');
+                  setIsRoomDrawerOpen(true);
+                }}
               />
             <input
               ref={relinkMapFileInputRef}
@@ -8468,6 +8474,7 @@ export default function App() {
                     setSelectedRoomAnnotation(anno);
                     setSelectedZoneForSidePanel(anno);
                     setIsZoneSidePanelOpen(false);
+                    setDrawerInitialTab('room');
                     setIsRoomDrawerOpen(true);
                   }}
                   onOpenBriefing={(anno) => {
@@ -8490,6 +8497,7 @@ export default function App() {
                     setSelectedRoomAnnotation(anno);
                     setSelectedZoneForSidePanel(anno);
                     setIsZoneSidePanelOpen(false);
+                    setDrawerInitialTab('room');
                     setIsRoomDrawerOpen(true);
                   }}
                   onUpdateAnnotation={(updated) => handleSaveZone(updated)}
@@ -10804,6 +10812,106 @@ export default function App() {
         })()}
         availableMonsters={compendiumMonsters}
         onSpawnMonsterToken={handleSpawnMonsterToken}
+        initialTab={drawerInitialTab}
+        activeSceneTitle={activeSceneInfo?.sceneTitle}
+        activeDmNotes={activeDmNotes}
+        roomAnnotations={roomAnnotations}
+        onSelectRoomByNumber={(targetNum) => {
+          const clean = (s?: string) => (s || '').toLowerCase().replace(/^(area|room|zone)\s*/i, '').replace(/[\s\-_:]/g, '');
+          const needle = clean(targetNum);
+          if (!needle) return;
+
+          const matchedOnMap = roomAnnotations.find((anno) => {
+            const aNum = clean(anno.roomNumber);
+            const aLabel = clean(anno.label);
+            return aNum === needle || `v${aNum}` === needle || aNum === `v${needle}` || aLabel.startsWith(needle);
+          });
+
+          if (matchedOnMap) {
+            setSelectedRoomAnnotation(matchedOnMap);
+            setSelectedZoneForSidePanel(matchedOnMap);
+            setDrawerInitialTab('room');
+            setIsRoomDrawerOpen(true);
+            return;
+          }
+
+          // Fallback: synthesize a virtual RoomAnnotation from the PDF digest room so the DM can still read & spawn from it even if not drawn on map yet
+          let activeDigest: ChapterPdfDigest | null = null;
+          const activeCamp = campaignsList.find(c => c.campaignId === activeSceneInfo?.campaignId);
+          const activeChap = activeCamp?.chapters.find(ch => ch.chapterId === activeSceneInfo?.chapterId);
+          if (activeChap?.pdfDigest) activeDigest = activeChap.pdfDigest;
+          if (!activeDigest) {
+            for (const c of campaignsList) {
+              for (const ch of c.chapters) {
+                if (ch.pdfDigest) { activeDigest = ch.pdfDigest; break; }
+              }
+              if (activeDigest) break;
+            }
+          }
+
+          const digestRoom = activeDigest?.rooms?.find((r) => {
+            const rNum = clean(r.roomNumber);
+            return rNum === needle || `v${rNum}` === needle || rNum === `v${needle}`;
+          });
+
+          if (digestRoom) {
+            const virtualRoom: RoomAnnotation = {
+              id: `pdf-room-${digestRoom.roomNumber}`,
+              x: 50,
+              y: 50,
+              label: `${digestRoom.roomNumber} - ${digestRoom.roomName}`,
+              roomNumber: digestRoom.roomNumber,
+              roomName: digestRoom.roomName,
+              boxedText: digestRoom.boxedText || '',
+              dmNotes: digestRoom.dmNotes || '',
+              monsters: digestRoom.monsters || [],
+              pdfSection: digestRoom.sceneTitle || activeDigest?.chapterTitle || ''
+            };
+            setSelectedRoomAnnotation(virtualRoom);
+            setSelectedZoneForSidePanel(virtualRoom);
+            setDrawerInitialTab('room');
+            setIsRoomDrawerOpen(true);
+          } else {
+            toast.info(`Room ${targetNum} is not yet mapped on this battlemap.`);
+          }
+        }}
+        onUpdateDigest={async (updatedDigest) => {
+          let targetCamp = campaignsList.find(c => c.campaignId === activeSceneInfo?.campaignId);
+          let targetChapId = activeSceneInfo?.chapterId;
+
+          if (!targetCamp || !targetChapId) {
+            for (const c of campaignsList) {
+              const foundCh = c.chapters.find(ch => ch.pdfDigest?.chapterTitle === updatedDigest.chapterTitle || ch.pdfDigest);
+              if (foundCh) {
+                targetCamp = c;
+                targetChapId = foundCh.chapterId;
+                break;
+              }
+            }
+          }
+
+          if (!targetCamp || !targetChapId) return;
+
+          const updatedCamp: Campaign = {
+            ...targetCamp,
+            updatedAt: Date.now(),
+            chapters: targetCamp.chapters.map((ch) =>
+              ch.chapterId === targetChapId
+                ? { ...ch, pdfDigest: updatedDigest }
+                : ch
+            )
+          };
+
+          setCampaignsList((prev) =>
+            prev.map((c) => (c.campaignId === updatedCamp.campaignId ? updatedCamp : c))
+          );
+
+          try {
+            await saveCampaignDoc(updatedCamp);
+          } catch (err) {
+            console.error('[App] Failed to persist updated ChapterPdfDigest:', err);
+          }
+        }}
       />
 
       {/* Zone Details Side Panel (Interactivity, Lore, Read-Aloud & PDF Linkage) */}

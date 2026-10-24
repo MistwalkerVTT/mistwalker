@@ -2471,6 +2471,184 @@ Respond with ONLY valid JSON strictly adhering to this structure:
 });
 
 /**
+ * POST /api/ai/digest-chapter-flow
+ * Extracts non-room adventure content from a chapter PDF or existing chapter digest:
+ * 1. storyBeats (Hook/Briefing, Arrival/Approach, Scripted Mid-Chapter Events, Climax, Conclusion)
+ * 2. generalFeatures (Ceilings, Lighting, Doors/Locks AC/HP/DC, Wards/Alarms, Environment)
+ * 3. roamingEncounters (Guard patrols, reinforcements, random encounters not fixed to a single room)
+ * 4. npcs (Dramatis Personae: roleplay traits, secrets, schedule, and statblock reference)
+ */
+aiRouter.post("/digest-chapter-flow", async (req, res) => {
+  const {
+    pdfPath,
+    chapterTitle = "Adventure Chapter",
+    campaignTitle = "Campaign",
+    digestSummary = "",
+    scenes = [],
+    rooms = []
+  } = req.body || {};
+
+  try {
+    const ai = getAI();
+    const contentsParts: any[] = [];
+
+    if (pdfPath) {
+      const resolved = await resolveImageToInlineData(pdfPath);
+      if (resolved) {
+        contentsParts.push(resolved);
+      }
+    }
+
+    const roomListText = Array.isArray(rooms) && rooms.length > 0
+      ? `Numbered rooms already indexed (${rooms.length}): ${rooms.map((r: any) => `${r.roomNumber} (${r.roomName})`).join(", ")}`
+      : "";
+
+    const sceneContextText = Array.isArray(scenes) && scenes.length > 0
+      ? `Existing scene summaries:\n${scenes.map((s: any) => `- ${s.sceneTitle}: ${s.summary || ""} | NPCs: ${(s.keyNpcs || []).join(", ")} | Hazards: ${(s.trapsAndHazards || []).join(", ")}`).join("\n")}`
+      : "";
+
+    const promptText = `You are a master Dungeons & Dragons 5e Dungeon Master and Adventure Archivist.
+Analyze all parts of this adventure chapter ("${chapterTitle}" from "${campaignTitle}") that are OUTSIDE of or OVERARCHING across the individual numbered room keys.
+
+${digestSummary ? `Chapter Overview:\n${digestSummary}\n` : ""}
+${sceneContextText}
+${roomListText}
+
+Extract a structured guide for the Dungeon Master covering all non-room content so the DM can run the entire session organically from Prologue to Epilogue:
+
+1. "storyBeats": Chronological narrative beats outside individual room descriptions:
+   - phase "hook": Adventure background, quest patron briefing, Golden Vault message, rumors, and mission objectives. Include verbatim read-aloud "boxedText" if present.
+   - phase "arrival": Traveling to the site, exterior perimeter, weather/time rules, and entry options before entering the first room.
+   - phase "event": Scripted mid-adventure events, alarms, rival crew arrivals, or timed triggers (e.g. "At midnight...", "When the alarm sounds...").
+   - phase "climax": Major turning point, boss confrontation trigger, or escape sequence.
+   - phase "conclusion": Epilogue read-aloud "boxedText", aftermath consequences, rewards/XP/gold, and hooks to the next adventure.
+   For each beat provide:
+   - "id": unique slug (e.g. "beat_hook", "beat_arrival", "beat_alarm", "beat_conclusion")
+   - "phase": "hook" | "arrival" | "event" | "climax" | "conclusion"
+   - "title": clear title
+   - "trigger": when this happens (e.g. "Start of Session", "Approaching the Estate", "If Alarm is Triggered", "Quest Complete")
+   - "boxedText": exact read-aloud player text (or empty string if none)
+   - "dmNotes": detailed markdown DM guidance, DCs, consequences, and rewards
+   - "monsters": ONLY actual 5e creature statblocks spawned by this event (e.g. ["2x Guard", "1x Veteran"]), never items or checks
+   - "relatedRooms": room codes referenced by this beat (e.g. ["G1", "G14"])
+
+2. "generalFeatures": Dungeon-wide / area-wide environmental & mechanical rules that apply across multiple rooms:
+   - "category": "doors" | "lighting" | "ceilings" | "wards" | "alarm" | "environment" | "other"
+   - "title": e.g. "Standard Interior Doors", "Magical Wards", "Ceilings & Climbing", "Illumination"
+   - "details": clear rule explanation
+   - "mechanics": exact DCs, AC, HP, or spell effects (e.g. "AC 15, HP 18, DC 15 Dexterity (Thieves' Tools) to pick, DC 18 Strength (Athletics) to force")
+
+3. "roamingEncounters": Guard patrols, roaming monsters, reinforcements, or random encounter tables not locked to a single static room:
+   - "id": unique slug
+   - "name": e.g. "House Guard Patrol", "Clockwork Reinforcements"
+   - "routeOrTrigger": patrol path or trigger condition (e.g. "Moves G2 -> G5 -> G8 every 15 minutes" or "Arrives 2 rounds after alarm")
+   - "description": tactical behavior, attitude, and what they do on sight
+   - "monsters": array of ONLY canonical 5e creatures (e.g. ["2x Guard", "1x Guard Drake"])
+   - "relatedRooms": array of room codes along their route (e.g. ["G2", "G5", "G8"])
+
+4. "npcs": Key named NPCs in this chapter (patrons, villains, social encounters, captives, or undercover agents):
+   - "id": unique slug
+   - "name": NPC's full name
+   - "role": their role/title in the story
+   - "statblock": canonical 5e statblock name they use (e.g. "Noble", "Spy", "Mage", "Veteran", "Archmage") or empty string if non-combatant
+   - "appearance": brief visual description
+   - "personality": mannerisms, ideals, bonds, flaws
+   - "secretOrMotivation": what they want, what they are hiding, or what info they give if charmed/interrogated
+   - "locationOrSchedule": where they start and how they move through the location
+   - "voicePreset": one of "wizard" | "villains_henchman" | "ogre" | "big_bad_boss" | "tavern_keeper"
+
+Respond with ONLY valid JSON matching that exact structure.`;
+
+    contentsParts.push({ text: promptText });
+
+    const response = await generateContentWithFallback(ai, {
+      preferredModel: "gemini-2.5-flash",
+      contents: { parts: contentsParts },
+      config: {
+        responseMimeType: "application/json"
+      }
+    });
+
+    let rawText = (response.text || "{}").trim();
+    if (rawText.startsWith("```json")) {
+      rawText = rawText.replace(/^```json\s*/, "").replace(/\s*```$/, "");
+    } else if (rawText.startsWith("```")) {
+      rawText = rawText.replace(/^```\s*/, "").replace(/\s*```$/, "");
+    }
+
+    let parsed: any = {};
+    try {
+      parsed = JSON.parse(rawText);
+    } catch {
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        parsed = JSON.parse(jsonMatch[0]);
+      }
+    }
+
+    const storyBeats = Array.isArray(parsed.storyBeats)
+      ? parsed.storyBeats.map((b: any, idx: number) => ({
+          id: b?.id || `beat_${idx + 1}`,
+          phase: ['hook', 'arrival', 'event', 'climax', 'conclusion'].includes(b?.phase) ? b.phase : 'event',
+          title: String(b?.title || `Story Beat ${idx + 1}`),
+          trigger: b?.trigger ? String(b.trigger) : undefined,
+          boxedText: b?.boxedText ? String(b.boxedText) : '',
+          dmNotes: String(b?.dmNotes || ''),
+          monsters: sanitizeMonsterStringList(b?.monsters || []),
+          relatedRooms: Array.isArray(b?.relatedRooms) ? b.relatedRooms.map(String) : []
+        }))
+      : [];
+
+    const generalFeatures = Array.isArray(parsed.generalFeatures)
+      ? parsed.generalFeatures.map((f: any) => ({
+          category: ['doors', 'lighting', 'ceilings', 'wards', 'alarm', 'environment', 'other'].includes(f?.category)
+            ? f.category
+            : 'other',
+          title: String(f?.title || 'Dungeon Feature'),
+          details: String(f?.details || ''),
+          mechanics: f?.mechanics ? String(f.mechanics) : undefined
+        }))
+      : [];
+
+    const roamingEncounters = Array.isArray(parsed.roamingEncounters)
+      ? parsed.roamingEncounters.map((r: any, idx: number) => ({
+          id: r?.id || `roam_${idx + 1}`,
+          name: String(r?.name || `Patrol ${idx + 1}`),
+          routeOrTrigger: String(r?.routeOrTrigger || 'Roaming'),
+          description: String(r?.description || ''),
+          monsters: sanitizeMonsterStringList(r?.monsters || []),
+          relatedRooms: Array.isArray(r?.relatedRooms) ? r.relatedRooms.map(String) : []
+        }))
+      : [];
+
+    const npcs = Array.isArray(parsed.npcs)
+      ? parsed.npcs.map((n: any, idx: number) => ({
+          id: n?.id || `npc_${idx + 1}`,
+          name: String(n?.name || `NPC ${idx + 1}`),
+          role: String(n?.role || 'Notable NPC'),
+          statblock: n?.statblock && !sanitizeMonsterStringList([n.statblock]).length ? undefined : (n?.statblock ? String(n.statblock) : undefined),
+          appearance: n?.appearance ? String(n.appearance) : undefined,
+          personality: n?.personality ? String(n.personality) : undefined,
+          secretOrMotivation: n?.secretOrMotivation ? String(n.secretOrMotivation) : undefined,
+          locationOrSchedule: n?.locationOrSchedule ? String(n.locationOrSchedule) : undefined,
+          voicePreset: n?.voicePreset ? String(n.voicePreset) : 'wizard'
+        }))
+      : [];
+
+    res.json({
+      success: true,
+      storyBeats,
+      generalFeatures,
+      roamingEncounters,
+      npcs
+    });
+  } catch (err: any) {
+    console.error("[AI] digest-chapter-flow error:", err);
+    res.status(500).json({ error: err.message || "Failed to extract non-room chapter flow" });
+  }
+});
+
+/**
  * POST /api/ai/ingest-chapter-pdf
  * Comprehensive pipeline analysis for D&D chapter PDFs:
  * Extracts chapter title, scenes, battlemap page numbers, and all room annotations with normalized bounds.

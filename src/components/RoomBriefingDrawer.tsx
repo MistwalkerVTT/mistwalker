@@ -33,6 +33,7 @@ import { Monster } from '../types/monster';
 import { updateRoomAnnotation } from '../lib/updateRoomAnnotation';
 import { resolveMonster, isExactMonsterMatch, isNonCreatureStatOrItem, SRD_MONSTERS } from '../data/srdMonstersCatalog';
 import { extractAndResolveRoomMonsters } from '../services/roomMonsterExtractor';
+import { ChapterFlowPanel } from './ChapterFlowPanel';
 import { toast } from 'sonner';
 import { NARRATION_VOICES, audioNarration, useAudioNarration } from '../services/audioNarrationService';
 
@@ -77,6 +78,12 @@ export interface RoomBriefingDrawerProps {
   chapterPdfDigest?: ChapterPdfDigest | null;
   availableMonsters?: Monster[];
   onSpawnMonsterToken?: (tokenData: { name: string; avatarUrl: string; hp: number; ac: number; size: number; polygonPoints?: number[] }) => void;
+  initialTab?: 'room' | 'flow';
+  activeSceneTitle?: string;
+  activeDmNotes?: string;
+  roomAnnotations?: RoomAnnotation[];
+  onSelectRoomByNumber?: (roomNumber: string) => void;
+  onUpdateDigest?: (updatedDigest: ChapterPdfDigest) => Promise<void> | void;
 }
 
 export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
@@ -93,9 +100,16 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
   campaignPdfs = [],
   chapterPdfDigest,
   availableMonsters = [],
-  onSpawnMonsterToken
+  onSpawnMonsterToken,
+  initialTab = 'room',
+  activeSceneTitle,
+  activeDmNotes,
+  roomAnnotations = [],
+  onSelectRoomByNumber,
+  onUpdateDigest
 }) => {
   const [activeRoom, setActiveRoom] = useState<RoomAnnotation | null>(room);
+  const [drawerTab, setDrawerTab] = useState<'room' | 'flow'>(initialTab);
   const [isEditMode, setIsEditMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isDmNotesExpanded, setIsDmNotesExpanded] = useState(true);
@@ -318,6 +332,15 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
     toast.info(`Removed ${monster.name} from room display`);
   };
 
+  // Synchronize drawerTab when initialTab or room changes
+  useEffect(() => {
+    if (initialTab === 'flow' || !room) {
+      setDrawerTab('flow');
+    } else if (room) {
+      setDrawerTab('room');
+    }
+  }, [initialTab, room?.id]);
+
   // Synchronize internal state when room prop changes
   useEffect(() => {
     if (!room) {
@@ -332,6 +355,7 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
     const isNewRoom = currentRoomIdRef.current !== room.id;
     if (isNewRoom) {
       currentRoomIdRef.current = room.id;
+      setDrawerTab('room');
       setIsEditMode(false);
       setConfirmDelete(false);
       setShowDrawerRoomsDropdown(false);
@@ -411,7 +435,94 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
     }
   }, [room?.id]);
 
-  if (!isOpen || !activeRoom) return null;
+  if (!isOpen) return null;
+
+  if (!activeRoom || drawerTab === 'flow') {
+    const fallbackRoomTitle = activeRoom
+      ? `${activeRoom.roomNumber ? `${activeRoom.roomNumber}: ` : ''}${activeRoom.roomName || activeRoom.label || 'Room'}`
+      : null;
+
+    return (
+      <div
+        id="room-briefing-drawer-overlay"
+        className="fixed inset-0 z-50 overflow-hidden bg-black/50 backdrop-blur-xs transition-opacity duration-300 animate-in fade-in"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose();
+        }}
+      >
+        <div
+          id="room-briefing-drawer-panel"
+          className="fixed inset-y-0 right-0 w-full max-w-lg bg-zinc-950 border-l border-zinc-800 shadow-2xl flex flex-col transform transition-transform duration-300 ease-out animate-in slide-in-from-right"
+        >
+          {/* Header in Chapter Flow Mode */}
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-850 bg-zinc-900/90 backdrop-blur-md shrink-0">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="p-2 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 shrink-0">
+                <BookOpen className="w-4 h-4" />
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="text-[10px] font-mono uppercase tracking-widest text-amber-400 font-bold">
+                  Non-Room Module Guide
+                </span>
+                <h2 className="text-sm font-bold text-zinc-100 truncate font-mono">
+                  {chapterPdfDigest?.chapterTitle || activeSceneTitle || 'Chapter Flow & Rules'}
+                </h2>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              {activeRoom && (
+                <button
+                  type="button"
+                  onClick={() => setDrawerTab('room')}
+                  className="px-2.5 py-1.5 rounded-xl text-xs font-mono font-bold flex items-center gap-1.5 transition-all border cursor-pointer bg-zinc-800 hover:bg-zinc-750 text-amber-300 border-amber-500/30"
+                  title={`Return to ${fallbackRoomTitle}`}
+                >
+                  <Layers className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="max-w-[110px] truncate">{activeRoom.roomNumber || 'Room'}</span>
+                </button>
+              )}
+              <button
+                id="btn-close-room-drawer"
+                onClick={onClose}
+                className="p-1.5 rounded-xl text-zinc-400 hover:text-zinc-100 hover:bg-zinc-850 transition-colors cursor-pointer"
+                title="Close Guide"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Chapter Flow Body */}
+          <div className="flex-1 overflow-y-auto p-5 pb-20 flex flex-col gap-5 custom-scrollbar">
+            <ChapterFlowPanel
+              chapterPdfDigest={chapterPdfDigest}
+              activeSceneTitle={activeSceneTitle}
+              activeDmNotes={activeDmNotes}
+              roomAnnotations={roomAnnotations}
+              availableMonsters={allAvailableMonsters}
+              onBroadcastReadAloud={onBroadcastReadAloud}
+              onSpawnMonsterToken={(tokenData) => {
+                if (onSpawnMonsterToken) {
+                  onSpawnMonsterToken({
+                    ...tokenData,
+                    polygonPoints: activeRoom?.polygonPoints
+                  });
+                }
+              }}
+              onSelectRoomByNumber={(rNum) => {
+                if (onSelectRoomByNumber) {
+                  onSelectRoomByNumber(rNum);
+                  setDrawerTab('room');
+                }
+              }}
+              onUpdateDigest={onUpdateDigest}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const roomNumber = activeRoom.roomNumber || (activeRoom.label ? activeRoom.label.split(/[\s\-:]/)[0] : '1');
   const roomName = activeRoom.roomName || (activeRoom.label ? activeRoom.label.replace(/^.*?[\-:]\s*/, '') : 'Zone');
@@ -581,6 +692,17 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            {/* Switch to Chapter Flow Guide */}
+            <button
+              type="button"
+              onClick={() => setDrawerTab('flow')}
+              className="px-2.5 py-1.5 rounded-xl text-xs font-mono font-bold flex items-center gap-1.5 transition-all border cursor-pointer bg-zinc-850 hover:bg-zinc-800 text-zinc-200 border-zinc-700"
+              title="Open Chapter Flow, Story Hooks, Dungeon Rules & Roaming Patrols"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+              <span>Guide</span>
+            </button>
+
             {/* Edit Mode Toggle */}
             {isEditMode && (
               <button
@@ -1014,6 +1136,76 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
                       </div>
                   </div>
               )}
+
+              {/* Contextual Linked Chapter Events / Roaming Patrols for this Room */}
+              {(() => {
+                const targetNum = (activeRoom.roomNumber || '').trim().toLowerCase();
+                if (!targetNum || !chapterPdfDigest) return null;
+
+                const linkedPatrols = (chapterPdfDigest.roamingEncounters || []).filter((p) => {
+                  const inRelated = (p.relatedRooms || []).some((r) => r.trim().toLowerCase() === targetNum);
+                  const inRoute = new RegExp(`\\b${targetNum.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(p.routeOrTrigger || '');
+                  return inRelated || inRoute;
+                });
+
+                const linkedBeats = (chapterPdfDigest.storyBeats || []).filter((b) =>
+                  (b.relatedRooms || []).some((r) => r.trim().toLowerCase() === targetNum)
+                );
+
+                if (linkedPatrols.length === 0 && linkedBeats.length === 0) return null;
+
+                return (
+                  <div className="p-3 rounded-2xl bg-amber-950/20 border border-amber-500/30 flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono uppercase tracking-wider font-bold text-amber-300 flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                        Linked Chapter Events & Patrols ({linkedPatrols.length + linkedBeats.length})
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setDrawerTab('flow')}
+                        className="text-[10px] font-mono font-bold text-amber-400 hover:text-amber-300 underline cursor-pointer"
+                      >
+                        Open Chapter Flow →
+                      </button>
+                    </div>
+                    {linkedPatrols.map((patrol) => (
+                      <div key={patrol.id} className="p-2 rounded-xl bg-zinc-950/80 border border-rose-500/25 flex flex-col gap-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-bold font-mono text-rose-300">🚨 Patrol: {patrol.title}</span>
+                          <button
+                            type="button"
+                            onClick={() => setDrawerTab('flow')}
+                            className="px-2 py-0.5 rounded bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-[10px] font-mono font-bold cursor-pointer"
+                          >
+                            View Patrol
+                          </button>
+                        </div>
+                        {patrol.routeOrTrigger && (
+                          <span className="text-[11px] text-zinc-400 font-mono">{patrol.routeOrTrigger}</span>
+                        )}
+                      </div>
+                    ))}
+                    {linkedBeats.map((beat) => (
+                      <div key={beat.id} className="p-2 rounded-xl bg-zinc-950/80 border border-amber-500/20 flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <span className="text-xs font-bold font-mono text-amber-200 block truncate">📖 {beat.title}</span>
+                          {beat.triggerCondition && (
+                            <span className="text-[10px] text-zinc-400 font-mono block truncate">Trigger: {beat.triggerCondition}</span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setDrawerTab('flow')}
+                          className="px-2 py-0.5 rounded bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-[10px] font-mono font-bold shrink-0 cursor-pointer"
+                        >
+                          Read Beat
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
 
               {/* Detected Monsters & Spawning Section */}
               {(() => {
