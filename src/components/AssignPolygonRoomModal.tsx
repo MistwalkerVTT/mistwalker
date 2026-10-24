@@ -14,6 +14,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { ChapterPdfDigest, ChapterRoomDetail, RoomAnnotation } from '../types';
+import { sanitizeMonsterStringList } from '../services/roomMonsterExtractor';
 
 export interface AssignPolygonRoomModalProps {
   isOpen: boolean;
@@ -203,7 +204,7 @@ export const AssignPolygonRoomModal: React.FC<AssignPolygonRoomModalProps> = ({
       roomName: assignedName,
       boxedText: matchedRoom?.boxedText || '',
       dmNotes: matchedRoom?.dmNotes || '',
-      monsters: matchedRoom?.monsters || [],
+      monsters: sanitizeMonsterStringList(matchedRoom?.monsters || []),
       pdfSection: matchedRoom?.sceneTitle || undefined,
       matchedPdfRoom: matchedRoom
     });
@@ -323,10 +324,10 @@ export const AssignPolygonRoomModal: React.FC<AssignPolygonRoomModalProps> = ({
               )}
 
               {/* Monsters Preview */}
-              {matchedRoom.monsters && matchedRoom.monsters.length > 0 && (
+              {matchedRoom.monsters && sanitizeMonsterStringList(matchedRoom.monsters).length > 0 && (
                 <div className="flex flex-wrap items-center gap-1.5 pt-1">
                   <Skull className="w-3.5 h-3.5 text-red-400" />
-                  {matchedRoom.monsters.map((m, mIdx) => (
+                  {sanitizeMonsterStringList(matchedRoom.monsters).map((m, mIdx) => (
                     <span
                       key={mIdx}
                       className="px-2 py-0.5 rounded bg-red-950/50 border border-red-500/30 text-red-300 text-[10px] font-mono font-bold"

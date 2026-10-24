@@ -32,6 +32,7 @@ import { RoomAnnotation, ChapterPdfDigest } from '../types';
 import { Monster } from '../types/monster';
 import { updateRoomAnnotation } from '../lib/updateRoomAnnotation';
 import { resolveMonster, isExactMonsterMatch, isNonCreatureStatOrItem, SRD_MONSTERS } from '../data/srdMonstersCatalog';
+import { extractAndResolveRoomMonsters } from '../services/roomMonsterExtractor';
 import { toast } from 'sonner';
 import { NARRATION_VOICES, audioNarration, useAudioNarration } from '../services/audioNarrationService';
 
@@ -1023,122 +1024,25 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
                   chapterPdfDigest?.rooms
                 );
 
-                // Combined list of monster candidates (manualMonsters takes precedence if populated)
-                const rawCandidates: any[] = manualMonsters.length > 0
-                  ? manualMonsters
-                  : [
-                      ...(activeRoom.monsters || []),
-                      ...(matchedDigestRoom?.monsters || [])
-                    ];
-
-                // Text corpus to search for monster references
-                const notesToSearch = [
-                  activeRoom.dmNotes,
-                  activeRoom.boxedText,
-                  activeRoom.roomName,
-                  activeRoom.roomNumber,
-                  activeRoom.label,
-                  activeRoom.pdfSection,
-                  matchedDigestRoom?.dmNotes,
-                  matchedDigestRoom?.boxedText,
-                  matchedDigestRoom?.roomName,
-                  matchedDigestRoom?.roomNumber
-                ].filter(Boolean).join(' ');
-
-                // Resolve all candidates using resolveMonster
-                const resolvedItems: Array<{ monster: Monster; count: number }> = [];
-
-                // 1. Resolve rawCandidates (filtering out non-creature items/stats like "+1 longsword" or "DC 20 Intelligence")
-                for (const raw of rawCandidates) {
-                  if (!raw || isNonCreatureStatOrItem(raw)) continue;
-                  const res = resolveMonster(raw, allAvailableMonsters);
-                  if (res?.monster?.name && !isNonCreatureStatOrItem(res.monster.name)) {
-                    resolvedItems.push(res);
-                  }
-                }
-
-                // 2. Scan notesToSearch for monsters if no candidates were explicitly defined
                 const cleanRoomNum = (activeRoom.roomNumber || activeRoom.label || '').toLowerCase().replace(/^(area|room|zone)\s*/i, '').replace(/[\s\-_:]/g, '');
-                const isRoomV8 = cleanRoomNum === 'v8' || cleanRoomNum === '8' ||
+                const isRoomV8 = cleanRoomNum === 'v8' ||
                   (activeRoom.label || '').toLowerCase().includes('v8') ||
                   (activeRoom.roomName || '').toLowerCase().includes('v8') ||
                   (activeRoom.roomName || '').toLowerCase().includes('coffin maker');
 
-                if (resolvedItems.length === 0 && notesToSearch.trim()) {
-                  // Sort monsters by name length descending so longer compound names match before substrings
-                  const sortedMonsters = [...allAvailableMonsters]
-                    .filter(m => m?.name && !isNonCreatureStatOrItem(m.name) && m.source !== 'Encounter Notes')
-                    .sort((a, b) => b.name.length - a.name.length);
+                const uniqueMonsterEntries = extractAndResolveRoomMonsters({
+                  manualMonsters,
+                  roomMonsters: activeRoom.monsters,
+                  digestMonsters: matchedDigestRoom?.monsters,
+                  dmNotes: activeRoom.dmNotes,
+                  digestDmNotes: matchedDigestRoom?.dmNotes,
+                  roomNumber: activeRoom.roomNumber,
+                  roomName: activeRoom.roomName,
+                  label: activeRoom.label,
+                  allAvailableMonsters,
+                  hiddenMonsterNames
+                });
 
-                  for (const m of sortedMonsters) {
-                    if (hiddenMonsterNames.includes(m.name)) continue;
-
-                    const mName = m.name.trim();
-                    const escaped = mName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                    let patternCore = escaped;
-                    if (mName.toLowerCase().endsWith('y') && !mName.toLowerCase().endsWith('ey')) {
-                      const root = escaped.slice(0, -1);
-                      patternCore = `(?:${root}ies|${escaped})`;
-                    } else if (mName.toLowerCase().endsWith('f')) {
-                      const root = escaped.slice(0, -1);
-                      patternCore = `(?:${root}ves|${escaped})`;
-                    } else if (!mName.toLowerCase().endsWith('s')) {
-                      patternCore = `${escaped}s?`;
-                    }
-
-                    // For generic single-word monster names like "Guard", avoid non-creature phrases ("stand guard", "on guard", "off guard") or compound creatures ("moonlight guard")
-                    let prefixLookbehind = '';
-                    if (mName.toLowerCase() === 'guard') {
-                      prefixLookbehind = '(?<!(?:moonlight|royal|temple|honor|elite|castle|city|vampire|stand|standing|stands|on|off|body)\\s+)';
-                    }
-
-                    // Ensure numbers preceded by '+', '-', 'DC', 'CR', 'AC', 'HP', 'd' (dice) are never treated as creature counts
-                    const regex = new RegExp(`(?:(?<!(?:\\b(?:dc|cr|ac|hp|level|lvl|page|pg|room|area|chapter)\\s*|[+\\-d]))\\b(\\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\\s*(?:x\\s*)?)?\\b${prefixLookbehind}${patternCore}\\b`, 'i');
-                    const match = notesToSearch.match(regex);
-
-                    if (match) {
-                      let count = 1;
-                      if (match[1]) {
-                        const wordMap: Record<string, number> = {
-                          one: 1, two: 2, three: 3, four: 4, five: 5, six: 6,
-                          seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12
-                        };
-                        const rawCount = match[1].toLowerCase();
-                        count = wordMap[rawCount] || parseInt(rawCount, 10) || 1;
-                      }
-                      resolvedItems.push({ monster: m, count });
-                      break; // Found primary matching monster in text
-                    }
-                  }
-                }
-
-                // 3. Fallback for Room V8 specifically (Area V8 has 9 Zombies)
-                if (isRoomV8 && !hiddenMonsterNames.includes('Zombie')) {
-                  const hasZombie = resolvedItems.some(r => isExactMonsterMatch(r.monster.name, 'zombie') || isExactMonsterMatch(r.monster.name, 'strahd zombie'));
-                  if (!hasZombie) {
-                    const zombie = allAvailableMonsters.find(m => isExactMonsterMatch(m.name, 'zombie')) || SRD_MONSTERS.find(m => isExactMonsterMatch(m.name, 'zombie'));
-                    if (zombie) {
-                      resolvedItems.push({ monster: zombie, count: 9 });
-                    }
-                  }
-                }
-
-                // Deduplicate and aggregate counts
-                const monsterMap = new Map<string, { monster: Monster; count: number }>();
-                for (const item of resolvedItems) {
-                  if (!item.monster || !item.monster.name) continue;
-                  if (hiddenMonsterNames.some(h => h.toLowerCase() === item.monster.name.toLowerCase())) continue;
-
-                  const key = item.monster.name.toLowerCase();
-                  const existing = monsterMap.get(key);
-                  if (existing) {
-                    existing.count += (item.count || 1);
-                  } else {
-                    monsterMap.set(key, { monster: item.monster, count: item.count || 1 });
-                  }
-                }
-
-                const uniqueMonsterEntries = Array.from(monsterMap.values());
                 const totalMonstersCount = uniqueMonsterEntries.reduce((sum, e) => sum + e.count, 0);
 
                 const sizeToNumber = (sz?: string): number => {
@@ -1525,7 +1429,7 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
                       </div>
                     ) : (
                       <div className="flex flex-col gap-2.5">
-                        {uniqueMonsterEntries.map(({ monster: m, count }, mIdx) => (
+                        {uniqueMonsterEntries.map(({ monster: m, count, source, matchedSnippet }, mIdx) => (
                           <div
                             key={mIdx}
                             className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 bg-zinc-900/90 rounded-xl border border-zinc-800/80 hover:border-zinc-700 transition-colors relative group min-w-0 overflow-hidden shadow-sm"
@@ -1552,6 +1456,24 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
                                       ×{count}
                                     </span>
                                   )}
+                                  <span
+                                    className={`px-1.5 py-0.5 rounded text-[9px] font-mono border shrink-0 ${
+                                      source === 'manual'
+                                        ? 'bg-amber-950/50 text-amber-300 border-amber-700/40'
+                                        : source === 'digest'
+                                          ? 'bg-emerald-950/50 text-emerald-300 border-emerald-700/40'
+                                          : 'bg-sky-950/50 text-sky-300 border-sky-700/40'
+                                    }`}
+                                    title={
+                                      matchedSnippet
+                                        ? `Detected in DM Notes: "...${matchedSnippet}..."`
+                                        : source === 'digest'
+                                          ? 'Verified from Chapter PDF Digest'
+                                          : 'Manually added to room'
+                                    }
+                                  >
+                                    {source === 'manual' ? 'Manual' : source === 'digest' ? 'PDF Digest' : 'DM Notes'}
+                                  </span>
                                 </div>
                                 <div className="text-[10px] text-zinc-400 font-mono mt-0.5 truncate">
                                   CR {m.challenge} · AC {m.ac} · HP {m.hp}

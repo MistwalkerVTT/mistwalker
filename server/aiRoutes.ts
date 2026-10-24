@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import { GoogleGenAI, createPartFromUri } from "@google/genai";
 import { generateCinematicBattlemap, generateArchitecturalBattlemap } from "./proceduralMapEngine";
+import { sanitizeMonsterStringList } from "../src/services/roomMonsterExtractor";
 import fs from "fs";
 import path from "path";
 
@@ -2378,8 +2379,8 @@ Analyze the document with deep precision to extract:
    - "roomName": The official name of the room/area (e.g. "The Parlor", "Guard Barracks", "Vault of the Sinner")
    - "boxedText": This MUST be the EXACT, verbatim read-aloud player boxed text transcribed word-for-word from the PDF source document. Do NOT summarize, paraphrase, or interpret. Must be 100% exact text.
    - "dmNotes": This MUST be the EXACT, verbatim room notes, descriptions, secrets, traps, DCs, tactics, and statistics transcribed word-for-word from the PDF source document. Do NOT summarize, synthesize, paraphrase, or interpret. We need EXACTLY what is written in the PDF, with zero interpretation or summary.
-   - "monsters": Array of creatures in this room (e.g. ["3x Thug", "1x Spy"])
-   - "treasure": Array of treasure in this room
+   - "monsters": Array of ONLY actual D&D 5e creatures, monsters, or NPC combatants physically present in this room, formatted as "<Count>x <Canonical 5e Statblock Name>" (e.g. ["3x Thug", "1x Spy"] or ["1x Guerthel (Wraith)"]). CRITICAL: NEVER include weapons (like "+1 longsword"), magic items, treasure, traps, decorative statues/paintings, or ability/skill checks (like "DC 20 Intelligence"). If no creatures are present, return [].
+   - "treasure": Array of treasure, weapons, or magic items in this room
    - "sceneTitle": Which scene this room best belongs to
 
 Respond with ONLY valid JSON strictly adhering to this structure:
@@ -2445,7 +2446,12 @@ Respond with ONLY valid JSON strictly adhering to this structure:
     }
 
     digest.scenes = Array.isArray(digest.scenes) ? digest.scenes : [];
-    digest.rooms = Array.isArray(digest.rooms) ? digest.rooms : [];
+    digest.rooms = Array.isArray(digest.rooms)
+      ? digest.rooms.map((r: any) => ({
+          ...r,
+          monsters: sanitizeMonsterStringList(r?.monsters || [])
+        }))
+      : [];
     digest.pdfFilename = pdfFilename || (pdfPath ? pdfPath.split('/').pop() : "chapter_adventure.pdf");
     digest.pdfUrl = pdfPath || "";
     digest.digestedAt = Date.now();
@@ -2523,7 +2529,7 @@ Carefully inspect the entire document (pages, text, and battlemaps) to identify:
      - "roomName": descriptive room name (e.g. "Entry Hall", "Guard Barracks", "Torture Chamber").
      - "boxedText": EXACT, verbatim read-aloud boxed text intended to be read aloud to players when entering.
      - "dmNotes": verbatim or detailed DM instructions, traps, DC perception/investigation checks, secrets, puzzle clues, and enemy combat tactics.
-     - "monsters": array of creatures/monsters present (e.g. ["2x Bugbear", "4x Goblin"]).
+     - "monsters": array of ONLY actual D&D 5e creatures/monsters/NPC combatants present in this room (e.g. ["2x Bugbear", "4x Goblin"]). NEVER include weapons (e.g. "+1 longsword"), magic items, traps, statues, or ability checks (e.g. "DC 20 Intelligence"). Return [] if no creatures are present.
      - "approximateNormalizedBounds": normalized bounding rectangle { "x": number, "y": number, "width": number, "height": number } (values from 0 to 100 percentage) estimating where this room is located on the tactical battlemap image for this scene:
        - x: percentage from left edge (0 to 100)
        - y: percentage from top edge (0 to 100)
@@ -2592,14 +2598,16 @@ You MUST respond with ONLY a valid JSON object strictly matching this interface:
     }
 
     if (!parsedChapter.chapterTitle) parsedChapter.chapterTitle = chapterTitle;
-    if (!Array.isArray(parsedChapter.allMonsters)) parsedChapter.allMonsters = [];
+    parsedChapter.allMonsters = sanitizeMonsterStringList(
+      Array.isArray(parsedChapter.allMonsters) ? parsedChapter.allMonsters : []
+    );
     if (!Array.isArray(parsedChapter.scenes)) parsedChapter.scenes = [];
 
     // Sanitize rooms and bounds
     for (const scene of parsedChapter.scenes) {
       if (!Array.isArray(scene.rooms)) scene.rooms = [];
       for (const room of scene.rooms) {
-        if (!room.monsters) room.monsters = [];
+        room.monsters = sanitizeMonsterStringList(room.monsters || []);
         if (!room.approximateNormalizedBounds) {
           room.approximateNormalizedBounds = { x: 20, y: 20, width: 25, height: 20 };
         } else {

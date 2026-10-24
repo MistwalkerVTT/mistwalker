@@ -4,6 +4,8 @@ import { Scene, RoomAnnotation, WallSegment, UploadedAsset } from '../types';
 import { Monster } from '../types/monster';
 import { snapPointToGrid, snapToGrid } from '../lib/visionEngine';
 import { getAiHeaders } from './aiService';
+import { isNonCreatureStatOrItem } from '../data/srdMonstersCatalog';
+import { sanitizeMonsterStringList } from './roomMonsterExtractor';
 
 // Ensure PDF.js worker is properly configured
 function ensurePdfWorker() {
@@ -278,7 +280,7 @@ export function generateRoomAnnotations(
       ],
       boxedText: room.boxedText || '',
       dmNotes: room.dmNotes || '',
-      monsters: room.monsters || [],
+      monsters: sanitizeMonsterStringList(room.monsters || []),
       color: '#f59e0b',
       pdfSection: `${sceneTitle} - ${label}`,
       campaignId,
@@ -563,6 +565,7 @@ export function buildSceneFromParsedData(params: {
  */
 export function normalizeMonsterName(raw: string): string {
   if (!raw || typeof raw !== 'string') return '';
+  if (isNonCreatureStatOrItem(raw)) return '';
   let clean = raw.trim();
 
   // Strip leading counters, numbers, or articles: "2x ", "4 ", "three ", "a ", "the "
@@ -583,8 +586,9 @@ export function normalizeMonsterName(raw: string): string {
   }
 
   // Proper Title Case
-  clean = clean.replace(/\b\w/g, (c) => c.toUpperCase());
-  return clean.trim();
+  clean = clean.replace(/\b\w/g, (c) => c.toUpperCase()).trim();
+  if (isNonCreatureStatOrItem(clean)) return '';
+  return clean;
 }
 
 /**

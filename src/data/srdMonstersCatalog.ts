@@ -1469,19 +1469,6 @@ export function isNonCreatureStatOrItem(rawInput: string | any): boolean {
     : String(rawInput?.name || '').trim();
   if (!rawStr) return true;
 
-  // Allow genuine animated object creatures from SRD
-  const lowerFull = rawStr.toLowerCase().replace(/^\d+\s*x?\s+/i, '').trim();
-  if (
-    lowerFull === 'animated armor' ||
-    lowerFull === 'flying sword' ||
-    lowerFull === 'rug of smothering' ||
-    lowerFull === 'broom of animated attack' ||
-    lowerFull === 'crawling claw' ||
-    lowerFull === 'dancing sword'
-  ) {
-    return false;
-  }
-
   // Reject "+1 longsword", "-2 penalty", "DC 20 ...", "AC 15 ...", "CR 2 ...", "HP 30 ..."
   if (/^[+\-]\s*\d+/i.test(rawStr)) return true;
   if (/^(?:dc|ac|cr|hp|pp|gp|sp|ep|cp|lvl|level|page|pg)\s*\d+/i.test(rawStr)) return true;
@@ -1496,17 +1483,31 @@ export function isNonCreatureStatOrItem(rawInput: string | any): boolean {
 
   if (!cleaned || /^\d+$/.test(cleaned)) return true;
 
+  // Allow genuine animated object creatures from SRD (singular or plural)
+  const cleanedSingular = cleaned.replace(/s$/i, '');
+  if (
+    cleanedSingular === 'animated armor' ||
+    cleanedSingular === 'flying sword' ||
+    cleanedSingular === 'rug of smothering' ||
+    cleanedSingular === 'broom of animated attack' ||
+    cleanedSingular === 'crawling claw' ||
+    cleanedSingular === 'dancing sword' ||
+    cleanedSingular === 'living blade'
+  ) {
+    return false;
+  }
+
   // Check if the cleaned phrase or all/primary words are non-creature stats/items
-  if (NON_CREATURE_STAT_OR_ITEM_WORDS.has(cleaned)) return true;
+  if (NON_CREATURE_STAT_OR_ITEM_WORDS.has(cleaned) || NON_CREATURE_STAT_OR_ITEM_WORDS.has(cleanedSingular)) return true;
 
   const words = cleaned.split(/[\s\-_/]+/).filter(Boolean);
   if (words.length === 0) return true;
 
-  // If the first word or last word is an ability score, check/save, weapon, or currency
+  // If the first word or last word is an ability score, skill, check/save, weapon, or currency
   if (words.every(w => NON_CREATURE_STAT_OR_ITEM_WORDS.has(w))) return true;
   if (
     words.some(w =>
-      /^(strength|dexterity|constitution|intelligence|wisdom|charisma|check|checks|saving|throw|throws|longsword|shortsword|greatsword|dagger|mace|handaxe|battleaxe|greataxe|warhammer|quarterstaff|crossbow|shortbow|longbow|scimitar|rapier|halberd|glaive|spear|javelin|trident|flail|morningstar|club|maul|whip|sling|potion|scroll|gp|sp|cp|ep|pp|feet|ft|hours?|minutes?|rounds?|turns?|days?|points?|damage)$/i.test(w)
+      /^(strength|dexterity|constitution|intelligence|wisdom|charisma|perception|investigation|acrobatics|athletics|arcana|deception|history|insight|intimidation|medicine|nature|performance|persuasion|religion|stealth|survival|sleight|check|checks|saving|throw|throws|longsword|longswords|shortsword|shortswords|greatsword|greatswords|dagger|daggers|mace|maces|handaxe|battleaxe|greataxe|warhammer|quarterstaff|crossbow|shortbow|longbow|scimitar|rapier|halberd|glaive|spear|javelin|trident|flail|morningstar|club|maul|whip|sling|potion|potions|scroll|scrolls|gp|sp|cp|ep|pp|feet|ft|hours?|minutes?|rounds?|turns?|days?|points?|damage)$/i.test(w)
     )
   ) {
     return true;
