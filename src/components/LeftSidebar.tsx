@@ -688,7 +688,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
       className="w-16 bg-zinc-950/98 backdrop-blur-xl border-r border-zinc-800/90 flex flex-col z-50 shadow-2xl h-full select-none shrink-0 relative text-zinc-300"
     >
       {/* Brand Icon */}
-      <div className="flex flex-col items-center py-2.5 border-b border-zinc-800/80 shrink-0">
+      <div className="flex flex-col items-center py-1.5 border-b border-zinc-800/80 shrink-0">
         <div
           id="mistwalker-brand-icon"
           onClick={() => {
@@ -710,11 +710,11 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
       </div>
 
       {/* Direct Tool 1: Select Tool (1-Click Toggle) */}
-      <div className="flex flex-col items-center py-2 border-b border-zinc-800/80 shrink-0 w-full px-1.5">
+      <div className="flex flex-col items-center gap-0.5 py-1.5 border-b border-zinc-800/80 shrink-0 w-full px-1.5">
         <button
           id="tool-select-direct"
           onClick={() => setTool(tool === 'select' ? 'pan' : 'select')}
-          className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all relative ${
+          className={`w-11 h-10 rounded-xl flex items-center justify-center transition-all relative ${
             tool === 'select'
               ? 'bg-amber-500/25 text-amber-300 border border-amber-500/60 shadow-[0_0_14px_rgba(245,158,11,0.4)]'
               : 'text-zinc-400 hover:text-amber-300 hover:bg-zinc-850 hover:border hover:border-zinc-700/60'
@@ -728,14 +728,12 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
             </span>
           )}
         </button>
-      </div>
 
-      {/* Direct Tool 2: Pan Tool (1-Click Toggle) */}
-      <div className="flex flex-col items-center py-2 border-b border-zinc-800/80 shrink-0 w-full px-1.5">
+        {/* Direct Tool 2: Pan Tool (1-Click Toggle) */}
         <button
           id="tool-pan-direct"
           onClick={() => setTool(tool === 'pan' ? 'select' : 'pan')}
-          className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all ${
+          className={`w-11 h-10 rounded-xl flex items-center justify-center transition-all ${
             tool === 'pan'
               ? 'bg-zinc-800 text-zinc-100 border border-zinc-600 shadow-md'
               : 'text-zinc-400 hover:text-white hover:bg-zinc-850 hover:border hover:border-zinc-700/60'
@@ -749,7 +747,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
       {/* Main Condensed Tool Categories (Scrollable for any screen height) */}
       <div
         id="sidebar-tools-scroll"
-        className="flex-1 w-full overflow-y-auto overflow-x-hidden flex flex-col items-center py-2.5 gap-2 px-1.5 sidebar-scrollbar"
+        className="flex-1 w-full overflow-y-auto overflow-x-hidden flex flex-col items-center py-1.5 gap-0.5 px-1.5 sidebar-scrollbar"
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
       >
         {/* 1. Campaign & Maps Group */}
@@ -759,7 +757,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
             onMouseEnter={(e) => handleMouseEnter('maps', e)}
             onMouseLeave={handleMouseLeave}
             onClick={(e) => handleGroupClick('maps', e)}
-            className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all relative ${
+            className={`w-11 h-10 rounded-xl flex items-center justify-center transition-all relative ${
               activeGroup === 'maps'
                 ? 'bg-emerald-500/25 text-emerald-400 border border-emerald-500/60 shadow-[0_0_14px_rgba(16,185,129,0.35)]'
                 : 'text-zinc-400 hover:text-emerald-300 hover:bg-zinc-850 hover:border hover:border-zinc-700/60'
@@ -781,7 +779,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
             onMouseEnter={(e) => handleMouseEnter('tokens', e)}
             onMouseLeave={handleMouseLeave}
             onClick={(e) => handleGroupClick('tokens', e)}
-            className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all relative ${
+            className={`w-11 h-10 rounded-xl flex items-center justify-center transition-all relative ${
               activeGroup === 'tokens' || isTokensActive
                 ? 'bg-blue-500/25 text-blue-400 border border-blue-500/60 shadow-[0_0_14px_rgba(59,130,246,0.35)]'
                 : 'text-zinc-400 hover:text-blue-300 hover:bg-zinc-850 hover:border hover:border-zinc-700/60'
@@ -804,7 +802,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
             onMouseEnter={(e) => handleMouseEnter('dice', e)}
             onMouseLeave={handleMouseLeave}
             onClick={(e) => handleGroupClick('dice', e)}
-            className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all relative ${
+            className={`w-11 h-10 rounded-xl flex items-center justify-center transition-all relative ${
               activeGroup === 'dice' || dicePool.length > 0
                 ? 'bg-purple-500/25 text-purple-400 border border-purple-500/60 shadow-[0_0_14px_rgba(168,85,247,0.35)]'
                 : 'text-zinc-400 hover:text-purple-300 hover:bg-zinc-850 hover:border hover:border-zinc-700/60'
@@ -827,7 +825,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
             onMouseEnter={(e) => handleMouseEnter('combat', e)}
             onMouseLeave={handleMouseLeave}
             onClick={(e) => handleGroupClick('combat', e)}
-            className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all relative ${
+            className={`w-11 h-10 rounded-xl flex items-center justify-center transition-all relative ${
               activeGroup === 'combat' || isCombatActive || tool === 'measure'
                 ? 'bg-amber-500/25 text-amber-400 border border-amber-500/60 shadow-[0_0_14px_rgba(245,158,11,0.35)]'
                 : 'text-zinc-400 hover:text-amber-300 hover:bg-zinc-850 hover:border hover:border-zinc-700/60'
@@ -848,7 +846,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
             onMouseEnter={(e) => handleMouseEnter('lighting', e)}
             onMouseLeave={handleMouseLeave}
             onClick={(e) => handleGroupClick('lighting', e)}
-            className={`w-11 h-11 rounded-xl flex flex-col items-center justify-center transition-all relative ${
+            className={`w-11 h-10 rounded-xl flex flex-col items-center justify-center transition-all relative ${
               activeGroup === 'lighting' || activeGroup === 'fog-grid' || tool === 'wall' || tool === 'zone' || tool === 'hotspot' || tool === 'polygon_zone' || tool === 'reveal' || tool === 'polygon_reveal'
                 ? 'bg-amber-500/25 text-amber-300 border border-amber-500/60 shadow-[0_0_14px_rgba(245,158,11,0.35)]'
                 : 'text-zinc-400 hover:text-amber-300 hover:bg-zinc-850 hover:border hover:border-zinc-700/60'
@@ -872,7 +870,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
             onMouseEnter={(e) => handleMouseEnter('fx', e)}
             onMouseLeave={handleMouseLeave}
             onClick={(e) => handleGroupClick('fx', e)}
-            className={`w-11 h-11 rounded-xl flex flex-col items-center justify-center transition-all relative ${
+            className={`w-11 h-10 rounded-xl flex flex-col items-center justify-center transition-all relative ${
               activeGroup === 'fx' || (boardAnimatedEnabled && (boardAnimatedFeatures.length > 0 || boardWeatherEffect !== 'none'))
                 ? 'bg-cyan-500/25 text-cyan-300 border border-cyan-500/60 shadow-[0_0_14px_rgba(6,182,212,0.4)]'
                 : 'text-zinc-400 hover:text-cyan-300 hover:bg-zinc-850 hover:border hover:border-zinc-700/60'
@@ -898,7 +896,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
             onMouseEnter={(e) => handleMouseEnter('ai', e)}
             onMouseLeave={handleMouseLeave}
             onClick={(e) => handleGroupClick('ai', e)}
-            className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all relative ${
+            className={`w-11 h-10 rounded-xl flex items-center justify-center transition-all relative ${
               activeGroup === 'ai' || isAIActive || showDndChatbot
                 ? 'bg-fuchsia-500/25 text-fuchsia-400 border border-fuchsia-500/60 shadow-[0_0_14px_rgba(217,70,239,0.35)]'
                 : 'text-zinc-400 hover:text-fuchsia-300 hover:bg-zinc-850 hover:border hover:border-zinc-700/60'
@@ -918,10 +916,10 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
             <button
               id="group-btn-handouts-journal"
               onClick={onOpenHandoutsJournal}
-              className={`w-11 h-11 rounded-xl flex flex-col items-center justify-center transition-all relative cursor-pointer ${
+              className={`w-11 h-10 rounded-xl flex flex-col items-center justify-center transition-all relative cursor-pointer ${
                 hasUnreadHandouts
-                  ? 'bg-amber-500/25 text-amber-300 border border-amber-500/60 shadow-[0_0_14px_rgba(245,158,11,0.4)]'
-                  : 'text-amber-300/90 hover:text-amber-200 bg-amber-950/30 hover:bg-amber-900/40 border border-amber-500/40 hover:border-amber-400/70'
+                  ? 'bg-amber-500/15 text-amber-300'
+                  : 'text-amber-300/90 hover:text-amber-200 hover:bg-zinc-850'
               }`}
               title="Handouts, Visual Props, Riddles, Quests & Shared Party Journal"
             >
@@ -942,10 +940,10 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
             <button
               id="group-btn-audio-jukebox"
               onClick={onOpenAudioMixer}
-              className={`w-11 h-11 rounded-xl flex flex-col items-center justify-center transition-all relative cursor-pointer ${
+              className={`w-11 h-10 rounded-xl flex flex-col items-center justify-center transition-all relative cursor-pointer ${
                 activeAudioLoopCount > 0
-                  ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-500/60 shadow-[0_0_14px_rgba(16,185,129,0.4)]'
-                  : 'text-emerald-300/90 hover:text-emerald-200 bg-emerald-950/30 hover:bg-emerald-900/40 border border-emerald-500/40 hover:border-emerald-400/70'
+                  ? 'bg-emerald-500/15 text-emerald-300'
+                  : 'text-emerald-300/90 hover:text-emerald-200 hover:bg-zinc-850'
               }`}
               title="Soundboard & Ambient Audio Mixer (Layered Loops, One-Click SFX & Spatial Map Audio)"
             >
@@ -964,7 +962,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
       </div>
 
       {/* Bottom Anchored Tools: Help, Bug Report, Bug Log / Notes, Settings */}
-      <div className="flex flex-col items-center py-2.5 border-t border-zinc-800/80 gap-2 shrink-0 w-full px-1.5 mt-auto bg-zinc-950/95">
+      <div className="flex flex-col items-center py-1.5 border-t border-zinc-800/80 gap-0.5 shrink-0 w-full px-1.5 mt-auto bg-zinc-950/95">
         {/* Switch to Player Mode (opens in a new tab so the DM session stays intact) */}
         <div className="relative group shrink-0">
           <button
@@ -975,7 +973,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
               url.searchParams.set('view', 'player');
               window.open(url.toString(), '_blank');
             }}
-            className="w-11 h-11 rounded-xl flex flex-col items-center justify-center transition-all text-sky-300 hover:text-sky-200 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 hover:border-sky-400/60 shadow-sm cursor-pointer active:scale-95"
+            className="w-11 h-10 rounded-xl flex flex-col items-center justify-center transition-all text-sky-300 hover:text-sky-200 hover:bg-zinc-850 cursor-pointer active:scale-95"
             title="Switch to Player Mode (opens the player view in a new tab; your DM session stays open)"
           >
             <Monitor className="w-5 h-5" />
@@ -990,7 +988,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
             onMouseEnter={(e) => handleMouseEnter('help', e)}
             onMouseLeave={handleMouseLeave}
             onClick={(e) => handleGroupClick('help', e)}
-            className={`w-11 h-11 rounded-xl flex flex-col items-center justify-center transition-all relative ${
+            className={`w-11 h-10 rounded-xl flex flex-col items-center justify-center transition-all relative ${
               activeGroup === 'help'
                 ? 'bg-sky-500/25 text-sky-400 border border-sky-500/60 shadow-[0_0_14px_rgba(56,189,248,0.35)]'
                 : 'text-zinc-400 hover:text-sky-300 hover:bg-zinc-850 hover:border hover:border-zinc-700/60'
@@ -1010,7 +1008,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
             <button
               id="btn-report-bug-sidebar"
               onClick={onOpenBugReport}
-              className="w-11 h-11 rounded-xl flex items-center justify-center transition-all text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 hover:border-rose-400/50 shadow-sm cursor-pointer active:scale-95"
+              className="w-11 h-10 rounded-xl flex items-center justify-center transition-all text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 hover:border-rose-400/50 shadow-sm cursor-pointer active:scale-95"
               title="Report a Bug & Issue Notes"
             >
               <Bug className="w-5 h-5" />
@@ -1024,7 +1022,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
             <button
               id="btn-sidebar-bug-manager"
               onClick={onOpenBugManager}
-              className="w-11 h-11 rounded-xl flex items-center justify-center transition-all text-zinc-400 hover:text-amber-300 bg-zinc-900/60 hover:bg-zinc-850 border border-zinc-800 hover:border-amber-500/40 shadow-sm cursor-pointer active:scale-95"
+              className="w-11 h-10 rounded-xl flex items-center justify-center transition-all text-zinc-400 hover:text-amber-300 hover:bg-zinc-850 cursor-pointer active:scale-95"
               title="Bug Log & DM Developer Notes"
             >
               <FileText className="w-5 h-5" />
@@ -1038,7 +1036,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
             <button
               id="btn-sidebar-settings"
               onClick={() => onOpenSettings()}
-              className="w-11 h-11 rounded-xl flex items-center justify-center transition-all text-zinc-400 hover:text-amber-400 bg-zinc-900/60 hover:bg-zinc-850 border border-zinc-800 hover:border-amber-500/40 shadow-sm cursor-pointer active:scale-95"
+              className="w-11 h-10 rounded-xl flex items-center justify-center transition-all text-zinc-400 hover:text-amber-400 bg-zinc-900/60 hover:bg-zinc-850 border border-zinc-800 hover:border-amber-500/40 shadow-sm cursor-pointer active:scale-95"
               title="Settings & Secrets Vault (D&D Beyond Cobalt, AI Keys & Credentials)"
             >
               <Settings className="w-5 h-5" />
