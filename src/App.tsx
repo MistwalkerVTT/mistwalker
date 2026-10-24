@@ -6068,8 +6068,38 @@ export default function App() {
       y: (pointer.y - stage.y()) / scale
     };
 
+    // Check if the click occurred on a room hotspot badge/label or token before starting hold-ping or stage drag
+    let clickedNode = e.target;
+    let isHotspotClick = false;
+    let isTokenClick = false;
+    while (clickedNode && clickedNode !== stage) {
+      const nodeName = typeof clickedNode.name === 'function' ? clickedNode.name() : '';
+      const nodeId = typeof clickedNode.id === 'function' ? clickedNode.id() : '';
+      if (
+        nodeName === 'room-hotspot' ||
+        nodeId === 'room-hotspots-group' ||
+        nodeId.startsWith('hotspot-') ||
+        nodeId.startsWith('label-')
+      ) {
+        isHotspotClick = true;
+        break;
+      }
+      if (nodeName === 'token') {
+        isTokenClick = true;
+      }
+      clickedNode = clickedNode.getParent?.();
+    }
+
+    if (isHotspotClick) {
+      cancelHoldPing();
+      if (stage && typeof stage.stopDrag === 'function') {
+        stage.stopDrag();
+      }
+      return;
+    }
+
     // Left-click hold map ping (Hold left-click for ~0.38s without dragging to ping; Alt+Hold pulls players' camera)
-    if (e.evt?.button === 0 && (tool === 'select' || tool === 'pan')) {
+    if (e.evt?.button === 0 && !isTokenClick && !hoveredZoneId && !isRoomDrawerOpen && (tool === 'select' || tool === 'pan')) {
       startHoldPing(
         point.x,
         point.y,
@@ -8010,7 +8040,7 @@ export default function App() {
                   });
                 }
               }}
-              draggable={(tool === 'pan' || isSpacePressed || isShiftPanActive) && !isDraggingToken}
+              draggable={(tool === 'pan' || isSpacePressed || isShiftPanActive) && !isDraggingToken && !hoveredZoneId && !isRoomDrawerOpen}
               onDragMove={(e) => {
                 if (e.target === stageRef.current && !isDraggingTokenRef.current) {
                   const newX = e.target.x();
@@ -8419,6 +8449,16 @@ export default function App() {
                   hoveredAnnotationId={hoveredZoneId}
                   onHoverAnnotation={setHoveredZoneId}
                   onSelectAnnotation={(anno) => {
+                    cancelHoldPing();
+                    if (stageRef.current && typeof stageRef.current.stopDrag === 'function') {
+                      stageRef.current.stopDrag();
+                    }
+                    try {
+                      const dd = (Konva as any)?.DD;
+                      if (dd?._dragElements?.size > 0) {
+                        dd._dragElements.forEach((elem: any) => elem?.node?.stopDrag?.());
+                      }
+                    } catch {}
                     if (anno.type === 'label') {
                       setEditingLabelAnnotation(anno);
                       setPendingLabelPosition(null);
@@ -8431,6 +8471,16 @@ export default function App() {
                     setIsRoomDrawerOpen(true);
                   }}
                   onOpenBriefing={(anno) => {
+                    cancelHoldPing();
+                    if (stageRef.current && typeof stageRef.current.stopDrag === 'function') {
+                      stageRef.current.stopDrag();
+                    }
+                    try {
+                      const dd = (Konva as any)?.DD;
+                      if (dd?._dragElements?.size > 0) {
+                        dd._dragElements.forEach((elem: any) => elem?.node?.stopDrag?.());
+                      }
+                    } catch {}
                     if (anno.type === 'label') {
                       setEditingLabelAnnotation(anno);
                       setPendingLabelPosition(null);
@@ -10719,6 +10769,7 @@ export default function App() {
           setSelectedRoomAnnotation(null);
           setIsZoneSidePanelOpen(false);
           setSelectedZoneForSidePanel(null);
+          setHoveredZoneId(null);
         }}
         onUpdateRoom={handleUpdateRoomAnnotation}
         onDeleteRoom={(roomId) => {

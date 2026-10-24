@@ -1390,6 +1390,131 @@ function isTrulyGuardType(name: string): boolean {
   return /^(guard|noble|commoner|gladiator|veteran|knight)(\s+\d+)?$/i.test(n);
 }
 
+const NON_CREATURE_STAT_OR_ITEM_WORDS = new Set([
+  // Ability scores, checks, saves, DCs, skills, and game mechanics
+  'strength', 'dexterity', 'constitution', 'intelligence', 'wisdom', 'charisma',
+  'str', 'dex', 'con', 'int', 'wis', 'cha',
+  'check', 'checks', 'save', 'saves', 'saving', 'throw', 'throws', 'dc', 'difficulty',
+  'skill', 'skills', 'passive', 'perception', 'investigation', 'acrobatics',
+  'athletics', 'arcana', 'deception', 'history', 'insight', 'intimidation',
+  'medicine', 'nature', 'performance', 'persuasion', 'religion', 'stealth',
+  'survival', 'sleight', 'initiative', 'proficiency', 'bonus', 'modifier',
+  'attack', 'attacks', 'damage', 'healing', 'hit', 'critical', 'roll', 'rolls',
+  // Weapons, armor, shields, and equipment
+  'longsword', 'longswords', 'shortsword', 'shortswords', 'greatsword', 'greatswords',
+  'broadsword', 'scimitar', 'scimitars', 'rapier', 'rapiers', 'dagger', 'daggers',
+  'handaxe', 'handaxes', 'battleaxe', 'battleaxes', 'greataxe', 'greataxes',
+  'mace', 'maces', 'morningstar', 'flail', 'flails', 'warhammer', 'warhammers',
+  'maul', 'mauls', 'club', 'clubs', 'greatclub', 'quarterstaff', 'spear', 'spears',
+  'javelin', 'javelins', 'trident', 'tridents', 'pike', 'pikes', 'halberd', 'halberds',
+  'glaive', 'glaives', 'lance', 'lances', 'whip', 'whips', 'shortbow', 'shortbows',
+  'longbow', 'longbows', 'bow', 'bows', 'crossbow', 'crossbows', 'sling', 'slings',
+  'dart', 'darts', 'arrow', 'arrows', 'bolt', 'bolts', 'weapon', 'weapons',
+  'blade', 'blades', 'sword', 'swords', 'axe', 'axes', 'hammer', 'hammers',
+  'shield', 'shields', 'armor', 'armour', 'mail', 'chainmail', 'plate', 'breastplate',
+  'leather', 'hide', 'splint', 'studded', 'buckler', 'helm', 'helmet', 'gauntlet',
+  'gauntlets', 'boots', 'cloak', 'robe', 'robes', 'ring', 'rings', 'amulet', 'necklace',
+  'pendant', 'brooch', 'wand', 'wands', 'rod', 'rods', 'staff', 'staves', 'scroll',
+  'scrolls', 'potion', 'potions', 'philter', 'elixir', 'vial', 'vials', 'flask', 'flasks',
+  'bottle', 'bottles', 'jug', 'pitcher', 'cup', 'goblet', 'chalice',
+  // Currency, gems, treasure, and room furnishings/architecture
+  'gem', 'gems', 'gemstone', 'gemstones', 'diamond', 'diamonds', 'ruby', 'rubies',
+  'emerald', 'emeralds', 'sapphire', 'sapphires', 'pearl', 'pearls', 'opal', 'jade',
+  'amber', 'topaz', 'amethyst', 'crystal', 'crystals', 'orb', 'orbs',
+  'coin', 'coins', 'gold', 'silver', 'electrum', 'copper', 'platinum',
+  'gp', 'sp', 'ep', 'cp', 'pp', 'treasure', 'loot', 'piece', 'pieces',
+  'chest', 'chests', 'box', 'boxes', 'coffin', 'coffins', 'sarcophagus',
+  'crate', 'crates', 'barrel', 'barrels', 'cask', 'keg', 'sack', 'sacks',
+  'bag', 'bags', 'pouch', 'pouches', 'backpack', 'book', 'books', 'tome', 'tomes',
+  'journal', 'paper', 'parchment', 'letter', 'letters', 'note', 'notes', 'map', 'maps',
+  'key', 'keys', 'lock', 'locks', 'padlock', 'manacles', 'chain', 'chains', 'rope', 'ropes',
+  'torch', 'torches', 'lantern', 'lanterns', 'candle', 'candles', 'chandelier', 'brazier',
+  'fireplace', 'hearth', 'mirror', 'mirrors', 'painting', 'paintings', 'portrait', 'portraits',
+  'tapestry', 'tapestries', 'rug', 'rugs', 'carpet', 'curtain', 'curtains', 'drape', 'drapes',
+  'bed', 'beds', 'cot', 'cots', 'mattress', 'table', 'tables', 'desk', 'desks',
+  'chair', 'chairs', 'stool', 'stools', 'bench', 'benches', 'throne', 'cabinet', 'wardrobe',
+  'shelf', 'shelves', 'bookshelf', 'rack', 'altar', 'shrine', 'pedestal', 'plinth',
+  'pillar', 'pillars', 'column', 'columns', 'statue', 'statues', 'bust', 'idol',
+  'fountain', 'well', 'basin', 'pool', 'tub', 'cauldron', 'kettle', 'pot', 'pots', 'pan',
+  'door', 'doors', 'gate', 'gates', 'portcullis', 'window', 'windows', 'shutter', 'shutters',
+  'wall', 'walls', 'floor', 'floors', 'ceiling', 'roof', 'stairs', 'staircase', 'steps',
+  'ladder', 'ladders', 'rung', 'rungs', 'ledge', 'balcony', 'gallery', 'hall', 'hallway',
+  'corridor', 'passage', 'tunnel', 'room', 'rooms', 'chamber', 'chambers', 'cell', 'cells',
+  'vault', 'crypt', 'tomb', 'grave', 'graves', 'alcove', 'niche', 'arch', 'archway',
+  'bridge', 'chasm', 'cliff', 'slope', 'shaft', 'chimney', 'vent', 'pipe', 'drain', 'sewer',
+  'trap', 'traps', 'pit', 'pits', 'lever', 'switch', 'button', 'tripwire',
+  // Units, time, measurements, and damage types
+  'foot', 'feet', 'ft', 'inch', 'inches', 'yard', 'yards', 'mile', 'miles',
+  'square', 'squares', 'hex', 'hexes', 'pound', 'pounds', 'lb', 'lbs', 'ounce', 'ounces',
+  'gallon', 'gallons', 'pint', 'pints', 'quart', 'quarts',
+  'second', 'seconds', 'round', 'rounds', 'turn', 'turns', 'minute', 'minutes',
+  'hour', 'hours', 'day', 'days', 'night', 'nights', 'week', 'weeks', 'month', 'months',
+  'year', 'years', 'century', 'centuries',
+  'level', 'levels', 'tier', 'tiers', 'point', 'points', 'hp', 'ac', 'cr', 'xp',
+  'slot', 'slots', 'charge', 'charges', 'use', 'uses', 'time', 'times', 'pair', 'pairs',
+  'set', 'sets', 'dozen', 'hundred', 'thousand', 'percent', 'degree', 'degrees',
+  'action', 'actions', 'reaction', 'reactions',
+  'bludgeoning', 'piercing', 'slashing', 'fire', 'cold', 'lightning', 'thunder',
+  'acid', 'poison', 'necrotic', 'radiant', 'force', 'psychic'
+]);
+
+/**
+ * Returns true if a candidate monster name or raw entry is actually a weapon, item,
+ * ability score check (e.g. "DC 20 Intelligence check"), modifier (e.g. "+1 longsword"),
+ * currency, measurement, or other non-creature game statistic.
+ */
+export function isNonCreatureStatOrItem(rawInput: string | any): boolean {
+  const rawStr = typeof rawInput === 'string'
+    ? rawInput.trim()
+    : String(rawInput?.name || '').trim();
+  if (!rawStr) return true;
+
+  // Allow genuine animated object creatures from SRD
+  const lowerFull = rawStr.toLowerCase().replace(/^\d+\s*x?\s+/i, '').trim();
+  if (
+    lowerFull === 'animated armor' ||
+    lowerFull === 'flying sword' ||
+    lowerFull === 'rug of smothering' ||
+    lowerFull === 'broom of animated attack' ||
+    lowerFull === 'crawling claw' ||
+    lowerFull === 'dancing sword'
+  ) {
+    return false;
+  }
+
+  // Reject "+1 longsword", "-2 penalty", "DC 20 ...", "AC 15 ...", "CR 2 ...", "HP 30 ..."
+  if (/^[+\-]\s*\d+/i.test(rawStr)) return true;
+  if (/^(?:dc|ac|cr|hp|pp|gp|sp|ep|cp|lvl|level|page|pg)\s*\d+/i.test(rawStr)) return true;
+
+  // Strip leading count ("1 ", "20x ", "two ", "+1 ")
+  const cleaned = rawStr
+    .replace(/^[+\-]?\s*\d+\s*x?\s+/i, '')
+    .replace(/^(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|a|an)\s+(?:x\s*)?/i, '')
+    .replace(/\(.*?\)/g, '')
+    .trim()
+    .toLowerCase();
+
+  if (!cleaned || /^\d+$/.test(cleaned)) return true;
+
+  // Check if the cleaned phrase or all/primary words are non-creature stats/items
+  if (NON_CREATURE_STAT_OR_ITEM_WORDS.has(cleaned)) return true;
+
+  const words = cleaned.split(/[\s\-_/]+/).filter(Boolean);
+  if (words.length === 0) return true;
+
+  // If the first word or last word is an ability score, check/save, weapon, or currency
+  if (words.every(w => NON_CREATURE_STAT_OR_ITEM_WORDS.has(w))) return true;
+  if (
+    words.some(w =>
+      /^(strength|dexterity|constitution|intelligence|wisdom|charisma|check|checks|saving|throw|throws|longsword|shortsword|greatsword|dagger|mace|handaxe|battleaxe|greataxe|warhammer|quarterstaff|crossbow|shortbow|longbow|scimitar|rapier|halberd|glaive|spear|javelin|trident|flail|morningstar|club|maul|whip|sling|potion|scroll|gp|sp|cp|ep|pp|feet|ft|hours?|minutes?|rounds?|turns?|days?|points?|damage)$/i.test(w)
+    )
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 /**
  * Resolves a monster string or name against all available monsters (with SRD fallbacks).
  * Returns a complete Monster object and quantity count.

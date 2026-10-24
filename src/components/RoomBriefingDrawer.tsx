@@ -31,7 +31,7 @@ import ReactMarkdown from 'react-markdown';
 import { RoomAnnotation, ChapterPdfDigest } from '../types';
 import { Monster } from '../types/monster';
 import { updateRoomAnnotation } from '../lib/updateRoomAnnotation';
-import { resolveMonster, isExactMonsterMatch, SRD_MONSTERS } from '../data/srdMonstersCatalog';
+import { resolveMonster, isExactMonsterMatch, isNonCreatureStatOrItem, SRD_MONSTERS } from '../data/srdMonstersCatalog';
 import { toast } from 'sonner';
 import { NARRATION_VOICES, audioNarration, useAudioNarration } from '../services/audioNarrationService';
 
@@ -349,7 +349,9 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
     let effectiveBoxedText = room.boxedText || '';
     let effectiveRoomName = rName;
     let effectivePdfSection = room.pdfSection || '';
-    let effectiveMonsters: any[] = (room.monsters && room.monsters.length > 0) ? room.monsters : [];
+    let effectiveMonsters: any[] = (room.monsters && room.monsters.length > 0)
+      ? room.monsters.filter((m: any) => !isNonCreatureStatOrItem(m))
+      : [];
 
     if (matchedDigestRoom) {
       if (!effectiveNotes && matchedDigestRoom.dmNotes) {
@@ -365,7 +367,7 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
         effectivePdfSection = matchedDigestRoom.sceneTitle || (chapterPdfDigest?.chapterTitle ? `${chapterPdfDigest.chapterTitle} - Room ${matchedDigestRoom.roomNumber}` : `Room ${matchedDigestRoom.roomNumber}`);
       }
       if (effectiveMonsters.length === 0 && matchedDigestRoom.monsters && matchedDigestRoom.monsters.length > 0) {
-        effectiveMonsters = matchedDigestRoom.monsters;
+        effectiveMonsters = matchedDigestRoom.monsters.filter((m: any) => !isNonCreatureStatOrItem(m));
       }
     } else {
       // Fallback default for Area V8
@@ -1046,11 +1048,11 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
                 // Resolve all candidates using resolveMonster
                 const resolvedItems: Array<{ monster: Monster; count: number }> = [];
 
-                // 1. Resolve rawCandidates
+                // 1. Resolve rawCandidates (filtering out non-creature items/stats like "+1 longsword" or "DC 20 Intelligence")
                 for (const raw of rawCandidates) {
-                  if (!raw) continue;
+                  if (!raw || isNonCreatureStatOrItem(raw)) continue;
                   const res = resolveMonster(raw, allAvailableMonsters);
-                  if (res?.monster?.name) {
+                  if (res?.monster?.name && !isNonCreatureStatOrItem(res.monster.name)) {
                     resolvedItems.push(res);
                   }
                 }
@@ -1064,7 +1066,9 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
 
                 if (resolvedItems.length === 0 && notesToSearch.trim()) {
                   // Sort monsters by name length descending so longer compound names match before substrings
-                  const sortedMonsters = [...allAvailableMonsters].sort((a, b) => b.name.length - a.name.length);
+                  const sortedMonsters = [...allAvailableMonsters]
+                    .filter(m => m?.name && !isNonCreatureStatOrItem(m.name) && m.source !== 'Encounter Notes')
+                    .sort((a, b) => b.name.length - a.name.length);
 
                   for (const m of sortedMonsters) {
                     if (hiddenMonsterNames.includes(m.name)) continue;
@@ -1088,7 +1092,8 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
                       prefixLookbehind = '(?<!(?:moonlight|royal|temple|honor|elite|castle|city|vampire|stand|standing|stands|on|off|body)\\s+)';
                     }
 
-                    const regex = new RegExp(`(?:(\\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\\s*(?:x\\s*)?)?\\b${prefixLookbehind}${patternCore}\\b`, 'i');
+                    // Ensure numbers preceded by '+', '-', 'DC', 'CR', 'AC', 'HP', 'd' (dice) are never treated as creature counts
+                    const regex = new RegExp(`(?:(?<!(?:\\b(?:dc|cr|ac|hp|level|lvl|page|pg|room|area|chapter)\\s*|[+\\-d]))\\b(\\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\\s*(?:x\\s*)?)?\\b${prefixLookbehind}${patternCore}\\b`, 'i');
                     const match = notesToSearch.match(regex);
 
                     if (match) {
@@ -1103,25 +1108,6 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
                       }
                       resolvedItems.push({ monster: m, count });
                       break; // Found primary matching monster in text
-                    }
-                  }
-
-                  // Also check for explicit creature count pattern in notes like "4 Moonlight Guardians" or "2 Moonlight Guardians"
-                  if (resolvedItems.length === 0) {
-                    const countCreatureRegex = /\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+(?:x\s*)?([A-Za-z]+(?:\s+[A-Za-z]+)?)\b/gi;
-                    let cMatch;
-                    while ((cMatch = countCreatureRegex.exec(notesToSearch)) !== null) {
-                      const candidateText = cMatch[0];
-                      const candidateMonsterName = cMatch[2].trim();
-                      // Ignore common non-creature nouns
-                      if (/^(doors?|chests?|feet|yards?|miles?|hours?|rounds?|turns?|levels?|points?|damage|gold|coins?|pieces?|boxes?|coffins?|torches?)$/i.test(candidateMonsterName)) {
-                        continue;
-                      }
-                      const res = resolveMonster(candidateText, allAvailableMonsters);
-                      if (res?.monster?.name && !hiddenMonsterNames.includes(res.monster.name)) {
-                        resolvedItems.push(res);
-                        break;
-                      }
                     }
                   }
                 }

@@ -68,7 +68,7 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
   if (visibleAnnotations.length === 0) return null;
 
   return (
-    <Group id="room-hotspots-group">
+    <Group id="room-hotspots-group" name="room-hotspot">
       {visibleAnnotations.map((anno) => {
         const isHovered = activeHoveredId === anno.id;
         const baseColor = anno.color || '#f59e0b'; // Default amber
@@ -105,11 +105,26 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
           centerPixelY = sumY / count;
         }
 
+        const handlePointerDown = (e: any) => {
+          e.cancelBubble = true;
+          if (e.evt) {
+            e.evt.stopPropagation();
+          }
+          const stage = e.target?.getStage?.();
+          if (stage && typeof stage.stopDrag === 'function') {
+            stage.stopDrag();
+          }
+        };
+
         const handleRightClick = (e: any) => {
           e.cancelBubble = true;
           if (e.evt) {
             e.evt.preventDefault();
             e.evt.stopPropagation();
+          }
+          const stage = e.target?.getStage?.();
+          if (stage && typeof stage.stopDrag === 'function') {
+            stage.stopDrag();
           }
           if (isPlayerView) return;
           if (campaignMode === 'creator') {
@@ -124,6 +139,10 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
           if (e.evt) {
             e.evt.preventDefault();
             e.evt.stopPropagation();
+          }
+          const stage = e.target?.getStage?.();
+          if (stage && typeof stage.stopDrag === 'function') {
+            stage.stopDrag();
           }
           if (isPlayerView) return;
           if (campaignMode === 'creator') {
@@ -150,9 +169,12 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
             <Group
               key={anno.id}
               id={`label-${anno.id}`}
+              name="room-hotspot"
               x={centerPixelX}
               y={centerPixelY}
               draggable={!isPlayerView && campaignMode === 'creator'}
+              onMouseDown={handlePointerDown}
+              onTouchStart={handlePointerDown}
               onDragEnd={(e) => {
                 if (isPlayerView || campaignMode !== 'creator') return;
                 const newPctX = Math.max(0, Math.min(100, (e.target.x() / mapW) * 100));
@@ -307,9 +329,12 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
 
             {/* Room Number Badge Button (e.g., "V8") - Direct hover target */}
             <Group
+              name="room-hotspot"
               x={centerPixelX}
               y={centerPixelY}
               listening={true}
+              onMouseDown={handlePointerDown}
+              onTouchStart={handlePointerDown}
               onClick={handleBadgeLeftClick}
               onTap={handleBadgeLeftClick}
               onContextMenu={handleRightClick}
