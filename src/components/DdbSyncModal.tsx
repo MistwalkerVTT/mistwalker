@@ -244,6 +244,9 @@ export const DdbSyncModal: React.FC<DdbSyncModalProps> = ({
         const fullChar: Character = {
           id: `char_ddb_${c.id}`,
           ddbCharacterId: String(c.id),
+          ddbCampaignId: selectedCampaignId || c.campaignId,
+          ddbCampaignTitle: campaignTitle || c.campaignTitle,
+          playerName: c.playerName || 'Player',
           name: c.name,
           race: c.race || 'Humanoid',
           classLevel: c.classLevel || 'Level 1',

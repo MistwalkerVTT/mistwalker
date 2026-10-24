@@ -12,7 +12,10 @@ import {
   Loader2,
   X,
   ArrowRight,
-  User
+  User,
+  Folder,
+  ChevronDown,
+  ChevronRight
 } from 'lucide-react';
 import { Character } from '../types/character';
 import {
@@ -22,6 +25,7 @@ import {
   getCharacterTokenUrl,
   isDdbMatch
 } from '../data/defaultCharacters';
+import { resolveCharacterCampaign, groupCharactersByCampaign } from '../data/ddbCampaignRegistry';
 import { isMonsterToken } from '../types';
 
 export interface PlayerCharacterChoiceItem {
@@ -36,6 +40,9 @@ export interface PlayerCharacterChoiceItem {
   speed: string;
   tokenId?: string;
   ddbCharacterId?: string;
+  ddbCampaignId?: string;
+  ddbCampaignTitle?: string;
+  playerName?: string;
   isOnMap: boolean;
   isClaimed: boolean;
 }
@@ -67,6 +74,8 @@ export const PlayerCharacterSelectModal: React.FC<PlayerCharacterSelectModalProp
   onPromptPrivacy
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCampaignFilter, setSelectedCampaignFilter] = useState<string>('ALL');
+  const [expandedCampaigns, setExpandedCampaigns] = useState<Record<string, boolean>>({});
   const [checkingCharId, setCheckingCharId] = useState<string | null>(null);
   const [privacyByDdbId, setPrivacyByDdbId] = useState<Record<string, boolean>>({});
 
@@ -102,6 +111,12 @@ export const PlayerCharacterSelectModal: React.FC<PlayerCharacterSelectModalProp
       }
 
       const avatarSrc = t.url || t.avatarUrl || getCharacterTokenUrl(canonicalName);
+      const campaignInfo = resolveCharacterCampaign({
+        id: t.id,
+        name: canonicalName,
+        ddbCharacterId: ddbId,
+        ddbUrl: (t as any).ddbUrl
+      });
 
       list.push({
         id: t.id,
@@ -115,6 +130,9 @@ export const PlayerCharacterSelectModal: React.FC<PlayerCharacterSelectModalProp
         ac: typeof t.ac === 'number' ? t.ac : (stats.ac ?? 14),
         speed: String((t as any).speed || stats.speed || '30 ft.'),
         ddbCharacterId: ddbId,
+        ddbCampaignId: campaignInfo.campaignId,
+        ddbCampaignTitle: campaignInfo.campaignTitle,
+        playerName: campaignInfo.playerName,
         isOnMap: true,
         isClaimed
       });
@@ -125,6 +143,15 @@ export const PlayerCharacterSelectModal: React.FC<PlayerCharacterSelectModalProp
     allCompendium.forEach((c) => {
       if (!c || !c.name) return;
       const ddbId = resolveTokenDdbCharacterId(c, compendiumCharacters);
+      const campaignInfo = resolveCharacterCampaign({
+        id: c.id,
+        name: c.name,
+        ddbCharacterId: ddbId,
+        ddbUrl: c.ddbUrl,
+        ddbCampaignId: c.ddbCampaignId,
+        ddbCampaignTitle: c.ddbCampaignTitle,
+        playerName: c.playerName
+      });
 
       const existing = list.find(item =>
         isDdbMatch(item.name, item.id, item.ddbCharacterId, ddbId || c.id, c.name)
@@ -132,6 +159,13 @@ export const PlayerCharacterSelectModal: React.FC<PlayerCharacterSelectModalProp
       if (existing) {
         if (!existing.ddbCharacterId && ddbId) {
           existing.ddbCharacterId = ddbId;
+        }
+        if (!existing.ddbCampaignId || existing.ddbCampaignId === 'unassigned') {
+          existing.ddbCampaignId = campaignInfo.campaignId;
+          existing.ddbCampaignTitle = campaignInfo.campaignTitle;
+        }
+        if (!existing.playerName && campaignInfo.playerName) {
+          existing.playerName = campaignInfo.playerName;
         }
         if (c.race && existing.race === 'Humanoid') existing.race = c.race;
         if (c.classLevel && existing.classLevel === 'Hero') existing.classLevel = c.classLevel;
@@ -156,6 +190,9 @@ export const PlayerCharacterSelectModal: React.FC<PlayerCharacterSelectModalProp
         ac: c.ac || 14,
         speed: c.speed || '30 ft.',
         ddbCharacterId: ddbId,
+        ddbCampaignId: campaignInfo.campaignId,
+        ddbCampaignTitle: campaignInfo.campaignTitle,
+        playerName: campaignInfo.playerName,
         isOnMap: false,
         isClaimed
       });
@@ -172,6 +209,10 @@ export const PlayerCharacterSelectModal: React.FC<PlayerCharacterSelectModalProp
       return a.name.localeCompare(b.name);
     });
   }, [tokens, compendiumCharacters, claimedTokenId]);
+
+  const campaignGroups = useMemo(() => {
+    return groupCharactersByCampaign(characterChoices);
+  }, [characterChoices]);
 
   // Automatically inspect D&D Beyond privacy status for all linked characters when modal opens
   useEffect(() => {
@@ -230,16 +271,28 @@ export const PlayerCharacterSelectModal: React.FC<PlayerCharacterSelectModalProp
     return characterChoices.filter(c => c.ddbCharacterId && privacyByDdbId[c.ddbCharacterId] === true);
   }, [characterChoices, privacyByDdbId]);
 
-  // Filter by search query
+  // Filter by search query and campaign filter
   const filteredChoices = useMemo(() => {
-    if (!searchQuery.trim()) return characterChoices;
     const q = searchQuery.toLowerCase().trim();
-    return characterChoices.filter(c =>
-      c.name.toLowerCase().includes(q) ||
-      c.classLevel.toLowerCase().includes(q) ||
-      c.race.toLowerCase().includes(q)
-    );
-  }, [characterChoices, searchQuery]);
+    return characterChoices.filter(c => {
+      if (selectedCampaignFilter === 'ON_MAP' && !c.isOnMap) return false;
+      if (selectedCampaignFilter !== 'ALL' && selectedCampaignFilter !== 'ON_MAP' && c.ddbCampaignId !== selectedCampaignFilter) {
+        return false;
+      }
+      if (!q) return true;
+      return (
+        c.name.toLowerCase().includes(q) ||
+        c.classLevel.toLowerCase().includes(q) ||
+        c.race.toLowerCase().includes(q) ||
+        (c.ddbCampaignTitle && c.ddbCampaignTitle.toLowerCase().includes(q)) ||
+        (c.playerName && c.playerName.toLowerCase().includes(q))
+      );
+    });
+  }, [characterChoices, searchQuery, selectedCampaignFilter]);
+
+  const filteredCampaignGroups = useMemo(() => {
+    return groupCharactersByCampaign(filteredChoices);
+  }, [filteredChoices]);
 
   if (!isOpen) return null;
 
@@ -310,25 +363,48 @@ export const PlayerCharacterSelectModal: React.FC<PlayerCharacterSelectModalProp
             </div>
           </div>
 
-          {/* Search bar */}
-          <div className="relative w-full sm:w-64">
-            <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search heroes by name or class..."
-              className="w-full bg-zinc-900 border border-zinc-800 focus:border-amber-500/60 rounded-xl pl-9 pr-8 py-2 text-xs font-mono text-zinc-200 placeholder:text-zinc-600 focus:outline-none"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
+          {/* Search bar & Campaign Dropdown */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+            {campaignGroups.length > 1 && (
+              <div className="relative flex items-center">
+                <Folder className="w-3.5 h-3.5 text-amber-400/80 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <select
+                  value={selectedCampaignFilter}
+                  onChange={e => setSelectedCampaignFilter(e.target.value)}
+                  className="w-full sm:w-56 bg-zinc-900 border border-zinc-800 hover:border-amber-500/40 focus:border-amber-500/60 rounded-xl pl-8 pr-3 py-2 text-xs font-mono text-zinc-200 focus:outline-none cursor-pointer"
+                >
+                  <option value="ALL">All Campaigns ({characterChoices.length})</option>
+                  {characterChoices.some(c => c.isOnMap) && (
+                    <option value="ON_MAP">On Map Now ({characterChoices.filter(c => c.isOnMap).length})</option>
+                  )}
+                  {campaignGroups.map(group => (
+                    <option key={group.campaignId} value={group.campaignId}>
+                      {group.campaignTitle} ({group.characters.length})
+                    </option>
+                  ))}
+                </select>
+              </div>
             )}
+
+            <div className="relative w-full sm:w-56">
+              <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Search heroes or player..."
+                className="w-full bg-zinc-900 border border-zinc-800 focus:border-amber-500/60 rounded-xl pl-9 pr-8 py-2 text-xs font-mono text-zinc-200 placeholder:text-zinc-600 focus:outline-none"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -371,156 +447,209 @@ export const PlayerCharacterSelectModal: React.FC<PlayerCharacterSelectModalProp
           </div>
         )}
 
-        {/* Character Card Grid */}
-        <div className="flex-1 overflow-y-auto py-4 pr-1 min-h-[280px]">
+        {/* Character Card Grid Grouped by Campaign */}
+        <div className="flex-1 overflow-y-auto py-4 pr-1 min-h-[280px] space-y-4">
           {filteredChoices.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-48 text-zinc-500 font-mono text-xs text-center">
               <User className="w-10 h-10 mb-2 text-zinc-600 opacity-60" />
               <span>No matching characters found.</span>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {filteredChoices.map((choice) => {
-                const isCheckingThis = checkingCharId === choice.id;
-                const isPrivateDdb = Boolean(choice.ddbCharacterId && privacyByDdbId[choice.ddbCharacterId] === true);
-                const isPublicDdb = Boolean(choice.ddbCharacterId && privacyByDdbId[choice.ddbCharacterId] === false);
+            filteredCampaignGroups.map((group) => {
+              const hasClaimedOrOnMap = group.characters.some(c => c.isClaimed || c.isOnMap);
+              const isPrimaryCampaign = group.campaignId === '6738033' || group.campaignId === '3290944' || hasClaimedOrOnMap;
+              const isExpanded =
+                selectedCampaignFilter !== 'ALL' ||
+                Boolean(searchQuery.trim()) ||
+                (expandedCampaigns[group.campaignId] ?? isPrimaryCampaign);
 
-                return (
-                  <div
-                    key={choice.id}
-                    onClick={() => !isCheckingThis && handleSelect(choice)}
-                    className={`group relative rounded-2xl p-4 border transition-all text-left flex flex-col justify-between cursor-pointer overflow-hidden transform hover:scale-[1.01] active:scale-[0.99] ${
-                      choice.isClaimed
-                        ? 'bg-emerald-950/40 border-emerald-500/70 shadow-lg shadow-emerald-950/40 ring-1 ring-emerald-500/30'
-                        : isPrivateDdb
-                        ? 'bg-zinc-900/90 hover:bg-zinc-850 border-amber-500/40 hover:border-amber-400 shadow-md'
-                        : 'bg-zinc-900/80 hover:bg-zinc-850 border-zinc-800 hover:border-amber-500/50 shadow-md'
+              return (
+                <div key={group.campaignId} className="rounded-2xl border border-zinc-800/80 bg-zinc-900/30 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setExpandedCampaigns(prev => ({
+                        ...prev,
+                        [group.campaignId]: !isExpanded
+                      }))
+                    }
+                    className={`w-full flex items-center justify-between px-4 py-2.5 text-left transition-colors cursor-pointer ${
+                      isPrimaryCampaign
+                        ? 'bg-amber-500/10 hover:bg-amber-500/15 border-b border-amber-500/20 text-amber-300'
+                        : 'bg-zinc-900/70 hover:bg-zinc-900 border-b border-zinc-800/70 text-zinc-300'
                     }`}
                   >
-                    {/* Top Row: Avatar + Name + Class */}
-                    <div>
-                      <div className="flex items-start gap-3">
-                        <div className="relative shrink-0">
-                          <div className={`w-12 h-12 rounded-xl overflow-hidden bg-zinc-800 border flex items-center justify-center ${
-                            choice.isClaimed
-                              ? 'border-emerald-400'
-                              : isPrivateDdb
-                              ? 'border-amber-500/60'
-                              : 'border-zinc-700 group-hover:border-amber-500/50'
-                          }`}>
-                            {choice.avatarUrl ? (
-                              <img src={choice.avatarUrl} alt={choice.name} className="w-full h-full object-cover" />
-                            ) : (
-                              <User className="w-6 h-6 text-zinc-500" />
-                            )}
-                          </div>
-                          {choice.isClaimed ? (
-                            <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-md bg-emerald-500 text-zinc-950 flex items-center justify-center font-bold shadow">
-                              <Check className="w-3.5 h-3.5 stroke-[3]" />
-                            </div>
-                          ) : isPrivateDdb ? (
-                            <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-md bg-amber-500 text-zinc-950 flex items-center justify-center font-bold shadow" title="Private Profile on D&D Beyond">
-                              <Lock className="w-3 h-3 stroke-[2.5]" />
-                            </div>
-                          ) : null}
-                        </div>
-
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5">
-                            <h3 className="text-sm font-bold text-white font-mono truncate group-hover:text-amber-300">
-                              {choice.name}
-                            </h3>
-                          </div>
-                          <div className="text-[11px] font-mono text-zinc-400 truncate mt-0.5">
-                            {[choice.race, choice.classLevel].filter(Boolean).join(' • ')}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Stat Badges: HP & AC & Speed */}
-                      <div className="flex items-center gap-2 mt-3 pt-2.5 border-t border-zinc-800/80 text-[11px] font-mono">
-                        <div className="flex items-center gap-1 text-emerald-400">
-                          <Heart className="w-3 h-3 text-emerald-400 shrink-0" />
-                          <span>{choice.currentHp}/{choice.maxHp} HP</span>
-                        </div>
-                        <span className="text-zinc-600">•</span>
-                        <div className="flex items-center gap-1 text-amber-400">
-                          <Shield className="w-3 h-3 text-amber-400 shrink-0" />
-                          <span>AC {choice.ac}</span>
-                        </div>
-                        <span className="text-zinc-600">•</span>
-                        <div className="text-zinc-400">
-                          <span>{choice.speed}</span>
-                        </div>
-                      </div>
+                    <div className="flex items-center gap-2 min-w-0">
+                      {isExpanded ? (
+                        <ChevronDown className="w-4 h-4 shrink-0 text-amber-400" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4 shrink-0 text-zinc-500" />
+                      )}
+                      <Folder className={`w-4 h-4 shrink-0 ${isPrimaryCampaign ? 'text-amber-400' : 'text-zinc-500'}`} />
+                      <span className="text-xs font-mono font-bold truncate">{group.campaignTitle}</span>
+                      {hasClaimedOrOnMap && (
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-400">
+                          Active Party
+                        </span>
+                      )}
                     </div>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-lg bg-zinc-950/80 border border-zinc-800 text-zinc-400 shrink-0 ml-2">
+                      {group.characters.length} {group.characters.length === 1 ? 'Hero' : 'Heroes'}
+                    </span>
+                  </button>
 
-                    {/* Bottom Row: Source & D&D Beyond Privacy Tag + Action Button */}
-                    <div className="mt-3 pt-2 border-t border-zinc-800/60 flex items-center justify-between gap-1">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        {choice.ddbCharacterId ? (
-                          isPrivateDdb ? (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/40 text-amber-300 text-[10px] font-mono font-bold">
-                              <Lock className="w-2.5 h-2.5 text-amber-400" />
-                              Private • Make Public
-                            </span>
-                          ) : isPublicDdb ? (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-mono font-bold">
-                              <Globe className="w-2.5 h-2.5" />
-                              DDB Public
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-500/10 border border-red-500/30 text-red-400 text-[10px] font-mono font-bold">
-                              <Sparkles className="w-2.5 h-2.5" />
-                              D&D Beyond
-                            </span>
-                          )
-                        ) : (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-400 text-[10px] font-mono">
-                            Local Sheet
-                          </span>
-                        )}
+                  {isExpanded && (
+                    <div className="p-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {group.characters.map((choice) => {
+                        const isCheckingThis = checkingCharId === choice.id;
+                        const isPrivateDdb = Boolean(choice.ddbCharacterId && privacyByDdbId[choice.ddbCharacterId] === true);
+                        const isPublicDdb = Boolean(choice.ddbCharacterId && privacyByDdbId[choice.ddbCharacterId] === false);
 
-                        {choice.isOnMap ? (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-mono">
-                            On Map
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-500 text-[10px] font-mono">
-                            Compendium
-                          </span>
-                        )}
-                      </div>
+                        return (
+                          <div
+                            key={choice.id}
+                            onClick={() => !isCheckingThis && handleSelect(choice)}
+                            className={`group relative rounded-2xl p-4 border transition-all text-left flex flex-col justify-between cursor-pointer overflow-hidden transform hover:scale-[1.01] active:scale-[0.99] ${
+                              choice.isClaimed
+                                ? 'bg-emerald-950/40 border-emerald-500/70 shadow-lg shadow-emerald-950/40 ring-1 ring-emerald-500/30'
+                                : isPrivateDdb
+                                ? 'bg-zinc-900/90 hover:bg-zinc-850 border-amber-500/40 hover:border-amber-400 shadow-md'
+                                : 'bg-zinc-900/80 hover:bg-zinc-850 border-zinc-800 hover:border-amber-500/50 shadow-md'
+                            }`}
+                          >
+                            {/* Top Row: Avatar + Name + Class */}
+                            <div>
+                              <div className="flex items-start gap-3">
+                                <div className="relative shrink-0">
+                                  <div className={`w-12 h-12 rounded-xl overflow-hidden bg-zinc-800 border flex items-center justify-center ${
+                                    choice.isClaimed
+                                      ? 'border-emerald-400'
+                                      : isPrivateDdb
+                                      ? 'border-amber-500/60'
+                                      : 'border-zinc-700 group-hover:border-amber-500/50'
+                                  }`}>
+                                    {choice.avatarUrl ? (
+                                      <img src={choice.avatarUrl} alt={choice.name} className="w-full h-full object-cover" />
+                                    ) : (
+                                      <User className="w-6 h-6 text-zinc-500" />
+                                    )}
+                                  </div>
+                                  {choice.isClaimed ? (
+                                    <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-md bg-emerald-500 text-zinc-950 flex items-center justify-center font-bold shadow">
+                                      <Check className="w-3.5 h-3.5 stroke-[3]" />
+                                    </div>
+                                  ) : isPrivateDdb ? (
+                                    <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-md bg-amber-500 text-zinc-950 flex items-center justify-center font-bold shadow" title="Private Profile on D&D Beyond">
+                                      <Lock className="w-3 h-3 stroke-[2.5]" />
+                                    </div>
+                                  ) : null}
+                                </div>
 
-                      {/* Button / Claim Action */}
-                      <div className="shrink-0">
-                        {isCheckingThis ? (
-                          <div className="flex items-center gap-1.5 text-xs text-amber-400 font-mono">
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            <span>Verifying...</span>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-1.5">
+                                    <h3 className="text-sm font-bold text-white font-mono truncate group-hover:text-amber-300">
+                                      {choice.name}
+                                    </h3>
+                                  </div>
+                                  <div className="text-[11px] font-mono text-zinc-400 truncate mt-0.5">
+                                    {[choice.race, choice.classLevel].filter(Boolean).join(' • ')}
+                                  </div>
+                                  {choice.playerName && (
+                                    <div className="text-[10px] font-mono text-zinc-500 truncate mt-0.5">
+                                      Player: {choice.playerName}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Stat Badges: HP & AC & Speed */}
+                              <div className="flex items-center gap-2 mt-3 pt-2.5 border-t border-zinc-800/80 text-[11px] font-mono">
+                                <div className="flex items-center gap-1 text-emerald-400">
+                                  <Heart className="w-3 h-3 text-emerald-400 shrink-0" />
+                                  <span>{choice.currentHp}/{choice.maxHp} HP</span>
+                                </div>
+                                <span className="text-zinc-600">•</span>
+                                <div className="flex items-center gap-1 text-amber-400">
+                                  <Shield className="w-3 h-3 text-amber-400 shrink-0" />
+                                  <span>AC {choice.ac}</span>
+                                </div>
+                                <span className="text-zinc-600">•</span>
+                                <div className="text-zinc-400">
+                                  <span>{choice.speed}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Bottom Row: Source & D&D Beyond Privacy Tag + Action Button */}
+                            <div className="mt-3 pt-2 border-t border-zinc-800/60 flex items-center justify-between gap-1">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {choice.ddbCharacterId ? (
+                                  isPrivateDdb ? (
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/40 text-amber-300 text-[10px] font-mono font-bold">
+                                      <Lock className="w-2.5 h-2.5 text-amber-400" />
+                                      Private • Make Public
+                                    </span>
+                                  ) : isPublicDdb ? (
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-mono font-bold">
+                                      <Globe className="w-2.5 h-2.5" />
+                                      DDB Public
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-500/10 border border-red-500/30 text-red-400 text-[10px] font-mono font-bold">
+                                      <Sparkles className="w-2.5 h-2.5" />
+                                      D&D Beyond
+                                    </span>
+                                  )
+                                ) : (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-400 text-[10px] font-mono">
+                                    Local Sheet
+                                  </span>
+                                )}
+
+                                {choice.isOnMap ? (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-mono">
+                                    On Map
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-500 text-[10px] font-mono">
+                                    Compendium
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Button / Claim Action */}
+                              <div className="shrink-0">
+                                {isCheckingThis ? (
+                                  <div className="flex items-center gap-1.5 text-xs text-amber-400 font-mono">
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    <span>Verifying...</span>
+                                  </div>
+                                ) : choice.isClaimed ? (
+                                  <span className="text-xs font-mono font-bold text-emerald-400 flex items-center gap-1">
+                                    <span>Claimed</span>
+                                    <Check className="w-3.5 h-3.5" />
+                                  </span>
+                                ) : isPrivateDdb ? (
+                                  <span className="text-xs font-mono font-bold text-amber-400 group-hover:text-amber-300 flex items-center gap-1">
+                                    <span>Unlock</span>
+                                    <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                                  </span>
+                                ) : (
+                                  <span className="text-xs font-mono font-bold text-amber-400 group-hover:text-amber-300 flex items-center gap-1">
+                                    <span>Play</span>
+                                    <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                           </div>
-                        ) : choice.isClaimed ? (
-                          <span className="text-xs font-mono font-bold text-emerald-400 flex items-center gap-1">
-                            <span>Claimed</span>
-                            <Check className="w-3.5 h-3.5" />
-                          </span>
-                        ) : isPrivateDdb ? (
-                          <span className="text-xs font-mono font-bold text-amber-400 group-hover:text-amber-300 flex items-center gap-1">
-                            <span>Unlock</span>
-                            <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-                          </span>
-                        ) : (
-                          <span className="text-xs font-mono font-bold text-amber-400 group-hover:text-amber-300 flex items-center gap-1">
-                            <span>Play</span>
-                            <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-                          </span>
-                        )}
-                      </div>
+                        );
+                      })}
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  )}
+                </div>
+              );
+            })
           )}
         </div>
 

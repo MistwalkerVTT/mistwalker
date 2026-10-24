@@ -33,10 +33,12 @@ import {
   PawPrint,
   User,
   GripHorizontal,
-  Lock
+  Lock,
+  Folder
 } from 'lucide-react';
 import { WildShapeModal } from './WildShapeModal';
 import { WildShapeBeastForm, ActiveWildShapeState, GAIAH_WILD_SHAPE_FORMS } from '../types/wildShape';
+import { resolveCharacterCampaign, groupCharactersByCampaign } from '../data/ddbCampaignRegistry';
 import { toast } from 'sonner';
 import { Character } from '../types/character';
 import { Monster } from '../types/monster';
@@ -1299,11 +1301,30 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       const key = c.name.toLowerCase().trim();
       if (!seen.has(key)) {
         seen.add(key);
-        merged.push(c);
+        const campaignInfo = resolveCharacterCampaign(c);
+        merged.push({
+          ...c,
+          ddbCampaignId: c.ddbCampaignId || campaignInfo.campaignId,
+          ddbCampaignTitle: c.ddbCampaignTitle || campaignInfo.campaignTitle,
+          playerName: c.playerName || campaignInfo.playerName
+        });
       }
     });
-    return merged;
+    return merged.sort((a, b) => {
+      const isPrimaryA = a.ddbCampaignId === '6738033' || a.ddbCampaignId === '3290944';
+      const isPrimaryB = b.ddbCampaignId === '6738033' || b.ddbCampaignId === '3290944';
+      if (isPrimaryA && !isPrimaryB) return -1;
+      if (!isPrimaryA && isPrimaryB) return 1;
+      return a.name.localeCompare(b.name);
+    });
   }, [compendiumCharacters]);
+
+  const arenaCampaignGroups = useMemo(() => {
+    return groupCharactersByCampaign(heroPool);
+  }, [heroPool]);
+
+  const [goldCampaignFilter, setGoldCampaignFilter] = useState<string>('ALL');
+  const [crimsonCampaignFilter, setCrimsonCampaignFilter] = useState<string>('ALL');
 
   const monsterPool = useMemo<Monster[]>(() => {
     const disabledSet = new Set(arenaConfig.disabledMonsterIds || []);
@@ -3611,7 +3632,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
             {/* Left Side: Team Gold (Player Challengers) */}
             <div className="lg:col-span-6 bg-zinc-900/75 border border-amber-500/30 rounded-3xl p-4 sm:p-5 space-y-3.5">
-              <div className="flex items-center justify-between border-b border-zinc-800 pb-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-2.5">
                 <div className="flex items-center gap-2">
                   <Shield className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400 shrink-0" />
                   <div>
@@ -3623,15 +3644,36 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                     </p>
                   </div>
                 </div>
-                {lobbyPlayers.length > 0 && (
-                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[10px] font-mono shrink-0">
-                    {lobbyPlayers.length} Online
-                  </span>
-                )}
+                <div className="flex items-center gap-2">
+                  {arenaCampaignGroups.length > 1 && (
+                    <div className="relative flex items-center">
+                      <Folder className="w-3 h-3 text-amber-400/80 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <select
+                        value={goldCampaignFilter}
+                        onChange={(e) => setGoldCampaignFilter(e.target.value)}
+                        className="bg-zinc-950 border border-zinc-800 hover:border-amber-500/40 rounded-xl pl-7 pr-2.5 py-1 text-[11px] font-mono text-zinc-200 focus:outline-none cursor-pointer max-w-[180px]"
+                      >
+                        <option value="ALL">All Campaigns ({heroPool.length})</option>
+                        {arenaCampaignGroups.map((g) => (
+                          <option key={g.campaignId} value={g.campaignId}>
+                            {g.campaignTitle} ({g.characters.length})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  {lobbyPlayers.length > 0 && (
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[10px] font-mono shrink-0">
+                      {lobbyPlayers.length} Online
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-60 sm:max-h-72 overflow-y-auto pr-1">
-                {heroPool.map((hero) => {
+                {heroPool
+                  .filter((h) => goldCampaignFilter === 'ALL' || h.ddbCampaignId === goldCampaignFilter || goldHeroIds.includes(h.id))
+                  .map((hero) => {
                   const isSelected = goldHeroIds.includes(hero.id);
                   const maxAllowed = matchMode === '1v1' ? 1 : matchMode === '2v2' ? 2 : 4;
                   const avatar = hero.avatarUrl || getCharacterTokenUrl(hero.name);
@@ -3668,8 +3710,15 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                         <div className="text-[10px] text-zinc-400 truncate">
                           {hero.race} • {hero.classLevel}
                         </div>
-                        <div className="text-[10px] font-mono text-emerald-400 mt-0.5">
-                          HP {hero.maxHp || hero.hp} • AC {hero.ac}
+                        <div className="flex items-center justify-between gap-1 mt-0.5">
+                          <span className="text-[10px] font-mono text-emerald-400">
+                            HP {hero.maxHp || hero.hp} • AC {hero.ac}
+                          </span>
+                          {hero.ddbCampaignTitle && (
+                            <span className="text-[9px] font-mono text-zinc-500 truncate max-w-[95px]" title={hero.ddbCampaignTitle}>
+                              {hero.ddbCampaignTitle}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </button>
@@ -3695,22 +3744,44 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                       </div>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => setCrimsonIsAI((v) => !v)}
-                      className={`px-2.5 py-1.5 rounded-xl text-[11px] font-mono font-bold border flex items-center gap-1.5 cursor-pointer ${
-                        crimsonIsAI
-                          ? 'bg-purple-500/20 border-purple-500/50 text-purple-300'
-                          : 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
-                      }`}
-                    >
-                      {crimsonIsAI ? <Bot className="w-3.5 h-3.5" /> : <Users className="w-3.5 h-3.5" />}
-                      <span>{crimsonIsAI ? 'AI Controlled' : 'Player 2'}</span>
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {arenaCampaignGroups.length > 1 && (
+                        <div className="relative flex items-center">
+                          <Folder className="w-3 h-3 text-rose-400/80 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          <select
+                            value={crimsonCampaignFilter}
+                            onChange={(e) => setCrimsonCampaignFilter(e.target.value)}
+                            className="bg-zinc-950 border border-zinc-800 hover:border-rose-500/40 rounded-xl pl-7 pr-2.5 py-1 text-[11px] font-mono text-zinc-200 focus:outline-none cursor-pointer max-w-[165px]"
+                          >
+                            <option value="ALL">All Campaigns ({heroPool.length})</option>
+                            {arenaCampaignGroups.map((g) => (
+                              <option key={g.campaignId} value={g.campaignId}>
+                                {g.campaignTitle} ({g.characters.length})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => setCrimsonIsAI((v) => !v)}
+                        className={`px-2.5 py-1.5 rounded-xl text-[11px] font-mono font-bold border flex items-center gap-1.5 cursor-pointer ${
+                          crimsonIsAI
+                            ? 'bg-purple-500/20 border-purple-500/50 text-purple-300'
+                            : 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
+                        }`}
+                      >
+                        {crimsonIsAI ? <Bot className="w-3.5 h-3.5" /> : <Users className="w-3.5 h-3.5" />}
+                        <span>{crimsonIsAI ? 'AI Controlled' : 'Player 2'}</span>
+                      </button>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-60 sm:max-h-72 overflow-y-auto pr-1">
-                    {heroPool.map((hero) => {
+                    {heroPool
+                      .filter((h) => crimsonCampaignFilter === 'ALL' || h.ddbCampaignId === crimsonCampaignFilter || crimsonHeroIds.includes(h.id))
+                      .map((hero) => {
                       const isSelected = crimsonHeroIds.includes(hero.id);
                       const maxAllowed = matchMode === '1v1' ? 1 : 2;
                       const avatar = hero.avatarUrl || getCharacterTokenUrl(hero.name);
@@ -3747,8 +3818,15 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                             <div className="text-[10px] text-zinc-400 truncate">
                               {hero.race} • {hero.classLevel}
                             </div>
-                            <div className="text-[10px] font-mono text-rose-300 mt-0.5">
-                              HP {hero.maxHp || hero.hp} • AC {hero.ac}
+                            <div className="flex items-center justify-between gap-1 mt-0.5">
+                              <span className="text-[10px] font-mono text-rose-300">
+                                HP {hero.maxHp || hero.hp} • AC {hero.ac}
+                              </span>
+                              {hero.ddbCampaignTitle && (
+                                <span className="text-[9px] font-mono text-zinc-500 truncate max-w-[95px]" title={hero.ddbCampaignTitle}>
+                                  {hero.ddbCampaignTitle}
+                                </span>
+                              )}
                             </div>
                           </div>
                         </button>

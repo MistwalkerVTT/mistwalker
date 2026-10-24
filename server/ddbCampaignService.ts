@@ -19,6 +19,8 @@ export interface DdbCampaignCharacter {
   race: string;
   classLevel: string;
   playerName: string;
+  campaignId?: string;
+  campaignTitle?: string;
   avatarUrl: string;
   currentHp: number;
   maxHp: number;
@@ -37,6 +39,15 @@ export interface DdbCampaignCharacter {
   isPrivate: boolean;
   readonlyUrl: string;
   lastUpdated: number;
+}
+
+export function cleanDdbCampaignTitle(rawTitle: string, fallbackId?: string): string {
+  if (!rawTitle) return fallbackId ? `Campaign ${fallbackId}` : 'D&D Beyond Campaign';
+  return decodeDdbHtmlEntities(rawTitle)
+    .replace(/<[^>]+>/g, '')
+    .replace(/\s*-\s*Campaigns\s*-\s*D&D Beyond.*$/i, '')
+    .replace(/\s*-\s*D&D Beyond.*$/i, '')
+    .trim() || (fallbackId ? `Campaign ${fallbackId}` : 'D&D Beyond Campaign');
 }
 
 // Fetch all campaigns accessible to the user on D&D Beyond
@@ -66,9 +77,9 @@ export async function fetchDdbCampaigns(): Promise<DdbCampaignSummary[]> {
       if (idMatch) {
         campaigns.push({
           id: idMatch[1],
-          title: titleMatch ? titleMatch[1].trim() : `Campaign ${idMatch[1]}`,
+          title: titleMatch ? cleanDdbCampaignTitle(titleMatch[1], idMatch[1]) : `Campaign ${idMatch[1]}`,
           characterCount: countMatch ? parseInt(countMatch[1], 10) : 0,
-          dm: dmMatch ? dmMatch[1].trim() : 'DM'
+          dm: dmMatch ? decodeDdbHtmlEntities(dmMatch[1].trim()) : 'DM'
         });
       }
     }
@@ -493,7 +504,7 @@ export async function fetchDdbCampaignCharacters(campaignId: string): Promise<{ 
 
     const titleMatch = html.match(/<h1[^>]*class="[^"]*page-title[^"]*"[^>]*>([\s\S]*?)<\/h1>/i) ||
                        html.match(/<title>([^<]+)<\/title>/i);
-    const campaignTitle = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, '').trim() : `Campaign ${campaignId}`;
+    const campaignTitle = titleMatch ? cleanDdbCampaignTitle(titleMatch[1], campaignId) : `Campaign ${campaignId}`;
 
     const re = /<li[^>]*class="[^"]*ddb-campaigns-character-card[^"]*"[^>]*>([\s\S]*?)<\/li>/gi;
     let match;
@@ -535,6 +546,8 @@ export async function fetchDdbCampaignCharacters(campaignId: string): Promise<{ 
           race: liveData.race || 'Character',
           classLevel: liveData.classLevel || card.meta,
           playerName: card.playerName,
+          campaignId,
+          campaignTitle,
           avatarUrl: liveData.avatarUrl || '',
           currentHp: liveData.currentHp ?? 20,
           maxHp: liveData.maxHp ?? 20,
@@ -555,6 +568,8 @@ export async function fetchDdbCampaignCharacters(campaignId: string): Promise<{ 
           race: 'Character',
           classLevel: card.meta,
           playerName: card.playerName,
+          campaignId,
+          campaignTitle,
           avatarUrl: '',
           currentHp: 20,
           maxHp: 20,
@@ -2136,7 +2151,8 @@ export class DdbHpSyncDaemon {
   private timer: NodeJS.Timeout | null = null;
   private monitoredCharacters: Map<string, ActiveHpState> = new Map();
   private cachedCharacters: DdbCampaignCharacter[] = [];
-  private activeCampaignId: string | null = null;
+  private cachedCampaigns: DdbCampaignSummary[] = [];
+  private activeCampaignId: string | null = '6738033';
   private isPolling = false;
 
   private constructor() {}
@@ -2171,10 +2187,29 @@ export class DdbHpSyncDaemon {
     try {
       DdbGameLogDaemon.getInstance().addCampaign(campaignId);
       const data = await fetchDdbCampaignCharacters(campaignId);
+      if (data.campaignTitle) {
+        const existingCampIdx = this.cachedCampaigns.findIndex(cp => cp.id === campaignId);
+        if (existingCampIdx === -1) {
+          this.cachedCampaigns.push({
+            id: campaignId,
+            title: data.campaignTitle,
+            characterCount: data.characters.length,
+            dm: 'DM'
+          });
+        } else {
+          this.cachedCampaigns[existingCampIdx].title = data.campaignTitle;
+          this.cachedCampaigns[existingCampIdx].characterCount = data.characters.length;
+        }
+      }
       for (const c of data.characters) {
         const existingIdx = this.cachedCharacters.findIndex(x => x.id === c.id);
         if (existingIdx !== -1) {
-          this.cachedCharacters[existingIdx] = c;
+          this.cachedCharacters[existingIdx] = {
+            ...this.cachedCharacters[existingIdx],
+            ...c,
+            campaignId: c.campaignId || this.cachedCharacters[existingIdx].campaignId,
+            campaignTitle: c.campaignTitle || this.cachedCharacters[existingIdx].campaignTitle
+          };
         } else {
           this.cachedCharacters.push(c);
         }
@@ -2197,14 +2232,19 @@ export class DdbHpSyncDaemon {
   }
 
   public async refreshAllCampaigns() {
-    const campaignIds = new Set<string>(['3290944', '6738033']);
+    const campaignIds = new Set<string>(['6738033', '3290944']);
     if (process.env.DND_BEYOND_CAMPAIGN_ID) {
       process.env.DND_BEYOND_CAMPAIGN_ID.split(',').map(s => s.trim()).filter(Boolean).forEach(id => campaignIds.add(id));
     }
     try {
       const campaigns = await fetchDdbCampaigns();
       for (const c of campaigns) {
-        if (c.id) campaignIds.add(c.id);
+        if (c.id) {
+          campaignIds.add(c.id);
+          const idx = this.cachedCampaigns.findIndex(cp => cp.id === c.id);
+          if (idx === -1) this.cachedCampaigns.push(c);
+          else this.cachedCampaigns[idx] = c;
+        }
       }
     } catch (err: any) {
       console.warn('[DdbHpSyncDaemon] Error refreshing campaigns list:', err.message);
@@ -2216,13 +2256,15 @@ export class DdbHpSyncDaemon {
 
     if (this.io && this.cachedCharacters.length > 0) {
       this.io.emit('DDB_CAMPAIGN_SYNC_INIT', {
-        campaignId: Array.from(campaignIds)[0],
+        campaignId: this.activeCampaignId || Array.from(campaignIds)[0],
+        campaigns: this.cachedCampaigns,
         characters: this.cachedCharacters
       });
     }
 
     return {
       campaignIds: Array.from(campaignIds),
+      campaigns: this.cachedCampaigns,
       totalCharacters: this.cachedCharacters.length,
       characters: this.cachedCharacters
     };
@@ -2242,7 +2284,12 @@ export class DdbHpSyncDaemon {
     for (const c of data.characters) {
       const existingIdx = this.cachedCharacters.findIndex(x => x.id === c.id);
       if (existingIdx !== -1) {
-        this.cachedCharacters[existingIdx] = c;
+        this.cachedCharacters[existingIdx] = {
+          ...this.cachedCharacters[existingIdx],
+          ...c,
+          campaignId: c.campaignId || this.cachedCharacters[existingIdx].campaignId,
+          campaignTitle: c.campaignTitle || this.cachedCharacters[existingIdx].campaignTitle
+        };
       } else {
         this.cachedCharacters.push(c);
       }
@@ -2261,6 +2308,7 @@ export class DdbHpSyncDaemon {
     if (this.io) {
       this.io.emit('DDB_CAMPAIGN_SYNC_INIT', {
         campaignId,
+        campaigns: this.cachedCampaigns,
         characters: this.cachedCharacters
       });
     }
@@ -2269,6 +2317,7 @@ export class DdbHpSyncDaemon {
     return {
       campaignId,
       campaignTitle: data.campaignTitle,
+      campaigns: this.cachedCampaigns,
       monitoredCount: this.monitoredCharacters.size,
       characters: this.cachedCharacters
     };
@@ -2340,14 +2389,19 @@ export class DdbHpSyncDaemon {
 
   private async startBackgroundMonitoring() {
     // 1. Auto-discover user campaigns
-    const campaignIds = new Set<string>(['3290944', '6738033']);
+    const campaignIds = new Set<string>(['6738033', '3290944']);
     if (process.env.DND_BEYOND_CAMPAIGN_ID) {
       process.env.DND_BEYOND_CAMPAIGN_ID.split(',').map(s => s.trim()).filter(Boolean).forEach(id => campaignIds.add(id));
     }
     try {
       const campaigns = await fetchDdbCampaigns();
       for (const c of campaigns) {
-        if (c.id) campaignIds.add(c.id);
+        if (c.id) {
+          campaignIds.add(c.id);
+          const idx = this.cachedCampaigns.findIndex(cp => cp.id === c.id);
+          if (idx === -1) this.cachedCampaigns.push(c);
+          else this.cachedCampaigns[idx] = c;
+        }
       }
     } catch (err: any) {
       console.warn('[DdbHpSyncDaemon] Auto-fetch campaigns note:', err.message);
@@ -2362,7 +2416,8 @@ export class DdbHpSyncDaemon {
 
     if (this.io && this.cachedCharacters.length > 0) {
       this.io.emit('DDB_CAMPAIGN_SYNC_INIT', {
-        campaignId: Array.from(campaignIds)[0],
+        campaignId: this.activeCampaignId || Array.from(campaignIds)[0],
+        campaigns: this.cachedCampaigns,
         characters: this.cachedCharacters
       });
     }
@@ -2445,6 +2500,7 @@ export class DdbHpSyncDaemon {
   public getStatus() {
     return {
       activeCampaignId: this.activeCampaignId,
+      campaigns: this.cachedCampaigns,
       monitoredCharacters: Array.from(this.monitoredCharacters.entries()).map(([id, s]) => ({
         id,
         ...s

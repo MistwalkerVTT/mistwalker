@@ -83,6 +83,7 @@ import {
 import { DEFAULT_MONSTERS } from './data/defaultMonsters';
 import { repairMonsterToken } from './data/srdMonstersCatalog';
 import { DEFAULT_CHARACTERS, getCharacterTokenUrl, getCharacterTokenDisplayName, resolveTokenCharacterStats, isDdbMatch } from './data/defaultCharacters';
+import { resolveCharacterCampaign } from './data/ddbCampaignRegistry';
 import { DEFAULT_ALLIES } from './data/defaultAllies';
 import { Monster, getSizeMultiplier } from './types/monster';
 import { Character } from './types/character';
@@ -1394,14 +1395,24 @@ export default function App() {
   useEffect(() => {
     const unsub = subscribeToCharacters((remoteChars) => {
       const remoteList = Array.isArray(remoteChars) ? remoteChars : [];
-      const updatedList = remoteList.map(c => ({
-        ...c,
-        avatarUrl: getCharacterTokenUrl(c.name, c.avatarUrl)
-      }));
+      const updatedList = remoteList.map(c => {
+        const campInfo = resolveCharacterCampaign(c);
+        return {
+          ...c,
+          ddbCampaignId: c.ddbCampaignId || campInfo.campaignId,
+          ddbCampaignTitle: c.ddbCampaignTitle || campInfo.campaignTitle,
+          avatarUrl: getCharacterTokenUrl(c.name, c.avatarUrl)
+        };
+      });
       const combined = [...updatedList];
       for (const def of DEFAULT_CHARACTERS) {
         if (!combined.some(c => c.id === def.id || c.name.toLowerCase() === def.name.toLowerCase())) {
-          combined.push(def);
+          const defCamp = resolveCharacterCampaign(def);
+          combined.push({
+            ...def,
+            ddbCampaignId: def.ddbCampaignId || defCamp.campaignId,
+            ddbCampaignTitle: def.ddbCampaignTitle || defCamp.campaignTitle
+          });
         }
       }
       setCompendiumCharacters(combined);
@@ -1427,12 +1438,21 @@ export default function App() {
               const existingIdx = next.findIndex(c =>
                 isDdbMatch(c.name, c.id, (c as any).ddbCharacterId, dId, dName)
               );
+              const resolvedCamp = resolveCharacterCampaign({
+                ddbCharacterId: dId,
+                ddbCampaignId: d.campaignId,
+                ddbCampaignTitle: d.campaignTitle,
+                name: dName
+              });
 
               if (existingIdx >= 0) {
                 const existing = next[existingIdx];
                 const updated: Character = {
                   ...existing,
                   ddbCharacterId: dId,
+                  ddbCampaignId: d.campaignId || existing.ddbCampaignId || resolvedCamp.campaignId,
+                  ddbCampaignTitle: (d.campaignTitle && d.campaignTitle !== 'My Campaigns' ? d.campaignTitle : undefined) || existing.ddbCampaignTitle || resolvedCamp.campaignTitle,
+                  playerName: d.playerName || existing.playerName,
                   hp: d.currentHp,
                   maxHp: d.maxHp,
                   tempHp: d.tempHp || 0,
@@ -1446,6 +1466,9 @@ export default function App() {
                 const newChar: Character = {
                   id: `char_ddb_${dId}`,
                   ddbCharacterId: dId,
+                  ddbCampaignId: resolvedCamp.campaignId,
+                  ddbCampaignTitle: resolvedCamp.campaignTitle,
+                  playerName: d.playerName || 'Player',
                   name: d.name,
                   race: d.race || 'Humanoid',
                   classLevel: d.classLevel || 'Level 1',
@@ -1459,7 +1482,7 @@ export default function App() {
                   stats: d.stats || { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
                   features: [],
                   spells: [],
-                  notes: `Imported from D&D Beyond Campaign (Player: ${d.playerName || 'Player'}). Direct URL: ${d.readonlyUrl || ''}`,
+                  notes: `Imported from D&D Beyond Campaign "${resolvedCamp.campaignTitle}" (Player: ${d.playerName || 'Player'}). Direct URL: ${d.readonlyUrl || ''}`,
                   createdAt: Date.now(),
                   updatedAt: Date.now()
                 };
@@ -3150,12 +3173,21 @@ export default function App() {
           const existingIdx = next.findIndex(c =>
             isDdbMatch(c.name, c.id, (c as any).ddbCharacterId, dId, dName)
           );
+          const resolvedCamp = resolveCharacterCampaign({
+            ddbCharacterId: dId,
+            ddbCampaignId: d.campaignId,
+            ddbCampaignTitle: d.campaignTitle,
+            name: dName
+          });
 
           if (existingIdx >= 0) {
             const existing = next[existingIdx];
             const updated: Character = {
               ...existing,
               ddbCharacterId: dId,
+              ddbCampaignId: d.campaignId || existing.ddbCampaignId || resolvedCamp.campaignId,
+              ddbCampaignTitle: (d.campaignTitle && d.campaignTitle !== 'My Campaigns' ? d.campaignTitle : undefined) || existing.ddbCampaignTitle || resolvedCamp.campaignTitle,
+              playerName: d.playerName || existing.playerName,
               hp: d.currentHp,
               maxHp: d.maxHp,
               tempHp: d.tempHp || 0,
@@ -3169,6 +3201,9 @@ export default function App() {
             const newChar: Character = {
               id: `char_ddb_${dId}`,
               ddbCharacterId: dId,
+              ddbCampaignId: resolvedCamp.campaignId,
+              ddbCampaignTitle: resolvedCamp.campaignTitle,
+              playerName: d.playerName || 'Player',
               name: d.name,
               race: d.race || 'Humanoid',
               classLevel: d.classLevel || 'Level 1',
@@ -3182,7 +3217,7 @@ export default function App() {
               stats: d.stats || { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
               features: [],
               spells: [],
-              notes: `Imported from D&D Beyond Campaign (Player: ${d.playerName || 'Player'}). Direct URL: ${d.readonlyUrl || ''}`,
+              notes: `Imported from D&D Beyond Campaign "${resolvedCamp.campaignTitle}" (Player: ${d.playerName || 'Player'}). Direct URL: ${d.readonlyUrl || ''}`,
               createdAt: Date.now(),
               updatedAt: Date.now()
             };

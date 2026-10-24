@@ -25,6 +25,8 @@ import {
   User,
   Activity,
   ChevronRight,
+  ChevronDown,
+  FolderOpen,
   Flame,
   Info,
   Layers,
@@ -41,6 +43,7 @@ import {
   CharacterEquipmentItem
 } from '../types/character';
 import { DEFAULT_CHARACTERS, getCharacterTokenUrl, CHARACTER_TOKEN_IMAGES } from '../data/defaultCharacters';
+import { resolveCharacterCampaign, groupCharactersByCampaign } from '../data/ddbCampaignRegistry';
 import {
   subscribeToCharacters,
   saveCharacter,
@@ -105,6 +108,11 @@ export const CharacterCompendiumModal: React.FC<CharacterCompendiumModalProps> =
   const [pdfViewerUrl, setPdfViewerUrl] = useState<string | null>(null);
   const [recentDigestSummary, setRecentDigestSummary] = useState<any | null>(null);
   const [isSyncingAllCampaigns, setIsSyncingAllCampaigns] = useState(false);
+  const [selectedCampaignFilter, setSelectedCampaignFilter] = useState<string>('all');
+  const [expandedCompendiumCampaigns, setExpandedCompendiumCampaigns] = useState<Record<string, boolean>>({
+    '6738033': true,
+    '3290944': true
+  });
 
   const handleSyncAllCampaigns = async () => {
     setIsSyncingAllCampaigns(true);
@@ -117,9 +125,18 @@ export const CharacterCompendiumModal: React.FC<CharacterCompendiumModalProps> =
 
       for (const d of chars) {
         const dId = String(d.id);
+        const resolvedCamp = resolveCharacterCampaign({
+          ddbCharacterId: dId,
+          ddbCampaignId: d.campaignId,
+          ddbCampaignTitle: d.campaignTitle,
+          name: d.name
+        });
         const fullChar: Character = {
           id: `char_ddb_${dId}`,
           ddbCharacterId: dId,
+          ddbCampaignId: resolvedCamp.campaignId,
+          ddbCampaignTitle: resolvedCamp.campaignTitle,
+          playerName: d.playerName || 'Player',
           name: d.name,
           race: d.race || 'Humanoid',
           classLevel: d.classLevel || 'Hero',
@@ -133,7 +150,7 @@ export const CharacterCompendiumModal: React.FC<CharacterCompendiumModalProps> =
           stats: d.stats || { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
           features: [],
           spells: [],
-          notes: `Imported from D&D Beyond Campaign (Player: ${d.playerName || 'Player'}). Direct URL: ${d.readonlyUrl || ''}`,
+          notes: `Imported from D&D Beyond Campaign "${resolvedCamp.campaignTitle}" (Player: ${d.playerName || 'Player'}). Direct URL: ${d.readonlyUrl || ''}`,
           createdAt: Date.now(),
           updatedAt: Date.now()
         };
@@ -156,12 +173,24 @@ export const CharacterCompendiumModal: React.FC<CharacterCompendiumModalProps> =
     const unsubscribe = subscribeToCharacters(
       (list) => {
         if (list && list.length > 0) {
-          const updatedList = list.map(c => ({
-            ...c,
-            avatarUrl: getCharacterTokenUrl(c.name, c.avatarUrl)
-          }));
+          const updatedList = list.map(c => {
+            const campInfo = resolveCharacterCampaign(c);
+            return {
+              ...c,
+              ddbCampaignId: c.ddbCampaignId || campInfo.campaignId,
+              ddbCampaignTitle: c.ddbCampaignTitle || campInfo.campaignTitle,
+              avatarUrl: getCharacterTokenUrl(c.name, c.avatarUrl)
+            };
+          });
           const existingIds = new Set(updatedList.map(c => c.id));
-          const missingDefaults = DEFAULT_CHARACTERS.filter(d => !existingIds.has(d.id));
+          const missingDefaults = DEFAULT_CHARACTERS.filter(d => !existingIds.has(d.id)).map(d => {
+            const campInfo = resolveCharacterCampaign(d);
+            return {
+              ...d,
+              ddbCampaignId: d.ddbCampaignId || campInfo.campaignId,
+              ddbCampaignTitle: d.ddbCampaignTitle || campInfo.campaignTitle
+            };
+          });
           const merged = [...updatedList, ...missingDefaults];
           setCharacters(merged);
           
@@ -199,16 +228,24 @@ export const CharacterCompendiumModal: React.FC<CharacterCompendiumModalProps> =
 
   if (!isOpen) return null;
 
-  const filteredCharacters = characters.filter(c => {
+  const searchFilteredCharacters = characters.filter(c => {
     const q = searchQuery.toLowerCase();
+    const campInfo = resolveCharacterCampaign(c);
     return (
       c.name.toLowerCase().includes(q) ||
       c.race.toLowerCase().includes(q) ||
       c.classLevel.toLowerCase().includes(q) ||
+      campInfo.campaignTitle.toLowerCase().includes(q) ||
       (c.background && c.background.toLowerCase().includes(q)) ||
       (c.notes && c.notes.toLowerCase().includes(q))
     );
   });
+
+  const allCampaignGroups = groupCharactersByCampaign(searchFilteredCharacters);
+  const filteredCharacters = selectedCampaignFilter === 'all'
+    ? searchFilteredCharacters
+    : searchFilteredCharacters.filter(c => resolveCharacterCampaign(c).campaignId === selectedCampaignFilter);
+  const visibleCampaignGroups = groupCharactersByCampaign(filteredCharacters);
 
   const getMod = (val: number) => {
     const m = Math.floor((val - 10) / 2);
@@ -600,58 +637,129 @@ export const CharacterCompendiumModal: React.FC<CharacterCompendiumModalProps> =
           
           {/* Left Sidebar: Character List */}
           <div className="w-80 border-r border-zinc-800 flex flex-col bg-zinc-950/60 shrink-0">
-            <div className="p-3 border-b border-zinc-800">
+            <div className="p-3 border-b border-zinc-800 space-y-2">
               <div className="relative">
                 <Search className="absolute left-3 top-2.5 w-4 h-4 text-zinc-500" />
                 <input
                   type="text"
-                  placeholder="Search heroes or class..."
+                  placeholder="Search heroes, class, or campaign..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3 py-2 text-xs font-mono text-zinc-200 focus:outline-none focus:border-amber-500/60"
                 />
               </div>
+
+              {/* Campaign Filter Dropdown */}
+              {allCampaignGroups.length > 1 && (
+                <div className="flex items-center gap-1.5">
+                  <FolderOpen className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <select
+                    value={selectedCampaignFilter}
+                    onChange={(e) => setSelectedCampaignFilter(e.target.value)}
+                    className="flex-1 min-w-0 bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1.5 text-[11px] font-mono font-bold text-amber-200 focus:outline-none focus:border-amber-500/60 cursor-pointer"
+                  >
+                    <option value="all">
+                      All Campaigns ({searchFilteredCharacters.length} Heroes • {allCampaignGroups.length} Campaigns)
+                    </option>
+                    {allCampaignGroups.map((grp) => (
+                      <option key={grp.campaignId} value={grp.campaignId}>
+                        {grp.isPrimaryCampaign ? '⭐ ' : '📁 '}{grp.campaignTitle} ({grp.items.length})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
 
-            <div className="flex-1 overflow-y-auto p-2 space-y-1.5 sidebar-scrollbar">
-              {filteredCharacters.map((c) => {
-                const isSelected = selectedCharacter?.id === c.id;
+            <div className="flex-1 overflow-y-auto p-2 space-y-2 sidebar-scrollbar">
+              {visibleCampaignGroups.map((group) => {
+                const isExpanded =
+                  selectedCampaignFilter !== 'all' ||
+                  Boolean(searchQuery.trim()) ||
+                  (expandedCompendiumCampaigns[group.campaignId] ?? group.isPrimaryCampaign);
+
                 return (
                   <div
-                    key={c.id}
-                    onClick={() => {
-                      setSelectedCharacter(c);
-                      setIsEditing(false);
-                    }}
-                    className={`p-2.5 rounded-xl border transition-all flex items-center gap-3 cursor-pointer ${
-                      isSelected
-                        ? 'bg-amber-500/15 border-amber-500/50 text-amber-200 shadow-md ring-1 ring-amber-500/30'
-                        : 'bg-zinc-900/60 border-zinc-800/80 hover:bg-zinc-800/50 text-zinc-300'
+                    key={group.campaignId}
+                    className={`rounded-xl border transition-all ${
+                      group.isPrimaryCampaign
+                        ? 'bg-amber-950/15 border-amber-500/35'
+                        : 'bg-zinc-950/60 border-zinc-800/80'
                     }`}
                   >
-                    <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-emerald-500/50 shadow-sm shrink-0 bg-zinc-950 relative">
-                      <img
-                        src={getCharacterTokenUrl(c.name, c.avatarUrl)}
-                        alt={c.name}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <h4 className="font-bold text-xs truncate font-serif">{c.name}</h4>
-                        {c.pdfUrl && (
-                          <span title="PDF Character Sheet Attached">
-                            <FileText className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                          </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExpandedCompendiumCampaigns((prev) => ({
+                          ...prev,
+                          [group.campaignId]: !isExpanded
+                        }))
+                      }
+                      className="w-full px-2.5 py-2 flex items-center justify-between gap-2 text-left cursor-pointer hover:bg-white/5 rounded-t-xl transition-colors"
+                    >
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <FolderOpen className={`w-3.5 h-3.5 shrink-0 ${group.isPrimaryCampaign ? 'text-amber-400' : 'text-emerald-400/80'}`} />
+                        <span className={`text-[11px] font-mono font-bold truncate ${group.isPrimaryCampaign ? 'text-amber-300' : 'text-zinc-300'}`}>
+                          {group.campaignTitle}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="px-1.5 py-0.5 rounded-full bg-zinc-900 border border-zinc-700 text-[10px] font-mono font-bold text-amber-300">
+                          {group.items.length}
+                        </span>
+                        {isExpanded ? (
+                          <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />
+                        ) : (
+                          <ChevronRight className="w-3.5 h-3.5 text-zinc-400" />
                         )}
                       </div>
-                      <p className="text-[10px] font-mono text-zinc-400 truncate">{c.race} • {c.classLevel}</p>
-                      <div className="flex items-center gap-2 mt-1 text-[9px] font-mono">
-                        <span className="text-emerald-400 font-bold">AC {c.ac}</span>
-                        <span className="text-rose-400 font-bold">HP {c.hp}/{c.maxHp}</span>
-                        <span className="text-cyan-400">⚡ {c.speed}</span>
+                    </button>
+
+                    {isExpanded && (
+                      <div className="p-1.5 pt-1 space-y-1.5 border-t border-zinc-800/60">
+                        {group.items.map((c) => {
+                          const isSelected = selectedCharacter?.id === c.id;
+                          return (
+                            <div
+                              key={c.id}
+                              onClick={() => {
+                                setSelectedCharacter(c);
+                                setIsEditing(false);
+                              }}
+                              className={`p-2 rounded-xl border transition-all flex items-center gap-2.5 cursor-pointer ${
+                                isSelected
+                                  ? 'bg-amber-500/15 border-amber-500/50 text-amber-200 shadow-md ring-1 ring-amber-500/30'
+                                  : 'bg-zinc-900/60 border-zinc-800/80 hover:bg-zinc-800/50 text-zinc-300'
+                              }`}
+                            >
+                              <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-emerald-500/50 shadow-sm shrink-0 bg-zinc-950 relative">
+                                <img
+                                  src={getCharacterTokenUrl(c.name, c.avatarUrl)}
+                                  alt={c.name}
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between">
+                                  <h4 className="font-bold text-xs truncate font-serif">{c.name}</h4>
+                                  {c.pdfUrl && (
+                                    <span title="PDF Character Sheet Attached">
+                                      <FileText className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-[10px] font-mono text-zinc-400 truncate">{c.race} • {c.classLevel}</p>
+                                <div className="flex items-center gap-2 mt-0.5 text-[9px] font-mono">
+                                  <span className="text-emerald-400 font-bold">AC {c.ac}</span>
+                                  <span className="text-rose-400 font-bold">HP {c.hp}/{c.maxHp}</span>
+                                  <span className="text-cyan-400">⚡ {c.speed}</span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
-                    </div>
+                    )}
                   </div>
                 );
               })}

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Character } from '../types/character';
 import { DEFAULT_CHARACTERS, getCharacterTokenUrl } from '../data/defaultCharacters';
+import { resolveCharacterCampaign, groupCharactersByCampaign } from '../data/ddbCampaignRegistry';
 import {
   Map as MapIcon,
   Upload,
@@ -502,6 +503,11 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   const [collapseCharacters, setCollapseCharacters] = useState(false);
   const [collapseMonsters, setCollapseMonsters] = useState(true);
   const [collapseAllies, setCollapseAllies] = useState(true);
+  const [selectedHeroCampaignFilter, setSelectedHeroCampaignFilter] = useState<string>('all');
+  const [expandedHeroCampaigns, setExpandedHeroCampaigns] = useState<Record<string, boolean>>({
+    '6738033': true,
+    '3290944': true
+  });
   const closeTimeoutRef = useRef<any>(null);
 
   // Dragging event listener for pinned flyout window
@@ -3621,9 +3627,18 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                 // 1. Incorporate live DDB daemon cached characters (from active campaign)
                 ddbPartyCharacters.forEach((c: any) => {
                   const ddbId = String(c.id);
+                  const resolvedCamp = resolveCharacterCampaign({
+                    ddbCharacterId: ddbId,
+                    ddbCampaignId: c.campaignId,
+                    ddbCampaignTitle: c.campaignTitle,
+                    name: c.name
+                  });
                   heroMap.set(ddbId, {
                     id: `char_ddb_${ddbId}`,
                     ddbCharacterId: ddbId,
+                    ddbCampaignId: resolvedCamp.campaignId,
+                    ddbCampaignTitle: resolvedCamp.campaignTitle,
+                    playerName: c.playerName || 'Player',
                     name: c.name,
                     url: c.avatarUrl || getCharacterTokenUrl(c.name),
                     size: 1,
@@ -3650,9 +3665,20 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                   if (hasDdbLink) {
                     const ddbId = String(c.ddbCharacterId || c.id.replace('char_ddb_', '') || c.name);
                     const existing = heroMap.get(ddbId);
+                    const resolvedCamp = resolveCharacterCampaign({
+                      id: c.id,
+                      ddbCharacterId: ddbId,
+                      ddbCampaignId: c.ddbCampaignId || existing?.ddbCampaignId,
+                      ddbCampaignTitle: c.ddbCampaignTitle || existing?.ddbCampaignTitle,
+                      name: c.name,
+                      notes: c.notes
+                    });
                     heroMap.set(ddbId, {
                       id: c.id,
                       ddbCharacterId: c.ddbCharacterId || existing?.ddbCharacterId || ddbId,
+                      ddbCampaignId: resolvedCamp.campaignId,
+                      ddbCampaignTitle: resolvedCamp.campaignTitle,
+                      playerName: c.playerName || existing?.playerName,
                       name: c.name,
                       url: c.avatarUrl || existing?.url || getCharacterTokenUrl(c.name),
                       size: (c as any).size || existing?.size || 1,
@@ -3668,12 +3694,19 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                   }
                 });
 
-                const heroTokens = Array.from(heroMap.values()).filter(t => 
+                const allHeroTokens = Array.from(heroMap.values()).filter(t => 
                   !searchLower ||
                   t.name.toLowerCase().includes(searchLower) ||
                   t.classLevel.toLowerCase().includes(searchLower) ||
-                  t.race.toLowerCase().includes(searchLower)
+                  t.race.toLowerCase().includes(searchLower) ||
+                  (t.ddbCampaignTitle && t.ddbCampaignTitle.toLowerCase().includes(searchLower))
                 );
+
+                const heroCampaignGroupsAll = groupCharactersByCampaign(allHeroTokens);
+                const heroTokens = selectedHeroCampaignFilter === 'all'
+                  ? allHeroTokens
+                  : allHeroTokens.filter(t => t.ddbCampaignId === selectedHeroCampaignFilter);
+                const heroCampaignGroups = groupCharactersByCampaign(heroTokens);
 
                 const monsterList: Monster[] = (compendiumMonsters && compendiumMonsters.length > 0)
                   ? compendiumMonsters
@@ -4055,6 +4088,30 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
 
                               {!collapseCharacters && (
                                 <>
+                                  {/* Campaign Filter Dropdown / Pill Bar */}
+                                  {heroCampaignGroupsAll.length > 1 && (
+                                    <div className="flex items-center gap-1.5 mt-0.5 mb-1">
+                                      <span className="text-[9px] font-mono text-emerald-300/80 uppercase font-bold shrink-0">
+                                        Campaign:
+                                      </span>
+                                      <select
+                                        value={selectedHeroCampaignFilter}
+                                        onChange={(e) => setSelectedHeroCampaignFilter(e.target.value)}
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="flex-1 min-w-0 bg-zinc-950/90 border border-emerald-500/40 rounded-lg px-2 py-1 text-[10px] font-mono font-bold text-emerald-200 focus:outline-none focus:border-emerald-400 cursor-pointer"
+                                      >
+                                        <option value="all">
+                                          All Campaigns ({allHeroTokens.length} Heroes across {heroCampaignGroupsAll.length} Campaigns)
+                                        </option>
+                                        {heroCampaignGroupsAll.map((grp) => (
+                                          <option key={grp.campaignId} value={grp.campaignId}>
+                                            {grp.isPrimaryCampaign ? '⭐ ' : '📁 '}{grp.campaignTitle} ({grp.items.length})
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                  )}
+
                                   {heroTokens.length === 0 ? (
                                     <div className="p-3 text-center flex flex-col items-center gap-2 bg-zinc-900/50 rounded-lg border border-emerald-900/20 my-1">
                                       <Users className="w-6 h-6 text-emerald-500/60" />
@@ -4081,66 +4138,116 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                                       )}
                                     </div>
                                   ) : (
-                                    <div className="grid grid-cols-2 gap-2 mt-1">
-                                      {heroTokens.map((tok) => {
-                                        const hpPercent = tok.maxHp > 0 ? Math.round((tok.hp / tok.maxHp) * 100) : 100;
-                                        const hpColor = hpPercent > 50 ? 'text-emerald-400' : hpPercent > 25 ? 'text-amber-400' : 'text-rose-400';
+                                    <div className="space-y-2 mt-1">
+                                      {heroCampaignGroups.map((group) => {
+                                        const isExpanded =
+                                          selectedHeroCampaignFilter !== 'all' ||
+                                          Boolean(tokenSearchQuery.trim()) ||
+                                          (expandedHeroCampaigns[group.campaignId] ?? group.isPrimaryCampaign);
 
                                         return (
                                           <div
-                                            key={tok.id || tok.ddbCharacterId}
-                                            draggable={true}
-                                            onDragStart={(e) => {
-                                              const tokenData = {
-                                                name: tok.name,
-                                                url: tok.url,
-                                                size: tok.size || 1,
-                                                hp: tok.hp,
-                                                maxHp: tok.maxHp,
-                                                currentHp: tok.hp,
-                                                tempHp: tok.tempHp,
-                                                ac: tok.ac,
-                                                isPlayer: true,
-                                                isMonster: false,
-                                                category: 'character',
-                                                ddbCharacterId: tok.ddbCharacterId,
-                                                characterId: tok.id
-                                              };
-                                              e.dataTransfer.setData('application/json', JSON.stringify(tokenData));
-                                              e.dataTransfer.setData('text/plain', tok.name);
-                                              e.dataTransfer.effectAllowed = 'copy';
-                                            }}
-                                            onClick={() => spawnToken(tok.name, tok.url, tok.size || 1, 'character', tok.hp, tok.ac, tok.ddbCharacterId)}
-                                            className="group relative flex items-center gap-2 p-1.5 bg-zinc-900/90 hover:bg-emerald-950/50 border border-emerald-900/30 hover:border-emerald-500/60 rounded-xl transition-all cursor-grab active:cursor-grabbing select-none"
-                                            title={`Drag onto map or click to spawn ${tok.name} (${tok.classLevel || 'Hero'})`}
+                                            key={group.campaignId}
+                                            className={`rounded-xl border transition-all ${
+                                              group.isPrimaryCampaign
+                                                ? 'bg-emerald-950/30 border-emerald-500/40'
+                                                : 'bg-zinc-950/60 border-zinc-800/80'
+                                            }`}
                                           >
-                                            {/* Token Avatar with Live Dot */}
-                                            <div className="relative w-9 h-9 rounded-full overflow-hidden border-2 border-emerald-500/50 group-hover:border-emerald-400 shrink-0 shadow-sm pointer-events-none">
-                                              <img src={tok.url} alt={tok.name} className="w-full h-full object-cover" />
-                                              <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-emerald-400 ring-1 ring-zinc-900" />
-                                            </div>
-
-                                            {/* Character Meta */}
-                                            <div className="flex flex-col min-w-0 flex-1 pointer-events-none">
-                                              <span className="text-[11px] font-bold text-zinc-200 group-hover:text-emerald-300 truncate leading-tight">
-                                                {tok.name}
-                                              </span>
-                                              <span className="text-[9px] text-zinc-400 truncate leading-tight mt-0.5">
-                                                {tok.classLevel || tok.race}
-                                              </span>
-                                              
-                                              {/* Live Stats Row */}
-                                              <div className="flex items-center gap-2 mt-1 text-[9px] font-mono">
-                                                <span className={`font-bold ${hpColor} flex items-center gap-0.5`}>
-                                                  <Heart className="w-2.5 h-2.5 fill-current" />
-                                                  {tok.hp}/{tok.maxHp}
-                                                </span>
-                                                <span className="text-zinc-400 flex items-center gap-0.5">
-                                                  <Shield className="w-2.5 h-2.5 text-blue-400" />
-                                                  {tok.ac}
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                setExpandedHeroCampaigns((prev) => ({
+                                                  ...prev,
+                                                  [group.campaignId]: !isExpanded
+                                                }))
+                                              }
+                                              className="w-full px-2.5 py-1.5 flex items-center justify-between gap-2 text-left cursor-pointer hover:bg-white/5 rounded-t-xl transition-colors"
+                                            >
+                                              <div className="flex items-center gap-1.5 min-w-0">
+                                                <FolderOpen className={`w-3.5 h-3.5 shrink-0 ${group.isPrimaryCampaign ? 'text-amber-400' : 'text-emerald-400/80'}`} />
+                                                <span className={`text-[10px] font-mono font-bold truncate ${group.isPrimaryCampaign ? 'text-amber-200' : 'text-zinc-300'}`}>
+                                                  {group.campaignTitle}
                                                 </span>
                                               </div>
-                                            </div>
+                                              <div className="flex items-center gap-1.5 shrink-0">
+                                                <span className="px-1.5 py-0.2 rounded-full bg-zinc-900 border border-zinc-700 text-[9px] font-mono font-bold text-emerald-300">
+                                                  {group.items.length}
+                                                </span>
+                                                {isExpanded ? (
+                                                  <ChevronDown className="w-3 h-3 text-zinc-400" />
+                                                ) : (
+                                                  <ChevronRight className="w-3 h-3 text-zinc-400" />
+                                                )}
+                                              </div>
+                                            </button>
+
+                                            {isExpanded && (
+                                              <div className="grid grid-cols-2 gap-1.5 p-2 pt-1 border-t border-zinc-800/60">
+                                                {group.items.map((tok: any) => {
+                                                  const hpPercent = tok.maxHp > 0 ? Math.round((tok.hp / tok.maxHp) * 100) : 100;
+                                                  const hpColor = hpPercent > 50 ? 'text-emerald-400' : hpPercent > 25 ? 'text-amber-400' : 'text-rose-400';
+
+                                                  return (
+                                                    <div
+                                                      key={tok.id || tok.ddbCharacterId}
+                                                      draggable={true}
+                                                      onDragStart={(e) => {
+                                                        const tokenData = {
+                                                          name: tok.name,
+                                                          url: tok.url,
+                                                          size: tok.size || 1,
+                                                          hp: tok.hp,
+                                                          maxHp: tok.maxHp,
+                                                          currentHp: tok.hp,
+                                                          tempHp: tok.tempHp,
+                                                          ac: tok.ac,
+                                                          isPlayer: true,
+                                                          isMonster: false,
+                                                          category: 'character',
+                                                          ddbCharacterId: tok.ddbCharacterId,
+                                                          characterId: tok.id
+                                                        };
+                                                        e.dataTransfer.setData('application/json', JSON.stringify(tokenData));
+                                                        e.dataTransfer.setData('text/plain', tok.name);
+                                                        e.dataTransfer.effectAllowed = 'copy';
+                                                      }}
+                                                      onClick={() => spawnToken(tok.name, tok.url, tok.size || 1, 'character', tok.hp, tok.ac, tok.ddbCharacterId)}
+                                                      className="group relative flex items-center gap-2 p-1.5 bg-zinc-900/90 hover:bg-emerald-950/50 border border-emerald-900/30 hover:border-emerald-500/60 rounded-xl transition-all cursor-grab active:cursor-grabbing select-none"
+                                                      title={`Drag onto map or click to spawn ${tok.name} (${tok.classLevel || 'Hero'} • ${group.campaignTitle})`}
+                                                    >
+                                                      {/* Token Avatar with Live Dot */}
+                                                      <div className="relative w-9 h-9 rounded-full overflow-hidden border-2 border-emerald-500/50 group-hover:border-emerald-400 shrink-0 shadow-sm pointer-events-none">
+                                                        <img src={tok.url} alt={tok.name} className="w-full h-full object-cover" />
+                                                        <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-emerald-400 ring-1 ring-zinc-900" />
+                                                      </div>
+
+                                                      {/* Character Meta */}
+                                                      <div className="flex flex-col min-w-0 flex-1 pointer-events-none">
+                                                        <span className="text-[11px] font-bold text-zinc-200 group-hover:text-emerald-300 truncate leading-tight">
+                                                          {tok.name}
+                                                        </span>
+                                                        <span className="text-[9px] text-zinc-400 truncate leading-tight mt-0.5">
+                                                          {tok.classLevel || tok.race}
+                                                        </span>
+                                                        
+                                                        {/* Live Stats Row */}
+                                                        <div className="flex items-center gap-2 mt-1 text-[9px] font-mono">
+                                                          <span className={`font-bold ${hpColor} flex items-center gap-0.5`}>
+                                                            <Heart className="w-2.5 h-2.5 fill-current" />
+                                                            {tok.hp}/{tok.maxHp}
+                                                          </span>
+                                                          <span className="text-zinc-400 flex items-center gap-0.5">
+                                                            <Shield className="w-2.5 h-2.5 text-blue-400" />
+                                                            {tok.ac}
+                                                          </span>
+                                                        </div>
+                                                      </div>
+                                                    </div>
+                                                  );
+                                                })}
+                                              </div>
+                                            )}
                                           </div>
                                         );
                                       })}

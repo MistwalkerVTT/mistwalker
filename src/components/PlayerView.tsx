@@ -2807,6 +2807,9 @@ export default function PlayerView() {
             next[existingIdx] = {
               ...existing,
               ddbCharacterId: dId,
+              ddbCampaignId: d.campaignId || existing.ddbCampaignId,
+              ddbCampaignTitle: d.campaignTitle || existing.ddbCampaignTitle,
+              playerName: d.playerName || existing.playerName,
               hp: d.currentHp,
               maxHp: d.maxHp,
               tempHp: d.tempHp || 0,
@@ -2818,6 +2821,9 @@ export default function PlayerView() {
             const newChar: Character = {
               id: `char_ddb_${dId}`,
               ddbCharacterId: dId,
+              ddbCampaignId: d.campaignId,
+              ddbCampaignTitle: d.campaignTitle,
+              playerName: d.playerName || 'Player',
               name: d.name,
               race: d.race || 'Humanoid',
               classLevel: d.classLevel || 'Level 1',
@@ -3039,6 +3045,9 @@ export default function PlayerView() {
                 next[existingIdx] = {
                   ...existing,
                   ddbCharacterId: dId,
+                  ddbCampaignId: d.campaignId || existing.ddbCampaignId,
+                  ddbCampaignTitle: d.campaignTitle || existing.ddbCampaignTitle,
+                  playerName: d.playerName || existing.playerName,
                   hp: d.currentHp,
                   maxHp: d.maxHp,
                   tempHp: d.tempHp || 0,
@@ -3050,6 +3059,9 @@ export default function PlayerView() {
                 const newChar: Character = {
                   id: `char_ddb_${dId}`,
                   ddbCharacterId: dId,
+                  ddbCampaignId: d.campaignId,
+                  ddbCampaignTitle: d.campaignTitle,
+                  playerName: d.playerName || 'Player',
                   name: d.name,
                   race: d.race || 'Humanoid',
                   classLevel: d.classLevel || 'Level 1',
