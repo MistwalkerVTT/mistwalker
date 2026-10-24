@@ -76,7 +76,34 @@ function Root() {
 
   return (
     <>
-      {appRevealed && (isPlayerView || chosePlayer ? <PlayerView /> : <App />)}
+      <style>{`
+        @keyframes mw-menu-emerge {
+          0% {
+            opacity: 0;
+            transform: scale(0.92) rotate(-2.5deg);
+            filter: blur(14px) brightness(0.35);
+          }
+          100% {
+            opacity: 1;
+            transform: scale(1) rotate(0deg);
+            filter: blur(0px) brightness(1);
+          }
+        }
+      `}</style>
+      {appRevealed && (
+        <div
+          style={
+            initialIntro && introMounted
+              ? {
+                  animation: 'mw-menu-emerge 1.9s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+                  backgroundColor: '#050508'
+                }
+              : undefined
+          }
+        >
+          {isPlayerView || chosePlayer ? <PlayerView /> : <App />}
+        </div>
+      )}
       {introMounted && (
         <IntroScreen
           onSelectDm={() => {

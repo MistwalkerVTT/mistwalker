@@ -169,7 +169,7 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onSelectDm, onSelectPl
 
 
 
-  // Living background: drifting mist + rising embers + faint rune sparks
+  // Living background: drifting mist + rising embers + faint rune sparks + ominous vortex on transition
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -192,54 +192,105 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onSelectDm, onSelectPl
     resize();
     window.addEventListener('resize', resize);
 
-    const mist = Array.from({ length: 16 }, () => ({
+    const mist = Array.from({ length: 18 }, () => ({
       x: Math.random() * 1.4 - 0.2,
       y: 0.35 + Math.random() * 0.65,
       r: 220 + Math.random() * 360,
       vx: (Math.random() - 0.5) * 0.00012 + 0.00005,
       a: 0.04 + Math.random() * 0.07,
-      hue: Math.random() < 0.5 ? 205 : 38
+      hue: Math.random() < 0.5 ? 205 : 38,
+      angle: Math.random() * Math.PI * 2
     }));
-    const embers = Array.from({ length: 90 }, () => ({
+    const embers = Array.from({ length: 110 }, () => ({
       x: Math.random(),
       y: Math.random(),
       s: 0.6 + Math.random() * 2,
       vy: 0.00012 + Math.random() * 0.0004,
       sway: Math.random() * Math.PI * 2,
-      a: 0.3 + Math.random() * 0.7
+      a: 0.3 + Math.random() * 0.7,
+      angle: Math.random() * Math.PI * 2,
+      radius: 0.1 + Math.random() * 0.7
     }));
 
+    let vortexSpin = 0;
     let t0 = performance.now();
     const loop = (now: number) => {
       const dt = Math.min(now - t0, 50);
       t0 = now;
       ctx.clearRect(0, 0, w, h);
 
+      const isLeaving = leavingRef.current;
+      const isFading = fadingOutRef.current;
+      if (isLeaving) {
+        vortexSpin += dt * (isFading ? 0.0038 : 0.0022);
+      }
+
+      const cx = w * 0.5;
+      const cy = h * 0.5;
+
       for (const m of mist) {
-        m.x += m.vx * dt;
-        if (m.x > 1.3) m.x = -0.3;
+        if (isLeaving) {
+          m.angle += dt * 0.0014;
+          const dx = m.x * w - cx;
+          const dy = m.y * h - cy;
+          const dist = Math.hypot(dx, dy);
+          const pull = isFading ? 1.008 : 0.992;
+          const ang = Math.atan2(dy, dx) + dt * 0.0018;
+          m.x = (cx + Math.cos(ang) * dist * pull) / w;
+          m.y = (cy + Math.sin(ang) * dist * pull) / h;
+        } else {
+          m.x += m.vx * dt;
+          if (m.x > 1.3) m.x = -0.3;
+        }
         const g = ctx.createRadialGradient(m.x * w, m.y * h, 0, m.x * w, m.y * h, m.r);
-        g.addColorStop(0, `hsla(${m.hue}, 40%, 70%, ${m.a})`);
-        g.addColorStop(1, 'hsla(220, 30%, 30%, 0)');
+        const hue = isLeaving
+          ? (isLeaving === 'dm' ? 275 : 225)
+          : m.hue;
+        const alpha = isLeaving ? Math.min(0.22, m.a * 2.2) : m.a;
+        g.addColorStop(0, `hsla(${hue}, 48%, ${isLeaving ? 16 : 70}%, ${alpha})`);
+        g.addColorStop(1, 'hsla(240, 40%, 6%, 0)');
         ctx.fillStyle = g;
         ctx.fillRect(m.x * w - m.r, m.y * h - m.r, m.r * 2, m.r * 2);
       }
 
       ctx.globalCompositeOperation = 'lighter';
       for (const e of embers) {
-        e.y -= e.vy * dt;
-        e.sway += 0.0015 * dt;
-        if (e.y < -0.05) {
-          e.y = 1.05;
-          e.x = Math.random();
+        let px: number;
+        let py: number;
+        if (isLeaving) {
+          e.angle += dt * (0.0025 + (1 - e.radius) * 0.004);
+          e.radius = isFading
+            ? Math.min(1.2, e.radius + dt * 0.00045)
+            : Math.max(0.02, e.radius * (1 - dt * 0.0009));
+          const maxDim = Math.max(w, h) * 0.65;
+          px = cx + Math.cos(e.angle + vortexSpin) * (e.radius * maxDim);
+          py = cy + Math.sin(e.angle + vortexSpin) * (e.radius * maxDim);
+        } else {
+          e.y -= e.vy * dt;
+          e.sway += 0.0015 * dt;
+          if (e.y < -0.05) {
+            e.y = 1.05;
+            e.x = Math.random();
+          }
+          px = (e.x + Math.sin(e.sway) * 0.012) * w;
+          py = e.y * h;
+          e.angle = Math.atan2(py - cy, px - cx);
+          e.radius = Math.hypot(px - cx, py - cy) / (Math.max(w, h) * 0.65);
         }
-        const px = (e.x + Math.sin(e.sway) * 0.012) * w;
-        const py = e.y * h;
+
         const flick = 0.6 + Math.sin(now * 0.004 + e.sway * 5) * 0.4;
-        const rad = e.s * 4;
+        const rad = e.s * (isLeaving ? 5.2 : 4);
         const g = ctx.createRadialGradient(px, py, 0, px, py, rad);
-        g.addColorStop(0, `rgba(255, 190, 80, ${e.a * flick})`);
-        g.addColorStop(1, 'rgba(255, 120, 20, 0)');
+        if (isLeaving === 'player') {
+          g.addColorStop(0, `rgba(125, 211, 252, ${e.a * flick})`);
+          g.addColorStop(1, 'rgba(79, 70, 229, 0)');
+        } else if (isLeaving === 'dm') {
+          g.addColorStop(0, `rgba(217, 119, 6, ${e.a * flick})`);
+          g.addColorStop(1, 'rgba(147, 51, 234, 0)');
+        } else {
+          g.addColorStop(0, `rgba(255, 190, 80, ${e.a * flick})`);
+          g.addColorStop(1, 'rgba(255, 120, 20, 0)');
+        }
         ctx.fillStyle = g;
         ctx.beginPath();
         ctx.arc(px, py, rad, 0, Math.PI * 2);
@@ -256,6 +307,10 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onSelectDm, onSelectPl
   }, []);
 
   const title = 'MISTWALKER';
+  const leavingRef = useRef<null | 'dm' | 'player'>(null);
+  const fadingOutRef = useRef<boolean>(false);
+  leavingRef.current = leaving;
+  fadingOutRef.current = fadingOut;
 
   return (
     <div
@@ -268,7 +323,9 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onSelectDm, onSelectPl
       style={{
         fontFamily: "'Cinzel', 'Trajan Pro', 'Georgia', serif",
         opacity: fadingOut ? 0 : 1,
-        transition: 'opacity 1.8s ease-in-out',
+        transform: fadingOut ? 'scale(1.28) rotate(8deg)' : 'scale(1) rotate(0deg)',
+        filter: fadingOut ? 'blur(18px)' : 'blur(0px)',
+        transition: 'opacity 1.9s cubic-bezier(0.22, 1, 0.36, 1), transform 2.1s cubic-bezier(0.4, 0, 0.2, 1), filter 1.9s ease-in-out',
         pointerEvents: fadingOut ? 'none' : 'auto'
       }}
     >
@@ -280,8 +337,26 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onSelectDm, onSelectPl
         @keyframes mw-fade-up { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
         @keyframes mw-sweep { 0% { transform: translateX(-120%) skewX(-20deg); } 100% { transform: translateX(260%) skewX(-20deg); } }
         @keyframes mw-glow { 0%,100% { filter: drop-shadow(0 0 18px rgba(245,158,11,0.55)); } 50% { filter: drop-shadow(0 0 46px rgba(251,191,36,0.95)); } }
-        @keyframes mw-flash { 0% { opacity: 0; } 55% { opacity: 1; } 100% { opacity: 1; } }
         @keyframes mw-bars { from { transform: scaleY(1); } to { transform: scaleY(0); } }
+        @keyframes mw-vortex-in {
+          0% { opacity: 0; transform: scale(1.55) rotate(0deg); }
+          35% { opacity: 1; }
+          100% { opacity: 1; transform: scale(0.92) rotate(220deg); }
+        }
+        @keyframes mw-vortex-counter {
+          0% { opacity: 0; transform: scale(1.3) rotate(0deg); }
+          40% { opacity: 0.95; }
+          100% { opacity: 1; transform: scale(0.78) rotate(-260deg); }
+        }
+        @keyframes mw-abyss-implode {
+          0% { opacity: 0; transform: scale(0.2); }
+          45% { opacity: 0.95; transform: scale(1.05); }
+          100% { opacity: 1; transform: scale(1.65); }
+        }
+        @keyframes mw-ui-sink {
+          0% { opacity: 1; transform: scale(1) rotate(0deg); filter: blur(0px); }
+          100% { opacity: 0; transform: scale(0.55) rotate(-14deg); filter: blur(16px); }
+        }
         .mw-card { transition: transform .35s cubic-bezier(.2,.8,.2,1), box-shadow .35s, border-color .35s; }
         .mw-card:hover { transform: translateY(-8px) scale(1.035); }
         .mw-card:hover .mw-sweep { animation: mw-sweep 1.1s ease-in-out; }
@@ -357,7 +432,12 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onSelectDm, onSelectPl
       <div className="absolute bottom-0 inset-x-0 h-[14vh] bg-black origin-bottom pointer-events-none" style={{ animation: 'mw-bars 2.2s 0.6s ease-in-out forwards', transform: 'scaleY(1)' }} />
 
       {/* Title block */}
-      <div className="relative z-10 h-full w-full flex flex-col items-center justify-start pt-[9vh] px-4">
+      <div
+        className="relative z-10 h-full w-full flex flex-col items-center justify-start pt-[9vh] px-4"
+        style={{
+          animation: leaving ? 'mw-ui-sink 1.85s cubic-bezier(0.55, 0.05, 0.67, 0.19) forwards' : undefined
+        }}
+      >
         <img
           src={LOGO_URL}
           alt="MistWalker"
@@ -515,15 +595,108 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onSelectDm, onSelectPl
         </button>
       )}
 
-      {/* Departure flash */}
+      {/* Ominous dark swirling abyssal vortex transition */}
       {leaving && (
-        <div
-          className="absolute inset-0 z-30 pointer-events-none"
-          style={{
-            background: `radial-gradient(circle at 50% 50%, ${leaving === 'dm' ? 'rgba(251,191,36,1)' : 'rgba(125,211,252,1)'} 0%, rgba(255,255,255,0.95) 18%, #000 90%)`,
-            animation: 'mw-flash 1.1s ease-in forwards'
-          }}
-        />
+        <div className="absolute inset-0 z-30 pointer-events-none overflow-hidden flex items-center justify-center">
+          {/* Deep creeping shadow veil */}
+          <div
+            className="absolute inset-0"
+            style={{
+              background:
+                'radial-gradient(circle at 50% 50%, rgba(3, 3, 7, 0.96) 0%, rgba(6, 5, 14, 0.94) 38%, rgba(2, 2, 5, 0.99) 100%)',
+              animation: 'mw-abyss-implode 1.8s cubic-bezier(0.22, 1, 0.36, 1) forwards'
+            }}
+          />
+
+          {/* Outer clockwise swirling dark mist tendrils */}
+          <div
+            className="absolute w-[180vmax] h-[180vmax] rounded-full"
+            style={{
+              background:
+                leaving === 'dm'
+                  ? 'conic-gradient(from 0deg at 50% 50%, rgba(4,4,8,0.98) 0deg, rgba(88,28,135,0.42) 55deg, rgba(5,5,10,0.98) 115deg, rgba(180,83,9,0.34) 175deg, rgba(3,3,7,0.99) 240deg, rgba(127,29,29,0.38) 305deg, rgba(4,4,8,0.98) 360deg)'
+                  : 'conic-gradient(from 0deg at 50% 50%, rgba(4,4,8,0.98) 0deg, rgba(30,58,138,0.45) 55deg, rgba(5,5,10,0.98) 115deg, rgba(88,28,135,0.38) 175deg, rgba(3,3,7,0.99) 240deg, rgba(14,116,144,0.36) 305deg, rgba(4,4,8,0.98) 360deg)',
+              filter: 'blur(36px)',
+              animation: 'mw-vortex-in 2.4s cubic-bezier(0.32, 0, 0.2, 1) forwards'
+            }}
+          />
+
+          {/* Inner counter-rotating shadowy maelstrom */}
+          <div
+            className="absolute w-[135vmax] h-[135vmax] rounded-full"
+            style={{
+              background:
+                leaving === 'dm'
+                  ? 'conic-gradient(from 180deg at 50% 50%, transparent 0deg, rgba(5,4,10,0.96) 60deg, rgba(147,51,234,0.28) 110deg, rgba(2,2,5,0.98) 180deg, rgba(217,119,6,0.24) 245deg, rgba(4,4,9,0.97) 310deg, transparent 360deg)'
+                  : 'conic-gradient(from 180deg at 50% 50%, transparent 0deg, rgba(5,4,10,0.96) 60deg, rgba(56,189,248,0.25) 110deg, rgba(2,2,5,0.98) 180deg, rgba(99,102,241,0.28) 245deg, rgba(4,4,9,0.97) 310deg, transparent 360deg)',
+              filter: 'blur(24px)',
+              animation: 'mw-vortex-counter 2.2s cubic-bezier(0.32, 0, 0.2, 1) forwards'
+            }}
+          />
+
+          {/* Spinning arcane abyssal geometry */}
+          <svg
+            viewBox="0 0 800 800"
+            className="relative w-[92vmin] h-[92vmin] opacity-80"
+            style={{ animation: 'mw-vortex-in 2.3s cubic-bezier(0.25, 0.1, 0.25, 1) forwards' }}
+          >
+            <defs>
+              <radialGradient id="mw-void-eye" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stopColor="#000000" stopOpacity="1" />
+                <stop offset="48%" stopColor="#05040a" stopOpacity="0.96" />
+                <stop
+                  offset="72%"
+                  stopColor={leaving === 'dm' ? '#581c87' : '#1e3a8a'}
+                  stopOpacity="0.45"
+                />
+                <stop offset="100%" stopColor="#000000" stopOpacity="0" />
+              </radialGradient>
+            </defs>
+            <circle cx="400" cy="400" r="360" fill="url(#mw-void-eye)" />
+            <circle
+              cx="400"
+              cy="400"
+              r="290"
+              fill="none"
+              stroke={leaving === 'dm' ? 'rgba(168,85,247,0.42)' : 'rgba(56,189,248,0.38)'}
+              strokeWidth="2"
+              strokeDasharray="10 18 4 12"
+            />
+            <circle
+              cx="400"
+              cy="400"
+              r="210"
+              fill="none"
+              stroke={leaving === 'dm' ? 'rgba(217,119,6,0.38)' : 'rgba(99,102,241,0.4)'}
+              strokeWidth="1.5"
+              strokeDasharray="6 14"
+            />
+            {Array.from({ length: 12 }).map((_, i) => {
+              const rot = i * 30;
+              return (
+                <path
+                  key={i}
+                  d="M400,400 Q460,260 360,110"
+                  fill="none"
+                  stroke={leaving === 'dm' ? 'rgba(88,28,135,0.45)' : 'rgba(30,64,175,0.45)'}
+                  strokeWidth="3.5"
+                  strokeLinecap="round"
+                  transform={`rotate(${rot} 400 400)`}
+                />
+              );
+            })}
+            <circle cx="400" cy="400" r="95" fill="#020205" />
+          </svg>
+
+          {/* Crushing pitch-black outer vignette */}
+          <div
+            className="absolute inset-0"
+            style={{
+              background:
+                'radial-gradient(circle at 50% 50%, transparent 12%, rgba(3, 3, 8, 0.85) 54%, #020205 90%)'
+            }}
+          />
+        </div>
       )}
     </div>
   );
