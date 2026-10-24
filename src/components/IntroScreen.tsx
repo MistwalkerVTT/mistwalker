@@ -77,15 +77,38 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onSelectDm, onSelectPl
   const [muted, setMuted] = useState(false);
   const [audioOn, setAudioOn] = useState(false);
 
-  // Cinematic sequence timing
+  // Cinematic sequence timing + preload high-res JB2A magical portal transition videos
   useEffect(() => {
+    const preloadUrls = [
+      '/jb2a/Community/JAA/glyphOfWarding.webm',
+      '/jb2a/Community/JackKerouac/magic_circle_CIRCLE_01.webm',
+      '/jb2a/Community/JackKerouac/runes_CIRCLE_02.webm',
+      '/jb2a/Community/JAA/MordenkainensMagnificentMansion.webm',
+      '/jb2a/Library/1st_Level/Detect_Magic/DetectMagicCircle_01_Regular_Blue_1200x1200.webm',
+      '/jb2a/Community/JAA/circleOfDeath.webm',
+      '/jb2a/Community/JackKerouac/energy_quickburst_CIRCLE_01.webm'
+    ];
+    const videos = preloadUrls.map((url) => {
+      const v = document.createElement('video');
+      v.preload = 'auto';
+      v.muted = true;
+      v.src = url;
+      v.load();
+      return v;
+    });
+
     const timers = [
       setTimeout(() => setStage(1), 400),
       setTimeout(() => setStage(2), 1500),
       setTimeout(() => setStage(3), 2900),
       setTimeout(() => setStage(4), 3900)
     ];
-    return () => timers.forEach(clearTimeout);
+    return () => {
+      timers.forEach(clearTimeout);
+      videos.forEach((v) => {
+        v.src = '';
+      });
+    };
   }, []);
 
   // Skip to choices on any key / click before they appear
@@ -201,18 +224,19 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onSelectDm, onSelectPl
       hue: Math.random() < 0.5 ? 205 : 38,
       angle: Math.random() * Math.PI * 2
     }));
-    const embers = Array.from({ length: 110 }, () => ({
+    const embers = Array.from({ length: 130 }, () => ({
       x: Math.random(),
       y: Math.random(),
-      s: 0.6 + Math.random() * 2,
+      s: 0.6 + Math.random() * 2.2,
       vy: 0.00012 + Math.random() * 0.0004,
       sway: Math.random() * Math.PI * 2,
-      a: 0.3 + Math.random() * 0.7,
+      a: 0.35 + Math.random() * 0.65,
       angle: Math.random() * Math.PI * 2,
-      radius: 0.1 + Math.random() * 0.7
+      radius: 0.05 + Math.random() * 0.75,
+      speed: 0.6 + Math.random() * 1.4
     }));
 
-    let vortexSpin = 0;
+    let warpElapsed = 0;
     let t0 = performance.now();
     const loop = (now: number) => {
       const dt = Math.min(now - t0, 50);
@@ -220,9 +244,8 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onSelectDm, onSelectPl
       ctx.clearRect(0, 0, w, h);
 
       const isLeaving = leavingRef.current;
-      const isFading = fadingOutRef.current;
       if (isLeaving) {
-        vortexSpin += dt * (isFading ? 0.0038 : 0.0022);
+        warpElapsed += dt;
       }
 
       const cx = w * 0.5;
@@ -230,41 +253,64 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onSelectDm, onSelectPl
 
       for (const m of mist) {
         if (isLeaving) {
-          m.angle += dt * 0.0014;
           const dx = m.x * w - cx;
           const dy = m.y * h - cy;
           const dist = Math.hypot(dx, dy);
-          const pull = isFading ? 1.008 : 0.992;
-          const ang = Math.atan2(dy, dx) + dt * 0.0018;
-          m.x = (cx + Math.cos(ang) * dist * pull) / w;
-          m.y = (cy + Math.sin(ang) * dist * pull) / h;
+          const ang = Math.atan2(dy, dx) + dt * 0.0022;
+          m.x = (cx + Math.cos(ang) * dist * 1.006) / w;
+          m.y = (cy + Math.sin(ang) * dist * 1.006) / h;
         } else {
           m.x += m.vx * dt;
           if (m.x > 1.3) m.x = -0.3;
         }
         const g = ctx.createRadialGradient(m.x * w, m.y * h, 0, m.x * w, m.y * h, m.r);
         const hue = isLeaving
-          ? (isLeaving === 'dm' ? 275 : 225)
+          ? (isLeaving === 'dm' ? 280 : 205)
           : m.hue;
-        const alpha = isLeaving ? Math.min(0.22, m.a * 2.2) : m.a;
-        g.addColorStop(0, `hsla(${hue}, 48%, ${isLeaving ? 16 : 70}%, ${alpha})`);
-        g.addColorStop(1, 'hsla(240, 40%, 6%, 0)');
+        const alpha = isLeaving ? Math.min(0.28, m.a * 2.5) : m.a;
+        g.addColorStop(0, `hsla(${hue}, 75%, ${isLeaving ? 22 : 70}%, ${alpha})`);
+        g.addColorStop(1, 'hsla(240, 50%, 5%, 0)');
         ctx.fillStyle = g;
         ctx.fillRect(m.x * w - m.r, m.y * h - m.r, m.r * 2, m.r * 2);
       }
 
       ctx.globalCompositeOperation = 'lighter';
+      const maxDim = Math.hypot(w, h) * 0.65;
+
       for (const e of embers) {
-        let px: number;
-        let py: number;
         if (isLeaving) {
-          e.angle += dt * (0.0025 + (1 - e.radius) * 0.004);
-          e.radius = isFading
-            ? Math.min(1.2, e.radius + dt * 0.00045)
-            : Math.max(0.02, e.radius * (1 - dt * 0.0009));
-          const maxDim = Math.max(w, h) * 0.65;
-          px = cx + Math.cos(e.angle + vortexSpin) * (e.radius * maxDim);
-          py = cy + Math.sin(e.angle + vortexSpin) * (e.radius * maxDim);
+          // High-energy warp streaks blasting & spiraling outward from the arcane gate
+          const accel = 1 + Math.min(4.5, warpElapsed * 0.0028) * e.speed;
+          e.angle += dt * 0.0014 * e.speed;
+          e.radius += dt * 0.00055 * accel;
+          if (e.radius > 1.15) {
+            e.radius = 0.02 + Math.random() * 0.08;
+            e.angle = Math.random() * Math.PI * 2;
+          }
+          const rNow = e.radius * maxDim;
+          const rTail = Math.max(0, (e.radius - 0.045 * accel) * maxDim);
+          const xHead = cx + Math.cos(e.angle) * rNow;
+          const yHead = cy + Math.sin(e.angle) * rNow;
+          const xTail = cx + Math.cos(e.angle - 0.06) * rTail;
+          const yTail = cy + Math.sin(e.angle - 0.06) * rTail;
+
+          const grad = ctx.createLinearGradient(xTail, yTail, xHead, yHead);
+          if (isLeaving === 'dm') {
+            grad.addColorStop(0, 'rgba(147, 51, 234, 0)');
+            grad.addColorStop(0.6, `rgba(192, 132, 252, ${e.a * 0.7})`);
+            grad.addColorStop(1, `rgba(251, 191, 36, ${e.a})`);
+          } else {
+            grad.addColorStop(0, 'rgba(37, 99, 235, 0)');
+            grad.addColorStop(0.6, `rgba(56, 189, 248, ${e.a * 0.75})`);
+            grad.addColorStop(1, `rgba(224, 242, 254, ${e.a})`);
+          }
+          ctx.strokeStyle = grad;
+          ctx.lineWidth = e.s * 1.8;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(xTail, yTail);
+          ctx.lineTo(xHead, yHead);
+          ctx.stroke();
         } else {
           e.y -= e.vy * dt;
           e.sway += 0.0015 * dt;
@@ -272,29 +318,21 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onSelectDm, onSelectPl
             e.y = 1.05;
             e.x = Math.random();
           }
-          px = (e.x + Math.sin(e.sway) * 0.012) * w;
-          py = e.y * h;
+          const px = (e.x + Math.sin(e.sway) * 0.012) * w;
+          const py = e.y * h;
           e.angle = Math.atan2(py - cy, px - cx);
-          e.radius = Math.hypot(px - cx, py - cy) / (Math.max(w, h) * 0.65);
-        }
+          e.radius = Math.max(0.03, Math.hypot(px - cx, py - cy) / maxDim);
 
-        const flick = 0.6 + Math.sin(now * 0.004 + e.sway * 5) * 0.4;
-        const rad = e.s * (isLeaving ? 5.2 : 4);
-        const g = ctx.createRadialGradient(px, py, 0, px, py, rad);
-        if (isLeaving === 'player') {
-          g.addColorStop(0, `rgba(125, 211, 252, ${e.a * flick})`);
-          g.addColorStop(1, 'rgba(79, 70, 229, 0)');
-        } else if (isLeaving === 'dm') {
-          g.addColorStop(0, `rgba(217, 119, 6, ${e.a * flick})`);
-          g.addColorStop(1, 'rgba(147, 51, 234, 0)');
-        } else {
+          const flick = 0.6 + Math.sin(now * 0.004 + e.sway * 5) * 0.4;
+          const rad = e.s * 4;
+          const g = ctx.createRadialGradient(px, py, 0, px, py, rad);
           g.addColorStop(0, `rgba(255, 190, 80, ${e.a * flick})`);
           g.addColorStop(1, 'rgba(255, 120, 20, 0)');
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(px, py, rad, 0, Math.PI * 2);
+          ctx.fill();
         }
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.arc(px, py, rad, 0, Math.PI * 2);
-        ctx.fill();
       }
       ctx.globalCompositeOperation = 'source-over';
       raf = requestAnimationFrame(loop);
@@ -323,9 +361,9 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onSelectDm, onSelectPl
       style={{
         fontFamily: "'Cinzel', 'Trajan Pro', 'Georgia', serif",
         opacity: fadingOut ? 0 : 1,
-        transform: fadingOut ? 'scale(1.28) rotate(8deg)' : 'scale(1) rotate(0deg)',
-        filter: fadingOut ? 'blur(18px)' : 'blur(0px)',
-        transition: 'opacity 1.9s cubic-bezier(0.22, 1, 0.36, 1), transform 2.1s cubic-bezier(0.4, 0, 0.2, 1), filter 1.9s ease-in-out',
+        transform: fadingOut ? 'scale(1.42)' : 'scale(1)',
+        filter: fadingOut ? 'blur(12px)' : 'blur(0px)',
+        transition: 'opacity 1.6s cubic-bezier(0.22, 1, 0.36, 1), transform 1.85s cubic-bezier(0.16, 1, 0.3, 1), filter 1.6s ease-in-out',
         pointerEvents: fadingOut ? 'none' : 'auto'
       }}
     >
@@ -338,24 +376,25 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onSelectDm, onSelectPl
         @keyframes mw-sweep { 0% { transform: translateX(-120%) skewX(-20deg); } 100% { transform: translateX(260%) skewX(-20deg); } }
         @keyframes mw-glow { 0%,100% { filter: drop-shadow(0 0 18px rgba(245,158,11,0.55)); } 50% { filter: drop-shadow(0 0 46px rgba(251,191,36,0.95)); } }
         @keyframes mw-bars { from { transform: scaleY(1); } to { transform: scaleY(0); } }
-        @keyframes mw-vortex-in {
-          0% { opacity: 0; transform: scale(1.55) rotate(0deg); }
-          35% { opacity: 1; }
-          100% { opacity: 1; transform: scale(0.92) rotate(220deg); }
+        @keyframes mw-portal-erupt {
+          0% { opacity: 0; transform: scale(0.18) rotate(-25deg); filter: brightness(2.4) saturate(1.6) blur(8px); }
+          25% { opacity: 1; filter: brightness(1.6) saturate(1.4) blur(0px); }
+          100% { opacity: 1; transform: scale(1.38) rotate(35deg); filter: brightness(1.15) saturate(1.3) blur(0px); }
         }
-        @keyframes mw-vortex-counter {
-          0% { opacity: 0; transform: scale(1.3) rotate(0deg); }
-          40% { opacity: 0.95; }
-          100% { opacity: 1; transform: scale(0.78) rotate(-260deg); }
+        @keyframes mw-portal-ring-expand {
+          0% { opacity: 0; transform: scale(0.32) rotate(0deg); }
+          20% { opacity: 1; }
+          100% { opacity: 0.95; transform: scale(1.65) rotate(-65deg); }
         }
-        @keyframes mw-abyss-implode {
-          0% { opacity: 0; transform: scale(0.2); }
-          45% { opacity: 0.95; transform: scale(1.05); }
-          100% { opacity: 1; transform: scale(1.65); }
+        @keyframes mw-shockwave-burst {
+          0% { opacity: 0.95; transform: scale(0.15); }
+          70% { opacity: 0.85; }
+          100% { opacity: 0; transform: scale(2.35); }
         }
-        @keyframes mw-ui-sink {
-          0% { opacity: 1; transform: scale(1) rotate(0deg); filter: blur(0px); }
-          100% { opacity: 0; transform: scale(0.55) rotate(-14deg); filter: blur(16px); }
+        @keyframes mw-ui-warp {
+          0% { opacity: 1; transform: scale(1); filter: blur(0px); }
+          45% { opacity: 0.35; transform: scale(0.84); filter: blur(6px); }
+          100% { opacity: 0; transform: scale(1.45); filter: blur(20px); }
         }
         .mw-card { transition: transform .35s cubic-bezier(.2,.8,.2,1), box-shadow .35s, border-color .35s; }
         .mw-card:hover { transform: translateY(-8px) scale(1.035); }
@@ -435,7 +474,7 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onSelectDm, onSelectPl
       <div
         className="relative z-10 h-full w-full flex flex-col items-center justify-start pt-[9vh] px-4"
         style={{
-          animation: leaving ? 'mw-ui-sink 1.85s cubic-bezier(0.55, 0.05, 0.67, 0.19) forwards' : undefined
+          animation: leaving ? 'mw-ui-warp 1.25s cubic-bezier(0.32, 0, 0.2, 1) forwards' : undefined
         }}
       >
         <img
@@ -595,105 +634,94 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onSelectDm, onSelectPl
         </button>
       )}
 
-      {/* Ominous dark swirling abyssal vortex transition */}
+      {/* High-definition JB2A Magical Arcane Portal & Runic Shockwave Transition */}
       {leaving && (
         <div className="absolute inset-0 z-30 pointer-events-none overflow-hidden flex items-center justify-center">
-          {/* Deep creeping shadow veil */}
+          {/* Deep dark cosmic backdrop so the additive WebM magic videos pop with vivid contrast */}
           <div
             className="absolute inset-0"
             style={{
               background:
-                'radial-gradient(circle at 50% 50%, rgba(3, 3, 7, 0.96) 0%, rgba(6, 5, 14, 0.94) 38%, rgba(2, 2, 5, 0.99) 100%)',
-              animation: 'mw-abyss-implode 1.8s cubic-bezier(0.22, 1, 0.36, 1) forwards'
-            }}
-          />
-
-          {/* Outer clockwise swirling dark mist tendrils */}
-          <div
-            className="absolute w-[180vmax] h-[180vmax] rounded-full"
-            style={{
-              background:
                 leaving === 'dm'
-                  ? 'conic-gradient(from 0deg at 50% 50%, rgba(4,4,8,0.98) 0deg, rgba(88,28,135,0.42) 55deg, rgba(5,5,10,0.98) 115deg, rgba(180,83,9,0.34) 175deg, rgba(3,3,7,0.99) 240deg, rgba(127,29,29,0.38) 305deg, rgba(4,4,8,0.98) 360deg)'
-                  : 'conic-gradient(from 0deg at 50% 50%, rgba(4,4,8,0.98) 0deg, rgba(30,58,138,0.45) 55deg, rgba(5,5,10,0.98) 115deg, rgba(88,28,135,0.38) 175deg, rgba(3,3,7,0.99) 240deg, rgba(14,116,144,0.36) 305deg, rgba(4,4,8,0.98) 360deg)',
-              filter: 'blur(36px)',
-              animation: 'mw-vortex-in 2.4s cubic-bezier(0.32, 0, 0.2, 1) forwards'
+                  ? 'radial-gradient(circle at 50% 50%, rgba(28, 10, 48, 0.78) 0%, rgba(7, 5, 14, 0.94) 52%, #020205 95%)'
+                  : 'radial-gradient(circle at 50% 50%, rgba(10, 28, 58, 0.78) 0%, rgba(5, 8, 18, 0.94) 52%, #020205 95%)'
             }}
           />
 
-          {/* Inner counter-rotating shadowy maelstrom */}
-          <div
-            className="absolute w-[135vmax] h-[135vmax] rounded-full"
+          {/* Layer 1: Massive Rotating Runic Containment Circle (JackKerouac Magic Circle / Runes) */}
+          <video
+            src={
+              leaving === 'dm'
+                ? '/jb2a/Community/JAA/glyphOfWarding.webm'
+                : '/jb2a/Community/JackKerouac/magic_circle_CIRCLE_01.webm'
+            }
+            autoPlay
+            loop
+            muted
+            playsInline
+            className="absolute w-[125vmin] h-[125vmin] object-contain"
             style={{
-              background:
-                leaving === 'dm'
-                  ? 'conic-gradient(from 180deg at 50% 50%, transparent 0deg, rgba(5,4,10,0.96) 60deg, rgba(147,51,234,0.28) 110deg, rgba(2,2,5,0.98) 180deg, rgba(217,119,6,0.24) 245deg, rgba(4,4,9,0.97) 310deg, transparent 360deg)'
-                  : 'conic-gradient(from 180deg at 50% 50%, transparent 0deg, rgba(5,4,10,0.96) 60deg, rgba(56,189,248,0.25) 110deg, rgba(2,2,5,0.98) 180deg, rgba(99,102,241,0.28) 245deg, rgba(4,4,9,0.97) 310deg, transparent 360deg)',
-              filter: 'blur(24px)',
-              animation: 'mw-vortex-counter 2.2s cubic-bezier(0.32, 0, 0.2, 1) forwards'
+              mixBlendMode: 'screen',
+              animation: 'mw-portal-ring-expand 2.5s cubic-bezier(0.16, 1, 0.3, 1) forwards'
             }}
           />
 
-          {/* Spinning arcane abyssal geometry */}
-          <svg
-            viewBox="0 0 800 800"
-            className="relative w-[92vmin] h-[92vmin] opacity-80"
-            style={{ animation: 'mw-vortex-in 2.3s cubic-bezier(0.25, 0.1, 0.25, 1) forwards' }}
-          >
-            <defs>
-              <radialGradient id="mw-void-eye" cx="50%" cy="50%" r="50%">
-                <stop offset="0%" stopColor="#000000" stopOpacity="1" />
-                <stop offset="48%" stopColor="#05040a" stopOpacity="0.96" />
-                <stop
-                  offset="72%"
-                  stopColor={leaving === 'dm' ? '#581c87' : '#1e3a8a'}
-                  stopOpacity="0.45"
-                />
-                <stop offset="100%" stopColor="#000000" stopOpacity="0" />
-              </radialGradient>
-            </defs>
-            <circle cx="400" cy="400" r="360" fill="url(#mw-void-eye)" />
-            <circle
-              cx="400"
-              cy="400"
-              r="290"
-              fill="none"
-              stroke={leaving === 'dm' ? 'rgba(168,85,247,0.42)' : 'rgba(56,189,248,0.38)'}
-              strokeWidth="2"
-              strokeDasharray="10 18 4 12"
-            />
-            <circle
-              cx="400"
-              cy="400"
-              r="210"
-              fill="none"
-              stroke={leaving === 'dm' ? 'rgba(217,119,6,0.38)' : 'rgba(99,102,241,0.4)'}
-              strokeWidth="1.5"
-              strokeDasharray="6 14"
-            />
-            {Array.from({ length: 12 }).map((_, i) => {
-              const rot = i * 30;
-              return (
-                <path
-                  key={i}
-                  d="M400,400 Q460,260 360,110"
-                  fill="none"
-                  stroke={leaving === 'dm' ? 'rgba(88,28,135,0.45)' : 'rgba(30,64,175,0.45)'}
-                  strokeWidth="3.5"
-                  strokeLinecap="round"
-                  transform={`rotate(${rot} 400 400)`}
-                />
-              );
-            })}
-            <circle cx="400" cy="400" r="95" fill="#020205" />
-          </svg>
+          {/* Layer 2: Interlocking Counter-Spinning Arcane Runes Ring */}
+          <video
+            src="/jb2a/Community/JackKerouac/runes_CIRCLE_02.webm"
+            autoPlay
+            loop
+            muted
+            playsInline
+            className="absolute w-[95vmin] h-[95vmin] object-contain"
+            style={{
+              mixBlendMode: 'screen',
+              filter: leaving === 'dm' ? 'hue-rotate(65deg) saturate(1.6)' : 'saturate(1.4)',
+              animation: 'mw-portal-erupt 2.4s cubic-bezier(0.16, 1, 0.3, 1) forwards'
+            }}
+          />
 
-          {/* Crushing pitch-black outer vignette */}
+          {/* Layer 3: Extradimensional Swirling Portal Core */}
+          <video
+            src={
+              leaving === 'dm'
+                ? '/jb2a/Community/JAA/MordenkainensMagnificentMansion.webm'
+                : '/jb2a/Library/1st_Level/Detect_Magic/DetectMagicCircle_01_Regular_Blue_1200x1200.webm'
+            }
+            autoPlay
+            loop
+            muted
+            playsInline
+            className="absolute w-[110vmin] h-[110vmin] object-contain"
+            style={{
+              mixBlendMode: 'screen',
+              animation: 'mw-portal-erupt 2.2s cubic-bezier(0.22, 1, 0.36, 1) forwards'
+            }}
+          />
+
+          {/* Layer 4: Initial Explosive Magical Shockwave Burst */}
+          <video
+            src={
+              leaving === 'dm'
+                ? '/jb2a/Community/JAA/circleOfDeath.webm'
+                : '/jb2a/Community/JackKerouac/energy_quickburst_CIRCLE_01.webm'
+            }
+            autoPlay
+            muted
+            playsInline
+            className="absolute w-[130vmin] h-[130vmin] object-contain"
+            style={{
+              mixBlendMode: 'screen',
+              animation: 'mw-shockwave-burst 1.65s cubic-bezier(0.16, 1, 0.3, 1) forwards'
+            }}
+          />
+
+          {/* Dark abyssal edge framing */}
           <div
             className="absolute inset-0"
             style={{
               background:
-                'radial-gradient(circle at 50% 50%, transparent 12%, rgba(3, 3, 8, 0.85) 54%, #020205 90%)'
+                'radial-gradient(circle at 50% 50%, transparent 32%, rgba(3, 3, 8, 0.72) 72%, #020205 98%)'
             }}
           />
         </div>
