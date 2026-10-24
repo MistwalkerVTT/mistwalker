@@ -965,6 +965,24 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
 
       {/* Bottom Anchored Tools: Help, Bug Report, Bug Log / Notes, Settings */}
       <div className="flex flex-col items-center py-2.5 border-t border-zinc-800/80 gap-2 shrink-0 w-full px-1.5 mt-auto bg-zinc-950/95">
+        {/* Switch to Player Mode (opens in a new tab so the DM session stays intact) */}
+        <div className="relative group shrink-0">
+          <button
+            id="btn-switch-to-player-mode"
+            onClick={() => {
+              const url = new URL(window.location.href);
+              url.search = '';
+              url.searchParams.set('view', 'player');
+              window.open(url.toString(), '_blank');
+            }}
+            className="w-11 h-11 rounded-xl flex flex-col items-center justify-center transition-all text-sky-300 hover:text-sky-200 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 hover:border-sky-400/60 shadow-sm cursor-pointer active:scale-95"
+            title="Switch to Player Mode (opens the player view in a new tab; your DM session stays open)"
+          >
+            <Monitor className="w-5 h-5" />
+            <span className="text-[6.5px] font-black font-mono tracking-wider -mt-0.5 leading-none">PLAYER</span>
+          </button>
+        </div>
+
         {/* Help & Support Group */}
         <div className="relative group shrink-0">
           <button

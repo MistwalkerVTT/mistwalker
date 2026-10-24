@@ -6619,6 +6619,24 @@ export default function PlayerView() {
                       {isFull && <span>Roll Dice</span>}
                     </button>
 
+                    {/* Switch to DM Mode */}
+                    <button
+                      id="btn-switch-to-dm-mode"
+                      onClick={() => {
+                        const url = new URL(window.location.href);
+                        url.search = '';
+                        url.searchParams.set('view', 'dm');
+                        window.location.assign(url.toString());
+                      }}
+                      className={`w-full flex items-center rounded-xl transition-all cursor-pointer border bg-zinc-900/80 hover:bg-amber-500/15 hover:border-amber-500/50 text-zinc-300 hover:text-amber-200 border-zinc-800 ${
+                        isFull ? 'px-2.5 py-2 gap-2 text-xs font-medium' : 'p-2.5 justify-center'
+                      }`}
+                      title="Switch to DM Mode"
+                    >
+                      <Shield className="w-4 h-4 text-amber-400 shrink-0" />
+                      {isFull && <span className="flex-1 text-left">Switch to DM Mode</span>}
+                    </button>
+
                     {/* Glow Light toggle (Stavros) */}
                     {claimedToken && (/stavros/i.test(claimedToken.name || '') || (claimedToken as any).canGlowLight) && (
                       <button
