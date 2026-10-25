@@ -1665,9 +1665,284 @@ ARTIFACTS OF VECNA:
 - Kas the Betrayer: Former vampire lieutenant who betrayed Vecna with the Sword of Kas; in Eve of Ruin, disguised as Mordenkainen ("The Weaver of Lies") to manipulate the party into defeating Vecna and claiming godhood for himself!
 `;
 
+// ─── D&D RAG (Retrieval-Augmented Generation) ─────────────────────────────────
+// Dynamically fetches real official D&D source material from Open5e (SRD-licensed,
+// free, no-auth) and the local DDB compendium cache so every chatbot reply is
+// grounded in verified rules text rather than model training alone.
+
+const OPEN5E_BASE = "https://api.open5e.com/v1";
+const OPEN5E_TIMEOUT_MS = 4000;
+
+async function open5eFetch(path: string): Promise<any | null> {
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), OPEN5E_TIMEOUT_MS);
+    const res = await fetch(`${OPEN5E_BASE}${path}`, { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+function formatSpell(s: any): string {
+  if (!s) return "";
+  const lines: string[] = [
+    `**${s.name}** (${s.school?.name || "Unknown school"}, Level ${s.level_int ?? s.level ?? "?"})`,
+    `Casting Time: ${s.casting_time || "—"} | Range: ${s.range || "—"} | Duration: ${s.duration || "—"}`,
+    `Components: ${s.components || "—"} | Concentration: ${s.concentration === "yes" ? "Yes" : "No"}`,
+    `Classes: ${s.dnd_class || "—"}`,
+    ``,
+    (s.desc || "").replace(/<[^>]+>/g, "").trim()
+  ];
+  if (s.higher_level) lines.push(`\n**At Higher Levels:** ${s.higher_level.replace(/<[^>]+>/g, "").trim()}`);
+  return lines.join("\n");
+}
+
+function formatMonsterOpen5e(m: any): string {
+  if (!m) return "";
+  const lines: string[] = [
+    `**${m.name}** — CR ${m.challenge_rating || "?"} | ${m.size || ""} ${m.type || ""} | AC ${m.armor_class || "?"} | HP ${m.hit_points || "?"} ${m.hit_dice ? `(${m.hit_dice})` : ""}`,
+    `Speed: ${m.speed || "30 ft."}`,
+    `STR ${m.strength ?? "?"} | DEX ${m.dexterity ?? "?"} | CON ${m.constitution ?? "?"} | INT ${m.intelligence ?? "?"} | WIS ${m.wisdom ?? "?"} | CHA ${m.charisma ?? "?"}`
+  ];
+  if (m.special_abilities?.length) {
+    lines.push("**Traits:**");
+    for (const t of m.special_abilities.slice(0, 4)) lines.push(`• *${t.name}*: ${(t.desc || "").slice(0, 300)}`);
+  }
+  if (m.actions?.length) {
+    lines.push("**Actions:**");
+    for (const a of m.actions.slice(0, 4)) lines.push(`• *${a.name}*: ${(a.desc || "").slice(0, 300)}`);
+  }
+  return lines.join("\n");
+}
+
+function formatMagicItem(item: any): string {
+  if (!item) return "";
+  const lines = [
+    `**${item.name}** — ${item.type || "Magic Item"} (${item.rarity || "Unknown rarity"})`,
+    item.requires_attunement ? `*Requires Attunement*` : "",
+    ``,
+    (item.desc || []).join("\n").replace(/<[^>]+>/g, "").trim().slice(0, 800)
+  ];
+  return lines.filter(Boolean).join("\n");
+}
+
+function formatClass(cls: any): string {
+  if (!cls) return "";
+  return [
+    `**${cls.name}** — Hit Die: ${cls.hit_die || "d8"} | Primary: ${cls.prof_armor || "—"} | Saves: ${cls.saving_throws || "—"}`,
+    `Skills: ${cls.skills || "—"}`,
+    (cls.desc || "").replace(/<[^>]+>/g, "").trim().slice(0, 600)
+  ].join("\n");
+}
+
+function formatRace(race: any): string {
+  if (!race) return "";
+  return [
+    `**${race.name}** — Speed: ${race.speed || "30 ft."} | Size: ${race.size || "Medium"}`,
+    `ASI: ${race.asi_desc || "—"}`,
+    (race.desc || "").replace(/<[^>]+>/g, "").trim().slice(0, 500)
+  ].join("\n");
+}
+
+function formatFeat(feat: any): string {
+  if (!feat) return "";
+  return [
+    `**${feat.name}** (Feat)`,
+    `Prerequisites: ${feat.prerequisite || "None"}`,
+    (feat.desc || "").replace(/<[^>]+>/g, "").trim().slice(0, 600)
+  ].join("\n");
+}
+
+function formatCondition(cond: any): string {
+  if (!cond) return "";
+  return [
+    `**${cond.name}** (Condition)`,
+    (cond.desc || []).join("\n").replace(/<[^>]+>/g, "").trim().slice(0, 600)
+  ].join("\n");
+}
+
+/**
+ * Detect what D&D entities the user message is asking about and
+ * fetch the real official data from Open5e + local compendium in parallel.
+ * Returns a formatted context block to inject into the AI system prompt.
+ */
+async function buildDndRagContext(
+  message: string,
+  extraContext: string,
+  campaignFocus: string,
+  localMonsters: { name: string; ac: number; hp: number; challenge: string; traits?: any[]; actions?: any[]; source?: string }[]
+): Promise<string> {
+  const searchText = `${message} ${extraContext} ${campaignFocus}`.toLowerCase();
+  const ragBlocks: string[] = [];
+
+  // ── helper: search Open5e by exact name, then fuzzy ──────────────────────────
+  async function searchOne(endpoint: string, query: string, limit = 3): Promise<any[]> {
+    const exactRes = await open5eFetch(`/${endpoint}/?search=${encodeURIComponent(query)}&limit=${limit}`);
+    if (exactRes?.results?.length) return exactRes.results;
+    return [];
+  }
+
+  // ── detect categories mentioned ───────────────────────────────────────────────
+  const spellPatterns = /\bspell\b|cast(ing)?\b|cantrip|sorcerer|wizard|cleric|druid|bard|warlock|paladin spell|concentration|verbal|somatic|material\b/i;
+  const monsterPatterns = /\b(monster|creature|beast|undead|dragon|fiend|aberration|stat\s*block|CR\s*\d|challenge\s*rating)\b/i;
+  const itemPatterns = /\b(magic\s*item|attunement|artifact|weapon|armor|ring|wand|rod|potion|scroll|cursed)\b/i;
+  const classPatterns = /\b(barbarian|bard|cleric|druid|fighter|monk|paladin|ranger|rogue|sorcerer|warlock|wizard|artificer)\s*(class|subclass|archetype|feature|level)?\b/i;
+  const racePatterns = /\b(dragonborn|dwarf|elf|gnome|half-elf|half-orc|halfling|human|tiefling|aasimar|genasi|goliath|tabaxi|tortle|orc|kobold|lizardfolk|kenku)\b/i;
+  const conditionPatterns = /\b(blinded|charmed|deafened|exhaustion|frightened|grappled|incapacitated|invisible|paralyzed|petrified|poisoned|prone|restrained|stunned|unconscious)\b/i;
+  const featPatterns = /\b(feat|alert|charger|crossbow\s*expert|dual\s*wielder|great\s*weapon\s*master|lucky|mage\s*slayer|mounted\s*combatant|polearm\s*master|resilient|sentinel|sharpshooter|shield\s*master|skilled|tough|war\s*caster|warcaster)\b/i;
+
+  // Extract quoted names or capitalized proper nouns from message
+  const quotedTerms = [...message.matchAll(/"([^"]+)"|'([^']+)'/g)].map(m => m[1] || m[2]);
+  const capitalizedWords = [...message.matchAll(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b/g)]
+    .map(m => m[1])
+    .filter(w => w.length > 3 && !["What", "How", "When", "Where", "Why", "Can", "Does", "Will", "The", "This", "That", "Give", "Tell", "Show", "Make", "Create", "Help"].includes(w));
+  const allNameTerms = [...new Set([...quotedTerms, ...capitalizedWords])];
+
+  const fetchPromises: Promise<void>[] = [];
+
+  // ── Spells ────────────────────────────────────────────────────────────────────
+  if (spellPatterns.test(searchText) || allNameTerms.length > 0) {
+    for (const term of allNameTerms.slice(0, 3)) {
+      fetchPromises.push((async () => {
+        const results = await searchOne("spells", term, 2);
+        for (const s of results) {
+          const block = formatSpell(s);
+          if (block) ragBlocks.push(`=== SPELL: ${s.name} ===\n${block}`);
+        }
+      })());
+    }
+    // Also search full message if it mentions specific spell names
+    const spellNameMatch = message.match(/\b(Fireball|Counterspell|Misty\s*Step|Shield|Silvery\s*Barbs|Wish|Power\s*Word\s*Kill|Banishment|Hold\s*Person|Polymorph|Animate\s*Objects|Darkness|Hypnotic\s*Pattern|Web|Slow|Haste|Bless|Shatter|Thunderwave|Eldritch\s*Blast|Healing\s*Word|Cure\s*Wounds|Spirit\s*Guardians|Dispel\s*Magic|Greater\s*Invisibility|Fly|Wall\s*of\s*Fire|Meteor\s*Swarm|Time\s*Stop|Foresight|True\s*Seeing|Mass\s*Suggestion|Reverse\s*Gravity|Simulacrum|Shapechange|Imprisonment|Gate)\b/gi);
+    if (spellNameMatch) {
+      for (const spellName of [...new Set(spellNameMatch.map(s => s.trim()))].slice(0, 3)) {
+        fetchPromises.push((async () => {
+          const results = await searchOne("spells", spellName, 1);
+          for (const s of results) {
+            const block = formatSpell(s);
+            if (block && !ragBlocks.some(b => b.includes(s.name))) {
+              ragBlocks.push(`=== SPELL: ${s.name} ===\n${block}`);
+            }
+          }
+        })());
+      }
+    }
+  }
+
+  // ── Monsters ─────────────────────────────────────────────────────────────────
+  if (monsterPatterns.test(searchText) || allNameTerms.length > 0) {
+    for (const term of allNameTerms.slice(0, 3)) {
+      fetchPromises.push((async () => {
+        // Check local DDB compendium first (faster)
+        const localMatch = localMonsters.find(m =>
+          m.name.toLowerCase() === term.toLowerCase() ||
+          m.name.toLowerCase().includes(term.toLowerCase())
+        );
+        if (localMatch) {
+          ragBlocks.push(`=== MONSTER (Local Cache): ${localMatch.name} ===\nCR: ${localMatch.challenge} | AC: ${localMatch.ac} | HP: ${localMatch.hp} | Source: ${localMatch.source || "DDB"}`);
+          return;
+        }
+        // Fallback to Open5e
+        const results = await searchOne("monsters", term, 1);
+        for (const m of results) {
+          const block = formatMonsterOpen5e(m);
+          if (block) ragBlocks.push(`=== MONSTER: ${m.name} ===\n${block}`);
+        }
+      })());
+    }
+  }
+
+  // ── Magic Items ───────────────────────────────────────────────────────────────
+  if (itemPatterns.test(searchText) || allNameTerms.length > 0) {
+    for (const term of allNameTerms.slice(0, 2)) {
+      fetchPromises.push((async () => {
+        const results = await searchOne("magicitems", term, 1);
+        for (const item of results) {
+          const block = formatMagicItem(item);
+          if (block) ragBlocks.push(`=== MAGIC ITEM: ${item.name} ===\n${block}`);
+        }
+      })());
+    }
+  }
+
+  // ── Classes ───────────────────────────────────────────────────────────────────
+  if (classPatterns.test(searchText)) {
+    const classMatch = searchText.match(/\b(barbarian|bard|cleric|druid|fighter|monk|paladin|ranger|rogue|sorcerer|warlock|wizard|artificer)\b/i);
+    if (classMatch) {
+      fetchPromises.push((async () => {
+        const results = await searchOne("classes", classMatch[1], 1);
+        for (const cls of results) {
+          const block = formatClass(cls);
+          if (block) ragBlocks.push(`=== CLASS: ${cls.name} ===\n${block}`);
+        }
+      })());
+    }
+  }
+
+  // ── Races ─────────────────────────────────────────────────────────────────────
+  if (racePatterns.test(searchText)) {
+    const raceMatch = searchText.match(/\b(dragonborn|dwarf|elf|gnome|half-elf|half-orc|halfling|human|tiefling|aasimar|genasi|goliath|tabaxi|tortle|orc|kobold|lizardfolk|kenku)\b/i);
+    if (raceMatch) {
+      fetchPromises.push((async () => {
+        const results = await searchOne("races", raceMatch[1], 1);
+        for (const race of results) {
+          const block = formatRace(race);
+          if (block) ragBlocks.push(`=== RACE: ${race.name} ===\n${block}`);
+        }
+      })());
+    }
+  }
+
+  // ── Conditions ────────────────────────────────────────────────────────────────
+  if (conditionPatterns.test(searchText)) {
+    const conditionMatches = [...searchText.matchAll(/\b(blinded|charmed|deafened|exhaustion|frightened|grappled|incapacitated|invisible|paralyzed|petrified|poisoned|prone|restrained|stunned|unconscious)\b/gi)];
+    for (const condMatch of conditionMatches.slice(0, 2)) {
+      fetchPromises.push((async () => {
+        const results = await searchOne("conditions", condMatch[1], 1);
+        for (const cond of results) {
+          const block = formatCondition(cond);
+          if (block) ragBlocks.push(`=== CONDITION: ${cond.name} ===\n${block}`);
+        }
+      })());
+    }
+  }
+
+  // ── Feats ─────────────────────────────────────────────────────────────────────
+  if (featPatterns.test(searchText) || allNameTerms.some(t => /feat/i.test(t))) {
+    for (const term of allNameTerms.filter(t => t.length > 4).slice(0, 2)) {
+      fetchPromises.push((async () => {
+        const results = await searchOne("feats", term, 1);
+        for (const feat of results) {
+          const block = formatFeat(feat);
+          if (block) ragBlocks.push(`=== FEAT: ${feat.name} ===\n${block}`);
+        }
+      })());
+    }
+  }
+
+  // ── Backgrounds ───────────────────────────────────────────────────────────────
+  const bgMatch = searchText.match(/\b(acolyte|charlatan|criminal|entertainer|folk\s*hero|guild\s*artisan|hermit|noble|outlander|sage|sailor|soldier|urchin)\b/i);
+  if (bgMatch) {
+    fetchPromises.push((async () => {
+      const results = await searchOne("backgrounds", bgMatch[1], 1);
+      for (const bg of results) {
+        if (bg?.name) ragBlocks.push(`=== BACKGROUND: ${bg.name} ===\n${(bg.feature_desc || "").trim().slice(0, 400)}`);
+      }
+    })());
+  }
+
+  // Run all lookups in parallel (max 4s each)
+  await Promise.allSettled(fetchPromises);
+
+  if (ragBlocks.length === 0) return "";
+  return `\n=== OFFICIAL D&D 5e SOURCE MATERIAL (Retrieved in Real-Time) ===\nThe following data was fetched live from the official SRD (Open5e API) and your local D&D Beyond compendium cache. Use this as ground truth when answering.\n\n${ragBlocks.slice(0, 10).join("\n\n")}`;
+}
+
 /**
  * POST /api/ai/dnd-chat
- * Multi-turn omniscient D&D chatbot powered by Gemini
+ * Multi-turn omniscient D&D chatbot powered by Gemini + live D&D RAG
  */
 aiRouter.post("/dnd-chat", async (req, res) => {
   const { 
@@ -1746,6 +2021,10 @@ ${digestRooms.map((r: any) => `[Room ${r.roomNumber}: ${r.roomName || "Unnamed"}
 `;
     }
 
+    // ── Await RAG lookup (runs in parallel with persona/lore build) ───────────
+    // ── Await RAG lookup (started in parallel with persona/lore build above) ──
+    const ragContext = await ragContextPromise;
+
     const systemInstruction = `${modePersona}
 
 === KNOWLEDGE BASE & LORE ===
@@ -1754,14 +2033,15 @@ ${modeLore}
 ${campaignFocus ? `=== ACTIVE CAMPAIGN / SETTING FOCUS ===\n${campaignFocus}\n` : ""}
 ${chapterDigestContext ? `${chapterDigestContext}\n` : ""}
 ${extraContext ? `=== ADDITIONAL CAMPAIGN & VTT SESSION CONTEXT ===\n${extraContext}\n` : ""}
-
+${ragContext ? `${ragContext}\n` : ""}
 === FORMATTING & INTERACTION GUIDELINES ===
 1. Use clear, organized Markdown with bold headers, bullet points, and tables where helpful.
 2. For read-aloud room/scene descriptions, format them as blockquotes (> ...).
 3. For stat blocks or mechanics, clearly format AC, HP, Speed, DCs, and Damage formulas (e.g., 16 [3d10] necrotic damage).
 4. If asked about NPCs, allies, or villains, include distinctive personality traits, roleplaying quotes, motivations, and tactical behaviors.
 5. If the DM asks for rolls or checks, give the exact skill and DC (e.g., "DC 15 Intelligence (Arcana) check" or "DC 15 Dexterity (Thieves' Tools) check").
-6. Adapt your tone and lore seamlessly to whatever campaign or setting the DM is currently running, keeping responses engaging, authoritative, and immediately useful at the gaming table!`;
+6. When OFFICIAL D&D SOURCE MATERIAL is provided above, always prioritize it over general knowledge for accuracy.
+7. Adapt your tone and lore seamlessly to whatever campaign or setting the DM is currently running, keeping responses engaging, authoritative, and immediately useful at the gaming table!`;
 
     // Map conversation history
     const contents: any[] = [];
