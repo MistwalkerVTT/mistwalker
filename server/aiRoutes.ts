@@ -1966,6 +1966,11 @@ aiRouter.post("/dnd-chat", async (req, res) => {
     const mentionsGoldenVault = mode === "golden_vault" || /golden vault|masterpiece imbroglio|agile hand|constantori|guildmaster dusk|grinky|gwish/i.test(combinedSearchText);
     const mentionsVecna = mode === "vecna" || /vecna|eve of ruin|kas the betrayer|rotten fate|dread counterspell|rod of seven parts|afterthought/i.test(combinedSearchText);
 
+    // ── RAG: Fetch real D&D source material in parallel with persona build ────
+    const { loadCachedCompendium } = await import("./ddbService");
+    const localMonsters = loadCachedCompendium();
+    const ragContextPromise = buildDndRagContext(message, extraContext, campaignFocus, localMonsters);
+
     // Determine role and knowledge based on mode (campaign-agnostic by default)
     let modePersona = "";
     let modeLore = "";
@@ -2021,7 +2026,6 @@ ${digestRooms.map((r: any) => `[Room ${r.roomNumber}: ${r.roomName || "Unnamed"}
 `;
     }
 
-    // ── Await RAG lookup (runs in parallel with persona/lore build) ───────────
     // ── Await RAG lookup (started in parallel with persona/lore build above) ──
     const ragContext = await ragContextPromise;
 

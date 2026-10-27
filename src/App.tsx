@@ -178,6 +178,9 @@ import { DEMO_GV_CAMPAIGN, DEMO_GV_SCENE, DEMO_GV_CHAPTER, DEMO_GV_ROOM_ZONES, D
 import ReactMarkdown from 'react-markdown';
 import { snapPointToGrid, findNearestWall, segmentsIntersect } from './lib/visionEngine';
 import { Toaster, toast } from 'sonner';
+import { undoRedo } from './services/undoRedoService';
+import { AoeTemplateLayer } from './components/AoeTemplateLayer';
+import { AoeTemplateConfig, AoeShapeType, ftToPx, findTokensInsideAoe } from './utils/aoeGeometry';
 import homeBackgroundImage from './assets/images/home_background.jpg';
 import sceneBackdropImage from './assets/images/scene_backdrop.jpg';
 
@@ -1095,6 +1098,21 @@ export default function App() {
 
   // MistWalker always loads directly onto the Home Screen Hub on app launch/refresh (imageFile = null)
   const [imageFile, setImageFile] = useState<string | null>(null);
+
+  // Universal Undo/Redo Reactive State
+  const [canUndoState, setCanUndoState] = useState<boolean>(false);
+  const [canRedoState, setCanRedoState] = useState<boolean>(false);
+
+  // 5e Spell AOE Measurement Template State
+  const [activeAoeTemplate, setActiveAoeTemplate] = useState<AoeTemplateConfig | null>(null);
+
+  useEffect(() => {
+    const unsub = undoRedo.subscribe(() => {
+      setCanUndoState(undoRedo.canUndo());
+      setCanRedoState(undoRedo.canRedo());
+    });
+    return () => unsub();
+  }, []);
   const [mapType, setMapType] = useState<'image' | 'video'>('image');
   const [image, imageStatus] = useImage(mapType === 'image' ? (imageFile || '') : '');
   const broadcastState = useCallback((_force?: boolean) => {
@@ -6768,6 +6786,12 @@ export default function App() {
   const handleDeleteSelected = () => {
     const count = selectedTokenIds.length;
     if (count > 0) {
+      const toDelete = tokens.filter(t => selectedTokenIds.includes(t.id));
+      undoRedo.recordAction({
+        type: 'TOKEN_DELETE',
+        description: `Delete ${count} token(s)`,
+        payload: { tokens: toDelete }
+      });
       setTokens(prev => {
         const next = prev.filter(t => !selectedTokenIds.includes(t.id));
         if (mapsDataRef.current[activeMapId]) {
@@ -6832,7 +6856,21 @@ export default function App() {
   }, [tool]);
 
   const handleDeleteWall = useCallback((wallId: string) => {
-    setWalls(prev => prev.filter(w => w.id !== wallId));
+    setWalls(prev => {
+      const toDelete = prev.find(w => w.id === wallId);
+      if (toDelete) {
+        undoRedo.recordAction({
+          type: 'WALLS_CHANGE',
+          description: 'Delete wall',
+          payload: {
+            description: 'Delete wall',
+            oldWalls: prev,
+            newWalls: prev.filter(w => w.id !== wallId)
+          }
+        });
+      }
+      return prev.filter(w => w.id !== wallId);
+    });
     setSelectedWallId(curr => curr === wallId ? null : curr);
     toast.info('Wall section deleted');
   }, []);
@@ -7012,10 +7050,171 @@ export default function App() {
     }
   }, [selectedTokenIds, editingTokenNameId]);
 
+  // Universal Undo & Redo Handlers
+  const handleUndo = useCallback(() => {
+    const action = undoRedo.undo();
+    if (!action) {
+      toast.info('Nothing to undo');
+      return;
+    }
+    undoRedo.setApplying(true);
+    try {
+      switch (action.type) {
+        case 'TOKEN_MOVE': {
+          const { tokenId, from } = action.payload;
+          setTokens(prev => {
+            const next = prev.map(t => t.id === tokenId ? { ...t, x: from.x, y: from.y } : t);
+            if (mapsDataRef.current[activeMapId]) mapsDataRef.current[activeMapId].tokens = next;
+            if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) {
+              socketRef.current.emit('MOVE_TOKEN', { id: tokenId, x: from.x, y: from.y });
+            }
+            return next;
+          });
+          toast.info(`Undid: ${action.description}`);
+          break;
+        }
+        case 'TOKEN_DELETE': {
+          const restoredTokens: Token[] = action.payload.tokens || [];
+          setTokens(prev => {
+            const next = [...prev, ...restoredTokens];
+            if (mapsDataRef.current[activeMapId]) mapsDataRef.current[activeMapId].tokens = next;
+            return next;
+          });
+          toast.info(`Undid deletion of ${restoredTokens.length} token(s)`);
+          break;
+        }
+        case 'TOKEN_ADD': {
+          const addedToken = action.payload.token;
+          if (addedToken) {
+            setTokens(prev => {
+              const next = prev.filter(t => t.id !== addedToken.id);
+              if (mapsDataRef.current[activeMapId]) mapsDataRef.current[activeMapId].tokens = next;
+              return next;
+            });
+            toast.info(`Undid placement of ${addedToken.name}`);
+          }
+          break;
+        }
+        case 'WALLS_CHANGE': {
+          const { oldWalls } = action.payload;
+          if (Array.isArray(oldWalls)) {
+            setWalls(oldWalls);
+            toast.info(`Undid: ${action.description}`);
+          }
+          break;
+        }
+        default:
+          break;
+      }
+    } finally {
+      undoRedo.setApplying(false);
+    }
+  }, [activeMapId]);
+
+  const handleRedo = useCallback(() => {
+    const action = undoRedo.redo();
+    if (!action) {
+      toast.info('Nothing to redo');
+      return;
+    }
+    undoRedo.setApplying(true);
+    try {
+      switch (action.type) {
+        case 'TOKEN_MOVE': {
+          const { tokenId, to } = action.payload;
+          setTokens(prev => {
+            const next = prev.map(t => t.id === tokenId ? { ...t, x: to.x, y: to.y } : t);
+            if (mapsDataRef.current[activeMapId]) mapsDataRef.current[activeMapId].tokens = next;
+            if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) {
+              socketRef.current.emit('MOVE_TOKEN', { id: tokenId, x: to.x, y: to.y });
+            }
+            return next;
+          });
+          toast.info(`Redid: ${action.description}`);
+          break;
+        }
+        case 'TOKEN_DELETE': {
+          const deletedTokens: Token[] = action.payload.tokens || [];
+          const delIds = new Set(deletedTokens.map(t => t.id));
+          setTokens(prev => {
+            const next = prev.filter(t => !delIds.has(t.id));
+            if (mapsDataRef.current[activeMapId]) mapsDataRef.current[activeMapId].tokens = next;
+            return next;
+          });
+          toast.info(`Redid deletion of ${deletedTokens.length} token(s)`);
+          break;
+        }
+        case 'TOKEN_ADD': {
+          const addedToken = action.payload.token;
+          if (addedToken) {
+            setTokens(prev => {
+              const next = [...prev, addedToken];
+              if (mapsDataRef.current[activeMapId]) mapsDataRef.current[activeMapId].tokens = next;
+              return next;
+            });
+            toast.info(`Redid placement of ${addedToken.name}`);
+          }
+          break;
+        }
+        case 'WALLS_CHANGE': {
+          const { newWalls } = action.payload;
+          if (Array.isArray(newWalls)) {
+            setWalls(newWalls);
+            toast.info(`Redid: ${action.description}`);
+          }
+          break;
+        }
+        default:
+          break;
+      }
+    } finally {
+      undoRedo.setApplying(false);
+    }
+  }, [activeMapId]);
+
+  const handleToggleAoeTemplate = useCallback((shape: AoeShapeType = 'sphere', sizeFt = 20) => {
+    if (activeAoeTemplate) {
+      setActiveAoeTemplate(null);
+      toast.info('AOE Template dismissed');
+    } else {
+      const stageW = (dimensions.width || 1200) - 64;
+      const stageH = dimensions.height || 800;
+      const center = {
+        x: Math.round((-stagePos.x + stageW / 2) / stageScale),
+        y: Math.round((-stagePos.y + stageH / 2) / stageScale)
+      };
+      setActiveAoeTemplate({
+        id: `aoe-${Date.now()}`,
+        shape,
+        origin: center,
+        target: { x: center.x + ftToPx(sizeFt, gridSize), y: center.y },
+        sizeFt,
+        color: '#f59e0b',
+        label: `${sizeFt}ft ${shape.toUpperCase()}`
+      });
+      toast.success('Spell AOE Template placed! Drag handles to move or aim.');
+    }
+  }, [activeAoeTemplate, dimensions, stagePos, stageScale, gridSize]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+
+      // Universal Undo (Ctrl+Z / Cmd+Z) & Redo (Ctrl+Y / Ctrl+Shift+Z / Cmd+Shift+Z)
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          handleRedo();
+        } else {
+          handleUndo();
+        }
+        return;
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        handleRedo();
         return;
       }
 
@@ -7776,6 +7975,12 @@ export default function App() {
           isAtHome={!imageFile}
           onPromptRollInitiative={handlePromptRollInitiative}
           onOpenCriticalHitsModal={() => setShowCriticalHitsModal(true)}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+          canUndo={canUndoState}
+          canRedo={canRedoState}
+          onToggleAoeTemplate={handleToggleAoeTemplate}
+          isAoeTemplateActive={Boolean(activeAoeTemplate)}
           activeMapId={activeMapId}
           liveMapId={liveMapId}
           onForceSync={handleForceSyncToPlayers}
@@ -8887,6 +9092,20 @@ export default function App() {
                       if (mapsDataRef.current[activeMapId]) {
                         mapsDataRef.current[activeMapId].tokens = nextTokens;
                       }
+
+                      if (startPos.x !== snappedX || startPos.y !== snappedY) {
+                        undoRedo.recordAction({
+                          type: 'TOKEN_MOVE',
+                          description: `Move ${token.name || 'Token'}`,
+                          payload: {
+                            tokenId: token.id,
+                            tokenName: token.name || 'Token',
+                            from: { x: startPos.x, y: startPos.y },
+                            to: { x: snappedX, y: snappedY }
+                          }
+                        });
+                      }
+
                       dragStartPositionsRef.current = {};
 
                       if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) {
@@ -8902,6 +9121,11 @@ export default function App() {
                       }
                     }}
                     onDelete={() => {
+                      undoRedo.recordAction({
+                        type: 'TOKEN_DELETE',
+                        description: `Delete ${token.name || 'Token'}`,
+                        payload: { tokens: [token] }
+                      });
                       const next = tokens.filter(t => t.id !== token.id);
                       setTokens(next);
                       setSelectedTokenIds(prev => prev.filter(id => id !== token.id));
@@ -8957,6 +9181,21 @@ export default function App() {
                     isDM={true}
                     onUpdateSource={addOrUpdateMapAudioSource}
                     onSelectSource={() => setShowAudioMixerModal(true)}
+                  />
+                </Layer>
+              )}
+
+              {/* 5e Spell AOE Measurement Template Layer */}
+              {activeAoeTemplate && (
+                <Layer>
+                  <AoeTemplateLayer
+                    config={activeAoeTemplate}
+                    tokens={tokens}
+                    gridSize={gridSize}
+                    stageScale={stageScale}
+                    isInteractive={true}
+                    onUpdateConfig={setActiveAoeTemplate}
+                    onDismiss={() => setActiveAoeTemplate(null)}
                   />
                 </Layer>
               )}
@@ -9578,6 +9817,151 @@ export default function App() {
                 </div>
               );
             })()}
+
+            {/* Undo / Redo & Spell AOE Quick Dock */}
+            <div className="absolute top-16 left-20 flex items-center gap-1.5 z-40 bg-zinc-900/90 backdrop-blur border border-zinc-750 p-1.5 rounded-xl shadow-xl">
+              <button
+                type="button"
+                onClick={handleUndo}
+                disabled={!canUndoState}
+                className="p-2 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
+                title={undoRedo.getUndoDescription() + " (Ctrl+Z)"}
+              >
+                <RotateCcw className="w-4 h-4 text-amber-400" />
+                <span className="hidden sm:inline">Undo</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleRedo}
+                disabled={!canRedoState}
+                className="p-2 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
+                title={undoRedo.getRedoDescription() + " (Ctrl+Y)"}
+              >
+                <RotateCcw className="w-4 h-4 text-amber-400 scale-x-[-1]" />
+                <span className="hidden sm:inline">Redo</span>
+              </button>
+              <div className="w-px h-5 bg-zinc-700/80 mx-0.5" />
+              <button
+                type="button"
+                onClick={() => handleToggleAoeTemplate('sphere', 20)}
+                className={`p-2 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 text-xs font-semibold ${
+                  activeAoeTemplate
+                    ? 'bg-amber-500/25 text-amber-300 border border-amber-500/60 shadow-[0_0_12px_rgba(245,158,11,0.3)]'
+                    : 'bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white'
+                }`}
+                title="Toggle 5e Spell AOE Measurement Template (Sphere, Cone, Cube, Line)"
+              >
+                <Sparkles className="w-4 h-4 text-amber-400" />
+                <span className="hidden sm:inline">Spell AOE</span>
+              </button>
+            </div>
+
+            {/* Floating 5e Spell AOE Measurement Template HUD */}
+            {activeAoeTemplate && (
+              <div className="absolute top-28 left-20 z-40 bg-zinc-950/95 border border-amber-500/50 rounded-2xl p-3 shadow-2xl backdrop-blur-md flex flex-col gap-2 max-w-sm animate-in fade-in slide-in-from-top-2 text-zinc-200">
+                <div className="flex items-center justify-between gap-2 border-b border-zinc-800 pb-2">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-400" />
+                    <span className="text-xs font-bold text-white tracking-wide font-mono">
+                      5e Spell AOE Template
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveAoeTemplate(null)}
+                    className="text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-zinc-800 transition-colors cursor-pointer"
+                    title="Dismiss Template"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* Shape Selectors */}
+                <div className="grid grid-cols-4 gap-1">
+                  {(['sphere', 'cone', 'cube', 'line'] as AoeShapeType[]).map(shape => (
+                    <button
+                      key={shape}
+                      type="button"
+                      onClick={() => {
+                        const defaultSize = shape === 'cone' ? 30 : shape === 'line' ? 60 : 20;
+                        setActiveAoeTemplate(prev => prev ? {
+                          ...prev,
+                          shape,
+                          sizeFt: defaultSize,
+                          target: { x: prev.origin.x + ftToPx(defaultSize, gridSize), y: prev.origin.y },
+                          label: `${defaultSize}ft ${shape.toUpperCase()}`
+                        } : null);
+                      }}
+                      className={`px-2 py-1.5 rounded-lg text-xs font-semibold capitalize transition-all cursor-pointer ${
+                        activeAoeTemplate.shape === shape
+                          ? 'bg-amber-500/25 text-amber-300 border border-amber-500/60 shadow-sm'
+                          : 'bg-zinc-900 text-zinc-400 hover:text-zinc-200 border border-zinc-800'
+                      }`}
+                    >
+                      {shape === 'sphere' ? '⭕ Sphere' : shape === 'cone' ? '📐 Cone' : shape === 'cube' ? '🔲 Cube' : '📏 Line'}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Size Quick Selectors */}
+                <div className="flex items-center gap-1.5 overflow-x-auto py-0.5">
+                  {[10, 15, 20, 30, 40, 60, 100].map(ft => (
+                    <button
+                      key={ft}
+                      type="button"
+                      onClick={() => {
+                        setActiveAoeTemplate(prev => prev ? {
+                          ...prev,
+                          sizeFt: ft,
+                          target: prev.target ? {
+                            x: prev.origin.x + (prev.target.x - prev.origin.x) * (ft / prev.sizeFt),
+                            y: prev.origin.y + (prev.target.y - prev.origin.y) * (ft / prev.sizeFt)
+                          } : undefined,
+                          label: `${ft}ft ${prev.shape.toUpperCase()}`
+                        } : null);
+                      }}
+                      className={`px-2 py-1 rounded-md text-[11px] font-mono font-bold transition-all cursor-pointer ${
+                        activeAoeTemplate.sizeFt === ft
+                          ? 'bg-amber-500 text-zinc-950 shadow-sm'
+                          : 'bg-zinc-900 text-zinc-400 hover:text-zinc-200 border border-zinc-800'
+                      }`}
+                    >
+                      {ft}ft
+                    </button>
+                  ))}
+                </div>
+
+                {/* Target Detection Summary & Action */}
+                {(() => {
+                  const hits = findTokensInsideAoe(tokens, activeAoeTemplate, gridSize);
+                  return (
+                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-zinc-800/80 text-xs">
+                      <span className="font-mono text-amber-300 font-bold truncate">
+                        🎯 {hits.length} caught {hits.length > 0 ? `(${hits.map(h => h.token.name).slice(0, 3).join(', ')}${hits.length > 3 ? '...' : ''})` : ''}
+                      </span>
+                      {hits.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const names = hits.map(h => h.token.name).join(', ');
+                            toast.info(`AOE Target Announcement: ${hits.length} creature(s) caught: ${names}`, { duration: 5000 });
+                            if (socketRef.current?.connected) {
+                              socketRef.current.emit('SEND_CHAT_MESSAGE', {
+                                sender: 'Dungeon Master',
+                                text: `💥 **AOE Spell Target (${activeAoeTemplate.sizeFt}ft ${activeAoeTemplate.shape.toUpperCase()})**: ${hits.length} targets caught: **${names}**`
+                              });
+                            }
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-[11px] font-mono shrink-0 cursor-pointer shadow-md"
+                        >
+                          Announce
+                        </button>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
 
             {/* Zoom Controls Overlay */}
             <div className="absolute bottom-8 right-8 flex flex-col gap-2 z-50 pointer-events-auto">

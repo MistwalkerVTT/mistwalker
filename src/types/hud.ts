@@ -243,16 +243,20 @@ export interface EvaluatedDiceRoll {
   breakdown: string;
 }
 
+import { evaluateWithDiceRoller } from '../services/diceRollerService';
+
 /**
- * Evaluates any D&D 5e dice formula (e.g. "8d6", "9d8", "3d4 + 3", "2d8 + 4d6", "1d8 + 5", "70")
- * by rolling every individual die, summing all dice + flat modifiers, and returning the full
- * array of 3D physics dice results so the exact number of dice tumble and add up accurately.
+ * Evaluates any D&D 5e dice formula (e.g. "8d6", "9d8", "3d4 + 3", "2d8 + 4d6", "1d8 + 5", "70", "4d6kh3", "1d10!", "2d20kh1 + 5")
+ * using the advanced @dice-roller/rpg-dice-roller engine with individual die tracking for 3D physics dice tumbling.
  */
 export function evaluateDiceFormula(
   formula: string | undefined,
   isCrit = false
 ): EvaluatedDiceRoll {
-  if (!formula || !String(formula).trim()) {
+  try {
+    return evaluateWithDiceRoller(formula, isCrit);
+  } catch (err) {
+    console.warn('[evaluateDiceFormula] Fallback on error:', err);
     const r = Math.floor(Math.random() * 8) + 1;
     return {
       total: r,
@@ -264,86 +268,6 @@ export function evaluateDiceFormula(
       breakdown: `[${r}] = ${r}`
     };
   }
-
-  const rawInput = String(formula).trim();
-  // Strip any previously appended roll breakdown (e.g. "→ [3 + 4] + 7 = 14") or parenthetical labels (e.g. "(6)", "(4 Darts)")
-  const raw = rawInput
-    .split(/→|=/)[0]
-    .replace(/\([^)]*\)/g, ' ')
-    .replace(/\b\d+(?:st|nd|rd|th)\b/gi, ' ')
-    .trim();
-
-  // Check if formula is a pure flat integer (e.g. "70" for Heal, "75" for Preserve Life, "5" for Aid)
-  const flatOnlyMatch = raw.match(/^\+?(\d+)(?:\s+[a-zA-Z\s]+)?$/);
-  if (flatOnlyMatch && !/(?<![a-zA-Z])\d*d\d+/i.test(raw)) {
-    const val = parseInt(flatOnlyMatch[1], 10) || 1;
-    return {
-      total: val,
-      dice: [],
-      rolls: [val],
-      sides: 8,
-      bonus: val,
-      diceSum: 0,
-      breakdown: `${val} (Flat)`
-    };
-  }
-
-  // Parse all signed dice terms (e.g. "4d4", "+ 2d6", "d8") and signed/leading flat integer terms (e.g. "+ 7", "1 + 1d4", "- 1")
-  const termRegex = /([+-])?\s*(?:(?<![a-zA-Z])(\d*)d(\d+)|(\d+)(?!\s*d\d))/gi;
-  let match: RegExpExecArray | null;
-  const dice: Array<{ sides: number; result: number; type: string }> = [];
-  const rolls: number[] = [];
-  let primarySides = 6;
-  let diceSum = 0;
-  let bonus = 0;
-
-  while ((match = termRegex.exec(raw)) !== null) {
-    const sign = match[1] === '-' ? -1 : 1;
-    if (match[3] !== undefined) {
-      // Dice term: (count)d(sides)
-      const rawCount = match[2] ? Math.max(1, parseInt(match[2], 10) || 1) : 1;
-      const count = isCrit ? rawCount * 2 : rawCount;
-      const sides = Math.max(2, parseInt(match[3], 10) || 6);
-      primarySides = sides;
-      for (let i = 0; i < count; i++) {
-        const r = Math.floor(Math.random() * sides) + 1;
-        dice.push({ sides, result: r, type: `d${sides}` });
-        rolls.push(r * sign);
-        diceSum += r * sign;
-      }
-    } else if (match[4] !== undefined) {
-      // Flat modifier term: e.g. "+ 7", "- 2", or leading "1" in "1 + 1d4"
-      const flatVal = parseInt(match[4], 10) || 0;
-      bonus += sign * flatVal;
-    }
-  }
-
-  if (dice.length === 0) {
-    const fallbackVal = parseInt(raw.replace(/[^\d-]/g, ''), 10) || 1;
-    return {
-      total: Math.max(1, fallbackVal),
-      dice: [],
-      rolls: [Math.max(1, fallbackVal)],
-      sides: 8,
-      bonus: Math.max(1, fallbackVal),
-      diceSum: 0,
-      breakdown: `${Math.max(1, fallbackVal)}`
-    };
-  }
-
-  const total = Math.max(1, diceSum + bonus);
-  const signStr = bonus > 0 ? ` + ${bonus}` : bonus < 0 ? ` - ${Math.abs(bonus)}` : '';
-  const breakdown = `[${rolls.join(' + ')}]${signStr} = ${total}${isCrit ? ' (CRIT 2x DICE!)' : ''}`;
-
-  return {
-    total,
-    dice,
-    rolls,
-    sides: primarySides,
-    bonus,
-    diceSum,
-    breakdown
-  };
 }
 
 const AUTO_ROLL_STORAGE_KEY = 'mistwalker_player_auto_roll_by_hero';

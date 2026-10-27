@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { X, Settings, ExternalLink, User, Users } from 'lucide-react';
+import { X, Settings, ExternalLink, User, Users, Sparkles, Wand2, Shield, Swords, RotateCcw } from 'lucide-react';
 import { DiceColorPreset } from '../graphics/dice/diceTextures';
 import { DdbDiceRollEvent, DieResult } from '../types/dice';
+import { rollAdvancedDice, isValidDiceNotation } from '../services/diceRollerService';
 
 export type SupportedDieType = 'd20' | 'd12' | 'd100' | 'd10' | 'd8' | 'd6' | 'd4';
 
@@ -147,6 +148,9 @@ export const PlayerDiceRollerModal: React.FC<PlayerDiceRollerModalProps> = ({
     d4: 0,
   });
 
+  const [customFormula, setCustomFormula] = useState<string>('');
+  const [modifier, setModifier] = useState<number>(0);
+  const [mode, setMode] = useState<'pool' | 'advanced'>('pool');
   const [isPublic, setIsPublic] = useState<boolean>(true);
 
   const totalDiceCount = useMemo(() => {
@@ -162,8 +166,12 @@ export const PlayerDiceRollerModal: React.FC<PlayerDiceRollerModalProps> = ({
         parts.push(`${cnt}${type}`);
       }
     });
-    return parts.join(' + ');
-  }, [counts]);
+    const base = parts.join(' + ');
+    if (!base) return '';
+    if (modifier > 0) return `${base} + ${modifier}`;
+    if (modifier < 0) return `${base} - ${Math.abs(modifier)}`;
+    return base;
+  }, [counts, modifier]);
 
   if (!isOpen) return null;
 
@@ -192,63 +200,48 @@ export const PlayerDiceRollerModal: React.FC<PlayerDiceRollerModalProps> = ({
       d6: 0,
       d4: 0,
     });
+    setModifier(0);
+    setCustomFormula('');
+  };
+
+  const handleApplyPreset = (formula: string) => {
+    setMode('advanced');
+    setCustomFormula(formula);
   };
 
   const handleExecuteRoll = () => {
-    if (totalDiceCount <= 0) return;
+    let finalFormula = mode === 'advanced' ? customFormula.trim() : poolFormula;
+    if (!finalFormula) {
+      if (totalDiceCount > 0) finalFormula = poolFormula;
+      else return;
+    }
 
-    const diceResults: DieResult[] = [];
-    let sumTotal = 0;
-    const formulaTokens: string[] = [];
+    try {
+      const advRoll = rollAdvancedDice(finalFormula);
 
-    const order: { type: SupportedDieType; sides: number }[] = [
-      { type: 'd20', sides: 20 },
-      { type: 'd12', sides: 12 },
-      { type: 'd100', sides: 100 },
-      { type: 'd10', sides: 10 },
-      { type: 'd8', sides: 8 },
-      { type: 'd6', sides: 6 },
-      { type: 'd4', sides: 4 },
-    ];
+      const rollEvent: DdbDiceRollEvent = {
+        id: `roll-${Date.now()}`,
+        characterName,
+        action: 'Dice Roll',
+        rollType: 'roll',
+        formula: `${advRoll.output}`,
+        diceNotation: advRoll.notation,
+        dice: advRoll.dice,
+        modifier,
+        total: advRoll.total,
+        isCritical: advRoll.isCritical,
+        isFumble: advRoll.isFumble,
+        theme: selectedDicePreset.id,
+        themeColor: selectedDicePreset.theme.primaryColor,
+        timestamp: Date.now(),
+        source: 'local'
+      };
 
-    order.forEach(({ type, sides }) => {
-      const cnt = counts[type];
-      if (cnt > 0) {
-        formulaTokens.push(`${cnt}${type}`);
-        for (let i = 0; i < cnt; i++) {
-          const val = Math.floor(Math.random() * sides) + 1;
-          sumTotal += val;
-          diceResults.push({
-            sides,
-            result: val,
-            type
-          });
-        }
-      }
-    });
-
-    const isCritical = diceResults.some(d => d.sides === 20 && d.result === 20);
-    const isFumble = diceResults.some(d => d.sides === 20 && d.result === 1);
-
-    const rollEvent: DdbDiceRollEvent = {
-      id: `roll-${Date.now()}`,
-      characterName,
-      action: 'Dice Roll',
-      rollType: 'roll',
-      formula: `${formulaTokens.join(' + ')} (${sumTotal})`,
-      diceNotation: formulaTokens.join(' + '),
-      dice: diceResults,
-      total: sumTotal,
-      isCritical,
-      isFumble,
-      theme: selectedDicePreset.id,
-      themeColor: selectedDicePreset.theme.primaryColor,
-      timestamp: Date.now(),
-      source: 'local'
-    };
-
-    onRoll(rollEvent, isPublic);
-    onClose();
+      onRoll(rollEvent, isPublic);
+      onClose();
+    } catch (err) {
+      console.error('Failed to execute advanced roll:', err);
+    }
   };
 
   const renderDieButton = (die: DieDef) => {
@@ -348,41 +341,162 @@ export const PlayerDiceRollerModal: React.FC<PlayerDiceRollerModalProps> = ({
           </button>
         </div>
 
-        {/* Active Selection Formula Pill (When dice are staged) */}
-        <div className="min-h-[20px] flex items-center justify-between px-1">
-          <span className="text-[11px] font-mono text-zinc-400">
-            {poolFormula ? (
-              <span className="text-amber-300 font-bold">Staged: {poolFormula}</span>
-            ) : (
-              <span className="text-zinc-500">Tap dice to add to roll pool</span>
-            )}
-          </span>
-          {totalDiceCount > 0 && (
-            <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
-              {totalDiceCount} {totalDiceCount === 1 ? 'die' : 'dice'}
-            </span>
-          )}
+        {/* Mode Switcher: Pool Builder vs Advanced Notation */}
+        <div className="grid grid-cols-2 p-1 bg-zinc-950/80 rounded-xl border border-zinc-800 text-xs font-semibold">
+          <button
+            type="button"
+            onClick={() => setMode('pool')}
+            className={`py-1.5 rounded-lg transition-all text-center cursor-pointer ${
+              mode === 'pool'
+                ? 'bg-zinc-850 text-amber-300 shadow-sm border border-zinc-700/60 font-bold'
+                : 'text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            Dice Pool
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode('advanced')}
+            className={`py-1.5 rounded-lg transition-all text-center cursor-pointer ${
+              mode === 'advanced'
+                ? 'bg-zinc-850 text-amber-300 shadow-sm border border-zinc-700/60 font-bold'
+                : 'text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            Advanced / 5e Math
+          </button>
         </div>
 
-        {/* Polyhedral Dice Grid */}
-        <div className="flex flex-col gap-2 bg-zinc-950/60 p-2.5 rounded-2xl border border-zinc-850">
-          {/* Row 1: d20, d12, d100, d10 */}
-          <div className="grid grid-cols-4 gap-1.5">
-            {DICE_ROW_TOP.map(renderDieButton)}
-          </div>
+        {mode === 'pool' ? (
+          <>
+            {/* Active Selection Formula Pill (When dice are staged) */}
+            <div className="min-h-[20px] flex items-center justify-between px-1">
+              <span className="text-[11px] font-mono text-zinc-400">
+                {poolFormula ? (
+                  <span className="text-amber-300 font-bold">Staged: {poolFormula}</span>
+                ) : (
+                  <span className="text-zinc-500">Tap dice to add to roll pool</span>
+                )}
+              </span>
+              {totalDiceCount > 0 && (
+                <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  {totalDiceCount} {totalDiceCount === 1 ? 'die' : 'dice'}
+                </span>
+              )}
+            </div>
 
-          {/* Row 2: d8, d6, d4 */}
-          <div className="grid grid-cols-3 gap-1.5 px-4">
-            {DICE_ROW_BOTTOM.map(renderDieButton)}
+            {/* Polyhedral Dice Grid */}
+            <div className="flex flex-col gap-2 bg-zinc-950/60 p-2.5 rounded-2xl border border-zinc-850">
+              {/* Row 1: d20, d12, d100, d10 */}
+              <div className="grid grid-cols-4 gap-1.5">
+                {DICE_ROW_TOP.map(renderDieButton)}
+              </div>
+
+              {/* Row 2: d8, d6, d4 */}
+              <div className="grid grid-cols-3 gap-1.5 px-4">
+                {DICE_ROW_BOTTOM.map(renderDieButton)}
+              </div>
+            </div>
+
+            {/* Flat Modifier Stepper */}
+            <div className="flex items-center justify-between px-2 py-1.5 bg-zinc-900/60 rounded-xl border border-zinc-800 text-xs">
+              <span className="text-zinc-400 font-medium">Modifier:</span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setModifier(m => m - 1)}
+                  className="w-6 h-6 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 flex items-center justify-center font-bold font-mono"
+                >
+                  -
+                </button>
+                <span className="font-mono font-bold w-9 text-center text-amber-300">
+                  {modifier >= 0 ? `+${modifier}` : modifier}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setModifier(m => m + 1)}
+                  className="w-6 h-6 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 flex items-center justify-center font-bold font-mono"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+          </>
+        ) : (
+          /* Advanced Notation Mode */
+          <div className="flex flex-col gap-2.5 bg-zinc-950/60 p-3 rounded-2xl border border-zinc-850">
+            <div>
+              <label className="text-[11px] font-semibold text-zinc-400 block mb-1">
+                Custom Expression (D&D 5e / RPG Math):
+              </label>
+              <input
+                type="text"
+                value={customFormula}
+                onChange={e => setCustomFormula(e.target.value)}
+                placeholder="e.g. 4d6kh3, 2d20kh1+5, 1d10!, 2d8+1d6+3"
+                className="w-full bg-zinc-900 text-amber-200 font-mono text-sm px-3 py-2 rounded-xl border border-zinc-700 focus:border-amber-500 outline-none placeholder:text-zinc-600"
+              />
+            </div>
+
+            {/* Quick 5e Presets */}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-zinc-500">
+                Quick 5e Presets:
+              </span>
+              <div className="grid grid-cols-2 gap-1.5 text-xs font-mono">
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('2d20kh1 + 5')}
+                  className="px-2 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-emerald-300 border border-emerald-500/30 text-left truncate cursor-pointer transition-colors"
+                >
+                  ⚔️ Adv (2d20kh1+5)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('2d20kl1 + 5')}
+                  className="px-2 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-rose-300 border border-rose-500/30 text-left truncate cursor-pointer transition-colors"
+                >
+                  🛡️ Dis (2d20kl1+5)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('4d6kh3')}
+                  className="px-2 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-amber-300 border border-amber-500/30 text-left truncate cursor-pointer transition-colors"
+                >
+                  🎲 Ability (4d6kh3)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('1d10!')}
+                  className="px-2 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-purple-300 border border-purple-500/30 text-left truncate cursor-pointer transition-colors"
+                >
+                  💥 Explode (1d10!)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('1d20ro<2 + 5')}
+                  className="px-2 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sky-300 border border-sky-500/30 text-left truncate cursor-pointer transition-colors"
+                >
+                  ✨ GWF (1d20ro&lt;2)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyPreset('2d6ro<2 + 3')}
+                  className="px-2 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-blue-300 border border-blue-500/30 text-left truncate cursor-pointer transition-colors"
+                >
+                  🗡️ Greatsword (2d6ro)
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Action Buttons: RESET & ROLL */}
         <div className="grid grid-cols-2 gap-2.5 pt-1">
           <button
             type="button"
             onClick={handleReset}
-            disabled={totalDiceCount === 0}
+            disabled={mode === 'pool' ? totalDiceCount === 0 : !customFormula.trim()}
             className="w-full py-2.5 rounded-xl font-bold font-mono text-xs uppercase tracking-wider transition-all cursor-pointer bg-[#2d3037] hover:bg-zinc-700 text-zinc-300 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed border border-zinc-700/40 active:scale-98"
           >
             RESET
@@ -391,11 +505,11 @@ export const PlayerDiceRollerModal: React.FC<PlayerDiceRollerModalProps> = ({
           <button
             type="button"
             onClick={handleExecuteRoll}
-            disabled={totalDiceCount === 0}
+            disabled={mode === 'pool' ? totalDiceCount === 0 : !customFormula.trim()}
             className="w-full py-2.5 rounded-xl font-bold font-mono text-xs uppercase tracking-wider transition-all cursor-pointer bg-[#8b1e28] hover:bg-[#a12330] text-white disabled:opacity-40 disabled:cursor-not-allowed border border-rose-600/40 shadow-lg shadow-rose-950/40 active:scale-98 flex items-center justify-center gap-1.5"
           >
             <span>ROLL</span>
-            {totalDiceCount > 0 && <span>({totalDiceCount})</span>}
+            {mode === 'pool' && totalDiceCount > 0 && <span>({totalDiceCount})</span>}
           </button>
         </div>
 

@@ -280,6 +280,12 @@ interface LeftSidebarProps {
   hasUnreadHandouts?: boolean;
   onOpenAudioMixer?: () => void;
   activeAudioLoopCount?: number;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
+  onToggleAoeTemplate?: () => void;
+  isAoeTemplateActive?: boolean;
 }
 
 type GroupMenuId = 'maps' | 'zones' | 'fog-grid' | 'lighting' | 'combat' | 'fx' | 'spells' | 'tokens' | 'dice' | 'ai' | 'help';
@@ -294,6 +300,12 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   hasUnreadHandouts,
   onOpenAudioMixer,
   activeAudioLoopCount = 0,
+  onUndo,
+  onRedo,
+  canUndo = false,
+  canRedo = false,
+  onToggleAoeTemplate,
+  isAoeTemplateActive = false,
   activeMapId,
   liveMapId,
   onForceSync,
@@ -748,6 +760,44 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
         >
           <Move className="w-5.5 h-5.5" />
         </button>
+
+        {/* Direct Tool: Undo & Redo (Ctrl+Z / Ctrl+Y) */}
+        <div className="flex items-center gap-1 w-full justify-center pt-1 border-t border-zinc-800/60">
+          <button
+            type="button"
+            onClick={onUndo}
+            disabled={!canUndo}
+            className="w-5.5 h-6 rounded-lg flex items-center justify-center text-zinc-400 hover:text-amber-300 hover:bg-zinc-800 disabled:opacity-20 disabled:cursor-not-allowed transition-all cursor-pointer"
+            title="Undo last action (Ctrl+Z)"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={onRedo}
+            disabled={!canRedo}
+            className="w-5.5 h-6 rounded-lg flex items-center justify-center text-zinc-400 hover:text-amber-300 hover:bg-zinc-800 disabled:opacity-20 disabled:cursor-not-allowed transition-all cursor-pointer"
+            title="Redo action (Ctrl+Y)"
+          >
+            <RotateCcw className="w-3.5 h-3.5 scale-x-[-1]" />
+          </button>
+        </div>
+
+        {/* Direct Tool: 5e Spell AOE Template */}
+        {onToggleAoeTemplate && (
+          <button
+            type="button"
+            onClick={onToggleAoeTemplate}
+            className={`w-11 h-9 rounded-xl flex items-center justify-center transition-all cursor-pointer mt-1 ${
+              isAoeTemplateActive
+                ? 'bg-amber-500/25 text-amber-300 border border-amber-500/60 shadow-[0_0_12px_rgba(245,158,11,0.3)]'
+                : 'text-zinc-400 hover:text-amber-300 hover:bg-zinc-850 hover:border hover:border-zinc-700/60'
+            }`}
+            title="5e Spell AOE Template (Sphere, Cone, Cube, Line with auto-target collision)"
+          >
+            <Sparkles className="w-4 h-4 text-amber-400" />
+          </button>
+        )}
       </div>
 
       {/* Main Condensed Tool Categories (Scrollable for any screen height) */}

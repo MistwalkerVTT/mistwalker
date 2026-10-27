@@ -11,6 +11,7 @@ import {
   isLineOfSightBlocked,
   isWallOccluding
 } from '../lib/visionEngine';
+import { unionFlatPolygons } from '../lib/polygonClippingService';
 
 interface DynamicLightingLayerProps {
   walls: WallSegment[];
@@ -297,9 +298,16 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
 
     if (polysToAdd.length > 0) {
       setExploredPolygons(prev => {
-        const next = [...prev, ...polysToAdd];
-        if (next.length > 800) return next.slice(-600);
-        return next;
+        const combined = [...prev, ...polysToAdd];
+        // Consolidate via boolean polygon clipping if accumulation grows
+        if (combined.length > 25) {
+          try {
+            return unionFlatPolygons(combined);
+          } catch {
+            return combined.slice(-50);
+          }
+        }
+        return combined;
       });
     }
   }, [activeFovPolygons, gridSize, visionConfig.enabled, visionConfig.explorationMemory, isFogVisible]);
