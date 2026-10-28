@@ -284,8 +284,6 @@ interface LeftSidebarProps {
   onRedo?: () => void;
   canUndo?: boolean;
   canRedo?: boolean;
-  onToggleAoeTemplate?: () => void;
-  isAoeTemplateActive?: boolean;
 }
 
 type GroupMenuId = 'maps' | 'zones' | 'fog-grid' | 'lighting' | 'combat' | 'fx' | 'spells' | 'tokens' | 'dice' | 'ai' | 'help';
@@ -304,8 +302,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   onRedo,
   canUndo = false,
   canRedo = false,
-  onToggleAoeTemplate,
-  isAoeTemplateActive = false,
   activeMapId,
   liveMapId,
   onForceSync,
@@ -782,22 +778,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
             <RotateCcw className="w-3.5 h-3.5 scale-x-[-1]" />
           </button>
         </div>
-
-        {/* Direct Tool: 5e Spell AOE Template */}
-        {onToggleAoeTemplate && (
-          <button
-            type="button"
-            onClick={onToggleAoeTemplate}
-            className={`w-11 h-9 rounded-xl flex items-center justify-center transition-all cursor-pointer mt-1 ${
-              isAoeTemplateActive
-                ? 'bg-amber-500/25 text-amber-300 border border-amber-500/60 shadow-[0_0_12px_rgba(245,158,11,0.3)]'
-                : 'text-zinc-400 hover:text-amber-300 hover:bg-zinc-850 hover:border hover:border-zinc-700/60'
-            }`}
-            title="5e Spell AOE Template (Sphere, Cone, Cube, Line with auto-target collision)"
-          >
-            <Sparkles className="w-4 h-4 text-amber-400" />
-          </button>
-        )}
       </div>
 
       {/* Main Condensed Tool Categories (Scrollable for any screen height) */}

@@ -179,8 +179,6 @@ import ReactMarkdown from 'react-markdown';
 import { snapPointToGrid, findNearestWall, segmentsIntersect } from './lib/visionEngine';
 import { Toaster, toast } from 'sonner';
 import { undoRedo } from './services/undoRedoService';
-import { AoeTemplateLayer } from './components/AoeTemplateLayer';
-import { AoeTemplateConfig, AoeShapeType, ftToPx, findTokensInsideAoe } from './utils/aoeGeometry';
 import homeBackgroundImage from './assets/images/home_background.jpg';
 import sceneBackdropImage from './assets/images/scene_backdrop.jpg';
 
@@ -1102,9 +1100,6 @@ export default function App() {
   // Universal Undo/Redo Reactive State
   const [canUndoState, setCanUndoState] = useState<boolean>(false);
   const [canRedoState, setCanRedoState] = useState<boolean>(false);
-
-  // 5e Spell AOE Measurement Template State
-  const [activeAoeTemplate, setActiveAoeTemplate] = useState<AoeTemplateConfig | null>(null);
 
   useEffect(() => {
     const unsub = undoRedo.subscribe(() => {
@@ -7172,30 +7167,6 @@ export default function App() {
     }
   }, [activeMapId]);
 
-  const handleToggleAoeTemplate = useCallback((shape: AoeShapeType = 'sphere', sizeFt = 20) => {
-    if (activeAoeTemplate) {
-      setActiveAoeTemplate(null);
-      toast.info('AOE Template dismissed');
-    } else {
-      const stageW = (dimensions.width || 1200) - 64;
-      const stageH = dimensions.height || 800;
-      const center = {
-        x: Math.round((-stagePos.x + stageW / 2) / stageScale),
-        y: Math.round((-stagePos.y + stageH / 2) / stageScale)
-      };
-      setActiveAoeTemplate({
-        id: `aoe-${Date.now()}`,
-        shape,
-        origin: center,
-        target: { x: center.x + ftToPx(sizeFt, gridSize), y: center.y },
-        sizeFt,
-        color: '#f59e0b',
-        label: `${sizeFt}ft ${shape.toUpperCase()}`
-      });
-      toast.success('Spell AOE Template placed! Drag handles to move or aim.');
-    }
-  }, [activeAoeTemplate, dimensions, stagePos, stageScale, gridSize]);
-
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -7979,8 +7950,6 @@ export default function App() {
           onRedo={handleRedo}
           canUndo={canUndoState}
           canRedo={canRedoState}
-          onToggleAoeTemplate={handleToggleAoeTemplate}
-          isAoeTemplateActive={Boolean(activeAoeTemplate)}
           activeMapId={activeMapId}
           liveMapId={liveMapId}
           onForceSync={handleForceSyncToPlayers}
@@ -9185,21 +9154,6 @@ export default function App() {
                 </Layer>
               )}
 
-              {/* 5e Spell AOE Measurement Template Layer */}
-              {activeAoeTemplate && (
-                <Layer>
-                  <AoeTemplateLayer
-                    config={activeAoeTemplate}
-                    tokens={tokens}
-                    gridSize={gridSize}
-                    stageScale={stageScale}
-                    isInteractive={true}
-                    onUpdateConfig={setActiveAoeTemplate}
-                    onDismiss={() => setActiveAoeTemplate(null)}
-                  />
-                </Layer>
-              )}
-
               {/* Left-Click Hold Map Ping Radar Layer */}
               <MapPingLayer
                 pings={mapPings}
@@ -9817,113 +9771,6 @@ export default function App() {
                 </div>
               );
             })()}
-
-            {/* Floating 5e Spell AOE Measurement Template HUD */}
-            {activeAoeTemplate && (
-              <div className="absolute top-16 left-20 z-40 bg-zinc-950/95 border border-amber-500/50 rounded-2xl p-3 shadow-2xl backdrop-blur-md flex flex-col gap-2 max-w-sm animate-in fade-in slide-in-from-top-2 text-zinc-200">
-                <div className="flex items-center justify-between gap-2 border-b border-zinc-800 pb-2">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-amber-400" />
-                    <span className="text-xs font-bold text-white tracking-wide font-mono">
-                      5e Spell AOE Template
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setActiveAoeTemplate(null)}
-                    className="text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-zinc-800 transition-colors cursor-pointer"
-                    title="Dismiss Template"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-
-                {/* Shape Selectors */}
-                <div className="grid grid-cols-4 gap-1">
-                  {(['sphere', 'cone', 'cube', 'line'] as AoeShapeType[]).map(shape => (
-                    <button
-                      key={shape}
-                      type="button"
-                      onClick={() => {
-                        const defaultSize = shape === 'cone' ? 30 : shape === 'line' ? 60 : 20;
-                        setActiveAoeTemplate(prev => prev ? {
-                          ...prev,
-                          shape,
-                          sizeFt: defaultSize,
-                          target: { x: prev.origin.x + ftToPx(defaultSize, gridSize), y: prev.origin.y },
-                          label: `${defaultSize}ft ${shape.toUpperCase()}`
-                        } : null);
-                      }}
-                      className={`px-2 py-1.5 rounded-lg text-xs font-semibold capitalize transition-all cursor-pointer ${
-                        activeAoeTemplate.shape === shape
-                          ? 'bg-amber-500/25 text-amber-300 border border-amber-500/60 shadow-sm'
-                          : 'bg-zinc-900 text-zinc-400 hover:text-zinc-200 border border-zinc-800'
-                      }`}
-                    >
-                      {shape === 'sphere' ? '⭕ Sphere' : shape === 'cone' ? '📐 Cone' : shape === 'cube' ? '🔲 Cube' : '📏 Line'}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Size Quick Selectors */}
-                <div className="flex items-center gap-1.5 overflow-x-auto py-0.5">
-                  {[10, 15, 20, 30, 40, 60, 100].map(ft => (
-                    <button
-                      key={ft}
-                      type="button"
-                      onClick={() => {
-                        setActiveAoeTemplate(prev => prev ? {
-                          ...prev,
-                          sizeFt: ft,
-                          target: prev.target ? {
-                            x: prev.origin.x + (prev.target.x - prev.origin.x) * (ft / prev.sizeFt),
-                            y: prev.origin.y + (prev.target.y - prev.origin.y) * (ft / prev.sizeFt)
-                          } : undefined,
-                          label: `${ft}ft ${prev.shape.toUpperCase()}`
-                        } : null);
-                      }}
-                      className={`px-2 py-1 rounded-md text-[11px] font-mono font-bold transition-all cursor-pointer ${
-                        activeAoeTemplate.sizeFt === ft
-                          ? 'bg-amber-500 text-zinc-950 shadow-sm'
-                          : 'bg-zinc-900 text-zinc-400 hover:text-zinc-200 border border-zinc-800'
-                      }`}
-                    >
-                      {ft}ft
-                    </button>
-                  ))}
-                </div>
-
-                {/* Target Detection Summary & Action */}
-                {(() => {
-                  const hits = findTokensInsideAoe(tokens, activeAoeTemplate, gridSize);
-                  return (
-                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-zinc-800/80 text-xs">
-                      <span className="font-mono text-amber-300 font-bold truncate">
-                        🎯 {hits.length} caught {hits.length > 0 ? `(${hits.map(h => h.token.name).slice(0, 3).join(', ')}${hits.length > 3 ? '...' : ''})` : ''}
-                      </span>
-                      {hits.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const names = hits.map(h => h.token.name).join(', ');
-                            toast.info(`AOE Target Announcement: ${hits.length} creature(s) caught: ${names}`, { duration: 5000 });
-                            if (socketRef.current?.connected) {
-                              socketRef.current.emit('SEND_CHAT_MESSAGE', {
-                                sender: 'Dungeon Master',
-                                text: `💥 **AOE Spell Target (${activeAoeTemplate.sizeFt}ft ${activeAoeTemplate.shape.toUpperCase()})**: ${hits.length} targets caught: **${names}**`
-                              });
-                            }
-                          }}
-                          className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-[11px] font-mono shrink-0 cursor-pointer shadow-md"
-                        >
-                          Announce
-                        </button>
-                      )}
-                    </div>
-                  );
-                })()}
-              </div>
-            )}
 
             {/* Zoom Controls Overlay */}
             <div className="absolute bottom-8 right-8 flex flex-col gap-2 z-50 pointer-events-auto">
