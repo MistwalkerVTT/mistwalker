@@ -472,12 +472,28 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
       const data = await res.json();
       const cached = data?.status?.cachedCharacters;
       if (Array.isArray(cached)) {
-        // Filter out obsolete static placeholder mock IDs so ONLY real DDB campaign heroes show
-        const filtered = cached.filter((c: any) => !['146614740', '147334187', '158502126', '146533824'].includes(String(c.id)));
-        setDdbPartyCharacters(filtered);
+        setDdbPartyCharacters(cached);
       }
     } catch (err) {
       console.warn('[LeftSidebar] Could not fetch DDB party status:', err);
+    } finally {
+      setIsLoadingDdbParty(false);
+    }
+  }, []);
+
+  const handleTriggerReSync = useCallback(async (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setIsLoadingDdbParty(true);
+    try {
+      await fetch('/api/ddb/campaigns/sync-all', { method: 'POST' });
+      const res = await fetch('/api/ddb/campaigns/sync-status');
+      const data = await res.json();
+      const cached = data?.status?.cachedCharacters;
+      if (Array.isArray(cached)) {
+        setDdbPartyCharacters(cached);
+      }
+    } catch (err) {
+      console.warn('[LeftSidebar] Could not re-sync DDB campaigns:', err);
     } finally {
       setIsLoadingDdbParty(false);
     }
@@ -3683,45 +3699,41 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                   });
                 });
 
-                // 2. Incorporate compendium characters that are linked to D&D Beyond
+                // 2. Incorporate compendium characters (ensuring all campaign heroes appear with proper campaign grouping)
                 (compendiumCharacters || []).forEach((c: any) => {
-                  const isMock = ['char_varrak', 'char_brannoc', 'char_noctua', 'char_aggie', 'char_rowan', 'char_sylas'].includes(c.id);
-                  const hasDdbLink = !isMock && (
-                    (c.id && c.id.startsWith('char_ddb_')) ||
-                    (c.ddbCharacterId && !['146614740', '147334187', '158502126', '146533824'].includes(String(c.ddbCharacterId))) ||
-                    (typeof c.notes === 'string' && c.notes.includes('D&D Beyond'))
-                  );
+                  const rawDdbId = c.ddbCharacterId ? String(c.ddbCharacterId) : (c.id && c.id.startsWith('char_ddb_') ? c.id.replace('char_ddb_', '') : '');
+                  const existing = (rawDdbId ? heroMap.get(rawDdbId) : null) ||
+                                   heroMap.get(c.id) ||
+                                   Array.from(heroMap.values()).find((h: any) => h.name.toLowerCase() === c.name.toLowerCase());
 
-                  if (hasDdbLink) {
-                    const ddbId = String(c.ddbCharacterId || c.id.replace('char_ddb_', '') || c.name);
-                    const existing = heroMap.get(ddbId);
-                    const resolvedCamp = resolveCharacterCampaign({
-                      id: c.id,
-                      ddbCharacterId: ddbId,
-                      ddbCampaignId: c.ddbCampaignId || existing?.ddbCampaignId,
-                      ddbCampaignTitle: c.ddbCampaignTitle || existing?.ddbCampaignTitle,
-                      name: c.name,
-                      notes: c.notes
-                    });
-                    heroMap.set(ddbId, {
-                      id: c.id,
-                      ddbCharacterId: c.ddbCharacterId || existing?.ddbCharacterId || ddbId,
-                      ddbCampaignId: resolvedCamp.campaignId,
-                      ddbCampaignTitle: resolvedCamp.campaignTitle,
-                      playerName: c.playerName || existing?.playerName,
-                      name: c.name,
-                      url: c.avatarUrl || existing?.url || getCharacterTokenUrl(c.name),
-                      size: (c as any).size || existing?.size || 1,
-                      hp: c.hp !== undefined ? c.hp : (existing?.hp ?? c.maxHp ?? 10),
-                      maxHp: c.maxHp || existing?.maxHp || 10,
-                      tempHp: c.tempHp || existing?.tempHp || 0,
-                      ac: c.ac || existing?.ac || 10,
-                      race: c.race || existing?.race || 'Hero',
-                      classLevel: c.classLevel || existing?.classLevel || 'D&D Beyond',
-                      readonlyUrl: existing?.readonlyUrl || (c.notes?.match(/https:\/\/dndbeyond\.com\/characters\/\d+/)?.[0]),
-                      category: 'character' as const
-                    });
-                  }
+                  const resolvedCamp = resolveCharacterCampaign({
+                    id: c.id,
+                    ddbCharacterId: rawDdbId || existing?.ddbCharacterId,
+                    ddbCampaignId: c.ddbCampaignId || existing?.ddbCampaignId,
+                    ddbCampaignTitle: c.ddbCampaignTitle || existing?.ddbCampaignTitle,
+                    name: c.name,
+                    notes: c.notes
+                  });
+
+                  const mapKey = rawDdbId || existing?.ddbCharacterId || c.id || c.name;
+                  heroMap.set(mapKey, {
+                    id: existing?.id || c.id,
+                    ddbCharacterId: rawDdbId || existing?.ddbCharacterId || (c.ddbCharacterId ? String(c.ddbCharacterId) : undefined),
+                    ddbCampaignId: existing?.ddbCampaignId && existing.ddbCampaignId !== 'custom' ? existing.ddbCampaignId : resolvedCamp.campaignId,
+                    ddbCampaignTitle: existing?.ddbCampaignTitle && existing.ddbCampaignTitle !== 'Custom & Pre-Gen Heroes' ? existing.ddbCampaignTitle : resolvedCamp.campaignTitle,
+                    playerName: existing?.playerName || c.playerName || (KNOWN_DDB_CHARACTER_TO_CAMPAIGN[rawDdbId]?.playerName) || 'Player',
+                    name: c.name || existing?.name,
+                    url: existing?.url || c.avatarUrl || getCharacterTokenUrl(c.name),
+                    size: (c as any).size || existing?.size || 1,
+                    hp: existing?.hp !== undefined ? existing.hp : (c.hp !== undefined ? c.hp : (c.maxHp ?? 10)),
+                    maxHp: existing?.maxHp || c.maxHp || 10,
+                    tempHp: existing?.tempHp || c.tempHp || 0,
+                    ac: existing?.ac || c.ac || 10,
+                    race: (existing?.race && existing.race !== 'Hero' && existing.race !== 'Character') ? existing.race : (c.race || 'Hero'),
+                    classLevel: (existing?.classLevel && existing.classLevel !== 'D&D Beyond') ? existing.classLevel : (c.classLevel || 'D&D Beyond'),
+                    readonlyUrl: existing?.readonlyUrl || (c.notes?.match(/https:\/\/dndbeyond\.com\/characters\/\d+/)?.[0]),
+                    category: 'character' as const
+                  });
                 });
 
                 const allHeroTokens = Array.from(heroMap.values()).filter(t => 
@@ -4098,6 +4110,16 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                                   </span>
                                 </div>
                                 <div className="flex items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={handleTriggerReSync}
+                                    disabled={isLoadingDdbParty}
+                                    className="text-[9px] text-emerald-400 hover:text-emerald-200 font-mono font-semibold flex items-center gap-1 cursor-pointer bg-emerald-500/10 hover:bg-emerald-500/20 px-1.5 py-0.5 rounded border border-emerald-500/30"
+                                    title="Force immediate re-sync of all D&D Beyond campaign heroes and party characters"
+                                  >
+                                    <RefreshCw className={`w-2.5 h-2.5 ${isLoadingDdbParty ? 'animate-spin text-emerald-300' : ''}`} />
+                                    Re-Sync
+                                  </button>
                                   {onOpenDdbSync && (
                                     <button
                                       type="button"

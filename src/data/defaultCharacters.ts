@@ -267,6 +267,7 @@ export const DEFAULT_CHARACTERS: Character[] = [
   },
   {
     id: 'char_brannoc',
+    ddbCharacterId: 147334187,
     name: 'Brannoc',
     race: 'Dwarf',
     classLevel: 'Paladin 5',
