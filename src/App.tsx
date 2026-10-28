@@ -9818,47 +9818,9 @@ export default function App() {
               );
             })()}
 
-            {/* Undo / Redo & Spell AOE Quick Dock */}
-            <div className="absolute top-16 left-20 flex items-center gap-1.5 z-40 bg-zinc-900/90 backdrop-blur border border-zinc-750 p-1.5 rounded-xl shadow-xl">
-              <button
-                type="button"
-                onClick={handleUndo}
-                disabled={!canUndoState}
-                className="p-2 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
-                title={undoRedo.getUndoDescription() + " (Ctrl+Z)"}
-              >
-                <RotateCcw className="w-4 h-4 text-amber-400" />
-                <span className="hidden sm:inline">Undo</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleRedo}
-                disabled={!canRedoState}
-                className="p-2 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
-                title={undoRedo.getRedoDescription() + " (Ctrl+Y)"}
-              >
-                <RotateCcw className="w-4 h-4 text-amber-400 scale-x-[-1]" />
-                <span className="hidden sm:inline">Redo</span>
-              </button>
-              <div className="w-px h-5 bg-zinc-700/80 mx-0.5" />
-              <button
-                type="button"
-                onClick={() => handleToggleAoeTemplate('sphere', 20)}
-                className={`p-2 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 text-xs font-semibold ${
-                  activeAoeTemplate
-                    ? 'bg-amber-500/25 text-amber-300 border border-amber-500/60 shadow-[0_0_12px_rgba(245,158,11,0.3)]'
-                    : 'bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white'
-                }`}
-                title="Toggle 5e Spell AOE Measurement Template (Sphere, Cone, Cube, Line)"
-              >
-                <Sparkles className="w-4 h-4 text-amber-400" />
-                <span className="hidden sm:inline">Spell AOE</span>
-              </button>
-            </div>
-
             {/* Floating 5e Spell AOE Measurement Template HUD */}
             {activeAoeTemplate && (
-              <div className="absolute top-28 left-20 z-40 bg-zinc-950/95 border border-amber-500/50 rounded-2xl p-3 shadow-2xl backdrop-blur-md flex flex-col gap-2 max-w-sm animate-in fade-in slide-in-from-top-2 text-zinc-200">
+              <div className="absolute top-16 left-20 z-40 bg-zinc-950/95 border border-amber-500/50 rounded-2xl p-3 shadow-2xl backdrop-blur-md flex flex-col gap-2 max-w-sm animate-in fade-in slide-in-from-top-2 text-zinc-200">
                 <div className="flex items-center justify-between gap-2 border-b border-zinc-800 pb-2">
                   <div className="flex items-center gap-2">
                     <Sparkles className="w-4 h-4 text-amber-400" />
