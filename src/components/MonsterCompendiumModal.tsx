@@ -657,6 +657,7 @@ export const MonsterCompendiumModal: React.FC<MonsterCompendiumModalProps> = ({
                           const tokenData = {
                             name: m.name,
                             url: m.avatarUrl || '/uploads/file-1792077381663-439615846.png',
+                            avatarUrl: m.avatarUrl || '/uploads/file-1792077381663-439615846.png',
                             size: getSizeMultiplier(m.size),
                             hp: m.hp,
                             maxHp: m.hp,
