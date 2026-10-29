@@ -25,6 +25,7 @@ interface DomEffectOverlayProps {
   onDispelEffect?: (effectId: string) => void;
   onInspectEffect?: (effect: VttEffectInstance) => void;
   onClearTokenAura?: (tokenId: string, auraName?: string) => void;
+  onRemoveTokenBubble?: (tokenId: string, bubbleId: string) => void;
 }
 
 const AURA_OR_TOKEN_BUFF_KEYWORDS = [
@@ -139,7 +140,8 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
   onEffectComplete,
   onDispelEffect,
   onInspectEffect,
-  onClearTokenAura
+  onClearTokenAura,
+  onRemoveTokenBubble
 }) => {
   // Lifetime expiration timer for non-persistent single-shot blasts (e.g. 5s fallback)
   useEffect(() => {
@@ -691,6 +693,65 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                     </button>
                   )}
                 </div>
+              </div>
+            );
+          });
+        })}
+
+        {/* 2c. Token Status & Lasting Debuff Video Bubbles (Hunter's Mark, Hex, Hold Person, etc.) */}
+        {tokens?.map((token) => {
+          const bubbles = token.bubbles;
+          if (!bubbles || !Array.isArray(bubbles) || bubbles.length === 0) return null;
+          const tokenSize = token.size || 1;
+          const tokenWidth = tokenSize * gridSize;
+          const tokenCenterX = (token.x ?? 0) + tokenWidth / 2;
+          const count = bubbles.length;
+          const bubbleSpacing = 26;
+          const totalWidth = (count - 1) * bubbleSpacing;
+          const startX = tokenCenterX - (totalWidth / 2);
+          const bubbleY = (token.y ?? 0) - 8;
+
+          return bubbles.map((b: any, idx: number) => {
+            if (!b.videoUrl) return null; // Non-video bubbles are rendered in Konva
+            const bx = startX + idx * bubbleSpacing;
+            const color = b.color || '#22c55e';
+
+            return (
+              <div
+                key={`dom-token-bubble-${token.id}-${b.id || idx}`}
+                className="absolute pointer-events-auto z-[45] group/bubble transition-transform hover:scale-125"
+                style={{
+                  left: `${bx}px`,
+                  top: `${bubbleY}px`,
+                  width: '24px',
+                  height: '24px',
+                  transform: 'translate(-50%, -50%)',
+                  borderRadius: '50%',
+                  overflow: 'hidden',
+                  backgroundColor: b.bgColor || '#090d16',
+                  border: `1.5px solid ${color}`,
+                  boxShadow: `0 0 8px ${color}`,
+                  cursor: 'pointer'
+                }}
+                title={`${b.label}${b.subLabel ? ` (${b.subLabel})` : ''}: ${b.description || 'Active Debuff'}\n(Click to remove)`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemoveTokenBubble?.(token.id, b.id);
+                }}
+              >
+                <video
+                  src={b.videoUrl}
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    borderRadius: '50%'
+                  }}
+                />
               </div>
             );
           });

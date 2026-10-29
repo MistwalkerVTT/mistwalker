@@ -103,7 +103,11 @@ import {
   soundCatalog,
   JB2A_REGISTRY,
   findJb2aAsset,
-  getDirectionalConeOrigin
+  getDirectionalConeOrigin,
+  TokenStatusBubble,
+  findLastingDebuffConfig,
+  createDebuffBubbleFromConfig,
+  TokenBubblesKonvaOverlay
 } from '../effects';
 import { PlayerStationModal, PlayerStationMode } from './PlayerStationModal';
 import { PlayerCharacterSelectModal, PlayerCharacterChoiceItem } from './PlayerCharacterSelectModal';
@@ -181,6 +185,7 @@ interface Token {
   isFlying?: boolean;
   haloActive?: boolean;
   videoUrl?: string;
+  bubbles?: TokenStatusBubble[];
 }
 
 /**
@@ -972,7 +977,8 @@ const PlayerToken = React.memo(({
           cloudGroupRef={cloudGroupRef}
         />
 
-        {/* 3. AC Shield Badge on Top-Left: REMOVED per user request */}
+        {/* 3. Token Status & Lasting Debuff Bubbles (Hunter's Mark, Hex, AC-like indicator badges) */}
+        <TokenBubblesKonvaOverlay bubbles={token.bubbles} tokenWidth={tokenPx} />
 
         {/* 4. Large, High-Contrast HP Pill Badge directly tied to D&D Beyond & Character Sheet (PLAYERS & ALLIES ONLY - Monsters & Condition tokens NEVER show HP in player view) */}
         {showHp && !isCondition && (!isMonster || isAlly) && (
@@ -4266,6 +4272,38 @@ export default function PlayerView() {
       socketRef.current.emit('EFFECT_SPAWN', newEffect);
     }
 
+    const lastingDebuff = findLastingDebuffConfig(activeEquippedAsset.id || activeEquippedAsset.name || aimedAction?.name);
+    const targetCreatureToken = tokens.find(t => {
+      const tRad = ((t.size || 1) * gridSize) / 2;
+      const tcX = (t.x ?? 0) + tRad;
+      const tcY = (t.y ?? 0) + tRad;
+      return Math.hypot(target.x - tcX, target.y - tcY) <= tRad + 15;
+    }) || hitToken;
+
+    if (lastingDebuff && targetCreatureToken) {
+      const targetTokenId = targetCreatureToken.id;
+      const targetTokenName = targetCreatureToken.name;
+      setTimeout(() => {
+        const bubble = createDebuffBubbleFromConfig(lastingDebuff, claimedToken?.name || 'Hero');
+        setTokens(prev => {
+          const next = prev.map(t => {
+            if (t.id !== targetTokenId) return t;
+            const existing = t.bubbles || [];
+            const filtered = existing.filter(b => b.sourceSpellId !== lastingDebuff.spellKey && b.label !== lastingDebuff.name);
+            return { ...t, bubbles: [...filtered, bubble] };
+          });
+          tokensRef.current = next;
+          if (socketRef.current?.connected) {
+            socketRef.current.emit('SYNC_TOKENS', next);
+          }
+          return next;
+        });
+        toast.success(`✨ ${lastingDebuff.name} moved into bubble above ${targetTokenName}!`, {
+          description: lastingDebuff.description
+        });
+      }, 2800);
+    }
+
     // Roll 3D physics damage/healing dice if the cast spell has a damageFormula (including upcasted formulas!)
     const expendedAimedSlot = aimedAction?.spellSlotRequired ?? aimedAction?.level ?? 0;
     if (expendedAimedSlot >= 1) {
@@ -4410,10 +4448,35 @@ export default function PlayerView() {
     };
 
     setEffects(prev => [...prev, newEffect]);
-    if (asset.soundKey) soundCatalog.play(asset.soundKey);
-    if (socketRef.current?.connected) {
-      socketRef.current.emit('EFFECT_SPAWN', newEffect);
-    }
+      if (asset.soundKey) soundCatalog.play(asset.soundKey);
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('EFFECT_SPAWN', newEffect);
+      }
+
+      const lastingDebuff = findLastingDebuffConfig(asset.id || action.name);
+      if (lastingDebuff && targetToken) {
+        const targetTokenId = targetToken.id;
+        const targetTokenName = targetToken.name;
+        setTimeout(() => {
+          const bubble = createDebuffBubbleFromConfig(lastingDebuff, caster.name || 'Hero');
+          setTokens(prev => {
+            const next = prev.map(t => {
+              if (t.id !== targetTokenId) return t;
+              const existing = t.bubbles || [];
+              const filtered = existing.filter(b => b.sourceSpellId !== lastingDebuff.spellKey && b.label !== lastingDebuff.name);
+              return { ...t, bubbles: [...filtered, bubble] };
+            });
+            tokensRef.current = next;
+            if (socketRef.current?.connected) {
+              socketRef.current.emit('SYNC_TOKENS', next);
+            }
+            return next;
+          });
+          toast.success(`✨ ${lastingDebuff.name} moved into bubble above ${targetTokenName}!`, {
+            description: lastingDebuff.description
+          });
+        }, 2800);
+      }
     toast.success(`Cast ${asset.name}!`, {
       description: `${asset.defaultSizeFt}ft ${asset.shape} placed at character position.`
     });
@@ -7797,7 +7860,15 @@ export default function PlayerView() {
         onDispelEffect={handleDispelEffect}
         onInspectEffect={handleInspectEffect}
         onClearTokenAura={handleClearTokenAura}
-      />
+          onRemoveTokenBubble={(tokenId, bubbleId) => {
+            setTokens(prev => {
+              const next = prev.map(t => t.id === tokenId ? { ...t, bubbles: (t.bubbles || []).filter(b => b.id !== bubbleId) } : t);
+              tokensRef.current = next;
+              if (socketRef.current?.connected) socketRef.current.emit('SYNC_TOKENS', next);
+              return next;
+            });
+          }}
+        />
 
       {/* ========================================================= */}
       {/* Token Right-Click Context Menu Popup (Mirrored from DM)   */}

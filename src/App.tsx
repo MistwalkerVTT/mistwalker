@@ -27,7 +27,9 @@ import {
   Scan,
   Users,
   Flame,
-  Undo2
+  Undo2,
+  CircleDot,
+  Plus
 } from 'lucide-react';
 import { Stage, Layer, Image as KonvaImage, Rect, Circle, Line, Text, Group, Wedge } from 'react-konva';
 import useImage from 'use-image';
@@ -55,7 +57,12 @@ import {
   AimReticle,
   videoCacheManager,
   soundCatalog,
-  getDirectionalConeOrigin
+  getDirectionalConeOrigin,
+  TokenStatusBubble,
+  PRESET_DM_BUBBLES,
+  findLastingDebuffConfig,
+  createDebuffBubbleFromConfig,
+  TokenBubblesKonvaOverlay
 } from './effects';
 import { JB2A_REGISTRY, findJb2aAsset } from './effects/db/jb2aRegistry';
 import { getAuraVideoUrl } from './effects/db/tokenFxMap';
@@ -229,6 +236,7 @@ interface Token {
   isFlying?: boolean;
   haloActive?: boolean;
   monsterState?: TokenMonsterState;
+  bubbles?: TokenStatusBubble[];
 }
 
 interface RollResult {
@@ -830,6 +838,9 @@ const TokenImage = React.memo(({
           vortexRingRef={vortexRingRef}
           cloudGroupRef={cloudGroupRef}
         />
+
+        {/* 2.8 Token Status & Lasting Debuff Bubbles (Hunter's Mark, Hex, AC-like indicator badges) */}
+        <TokenBubblesKonvaOverlay bubbles={token.bubbles} tokenWidth={tokenWidth} />
 
         {/* 3. AC Shield Badge on Top-Left */}
         {!token.isCondition && (!isPlayerView || !isMonster) && (
@@ -1852,7 +1863,12 @@ export default function App() {
     toast.info(`Auto-Apply Monster Damage: ${enabled ? 'ENABLED' : 'DISABLED'}`);
   }, []);
   const [isCombatTrackerMinimized, setIsCombatTrackerMinimized] = useState(false);
-  const [tokenMenuTab, setTokenMenuTab] = useState<'stats' | 'conditions' | 'auras'>('stats');
+  const [tokenMenuTab, setTokenMenuTab] = useState<'stats' | 'conditions' | 'auras' | 'bubbles'>('stats');
+  const [customBubbleLabel, setCustomBubbleLabel] = useState('');
+  const [customBubbleSubLabel, setCustomBubbleSubLabel] = useState('');
+  const [customBubbleIcon, setCustomBubbleIcon] = useState('🎯');
+  const [customBubbleColor, setCustomBubbleColor] = useState('#38bdf8');
+  const [customBubbleStyle, setCustomBubbleStyle] = useState<'classic' | 'ac-badge' | 'orb' | 'shield' | 'danger'>('ac-badge');
   const [customAuraRadiusInput, setCustomAuraRadiusInput] = useState<number>(10);
   const [customAuraColorInput, setCustomAuraColorInput] = useState<string>('rgba(234, 179, 8, 0.4)');
   const [customAuraOpacityInput, setCustomAuraOpacityInput] = useState<number>(0.35);
@@ -4549,20 +4565,42 @@ export default function App() {
       } : undefined
     };
 
+    const lastingDebuff = findLastingDebuffConfig(activeEquippedAsset.id || activeEquippedAsset.name);
+    const targetCreatureToken = tokens.find(t => {
+      const tRad = ((t.size || 1) * gridSize) / 2;
+      const tcX = (t.x ?? 0) + tRad;
+      const tcY = (t.y ?? 0) + tRad;
+      return Math.hypot(target.x - tcX, target.y - tcY) <= tRad + 15;
+    }) || hitToken;
+
     setEffects(prev => [...prev, newEffect]);
     if (activeEquippedAsset.soundKey) soundCatalog.play(activeEquippedAsset.soundKey);
     if (socketRef.current?.connected) {
       socketRef.current.emit('EFFECT_SPAWN', newEffect);
     }
+    toast.success(`Cast ${activeEquippedAsset.name}!`);
 
-    if (activeDmMonsterAction) {
-      const singleSelected = selectedTokenIds.length === 1 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
-      if (singleSelected) {
-        executeMonsterRoll(singleSelected, activeDmMonsterAction);
-      }
-      setActiveDmMonsterAction(null);
-    } else {
-      toast.success(`Cast ${activeEquippedAsset.name}!`);
+    // After the main spell animation (2.8s), move lasting debuff spells (Hunter's Mark, Hex, etc.) into a small bubble above the enemy's head
+    if (lastingDebuff && targetCreatureToken) {
+      const targetTokenId = targetCreatureToken.id;
+      const targetTokenName = targetCreatureToken.name;
+      setTimeout(() => {
+        const bubble = createDebuffBubbleFromConfig(lastingDebuff, selectedToken?.name || 'Caster');
+        setTokens(prev => {
+          const next = prev.map(t => {
+            if (t.id !== targetTokenId) return t;
+            const existing = t.bubbles || [];
+            const filtered = existing.filter(b => b.sourceSpellId !== lastingDebuff.spellKey && b.label !== lastingDebuff.name);
+            return { ...t, bubbles: [...filtered, bubble] };
+          });
+          if (mapsDataRef.current[activeMapId]) mapsDataRef.current[activeMapId].tokens = next;
+          if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) socketRef.current.emit('SYNC_TOKENS', next);
+          return next;
+        });
+        toast.success(`✨ ${lastingDebuff.name} moved into bubble above ${targetTokenName}'s head!`, {
+          description: lastingDebuff.description
+        });
+      }, 2800);
     }
 
     setAimOrigin(null);
@@ -10473,6 +10511,20 @@ export default function App() {
                   <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse shrink-0" />
                 )}
               </button>
+              <button
+                onClick={() => setTokenMenuTab('bubbles')}
+                className={`flex-1 py-1 rounded-md text-[10px] font-bold font-mono transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                  tokenMenuTab === 'bubbles'
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-xs'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                <CircleDot className="w-2.5 h-2.5 text-emerald-400" />
+                <span>Bubbles</span>
+                {(currentToken?.bubbles?.length || 0) > 0 && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                )}
+              </button>
             </div>
             
             {tokenMenuTab === 'stats' && (
@@ -10859,78 +10911,112 @@ export default function App() {
                         (currentToken?.auraRadius === preset.radius && currentToken?.auraColor === preset.color);
                       return (
                         <button
-                          key={preset.id}
+                          key={preset.name}
                           type="button"
-                          onContextMenu={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            const rule = lookupDndRuleDetails(preset.name, "aura");
-                            if (rule) setInspectedRuleEntry(rule);
-                          }}
                           onClick={() => {
-                            handleUpdateDmToken({
-                              auraRadius: preset.radius,
-                              auraColor: preset.color,
-                              auraName: preset.name,
-                              auraOpacity: preset.opacity || 0.9,
-                              videoUrl: preset.videoUrl
-                            });
-                            toast.success(`Equipped ${preset.name} (${preset.radius}ft)`);
+                            if (isActive) {
+                              handleUpdateDmToken({
+                                auraRadius: undefined,
+                                auraColor: undefined,
+                                auraName: undefined,
+                                auraOpacity: undefined,
+                                auras: []
+                              });
+                            } else {
+                              handleUpdateDmToken({
+                                auraRadius: preset.radius,
+                                auraColor: preset.color,
+                                auraName: preset.name,
+                                auraOpacity: preset.opacity ?? 0.35,
+                                auras: [{
+                                  radius: preset.radius,
+                                  color: preset.color,
+                                  opacity: preset.opacity ?? 0.35,
+                                  name: preset.name,
+                                  videoUrl: preset.videoUrl
+                                }]
+                              });
+                            }
                           }}
-                          className={`w-full p-1.5 rounded-lg text-left transition-all flex items-center justify-between border cursor-pointer ${
+                          className={`w-full text-left px-2 py-1.5 rounded-lg border transition-all cursor-pointer flex items-center justify-between ${
                             isActive
-                              ? 'bg-indigo-600/30 border-indigo-400/80 text-white shadow-sm'
-                              : 'bg-zinc-900/80 hover:bg-zinc-800 border-zinc-800 text-zinc-300'
+                              ? 'bg-indigo-500/20 border-indigo-400/70 text-indigo-200 shadow-sm'
+                              : 'bg-zinc-900/90 hover:bg-zinc-850 border-zinc-800 text-zinc-300 hover:text-white'
                           }`}
                         >
-                          <div className="flex items-center gap-2 min-w-0">
+                          <div className="flex items-center gap-2 overflow-hidden">
                             <div
                               className="w-3.5 h-3.5 rounded-full border border-white/40 shrink-0"
                               style={{ backgroundColor: preset.color }}
                             />
-                            <div className="flex flex-col min-w-0">
-                              <span className="text-[11px] font-semibold truncate leading-tight">{preset.name}</span>
-                              {preset.description && (
-                                <span className="text-[9px] text-zinc-500 truncate leading-tight">{preset.description}</span>
-                              )}
-                            </div>
+                            <span className="text-[11px] font-medium truncate">{preset.name}</span>
                           </div>
-                          <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700 shrink-0 ml-1">
-                            {preset.radius}ft
-                          </span>
+                          <span className="text-[9px] font-mono text-zinc-400 shrink-0">{preset.radius}ft</span>
                         </button>
                       );
                     })}
                   </div>
                 </div>
 
-                {/* Section: Custom Aura Controls */}
+                {/* Section: Custom Aura Builder */}
                 <div className="border-t border-zinc-800/80 pt-2.5 space-y-2">
-                  <span className="text-[9px] font-mono text-zinc-400 uppercase font-bold tracking-tighter block px-1">
-                    Custom Aura Settings
-                  </span>
+                  <div className="flex justify-between items-center px-1">
+                    <span className="text-[9px] font-mono text-zinc-400 uppercase font-bold tracking-tighter">
+                      Custom Aura Builder
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleUpdateDmToken({
+                          auraRadius: customAuraRadiusInput,
+                          auraColor: customAuraColorInput,
+                          auraName: customAuraNameInput || 'Custom Aura',
+                          auraOpacity: customAuraOpacityInput,
+                          auras: [{
+                            radius: customAuraRadiusInput,
+                            color: customAuraColorInput,
+                            opacity: customAuraOpacityInput,
+                            name: customAuraNameInput || 'Custom Aura'
+                          }]
+                        });
+                        toast.success(`Applied ${customAuraRadiusInput}ft aura to ${currentToken?.name || 'token'}`);
+                      }}
+                      className="px-2 py-0.5 bg-indigo-500/30 hover:bg-indigo-500/50 text-indigo-200 border border-indigo-400/50 rounded text-[9px] font-mono font-bold transition-all cursor-pointer"
+                    >
+                      Apply
+                    </button>
+                  </div>
 
-                  {/* Radius quick buttons & input */}
+                  {/* Custom Name */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[9px] text-zinc-400 font-mono w-11 shrink-0">Name:</span>
+                    <input
+                      type="text"
+                      placeholder="e.g. Divine Shield"
+                      value={customAuraNameInput}
+                      onChange={(e) => setCustomAuraNameInput(e.target.value)}
+                      className="flex-1 bg-zinc-900 border border-zinc-700 rounded px-1.5 py-0.5 text-[10px] text-zinc-200 font-mono focus:outline-none focus:border-indigo-400"
+                    />
+                  </div>
+
+                  {/* Custom Radius */}
                   <div className="flex items-center gap-1.5">
                     <span className="text-[9px] text-zinc-400 font-mono w-11 shrink-0">Radius:</span>
-                    <div className="flex items-center gap-1 flex-1 overflow-x-auto">
-                      {[5, 10, 15, 20, 30, 60].map((r) => (
+                    <div className="flex items-center gap-1 flex-1">
+                      {[5, 10, 15, 30].map((r) => (
                         <button
                           key={r}
                           type="button"
                           onClick={() => {
                             setCustomAuraRadiusInput(r);
-                            handleUpdateDmToken({
-                              auraRadius: r,
-                              auraColor: currentToken?.auraColor || customAuraColorInput,
-                              auraName: currentToken?.auraName || 'Custom Aura',
-                              auraOpacity: currentToken?.auraOpacity ?? customAuraOpacityInput
-                            });
+                            if (currentToken?.auraRadius && currentToken.auraRadius > 0) {
+                              handleUpdateDmToken({ auraRadius: r });
+                            }
                           }}
-                          className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold transition-all border cursor-pointer ${
-                            (currentToken?.auraRadius || customAuraRadiusInput) === r
-                              ? 'bg-amber-500/30 text-amber-300 border-amber-500/60'
-                              : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
+                          className={`flex-1 py-0.5 rounded text-[9px] font-mono font-bold border transition-all cursor-pointer ${
+                            (currentToken?.auraRadius ?? customAuraRadiusInput) === r
+                              ? 'bg-indigo-500/30 text-indigo-200 border-indigo-400/70'
+                              : 'bg-zinc-900 text-zinc-400 hover:text-white border-zinc-800'
                           }`}
                         >
                           {r}ft
@@ -10939,31 +11025,35 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Color Swatches */}
+                  {/* Custom Color Palette */}
                   <div className="flex items-center gap-1.5">
                     <span className="text-[9px] text-zinc-400 font-mono w-11 shrink-0">Color:</span>
-                    <div className="flex items-center gap-1.5 flex-wrap flex-1">
-                      {AURA_COLOR_PALETTE.map((pal) => (
+                    <div className="flex items-center gap-1 flex-1">
+                      {[
+                        { label: 'Gold', val: 'rgba(234, 179, 8, 0.5)' },
+                        { label: 'Holy', val: 'rgba(250, 204, 21, 0.5)' },
+                        { label: 'Blue', val: 'rgba(56, 189, 248, 0.5)' },
+                        { label: 'Purp', val: 'rgba(168, 85, 247, 0.5)' },
+                        { label: 'Red', val: 'rgba(239, 68, 68, 0.5)' },
+                        { label: 'Grn', val: 'rgba(34, 197, 94, 0.5)' },
+                        { label: 'Wht', val: 'rgba(255, 255, 255, 0.45)' }
+                      ].map((c) => (
                         <button
-                          key={pal.name}
+                          key={c.label}
                           type="button"
                           onClick={() => {
-                            setCustomAuraColorInput(pal.color);
-                            handleUpdateDmToken({
-                              auraColor: pal.color,
-                              auraRadius: currentToken?.auraRadius || customAuraRadiusInput || 10,
-                              auraName: currentToken?.auraName || `${pal.name} Aura`,
-                              auraOpacity: currentToken?.auraOpacity ?? 0.9,
-                              videoUrl: (pal as any).videoUrl
-                            });
+                            setCustomAuraColorInput(c.val);
+                            if (currentToken?.auraRadius && currentToken.auraRadius > 0) {
+                              handleUpdateDmToken({ auraColor: c.val });
+                            }
                           }}
                           className={`w-4 h-4 rounded-full border transition-all cursor-pointer ${
-                            (currentToken?.auraColor || customAuraColorInput) === pal.color
-                              ? 'ring-2 ring-white scale-110 border-white'
-                              : 'border-white/30 hover:scale-105'
+                            (currentToken?.auraColor ?? customAuraColorInput) === c.val
+                              ? 'scale-110 border-white shadow-sm'
+                              : 'border-white/30 hover:border-white/70'
                           }`}
-                          style={{ backgroundColor: pal.color }}
-                          title={pal.name}
+                          style={{ backgroundColor: c.val }}
+                          title={c.label}
                         />
                       ))}
                     </div>
@@ -10991,6 +11081,270 @@ export default function App() {
                       {Math.round((currentToken?.auraOpacity ?? customAuraOpacityInput) * 100)}%
                     </span>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {tokenMenuTab === 'bubbles' && (
+              <div className="space-y-3">
+                {/* Active Monster Bubbles Header / List */}
+                <div className="flex justify-between items-center px-1">
+                  <span className="text-[9px] font-mono text-zinc-400 uppercase font-bold tracking-tighter flex items-center gap-1">
+                    <CircleDot className="w-2.5 h-2.5 text-emerald-400" />
+                    Active Status Bubbles
+                  </span>
+                  <span className="text-[9px] font-mono text-emerald-400 font-bold">
+                    {(currentToken?.bubbles || []).length} Active
+                  </span>
+                </div>
+
+                {((currentToken?.bubbles || []).length > 0) ? (
+                  <div className="space-y-1.5 max-h-36 overflow-y-auto sidebar-scrollbar pr-1">
+                    {(currentToken?.bubbles || []).map((b) => (
+                      <div
+                        key={b.id}
+                        className="bg-zinc-900/90 border border-zinc-800 rounded-lg p-1.5 flex items-center justify-between group hover:border-zinc-700 transition-all"
+                      >
+                        <div className="flex items-center gap-2 overflow-hidden">
+                          {/* Miniature Bubble Preview */}
+                          <div
+                            className="w-5 h-5 rounded-full flex flex-col items-center justify-center shrink-0 border shadow-xs"
+                            style={{
+                              backgroundColor: b.bgColor || '#090d16',
+                              borderColor: b.color || '#38bdf8'
+                            }}
+                          >
+                            <span className="text-[8px] leading-none">{b.icon || '•'}</span>
+                          </div>
+                          <div className="flex flex-col min-w-0">
+                            <span className="text-[11px] font-bold text-zinc-200 truncate flex items-center gap-1">
+                              {b.label}
+                              {b.subLabel && (
+                                <span className="text-[8px] px-1 py-0.2 rounded font-mono font-bold bg-zinc-800" style={{ color: b.color }}>
+                                  {b.subLabel}
+                                </span>
+                              )}
+                            </span>
+                            {b.description && (
+                              <span className="text-[8px] font-mono text-zinc-400 truncate max-w-[150px]">
+                                {b.description}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = (currentToken?.bubbles || []).filter(item => item.id !== b.id);
+                            handleUpdateDmToken({ bubbles: next });
+                            toast.info(`Removed ${b.label} bubble`);
+                          }}
+                          className="p-1 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors cursor-pointer shrink-0"
+                          title="Remove bubble"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleUpdateDmToken({ bubbles: [] });
+                        toast.info('Cleared all status bubbles');
+                      }}
+                      className="w-full text-center py-1 text-[9px] font-mono text-red-400 hover:text-red-300 cursor-pointer"
+                    >
+                      Clear All Bubbles
+                    </button>
+                  </div>
+                ) : (
+                  <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-2 text-center text-[10px] text-zinc-400 font-mono">
+                    No active bubbles. Choose a 1-click preset or build a custom bubble below.
+                  </div>
+                )}
+
+                {/* Section: 1-Click Preset Badges (AC Style & Debuffs) */}
+                <div>
+                  <div className="flex justify-between items-center px-1 mb-1.5">
+                    <span className="text-[9px] font-mono text-zinc-400 uppercase font-bold tracking-tighter">
+                      1-Click Preset Badges
+                    </span>
+                    <span className="text-[9px] font-mono text-emerald-400 font-bold">AC-Style</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto sidebar-scrollbar pr-1">
+                    {PRESET_DM_BUBBLES.map((preset) => {
+                      const isActive = (currentToken?.bubbles || []).some(b => b.label === preset.label);
+                      return (
+                        <button
+                          key={preset.label}
+                          type="button"
+                          onClick={() => {
+                            if (isActive) {
+                              const next = (currentToken?.bubbles || []).filter(b => b.label !== preset.label);
+                              handleUpdateDmToken({ bubbles: next });
+                            } else {
+                              const newBubble: TokenStatusBubble = {
+                                ...preset,
+                                id: `bubble_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`
+                              };
+                              handleUpdateDmToken({
+                                bubbles: [...(currentToken?.bubbles || []).filter(b => b.label !== preset.label), newBubble]
+                              });
+                              toast.success(`Added ${preset.label} bubble above ${currentToken?.name || 'monster'}!`);
+                            }
+                          }}
+                          className={`text-left p-1.5 rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 ${
+                            isActive
+                              ? 'bg-emerald-500/20 border-emerald-400/70 text-emerald-100 shadow-sm'
+                              : 'bg-zinc-900/90 hover:bg-zinc-850 border-zinc-800 text-zinc-300 hover:text-white'
+                          }`}
+                        >
+                          {/* Miniature Bubble Avatar */}
+                          <div
+                            className="w-5 h-5 rounded-full flex flex-col items-center justify-center shrink-0 border"
+                            style={{
+                              backgroundColor: '#090d16',
+                              borderColor: preset.color
+                            }}
+                          >
+                            <span className="text-[8px] leading-none">{preset.icon}</span>
+                          </div>
+                          <div className="flex flex-col min-w-0">
+                            <span className="text-[10px] font-bold truncate leading-tight">{preset.label}</span>
+                            <span className="text-[8px] font-mono font-bold" style={{ color: preset.color }}>
+                              {preset.subLabel}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Section: Custom Bubble Creator */}
+                <div className="border-t border-zinc-800/80 pt-2.5 space-y-2">
+                  <div className="flex justify-between items-center px-1">
+                    <span className="text-[9px] font-mono text-zinc-400 uppercase font-bold tracking-tighter">
+                      Custom Bubble Creator
+                    </span>
+                    {/* Live Badge Preview */}
+                    <div className="flex items-center gap-1 bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-700">
+                      <span className="text-[8px] font-mono text-zinc-400">Preview:</span>
+                      <div
+                        className="w-5 h-5 rounded-full flex flex-col items-center justify-center shrink-0 border shadow-xs"
+                        style={{
+                          backgroundColor: '#090d16',
+                          borderColor: customBubbleColor
+                        }}
+                      >
+                        {customBubbleSubLabel && (
+                          <span className="text-[5px] font-bold font-mono leading-none" style={{ color: customBubbleColor }}>
+                            {customBubbleSubLabel.substring(0, 4)}
+                          </span>
+                        )}
+                        <span className="text-[8px] leading-none">{customBubbleIcon || '🎯'}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Label & SubLabel Inputs */}
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <div className="col-span-2">
+                      <input
+                        type="text"
+                        placeholder="Bubble Label (e.g. Phase 2)"
+                        value={customBubbleLabel}
+                        onChange={(e) => setCustomBubbleLabel(e.target.value)}
+                        className="w-full bg-zinc-900 border border-zinc-700 rounded px-1.5 py-1 text-[10px] text-zinc-200 font-mono focus:outline-none focus:border-emerald-400"
+                      />
+                    </div>
+                    <div>
+                      <input
+                        type="text"
+                        placeholder="AC/Tag"
+                        maxLength={4}
+                        value={customBubbleSubLabel}
+                        onChange={(e) => setCustomBubbleSubLabel(e.target.value.toUpperCase())}
+                        className="w-full bg-zinc-900 border border-zinc-700 rounded px-1.5 py-1 text-[10px] text-center text-zinc-200 font-mono uppercase font-bold focus:outline-none focus:border-emerald-400"
+                        title="Top small text (similar to 'AC', up to 4 chars)"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Icon Picker */}
+                  <div className="flex items-center gap-1 overflow-x-auto pb-1 sidebar-scrollbar">
+                    {['🎯', '💀', '🛡️', '⚔️', '🔥', '❄️', '⚡', '🩸', '👑', '👁️', '⛓️', '⏳', '⚠️', '💣', '💎', '✨', '🧠', '🚫', '💤', '💥'].map(ic => (
+                      <button
+                        key={ic}
+                        type="button"
+                        onClick={() => setCustomBubbleIcon(ic)}
+                        className={`w-6 h-6 rounded text-xs shrink-0 border transition-all cursor-pointer flex items-center justify-center ${
+                          customBubbleIcon === ic
+                            ? 'bg-emerald-500/30 border-emerald-400 scale-110 shadow-xs'
+                            : 'bg-zinc-900 border-zinc-800 hover:border-zinc-700 text-zinc-300'
+                        }`}
+                      >
+                        {ic}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Color Palette Swatches */}
+                  <div className="flex items-center justify-between px-0.5">
+                    <span className="text-[9px] text-zinc-400 font-mono">Color:</span>
+                    <div className="flex items-center gap-1.5">
+                      {[
+                        { label: 'Sky', val: '#38bdf8' },
+                        { label: 'Emerald', val: '#22c55e' },
+                        { label: 'Purple', val: '#a855f7' },
+                        { label: 'Amber', val: '#fbbf24' },
+                        { label: 'Red', val: '#ef4444' },
+                        { label: 'Pink', val: '#ec4899' },
+                        { label: 'Indigo', val: '#6366f1' },
+                        { label: 'Slate', val: '#94a3b8' }
+                      ].map(c => (
+                        <button
+                          key={c.label}
+                          type="button"
+                          onClick={() => setCustomBubbleColor(c.val)}
+                          className={`w-4 h-4 rounded-full border transition-all cursor-pointer ${
+                            customBubbleColor === c.val
+                              ? 'scale-125 border-white shadow-sm ring-1 ring-white/50'
+                              : 'border-white/30 hover:border-white/70'
+                          }`}
+                          style={{ backgroundColor: c.val }}
+                          title={c.label}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Add Custom Bubble Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const lbl = customBubbleLabel.trim() || 'Status Marker';
+                      const newBubble: TokenStatusBubble = {
+                        id: `bubble_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                        label: lbl,
+                        subLabel: customBubbleSubLabel.trim() || undefined,
+                        icon: customBubbleIcon || '🎯',
+                        color: customBubbleColor,
+                        style: customBubbleStyle,
+                        createdTime: Date.now()
+                      };
+                      handleUpdateDmToken({
+                        bubbles: [...(currentToken?.bubbles || []), newBubble]
+                      });
+                      setCustomBubbleLabel('');
+                      setCustomBubbleSubLabel('');
+                      toast.success(`Added "${lbl}" bubble above ${currentToken?.name || 'monster'}!`);
+                    }}
+                    className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold font-mono shadow-md transition-all cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Custom Bubble</span>
+                  </button>
                 </div>
               </div>
             )}

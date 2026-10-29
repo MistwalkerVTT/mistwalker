@@ -2,6 +2,8 @@
 // Public API for the MistWalker 4.0 Effects Engine
 
 export * from './types/effect';
+export * from './types/bubble';
+export * from './bubbles/bubbleCatalog';
 export * from './db/jb2aRegistry';
 export * from './db/soundCatalog';
 export * from './db/templateFallbackMatrix';
@@ -18,3 +20,4 @@ export * from './ui/AimReticle';
 export * from './ui/CompendiumCustomFxModal';
 export * from './ui/Attribution';
 export * from './geometry/coneGeometry';
+export * from './ui/TokenBubblesKonvaOverlay';
