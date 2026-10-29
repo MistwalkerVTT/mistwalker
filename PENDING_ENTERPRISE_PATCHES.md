@@ -88,6 +88,19 @@
 
 ---
 
+### [2026-10-29] feat(arena): roll to hit first, then roll damage independently with correct dice types
+- **Commit**: `6a63f3f`
+- **Files Changed**:
+  - `src/components/PlayerArenaMode.tsx`
+- **Summary**:
+  - Arena attack resolution (auto-roll) now always tumbles the d20 to-hit roll first (1d20, or 2d20kl1 with close-combat disadvantage), labeled HIT/MISS/CRITICAL vs target AC.
+  - On a hit, the damage roll is shown as a separate 3D roll ~1.35s later using the weapon/spell's actual damage dice (e.g. 1d8, 2d6, 1d10 + 1d6), with dice doubled on crits.
+  - Misses show only the d20 roll; no damage dice are rolled.
+- **Impact / Testing Notes**:
+  - In Arena Mode with Auto Roll ON, attack an enemy and verify two distinct roll toasts/3D rolls appear in order: d20 to-hit, then damage dice of the correct types.
+
+---
+
 ### Template for Incoming Entries:
 ```markdown
 ### [YYYY-MM-DD] <Title / Commit Short Summary>
