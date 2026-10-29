@@ -52,8 +52,14 @@ export const PlatformLandingGate: React.FC<PlatformLandingGateProps> = ({
       setSuccessMsg('Signed in with Google!');
       setTimeout(onAuthenticated, 400);
     } catch (err: any) {
-      console.error(err);
-      setErrorMsg(err.message || 'Google sign-in was interrupted. Please try again.');
+      console.error('Google Sign-in Error:', err);
+      if (err?.code === 'auth/unauthorized-domain' || (err?.message && err.message.includes('auth/unauthorized-domain'))) {
+        setErrorMsg('UNAUTHORIZED_DOMAIN');
+      } else if (err?.code === 'auth/popup-closed-by-user') {
+        setErrorMsg('Sign-in window was closed before finishing.');
+      } else {
+        setErrorMsg(err.message || 'Google sign-in was interrupted. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -74,8 +80,16 @@ export const PlatformLandingGate: React.FC<PlatformLandingGateProps> = ({
       }
       setTimeout(onAuthenticated, 400);
     } catch (err: any) {
-      console.error(err);
-      setErrorMsg(err.message || 'Authentication failed. Please verify credentials.');
+      console.error('Email Auth Error:', err);
+      if (err?.code === 'auth/email-already-in-use') {
+        setErrorMsg('This email is already registered. Please switch to the "Log In" tab.');
+      } else if (err?.code === 'auth/invalid-credential' || err?.code === 'auth/wrong-password' || err?.code === 'auth/user-not-found') {
+        setErrorMsg('Incorrect email or password. Please double-check your credentials.');
+      } else if (err?.code === 'auth/weak-password') {
+        setErrorMsg('Password should be at least 6 characters long.');
+      } else {
+        setErrorMsg(err.message || 'Authentication failed. Please verify your credentials.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -187,7 +201,32 @@ export const PlatformLandingGate: React.FC<PlatformLandingGateProps> = ({
             </div>
 
             {/* Error & Success Feedback */}
-            {errorMsg && (
+            {errorMsg === 'UNAUTHORIZED_DOMAIN' ? (
+              <div className="mb-4 p-3.5 rounded-xl bg-amber-950/50 border border-amber-500/40 text-amber-200 text-xs space-y-2">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-semibold text-white">Firebase Domain Authorization Required:</span>
+                    <p className="mt-1 text-amber-200/90 leading-relaxed">
+                      Google OAuth requires <code className="bg-amber-900/60 px-1 py-0.5 rounded text-amber-100 font-mono">mistwalker-beta.onrender.com</code> to be authorized in Firebase Console under Authentication Settings.
+                    </p>
+                  </div>
+                </div>
+                <div className="pt-2 border-t border-amber-500/20 flex flex-wrap items-center gap-2">
+                  <a
+                    href="https://console.firebase.google.com/project/gen-lang-client-0800395076/authentication/settings"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500 text-zinc-950 font-bold hover:bg-amber-400 transition"
+                  >
+                    Open Firebase Settings &rarr;
+                  </a>
+                  <span className="text-[11px] text-amber-300">
+                    Or sign in below with <strong>Email & Password</strong> right now!
+                  </span>
+                </div>
+              </div>
+            ) : errorMsg && (
               <div className="mb-4 p-3 rounded-xl bg-rose-950/40 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{errorMsg}</span>
