@@ -17,3 +17,4 @@ export * from './ui/EffectsDrawer';
 export * from './ui/AimReticle';
 export * from './ui/CompendiumCustomFxModal';
 export * from './ui/Attribution';
+export * from './geometry/coneGeometry';

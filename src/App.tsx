@@ -54,7 +54,8 @@ import {
   DomEffectOverlay,
   AimReticle,
   videoCacheManager,
-  soundCatalog
+  soundCatalog,
+  getDirectionalConeOrigin
 } from './effects';
 import { JB2A_REGISTRY, findJb2aAsset } from './effects/db/jb2aRegistry';
 import { getAuraVideoUrl } from './effects/db/tokenFxMap';
@@ -4497,6 +4498,15 @@ export default function App() {
       ? { x: (hitToken.x ?? 0) + hitTokenRadius, y: (hitToken.y ?? 0) + hitTokenRadius }
       : (isPointAoe ? target : origin);
 
+    const isCone = activeEquippedAsset.paradigm === 'cone' || activeEquippedAsset.targetType === 'cone' || activeEquippedAsset.shape === 'cone';
+    let castOrigin = origin;
+    let castRotation = rotation;
+    if (isCone) {
+      const coneInfo = getDirectionalConeOrigin(origin, target, tokens, gridSize, selectedToken);
+      castOrigin = { x: coneInfo.x, y: coneInfo.y };
+      castRotation = Math.atan2(target.y - coneInfo.tokenCenter.y, target.x - coneInfo.tokenCenter.x) * (180 / Math.PI);
+    }
+
     const newEffect: VttEffectInstance = {
       id: `eff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       name: hitToken ? `${activeEquippedAsset.name} (${hitToken.name})` : activeEquippedAsset.name,
@@ -4508,14 +4518,14 @@ export default function App() {
       loopVideoUrl: activeEquippedAsset.loopWebm,
       thumbUrl: activeEquippedAsset.thumb,
       paradigm: isTrajectory ? 'projectile' : (isAuraOrBuff ? 'aura' : activeEquippedAsset.paradigm),
-      x: isTrajectory ? origin.x : lockedPos.x,
-      y: isTrajectory ? origin.y : lockedPos.y,
-      originX: origin.x,
-      originY: origin.y,
+      x: isCone ? castOrigin.x : (isTrajectory ? origin.x : lockedPos.x),
+      y: isCone ? castOrigin.y : (isTrajectory ? origin.y : lockedPos.y),
+      originX: castOrigin.x,
+      originY: castOrigin.y,
       targetX: hitToken ? lockedPos.x : target.x,
       targetY: hitToken ? lockedPos.y : target.y,
       sizeFt: activeEquippedAsset.defaultSizeFt,
-      rotation: (activeEquippedAsset.paradigm === 'cone' || activeEquippedAsset.paradigm === 'line') ? rotation : 0,
+      rotation: (activeEquippedAsset.paradigm === 'cone' || activeEquippedAsset.paradigm === 'line') ? (isCone ? castRotation : rotation) : 0,
       opacity: 1.0,
       blendMode: activeEquippedAsset.blendMode,
       isPersistent: isAuraOrBuff || Boolean(activeEquippedAsset.isPersistent),
@@ -9178,6 +9188,8 @@ export default function App() {
                     current={aimCurrent}
                     gridSize={gridSize}
                     stageScale={stageScale}
+                    tokens={tokens}
+                    preferredToken={selectedTokenIds.length > 0 ? tokens.find(t => t.id === selectedTokenIds[0]) : null}
                   />
                 </Layer>
               )}

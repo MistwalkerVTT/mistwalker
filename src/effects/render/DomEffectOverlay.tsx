@@ -8,6 +8,7 @@ import { X, Sparkles } from 'lucide-react';
 import { VttEffectInstance, Jb2aAssetDefinition } from '../types/effect';
 import { soundCatalog } from '../db/soundCatalog';
 import { getConditionFx, getAuraVideoUrl } from '../db/tokenFxMap';
+import { getDirectionalConeOrigin } from '../geometry/coneGeometry';
 
 interface DomEffectOverlayProps {
   effects: VttEffectInstance[];
@@ -850,7 +851,18 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
             const isCone = activeEquippedAsset.paradigm === 'cone';
             const length = (previewSize / 5) * gridSize;
             const spreadOrHeight = isCone ? length : Math.max(gridSize, length / 10);
-            const projAnchorX = '0px';
+            let previewX = aimOrigin.x;
+            let previewY = aimOrigin.y;
+            let previewAngle = angleDeg;
+            let projAnchorX = '0px';
+
+            if (isCone) {
+              const coneOrig = getDirectionalConeOrigin(aimOrigin, aimCurrent, tokens, gridSize);
+              previewX = coneOrig.x;
+              previewY = coneOrig.y;
+              previewAngle = Math.atan2(aimCurrent.y - coneOrig.tokenCenter.y, aimCurrent.x - coneOrig.tokenCenter.x) * (180 / Math.PI);
+              projAnchorX = '15%';
+            }
 
             return (
               <video
@@ -863,18 +875,16 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                 preload="auto"
                 style={{
                   position: 'absolute',
-                  left: `${aimOrigin.x}px`,
-                  top: `${aimOrigin.y}px`,
+                  left: `${previewX}px`,
+                  top: `${previewY}px`,
                   width: `${length}px`,
                   height: `${spreadOrHeight}px`,
                   maxWidth: 'none',
                   maxHeight: 'none',
                   minWidth: `${length}px`,
                   minHeight: `${spreadOrHeight}px`,
-                  transform: `translate(-${projAnchorX}, -50%) rotate(${angleDeg}deg) translateZ(0)`,
+                  transform: `translate(-${projAnchorX}, -50%) rotate(${previewAngle}deg) translateZ(0)`,
                   transformOrigin: `${projAnchorX} 50%`,
-                  // projectile-origin-anchored
-                  // origin-anchored
                   objectFit: 'fill',
                   opacity: 0.8,
                   filter: 'drop-shadow(0 0 16px rgba(255, 255, 255, 0.4))',

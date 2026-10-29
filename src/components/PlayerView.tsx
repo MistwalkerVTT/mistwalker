@@ -102,7 +102,8 @@ import {
   videoCacheManager,
   soundCatalog,
   JB2A_REGISTRY,
-  findJb2aAsset
+  findJb2aAsset,
+  getDirectionalConeOrigin
 } from '../effects';
 import { PlayerStationModal, PlayerStationMode } from './PlayerStationModal';
 import { PlayerCharacterSelectModal, PlayerCharacterChoiceItem } from './PlayerCharacterSelectModal';
@@ -4044,6 +4045,15 @@ export default function PlayerView() {
       ? { x: (hitToken.x ?? 0) + hitTokenRadius, y: (hitToken.y ?? 0) + hitTokenRadius }
       : (isPointAoe ? target : origin);
 
+    const isCone = activeEquippedAsset.paradigm === 'cone' || activeEquippedAsset.targetType === 'cone' || activeEquippedAsset.shape === 'cone';
+    let castOrigin = origin;
+    let castRotation = rotation;
+    if (isCone) {
+      const coneInfo = getDirectionalConeOrigin(origin, target, tokens, gridSize, claimedToken);
+      castOrigin = { x: coneInfo.x, y: coneInfo.y };
+      castRotation = Math.atan2(target.y - coneInfo.tokenCenter.y, target.x - coneInfo.tokenCenter.x) * (180 / Math.PI);
+    }
+
     const aimedAction = activeTargetingAction;
     const newEffect: VttEffectInstance = {
       id: `eff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -4056,14 +4066,14 @@ export default function PlayerView() {
       loopVideoUrl: activeEquippedAsset.loopWebm,
       thumbUrl: activeEquippedAsset.thumb,
       paradigm: isTrajectory ? 'projectile' : (isAuraOrBuff ? 'aura' : activeEquippedAsset.paradigm),
-      x: isTrajectory ? origin.x : lockedPos.x,
-      y: isTrajectory ? origin.y : lockedPos.y,
-      originX: origin.x,
-      originY: origin.y,
+      x: isCone ? castOrigin.x : (isTrajectory ? origin.x : lockedPos.x),
+      y: isCone ? castOrigin.y : (isTrajectory ? origin.y : lockedPos.y),
+      originX: castOrigin.x,
+      originY: castOrigin.y,
       targetX: hitToken ? lockedPos.x : target.x,
       targetY: hitToken ? lockedPos.y : target.y,
       sizeFt: activeEquippedAsset.defaultSizeFt,
-      rotation: (activeEquippedAsset.paradigm === 'cone' || activeEquippedAsset.paradigm === 'line') ? rotation : 0,
+      rotation: (activeEquippedAsset.paradigm === 'cone' || activeEquippedAsset.paradigm === 'line') ? (isCone ? castRotation : rotation) : 0,
       opacity: 1.0,
       blendMode: activeEquippedAsset.blendMode,
       isPersistent: isAuraOrBuff || Boolean(activeEquippedAsset.isPersistent),
@@ -5347,6 +5357,15 @@ export default function PlayerView() {
       const isDirectional = !isAuraOrBuff && (asset.paradigm === 'cone' || asset.paradigm === 'line');
       const isTrajectory = !isAuraOrBuff && !isDirectional && ((asset.paradigm === 'projectile' || asset.paradigm === 'ray') || Boolean(asset.projectileWebm)) && distPx > 15;
       const aimAngleDeg = Math.atan2(targetCenter.y - casterCenter.y, targetCenter.x - casterCenter.x) * (180 / Math.PI);
+
+      const isCone = !isAuraOrBuff && (asset.paradigm === 'cone' || asset.targetType === 'cone' || asset.shape === 'cone');
+      let dirOrigin = casterCenter;
+      let dirAngleDeg = aimAngleDeg;
+      if (isCone) {
+        const coneInfo = getDirectionalConeOrigin(casterCenter, targetCenter, tokens, gridSize, caster);
+        dirOrigin = { x: coneInfo.x, y: coneInfo.y };
+        dirAngleDeg = Math.atan2(targetCenter.y - coneInfo.tokenCenter.y, targetCenter.x - coneInfo.tokenCenter.x) * (180 / Math.PI);
+      }
       const newEffect: VttEffectInstance = {
         id: `eff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         name: (isAuraOrBuff ? isAuraSelf : isSelfTarget) ? asset.name : `${asset.name} (${auraLockedToken.name})`,
@@ -5356,14 +5375,14 @@ export default function PlayerView() {
         loopVideoUrl: asset.loopWebm,
         thumbUrl: asset.thumb,
         paradigm: isTrajectory ? 'projectile' : (isAuraOrBuff ? 'aura' : asset.paradigm),
-        x: (isTrajectory || isDirectional) ? casterCenter.x : (isAuraOrBuff ? auraLockedCenter.x : targetCenter.x),
-        y: (isTrajectory || isDirectional) ? casterCenter.y : (isAuraOrBuff ? auraLockedCenter.y : targetCenter.y),
-        originX: casterCenter.x,
-        originY: casterCenter.y,
+        x: isCone ? dirOrigin.x : ((isTrajectory || isDirectional) ? casterCenter.x : (isAuraOrBuff ? auraLockedCenter.x : targetCenter.x)),
+        y: isCone ? dirOrigin.y : ((isTrajectory || isDirectional) ? casterCenter.y : (isAuraOrBuff ? auraLockedCenter.y : targetCenter.y)),
+        originX: isCone ? dirOrigin.x : casterCenter.x,
+        originY: isCone ? dirOrigin.y : casterCenter.y,
         targetX: isAuraOrBuff ? auraLockedCenter.x : targetCenter.x,
         targetY: isAuraOrBuff ? auraLockedCenter.y : targetCenter.y,
         sizeFt: asset.defaultSizeFt,
-        rotation: (isTrajectory || isDirectional) ? aimAngleDeg : 0,
+        rotation: isCone ? dirAngleDeg : ((isTrajectory || isDirectional) ? aimAngleDeg : 0),
         opacity: 1.0,
         blendMode: asset.blendMode,
         isPersistent: isAuraOrBuff || Boolean(asset.isPersistent),
@@ -7519,6 +7538,8 @@ export default function PlayerView() {
               current={aimCurrent}
               gridSize={gridSize}
               stageScale={stageScale}
+              tokens={tokens}
+              preferredToken={claimedToken}
             />
           </Layer>
         )}

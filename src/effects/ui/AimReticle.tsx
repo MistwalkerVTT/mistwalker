@@ -5,6 +5,7 @@
 import React from 'react';
 import { Group, Circle, Line, Wedge, Rect, Text } from 'react-konva';
 import { Jb2aAssetDefinition } from '../types/effect';
+import { getDirectionalConeOrigin, TokenPositionLike } from '../geometry/coneGeometry';
 
 interface AimReticleProps {
   asset: Jb2aAssetDefinition;
@@ -12,6 +13,8 @@ interface AimReticleProps {
   current: { x: number; y: number } | null;
   gridSize: number;
   stageScale: number;
+  tokens?: TokenPositionLike[];
+  preferredToken?: TokenPositionLike | null;
 }
 
 const SINGLE_TARGET_IDS = new Set([
@@ -37,7 +40,9 @@ export const AimReticle: React.FC<AimReticleProps> = React.memo(({
   origin,
   current,
   gridSize,
-  stageScale
+  stageScale,
+  tokens,
+  preferredToken
 }) => {
   if (!origin || !current) return null;
 
@@ -157,12 +162,15 @@ export const AimReticle: React.FC<AimReticleProps> = React.memo(({
   // 1. Cone (Burning Hands, Cone of Cold, Color Spray, Thunderwave)
   if (asset.targetType === 'cone' || asset.paradigm === 'cone' || asset.shape === 'cone') {
     const coneRadius = (asset.defaultSizeFt / 5) * gridSize;
+    const coneOrigin = getDirectionalConeOrigin(origin, current, tokens, gridSize, preferredToken);
+    const coneAngleDeg = Math.atan2(current.y - coneOrigin.tokenCenter.y, current.x - coneOrigin.tokenCenter.x) * (180 / Math.PI);
+
     return (
-      <Group x={origin.x} y={origin.y} listening={false}>
+      <Group x={coneOrigin.x} y={coneOrigin.y} listening={false}>
         <Wedge
           radius={coneRadius}
           angle={53} // Standard 5e cone angle (~53 degrees)
-          rotation={angleDeg - 26.5}
+          rotation={coneAngleDeg - 26.5}
           stroke={color}
           strokeWidth={2.5 / stageScale}
           dash={[8, 4]}
@@ -171,8 +179,8 @@ export const AimReticle: React.FC<AimReticleProps> = React.memo(({
         />
         <Text
           text={`${asset.name} (${asset.defaultSizeFt}ft Cone)`}
-          x={current.x - origin.x + (12 / stageScale)}
-          y={current.y - origin.y + (12 / stageScale)}
+          x={current.x - coneOrigin.x + (12 / stageScale)}
+          y={current.y - coneOrigin.y + (12 / stageScale)}
           fill="#ffffff"
           fontSize={12 / stageScale}
           fontFamily="monospace"
