@@ -4213,6 +4213,16 @@ export default function PlayerView() {
       castRotation = Math.atan2(target.y - coneInfo.tokenCenter.y, target.x - coneInfo.tokenCenter.x) * (180 / Math.PI);
     }
 
+    const lastingDebuff = findLastingDebuffConfig(activeEquippedAsset.id || activeEquippedAsset.name || aimedAction?.name);
+    const targetCreatureToken = tokens.find(t => {
+      const tRad = ((t.size || 1) * gridSize) / 2;
+      const tcX = (t.x ?? 0) + tRad;
+      const tcY = (t.y ?? 0) + tRad;
+      return Math.hypot(target.x - tcX, target.y - tcY) <= tRad + 15;
+    }) || hitToken;
+
+    const isDebuffOnTarget = Boolean(lastingDebuff && targetCreatureToken);
+
     const aimedAction = activeTargetingAction;
     const newEffect: VttEffectInstance = {
       id: `eff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -4235,11 +4245,11 @@ export default function PlayerView() {
       rotation: (activeEquippedAsset.paradigm === 'cone' || activeEquippedAsset.paradigm === 'line') ? (isCone ? castRotation : rotation) : 0,
       opacity: 1.0,
       blendMode: activeEquippedAsset.blendMode,
-      isPersistent: isAuraOrBuff || Boolean(activeEquippedAsset.isPersistent),
-      loop: isAuraOrBuff || Boolean(activeEquippedAsset.isPersistent),
+      isPersistent: isDebuffOnTarget ? false : (isAuraOrBuff || Boolean(activeEquippedAsset.isPersistent)),
+      loop: isDebuffOnTarget ? false : (isAuraOrBuff || Boolean(activeEquippedAsset.isPersistent)),
       attachedTokenId: hitToken ? hitToken.id : undefined,
       castTime: Date.now(),
-      durationMs: isTrajectory ? 2500 : 5000,
+      durationMs: isDebuffOnTarget ? 2800 : (isTrajectory ? 2500 : 5000),
       soundKey: activeEquippedAsset.soundKey,
       color: activeEquippedAsset.color,
       trajectory: isTrajectory ? {
@@ -4272,18 +4282,17 @@ export default function PlayerView() {
       socketRef.current.emit('EFFECT_SPAWN', newEffect);
     }
 
-    const lastingDebuff = findLastingDebuffConfig(activeEquippedAsset.id || activeEquippedAsset.name || aimedAction?.name);
-    const targetCreatureToken = tokens.find(t => {
-      const tRad = ((t.size || 1) * gridSize) / 2;
-      const tcX = (t.x ?? 0) + tRad;
-      const tcY = (t.y ?? 0) + tRad;
-      return Math.hypot(target.x - tcX, target.y - tcY) <= tRad + 15;
-    }) || hitToken;
-
     if (lastingDebuff && targetCreatureToken) {
       const targetTokenId = targetCreatureToken.id;
       const targetTokenName = targetCreatureToken.name;
+      const effectToRemoveId = newEffect.id;
       setTimeout(() => {
+        // Remove the main full-size blast animation now that it transitioned into the bubble
+        setEffects(prev => prev.filter(e => e.id !== effectToRemoveId));
+        if (socketRef.current?.connected) {
+          socketRef.current.emit('EFFECT_REMOVE', { id: effectToRemoveId });
+        }
+
         const bubble = createDebuffBubbleFromConfig(lastingDebuff, claimedToken?.name || 'Hero');
         setTokens(prev => {
           const next = prev.map(t => {

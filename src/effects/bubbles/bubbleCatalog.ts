@@ -145,14 +145,25 @@ export const LASTING_DEBUFF_SPELLS: DebuffSpellConfig[] = [
 
 /**
  * Checks if a spell or asset key represents a lasting debuff spell that transitions to a bubble.
+ * Prioritizes exact matches, then alias equality, then inclusion to prevent cross-matching.
  */
 export function findLastingDebuffConfig(assetIdOrName: string | undefined): DebuffSpellConfig | null {
   if (!assetIdOrName) return null;
   const lower = assetIdOrName.trim().toLowerCase();
+  
+  // 1. Exact match on spellKey or name
   for (const cfg of LASTING_DEBUFF_SPELLS) {
-    if (cfg.spellKey === lower) return cfg;
-    if (cfg.name.toLowerCase() === lower) return cfg;
-    if (cfg.aliases.some(a => lower.includes(a) || a.includes(lower))) return cfg;
+    if (cfg.spellKey === lower || cfg.name.toLowerCase() === lower) return cfg;
+  }
+
+  // 2. Exact match on any alias
+  for (const cfg of LASTING_DEBUFF_SPELLS) {
+    if (cfg.aliases.some(a => a === lower)) return cfg;
+  }
+
+  // 3. Substring match where token name or alias contains each other
+  for (const cfg of LASTING_DEBUFF_SPELLS) {
+    if (cfg.aliases.some(a => lower.includes(a) || (a.length >= 4 && a.includes(lower)))) return cfg;
   }
   return null;
 }

@@ -4523,6 +4523,16 @@ export default function App() {
       castRotation = Math.atan2(target.y - coneInfo.tokenCenter.y, target.x - coneInfo.tokenCenter.x) * (180 / Math.PI);
     }
 
+    const lastingDebuff = findLastingDebuffConfig(activeEquippedAsset.id || activeEquippedAsset.name);
+    const targetCreatureToken = tokens.find(t => {
+      const tRad = ((t.size || 1) * gridSize) / 2;
+      const tcX = (t.x ?? 0) + tRad;
+      const tcY = (t.y ?? 0) + tRad;
+      return Math.hypot(target.x - tcX, target.y - tcY) <= tRad + 15;
+    }) || hitToken;
+
+    const isDebuffOnTarget = Boolean(lastingDebuff && targetCreatureToken);
+
     const newEffect: VttEffectInstance = {
       id: `eff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       name: hitToken ? `${activeEquippedAsset.name} (${hitToken.name})` : activeEquippedAsset.name,
@@ -4544,13 +4554,13 @@ export default function App() {
       rotation: (activeEquippedAsset.paradigm === 'cone' || activeEquippedAsset.paradigm === 'line') ? (isCone ? castRotation : rotation) : 0,
       opacity: 1.0,
       blendMode: activeEquippedAsset.blendMode,
-      isPersistent: isAuraOrBuff || Boolean(activeEquippedAsset.isPersistent),
-      loop: isAuraOrBuff || Boolean(activeEquippedAsset.isPersistent),
+      isPersistent: isDebuffOnTarget ? false : (isAuraOrBuff || Boolean(activeEquippedAsset.isPersistent)),
+      loop: isDebuffOnTarget ? false : (isAuraOrBuff || Boolean(activeEquippedAsset.isPersistent)),
       attachedTokenId: hitToken ? hitToken.id : undefined,
       ownerId: hitToken?.id || selectedToken?.id,
       casterName: selectedToken?.name || hitToken?.name,
       castTime: Date.now(),
-      durationMs: isTrajectory ? 2500 : 5000,
+      durationMs: isDebuffOnTarget ? 2800 : (isTrajectory ? 2500 : 5000),
       soundKey: activeEquippedAsset.soundKey,
       color: activeEquippedAsset.color,
       trajectory: isTrajectory ? {
@@ -4565,26 +4575,18 @@ export default function App() {
       } : undefined
     };
 
-    const lastingDebuff = findLastingDebuffConfig(activeEquippedAsset.id || activeEquippedAsset.name);
-    const targetCreatureToken = tokens.find(t => {
-      const tRad = ((t.size || 1) * gridSize) / 2;
-      const tcX = (t.x ?? 0) + tRad;
-      const tcY = (t.y ?? 0) + tRad;
-      return Math.hypot(target.x - tcX, target.y - tcY) <= tRad + 15;
-    }) || hitToken;
-
-    setEffects(prev => [...prev, newEffect]);
-    if (activeEquippedAsset.soundKey) soundCatalog.play(activeEquippedAsset.soundKey);
-    if (socketRef.current?.connected) {
-      socketRef.current.emit('EFFECT_SPAWN', newEffect);
-    }
-    toast.success(`Cast ${activeEquippedAsset.name}!`);
-
     // After the main spell animation (2.8s), move lasting debuff spells (Hunter's Mark, Hex, etc.) into a small bubble above the enemy's head
     if (lastingDebuff && targetCreatureToken) {
       const targetTokenId = targetCreatureToken.id;
       const targetTokenName = targetCreatureToken.name;
+      const effectToRemoveId = newEffect.id;
       setTimeout(() => {
+        // Remove the main full-size blast animation now that it transitioned into the bubble
+        setEffects(prev => prev.filter(e => e.id !== effectToRemoveId));
+        if (socketRef.current?.connected) {
+          socketRef.current.emit('EFFECT_REMOVE', { id: effectToRemoveId });
+        }
+
         const bubble = createDebuffBubbleFromConfig(lastingDebuff, selectedToken?.name || 'Caster');
         setTokens(prev => {
           const next = prev.map(t => {
