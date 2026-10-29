@@ -81,7 +81,9 @@ export const PlatformLandingGate: React.FC<PlatformLandingGateProps> = ({
       setTimeout(onAuthenticated, 400);
     } catch (err: any) {
       console.error('Email Auth Error:', err);
-      if (err?.code === 'auth/email-already-in-use') {
+      if (err?.code === 'auth/operation-not-allowed') {
+        setErrorMsg('Email & Password accounts are not yet enabled in your Firebase Console. Please toggle Email/Password on under Authentication > Sign-in method.');
+      } else if (err?.code === 'auth/email-already-in-use') {
         setErrorMsg('This email is already registered. Please switch to the "Log In" tab.');
       } else if (err?.code === 'auth/invalid-credential' || err?.code === 'auth/wrong-password' || err?.code === 'auth/user-not-found') {
         setErrorMsg('Incorrect email or password. Please double-check your credentials.');
