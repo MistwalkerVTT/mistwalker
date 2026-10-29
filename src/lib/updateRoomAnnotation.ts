@@ -1,5 +1,5 @@
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
-import { db, cleanForFirestore, handleFirestoreError, OperationType, Campaign } from './firebase';
+import { db, cleanForFirestore, handleFirestoreError, OperationType, Campaign, IS_ENTERPRISE_BETA } from './firebase';
 import { RoomAnnotation } from '../types';
 
 export interface UpdateRoomAnnotationParams {
@@ -45,6 +45,22 @@ export async function updateRoomAnnotation({
 
   const cleanedZone = cleanForFirestore(updatedZone);
 
+  let targetCampaignId = campaignId;
+  let targetSessionId = activeSessionId;
+  if (IS_ENTERPRISE_BETA) {
+    if (targetCampaignId && targetCampaignId !== 'default' && !targetCampaignId.startsWith('beta_')) {
+      targetCampaignId = `beta_${targetCampaignId}`;
+    }
+    if (targetSessionId === 'current') {
+      targetSessionId = 'beta_current';
+    }
+  } else {
+    if (targetCampaignId && targetCampaignId.startsWith('beta_')) {
+      console.warn('[Security Silo] Stable cannot modify Beta campaign:', targetCampaignId);
+      return updatedZone;
+    }
+  }
+
   // 1. Update direct mapZones collection
   try {
     await setDoc(doc(db, 'mapZones', zoneId), cleanedZone, { merge: true });
@@ -52,17 +68,17 @@ export async function updateRoomAnnotation({
     console.warn('[updateRoomAnnotation] mapZones write warning:', err);
   }
 
-  // 2. Update campaigns subcollection if campaignId provided
-  if (campaignId && campaignId !== 'default') {
+  // 2. Update campaigns subcollection if targetCampaignId provided
+  if (targetCampaignId && targetCampaignId !== 'default') {
     try {
-      await setDoc(doc(db, 'campaigns', campaignId, 'zones', zoneId), cleanedZone, { merge: true });
+      await setDoc(doc(db, 'campaigns', targetCampaignId, 'zones', zoneId), cleanedZone, { merge: true });
     } catch (err) {
       console.warn('[updateRoomAnnotation] campaigns subcollection write warning:', err);
     }
 
     // 3. Update the main Campaign document scene if chapterId and sceneId match
     try {
-      const campRef = doc(db, 'campaigns', campaignId);
+      const campRef = doc(db, 'campaigns', targetCampaignId);
       const campSnap = await getDoc(campRef);
       if (campSnap.exists()) {
         const campData = campSnap.data() as Campaign;
@@ -107,10 +123,10 @@ export async function updateRoomAnnotation({
     }
   }
 
-  // 4. Update activeSession document if activeSessionId provided
-  if (activeSessionId) {
+  // 4. Update activeSession document if targetSessionId provided
+  if (targetSessionId) {
     try {
-      const sessionRef = doc(db, 'activeSession', activeSessionId);
+      const sessionRef = doc(db, 'activeSession', targetSessionId);
       const sessionSnap = await getDoc(sessionRef);
       if (sessionSnap.exists()) {
         const sessionData = sessionSnap.data();

@@ -369,11 +369,14 @@ async function startServer() {
           const db = getFirestore(fbApp, config.firestoreDatabaseId);
 
           // Check uploadedAssets collection
+          const isBetaServer = process.env.APP_ENV === 'beta' || process.env.RENDER_SERVICE_ID === 'srv-dbhqc7afngtc73cau1i0' || process.env.IS_BETA === 'true';
           const assetsSnap = await getDocs(collection(db, 'uploadedAssets'));
           let foundDataUrl: string | null = null;
 
           assetsSnap.forEach(d => {
             const data = d.data();
+            const isBetaDoc = Boolean(d.id.startsWith('beta_') || data.isBeta);
+            if (isBetaServer ? !isBetaDoc : isBetaDoc) return;
             if (data.url && (data.url.endsWith(filename) || path.basename(data.url) === filename)) {
               if (data.url && typeof data.url === 'string' && data.url.startsWith('data:image')) {
                 foundDataUrl = data.url;
@@ -388,6 +391,8 @@ async function startServer() {
             const monSnap = await getDocs(collection(db, 'monsters'));
             monSnap.forEach(d => {
               const mon = d.data();
+              const isBetaDoc = Boolean(d.id.startsWith('beta_') || mon.isBeta);
+              if (isBetaServer ? !isBetaDoc : isBetaDoc) return;
               if (mon?.avatarUrl && (mon.avatarUrl.endsWith(filename) || path.basename(mon.avatarUrl) === filename)) {
                 if (typeof mon.avatarUrl === 'string' && mon.avatarUrl.startsWith('data:image')) {
                   foundDataUrl = mon.avatarUrl;
@@ -406,6 +411,8 @@ async function startServer() {
             const campSnap = await getDocs(collection(db, 'campaigns'));
             campSnap.forEach(d => {
               const camp = d.data();
+              const isBetaDoc = Boolean(d.id.startsWith('beta_') || camp.isBeta);
+              if (isBetaServer ? !isBetaDoc : isBetaDoc) return;
               if (camp?.chapters && Array.isArray(camp.chapters)) {
                 for (const ch of camp.chapters) {
                   if (ch.scenes && Array.isArray(ch.scenes)) {

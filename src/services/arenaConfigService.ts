@@ -1,5 +1,5 @@
 import { doc, setDoc, onSnapshot } from 'firebase/firestore';
-import { db, ensureAuth } from '../lib/firebase';
+import { db, ensureAuth, IS_ENTERPRISE_BETA } from '../lib/firebase';
 import { WallSegment } from '../types';
 import { Monster } from '../types/monster';
 import { PRESET_BATTLEMAPS, PresetBattlemap } from '../data/presetBattlemaps';
@@ -214,7 +214,8 @@ export async function saveArenaConfig(config: ArenaConfig, socket?: any): Promis
   try {
     await ensureAuth();
     const cleanDoc = stripUndefinedDeep(stamped);
-    await setDoc(doc(db, 'activeSession', 'arena_config'), cleanDoc, { merge: true });
+    const arenaDocId = IS_ENTERPRISE_BETA ? 'beta_arena_config' : 'arena_config';
+    await setDoc(doc(db, 'activeSession', arenaDocId), cleanDoc, { merge: true });
   } catch (err) {
     console.warn('[ArenaConfig] Firestore sync notice:', err);
   }
@@ -237,7 +238,7 @@ export function subscribeToArenaConfig(callback: (config: ArenaConfig) => void):
   let unsubFirestore: (() => void) | null = null;
   try {
     unsubFirestore = onSnapshot(
-      doc(db, 'activeSession', 'arena_config'),
+      doc(db, 'activeSession', IS_ENTERPRISE_BETA ? 'beta_arena_config' : 'arena_config'),
       (snap) => {
         if (snap.exists()) {
           const remote = normalizeArenaConfig(snap.data());
