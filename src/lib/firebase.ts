@@ -47,6 +47,11 @@ export const storage: FirebaseStorage = getStorage(app);
 // Initialize Firebase Auth
 export const auth: Auth = getAuth(app);
 
+// Complete Domain Silo: Stable v1.0.0 vs Enterprise Beta
+export const IS_ENTERPRISE_BETA: boolean =
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_APP_ENV === 'beta') ||
+  (typeof window !== 'undefined' && (window.location.hostname.includes('mistwalker-beta') || window.location.port === '5174'));
+
 // Auto-authenticate anonymously to ensure request.auth is established for rules
 let authInitialized = false;
 export async function ensureAuth() {
@@ -330,7 +335,13 @@ export async function saveUploadedAsset(
     updatedAt?: number;
   }
 ): Promise<UploadedAsset> {
-  const assetId = assetData.assetId || `${assetData.type}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+  let baseAssetId = assetData.assetId || `${assetData.type}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+  if (IS_ENTERPRISE_BETA) {
+    if (!baseAssetId.startsWith('beta_')) baseAssetId = `beta_${baseAssetId}`;
+  } else {
+    baseAssetId = baseAssetId.replace(/^beta_/, '');
+  }
+  const assetId = baseAssetId;
   const path = `uploadedAssets/${assetId}`;
 
   let url = assetData.url;
@@ -400,8 +411,10 @@ export async function saveUploadedAsset(
     size: assetData.size || 1,
     fileSizeBytes: assetData.fileSizeBytes || 0,
     createdAt: assetData.createdAt || Date.now(),
-    updatedAt: Date.now()
+    updatedAt: Date.now(),
+    ...(IS_ENTERPRISE_BETA ? { isBeta: true } : {})
   };
+
 
   try {
     const docRef = doc(db, 'uploadedAssets', assetId);
@@ -439,13 +452,18 @@ export async function getUploadedAssetsList(
   try {
     const colRef = collection(db, path);
     const snap = await getDocs(colRef);
-    let assets: UploadedAsset[] = snap.docs.map(docSnap => {
-      const data = docSnap.data() as UploadedAsset;
-      return {
-        ...data,
-        assetId: data.assetId || docSnap.id
-      };
-    });
+    let assets: UploadedAsset[] = snap.docs
+      .map(docSnap => {
+        const data = docSnap.data() as UploadedAsset;
+        return {
+          ...data,
+          assetId: data.assetId || docSnap.id
+        };
+      })
+      .filter(a => {
+        const isBetaDoc = Boolean(a.assetId?.startsWith('beta_') || a.id?.startsWith('beta_') || (a as any).isBeta);
+        return IS_ENTERPRISE_BETA ? isBetaDoc : !isBetaDoc;
+      });
 
     if (typeFilter && typeFilter !== 'all') {
       assets = assets.filter(a => a.type === typeFilter);
@@ -473,13 +491,18 @@ export function subscribeToUploadedAssets(
   const unsubscribe = onSnapshot(
     colRef,
     (snapshot) => {
-      let assets: UploadedAsset[] = snapshot.docs.map(docSnap => {
-        const data = docSnap.data() as UploadedAsset;
-        return {
-          ...data,
-          assetId: data.assetId || docSnap.id
-        };
-      });
+      let assets: UploadedAsset[] = snapshot.docs
+        .map(docSnap => {
+          const data = docSnap.data() as UploadedAsset;
+          return {
+            ...data,
+            assetId: data.assetId || docSnap.id
+          };
+        })
+        .filter(a => {
+          const isBetaDoc = Boolean(a.assetId?.startsWith('beta_') || a.id?.startsWith('beta_') || (a as any).isBeta);
+          return IS_ENTERPRISE_BETA ? isBetaDoc : !isBetaDoc;
+        });
       if (typeFilter !== 'all') {
         assets = assets.filter(a => a.type === typeFilter);
       }
@@ -500,6 +523,14 @@ export function subscribeToUploadedAssets(
  * Delete an uploaded asset from Firestore, IndexedDB, and server storage
  */
 export async function deleteUploadedAsset(assetId: string, assetUrl?: string): Promise<void> {
+  if (IS_ENTERPRISE_BETA && !assetId.startsWith('beta_')) {
+    console.warn('[Security Silo] Enterprise Beta cannot delete Stable asset:', assetId);
+    return;
+  }
+  if (!IS_ENTERPRISE_BETA && assetId.startsWith('beta_')) {
+    console.warn('[Security Silo] Stable cannot delete Beta asset:', assetId);
+    return;
+  }
   const path = `uploadedAssets/${assetId}`;
   try {
     const docRef = doc(db, 'uploadedAssets', assetId);
@@ -555,7 +586,8 @@ export async function uploadAndRegisterAsset(
 
   let finalUrl = '';
   const assetName = options?.customName || file.name.replace(/\.[^/.]+$/, "") || 'Uploaded Asset';
-  const assetId = `${type}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const baseAssetId = `${type}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const assetId = IS_ENTERPRISE_BETA ? `beta_${baseAssetId}` : baseAssetId;
 
   // Step 1: Pre-cache in client IndexedDB for instantaneous local access
   try {
@@ -727,7 +759,12 @@ export async function getCampaignsList(): Promise<Campaign[]> {
     const snapshot = await getDocs(colRef);
     const list: Campaign[] = [];
     snapshot.forEach(docSnap => {
-      list.push(docSnap.data() as Campaign);
+      const data = docSnap.data() as Campaign;
+      const id = docSnap.id;
+      const isBetaDoc = Boolean(id.startsWith('beta_') || (data as any).isBeta);
+      if (IS_ENTERPRISE_BETA ? isBetaDoc : !isBetaDoc) {
+        list.push({ ...data, id, campaignId: id });
+      }
     });
     return list.sort((a, b) => b.createdAt - a.createdAt);
   } catch (error) {
@@ -740,9 +777,15 @@ export async function getCampaignsList(): Promise<Campaign[]> {
  * Sanitizes all scenes to prevent exceeding Firestore's 1MB document limit
  */
 export async function saveCampaignDoc(campaign: Campaign): Promise<void> {
-  const path = `campaigns/${campaign.campaignId}`;
+  let targetCampaignId = campaign.campaignId;
+  if (IS_ENTERPRISE_BETA) {
+    if (!targetCampaignId.startsWith('beta_')) targetCampaignId = `beta_${targetCampaignId}`;
+  } else {
+    targetCampaignId = targetCampaignId.replace(/^beta_/, '');
+  }
+  const path = `campaigns/${targetCampaignId}`;
   try {
-    const docRef = doc(db, 'campaigns', campaign.campaignId);
+    const docRef = doc(db, 'campaigns', targetCampaignId);
     
     // Sanitize all scenes across chapters to protect against Firestore 1MB document limit
     let sanitizedChapters = campaign.chapters;
@@ -789,14 +832,15 @@ export async function deleteCampaignDoc(campaignId: string): Promise<void> {
  * Publish active session state for real-time player synchronization
  */
 export async function publishActiveSession(sessionData: ActiveSessionData): Promise<void> {
-  const path = `activeSession/current`;
+  const sessionDocId = IS_ENTERPRISE_BETA ? 'beta_current' : 'current';
+  const path = `activeSession/${sessionDocId}`;
   try {
     let safeMapUrl = sessionData.mapUrl;
     if (safeMapUrl && safeMapUrl.startsWith('blob:')) {
       const uploaded = await uploadBlobUrlToServer(safeMapUrl, sessionData.sceneTitle || sessionData.sceneId || 'map');
       safeMapUrl = !uploaded.startsWith('blob:') ? uploaded : (sessionData.mapThumbnailUrl || '');
     }
-    const docRef = doc(db, 'activeSession', 'current');
+    const docRef = doc(db, 'activeSession', sessionDocId);
     const payload = cleanForFirestore({
       ...sessionData,
       mapUrl: safeMapUrl,
@@ -815,8 +859,9 @@ export async function publishActiveSession(sessionData: ActiveSessionData): Prom
 export function subscribeToActiveSession(
   onUpdate: (session: ActiveSessionData | null) => void
 ): () => void {
-  const path = `activeSession/current`;
-  const docRef = doc(db, 'activeSession', 'current');
+  const sessionDocId = IS_ENTERPRISE_BETA ? 'beta_current' : 'current';
+  const path = `activeSession/${sessionDocId}`;
+  const docRef = doc(db, 'activeSession', sessionDocId);
   
   const unsubscribe = onSnapshot(docRef, (docSnap) => {
     if (docSnap.exists()) {
@@ -844,7 +889,12 @@ export function subscribeToCampaigns(
     setFirebaseConnectedState(true);
     const list: Campaign[] = [];
     snapshot.forEach(docSnap => {
-      list.push(docSnap.data() as Campaign);
+      const data = docSnap.data() as Campaign;
+      const id = docSnap.id;
+      const isBetaDoc = Boolean(id.startsWith('beta_') || (data as any).isBeta);
+      if (IS_ENTERPRISE_BETA ? isBetaDoc : !isBetaDoc) {
+        list.push({ ...data, id, campaignId: id });
+      }
     });
     onUpdate(list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
   }, (error) => {
@@ -1569,6 +1619,14 @@ export async function deleteMapZone(
   zoneId: string,
   campaignId?: string
 ): Promise<void> {
+  if (IS_ENTERPRISE_BETA && !zoneId.startsWith('beta_') && (!campaignId || !campaignId.startsWith('beta_'))) {
+    console.warn('[Security Silo] Enterprise Beta cannot delete Stable mapZone:', zoneId);
+    return;
+  }
+  if (!IS_ENTERPRISE_BETA && (zoneId.startsWith('beta_') || (campaignId && campaignId.startsWith('beta_')))) {
+    console.warn('[Security Silo] Stable cannot delete Beta mapZone:', zoneId);
+    return;
+  }
   const path = `mapZones/${zoneId}`;
   try {
     await deleteDoc(doc(db, 'mapZones', zoneId));
@@ -1592,7 +1650,13 @@ import { Monster } from '../types/monster';
 export type { Monster, MonsterTrait, MonsterAction, MonsterSpellcasting } from '../types/monster';
 
 export async function saveMonster(monster: Monster): Promise<Monster> {
-  const monsterId = monster.monsterId || `monster_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  let targetMonsterId = monster.monsterId || `monster_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  if (IS_ENTERPRISE_BETA) {
+    if (!targetMonsterId.startsWith('beta_')) targetMonsterId = `beta_${targetMonsterId}`;
+  } else {
+    targetMonsterId = targetMonsterId.replace(/^beta_/, '');
+  }
+  const monsterId = targetMonsterId;
   const path = `monsters/${monsterId}`;
   const now = Date.now();
 
@@ -1645,7 +1709,8 @@ export async function saveMonster(monster: Monster): Promise<Monster> {
     avatarUrl,
     statblockImageUrl,
     createdAt: monster.createdAt || now,
-    updatedAt: now
+    updatedAt: now,
+    ...(IS_ENTERPRISE_BETA ? { isBeta: true } : {})
   };
 
   try {
@@ -1674,10 +1739,15 @@ export async function getMonstersList(): Promise<Monster[]> {
   try {
     const colRef = collection(db, path);
     const snap = await getDocs(colRef);
-    const list: Monster[] = snap.docs.map(d => ({
-      ...(d.data() as Monster),
-      monsterId: d.data().monsterId || d.id
-    }));
+    const list: Monster[] = snap.docs
+      .map(d => ({
+        ...(d.data() as Monster),
+        monsterId: d.data().monsterId || d.id
+      }))
+      .filter(m => {
+        const isBetaDoc = Boolean(m.monsterId.startsWith('beta_') || (m as any).isBeta);
+        return IS_ENTERPRISE_BETA ? isBetaDoc : !isBetaDoc;
+      });
     list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     return list;
   } catch (error) {
@@ -1695,10 +1765,15 @@ export function subscribeToMonsters(
   return onSnapshot(
     colRef,
     (snap) => {
-      const list: Monster[] = snap.docs.map(d => ({
-        ...(d.data() as Monster),
-        monsterId: d.data().monsterId || d.id
-      }));
+      const list: Monster[] = snap.docs
+        .map(d => ({
+          ...(d.data() as Monster),
+          monsterId: d.data().monsterId || d.id
+        }))
+        .filter(m => {
+          const isBetaDoc = Boolean(m.monsterId.startsWith('beta_') || (m as any).isBeta);
+          return IS_ENTERPRISE_BETA ? isBetaDoc : !isBetaDoc;
+        });
       list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
       callback(list);
     },
@@ -1711,6 +1786,14 @@ export function subscribeToMonsters(
 }
 
 export async function deleteMonster(monsterId: string): Promise<void> {
+  if (IS_ENTERPRISE_BETA && !monsterId.startsWith('beta_')) {
+    console.warn('[Security Silo] Enterprise Beta cannot delete Stable monster:', monsterId);
+    return;
+  }
+  if (!IS_ENTERPRISE_BETA && monsterId.startsWith('beta_')) {
+    console.warn('[Security Silo] Stable cannot delete Beta monster:', monsterId);
+    return;
+  }
   const path = `monsters/${monsterId}`;
   try {
     const docRef = doc(db, 'monsters', monsterId);
@@ -1728,7 +1811,13 @@ import { Ally } from '../types/ally';
 export type { Ally, AllyTrait, AllyAction } from '../types/ally';
 
 export async function saveAlly(ally: Ally): Promise<Ally> {
-  const allyId = ally.allyId || `ally_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  let targetAllyId = ally.allyId || `ally_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  if (IS_ENTERPRISE_BETA) {
+    if (!targetAllyId.startsWith('beta_')) targetAllyId = `beta_${targetAllyId}`;
+  } else {
+    targetAllyId = targetAllyId.replace(/^beta_/, '');
+  }
+  const allyId = targetAllyId;
   const path = `allies/${allyId}`;
   const now = Date.now();
 
@@ -1782,7 +1871,8 @@ export async function saveAlly(ally: Ally): Promise<Ally> {
     statblockImageUrl,
     category: 'ally',
     createdAt: ally.createdAt || now,
-    updatedAt: now
+    updatedAt: now,
+    ...(IS_ENTERPRISE_BETA ? { isBeta: true } : {})
   };
 
   try {
@@ -1811,10 +1901,15 @@ export async function getAlliesList(): Promise<Ally[]> {
   try {
     const colRef = collection(db, path);
     const snap = await getDocs(colRef);
-    const list: Ally[] = snap.docs.map(d => ({
-      ...(d.data() as Ally),
-      allyId: d.data().allyId || d.id
-    }));
+    const list: Ally[] = snap.docs
+      .map(d => ({
+        ...(d.data() as Ally),
+        allyId: d.data().allyId || d.id
+      }))
+      .filter(a => {
+        const isBetaDoc = Boolean(a.allyId.startsWith('beta_') || (a as any).isBeta);
+        return IS_ENTERPRISE_BETA ? isBetaDoc : !isBetaDoc;
+      });
     list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     return list;
   } catch (error) {
@@ -1832,10 +1927,15 @@ export function subscribeToAllies(
   return onSnapshot(
     colRef,
     (snap) => {
-      const list: Ally[] = snap.docs.map(d => ({
-        ...(d.data() as Ally),
-        allyId: d.data().allyId || d.id
-      }));
+      const list: Ally[] = snap.docs
+        .map(d => ({
+          ...(d.data() as Ally),
+          allyId: d.data().allyId || d.id
+        }))
+        .filter(a => {
+          const isBetaDoc = Boolean(a.allyId.startsWith('beta_') || (a as any).isBeta);
+          return IS_ENTERPRISE_BETA ? isBetaDoc : !isBetaDoc;
+        });
       list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
       callback(list);
     },
@@ -1848,6 +1948,14 @@ export function subscribeToAllies(
 }
 
 export async function deleteAlly(allyId: string): Promise<void> {
+  if (IS_ENTERPRISE_BETA && !allyId.startsWith('beta_')) {
+    console.warn('[Security Silo] Enterprise Beta cannot delete Stable ally:', allyId);
+    return;
+  }
+  if (!IS_ENTERPRISE_BETA && allyId.startsWith('beta_')) {
+    console.warn('[Security Silo] Stable cannot delete Beta ally:', allyId);
+    return;
+  }
   const path = `allies/${allyId}`;
   try {
     const docRef = doc(db, 'allies', allyId);
@@ -1865,7 +1973,13 @@ import { Character } from '../types/character';
 export type { Character } from '../types/character';
 
 export async function saveCharacter(character: Character): Promise<Character> {
-  const characterId = character.id || `char_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  let targetCharacterId = character.id || `char_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  if (IS_ENTERPRISE_BETA) {
+    if (!targetCharacterId.startsWith('beta_')) targetCharacterId = `beta_${targetCharacterId}`;
+  } else {
+    targetCharacterId = targetCharacterId.replace(/^beta_/, '');
+  }
+  const characterId = targetCharacterId;
   const path = `characters/${characterId}`;
   const now = Date.now();
 
@@ -1895,7 +2009,8 @@ export async function saveCharacter(character: Character): Promise<Character> {
     avatarUrl,
     pdfUrl,
     createdAt: character.createdAt || now,
-    updatedAt: now
+    updatedAt: now,
+    ...(IS_ENTERPRISE_BETA ? { isBeta: true } : {})
   };
 
   try {
@@ -1917,10 +2032,15 @@ export function subscribeToCharacters(
   return onSnapshot(
     colRef,
     (snap) => {
-      const list: Character[] = snap.docs.map(d => ({
-        ...(d.data() as Character),
-        id: d.data().id || d.id
-      }));
+      const list: Character[] = snap.docs
+        .map(d => ({
+          ...(d.data() as Character),
+          id: d.data().id || d.id
+        }))
+        .filter(c => {
+          const isBetaDoc = Boolean(c.id.startsWith('beta_') || (c as any).isBeta);
+          return IS_ENTERPRISE_BETA ? isBetaDoc : !isBetaDoc;
+        });
       list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
       callback(list);
     },
@@ -1933,6 +2053,14 @@ export function subscribeToCharacters(
 }
 
 export async function deleteCharacter(characterId: string): Promise<void> {
+  if (IS_ENTERPRISE_BETA && !characterId.startsWith('beta_')) {
+    console.warn('[Security Silo] Enterprise Beta cannot delete Stable character:', characterId);
+    return;
+  }
+  if (!IS_ENTERPRISE_BETA && characterId.startsWith('beta_')) {
+    console.warn('[Security Silo] Stable cannot delete Beta character:', characterId);
+    return;
+  }
   const path = `characters/${characterId}`;
   try {
     const docRef = doc(db, 'characters', characterId);
