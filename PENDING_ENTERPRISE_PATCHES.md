@@ -30,6 +30,25 @@
 
 ---
 
+### [2026-10-29] feat(spells): cast cone spell attack from token edge closest to aim direction
+- **Commit**: `dcb7246`
+- **Files Changed**:
+  - `src/effects/geometry/coneGeometry.ts`
+  - `src/effects/index.ts`
+  - `src/effects/render/DomEffectOverlay.tsx`
+  - `src/effects/ui/AimReticle.tsx`
+  - `src/App.tsx`
+  - `src/components/PlayerView.tsx`
+- **Summary**:
+  - Implemented `getDirectionalConeOrigin` to compute the perimeter/edge intersection of the caster's token pointing towards the aim target.
+  - Updated `<AimReticle />` cone wedge preview to render from the token's edge rather than center.
+  - Updated `<DomEffectOverlay />` aiming preview and cone spell instance positioning to anchor at the perimeter edge.
+  - Updated DM mode (`App.tsx`) and Player View (`PlayerView.tsx`) cone spell cast handlers so cone spell attacks emanate from the caster token's boundary facing the target.
+- **Impact / Testing Notes**:
+  - Verify cone spells (e.g. Burning Hands, Cone of Cold, Color Spray) emanate from the perimeter of the player token facing the aim cursor without obscuring the token.
+
+---
+
 ### Template for Incoming Entries:
 ```markdown
 ### [YYYY-MM-DD] <Title / Commit Short Summary>
