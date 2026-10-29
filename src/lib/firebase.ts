@@ -35,6 +35,7 @@ import {
 } from './storageCache';
 import type { AnimatedFeature, WeatherEffectType } from '../types';
 import type { CampaignMember } from '../types/auth';
+import { SAMPLE_CAMPAIGNS } from '../data/sampleCampaigns';
 
 // Initialize Firebase App
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
@@ -739,9 +740,15 @@ export async function getCampaignsList(): Promise<Campaign[]> {
     snapshot.forEach(docSnap => {
       list.push(docSnap.data() as Campaign);
     });
-    return list.sort((a, b) => b.createdAt - a.createdAt);
+    const sampleIds = new Set(SAMPLE_CAMPAIGNS.map(s => s.campaignId));
+    const merged = [
+      ...SAMPLE_CAMPAIGNS,
+      ...list.filter(c => !sampleIds.has(c.campaignId))
+    ];
+    return merged.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   } catch (error) {
-    handleFirestoreError(error, OperationType.GET, path);
+    console.warn('Could not fetch remote campaigns, returning sample campaigns:', error);
+    return SAMPLE_CAMPAIGNS;
   }
 }
 
@@ -856,7 +863,12 @@ export function subscribeToCampaigns(
     snapshot.forEach(docSnap => {
       list.push(docSnap.data() as Campaign);
     });
-    onUpdate(list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
+    const sampleIds = new Set(SAMPLE_CAMPAIGNS.map(s => s.campaignId));
+    const merged = [
+      ...SAMPLE_CAMPAIGNS,
+      ...list.filter(c => !sampleIds.has(c.campaignId))
+    ];
+    onUpdate(merged.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
   }, (error) => {
     console.error('Campaigns subscription error:', error);
     setFirebaseConnectedState(false);

@@ -15,6 +15,10 @@ service cloud.firestore {
       allow read: if true;
     }
 
+    // ==========================================
+    // STABLE (PRODUCTION v1.0.0) COLLECTIONS
+    // ==========================================
+
     // Campaign Builder Hierarchy
     match /campaigns/{campaignId} {
       allow read: if true;
@@ -83,6 +87,86 @@ service cloud.firestore {
     match /bug_reports/{reportId} {
       allow read: if true;
       allow create, update, delete: if isValidId(reportId);
+    }
+
+    // ==========================================
+    // ENTERPRISE BETA PARTITIONED COLLECTIONS
+    // ==========================================
+
+    // Beta Campaign Builder Hierarchy
+    match /beta_campaigns/{campaignId} {
+      allow read: if true;
+      allow create, update: if isValidId(campaignId);
+      allow delete: if isValidId(campaignId);
+
+      match /zones/{zoneId} {
+        allow read: if true;
+        allow create, update, delete: if isValidId(zoneId);
+      }
+
+      match /{subcollection=**} {
+        allow read, write: if true;
+      }
+    }
+
+    // Beta Dedicated Map Zones collection
+    match /beta_mapZones/{zoneId} {
+      allow read: if true;
+      allow create, update, delete: if isValidId(zoneId);
+    }
+
+    // Beta Real-time Player Session Synchronization
+    match /beta_activeSession/{sessionId} {
+      allow read: if true;
+      allow create, update: if isValidId(sessionId);
+      allow delete: if isValidId(sessionId);
+    }
+
+    // Beta Uploaded Assets Library (Maps, Tokens, PDFs, Media)
+    match /beta_uploadedAssets/{assetId} {
+      allow read: if true;
+      allow create, update: if isValidId(assetId);
+      allow delete: if isValidId(assetId);
+    }
+
+    // Beta Monster Compendium Collection
+    match /beta_monsters/{monsterId} {
+      allow read: if true;
+      allow create, update: if isValidId(monsterId);
+      allow delete: if isValidId(monsterId);
+    }
+
+    // Beta Character Compendium Collection
+    match /beta_characters/{characterId} {
+      allow read: if true;
+      allow create, update: if isValidId(characterId);
+      allow delete: if isValidId(characterId);
+    }
+
+    // Beta Allies & Summons Compendium Collection
+    match /beta_allies/{allyId} {
+      allow read: if true;
+      allow create, update: if isValidId(allyId);
+      allow delete: if isValidId(allyId);
+    }
+
+    // Beta Special Effects Collection (Spell & Environmental Animations)
+    match /beta_special_effects/{effectId} {
+      allow read: if true;
+      allow create, update: if isValidId(effectId);
+      allow delete: if isValidId(effectId);
+    }
+
+    // Beta Bug Reports & DM Developer Notes
+    match /beta_bug_reports/{reportId} {
+      allow read: if true;
+      allow create, update, delete: if isValidId(reportId);
+    }
+
+    // Beta Multi-tenant Room Codes / Lobbies
+    match /beta_rooms/{roomId} {
+      allow read: if true;
+      allow create, update, delete: if isValidId(roomId);
     }
   }
 }

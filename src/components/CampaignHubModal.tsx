@@ -21,6 +21,7 @@ import { getCampaignsList, saveCampaignDoc } from '../lib/firebase';
 import { ensureCampaignInvite, generateInviteCode } from '../lib/campaignInvite';
 import { extractDdbCampaignId } from '../lib/ddbUrlHelper';
 import { getDmViewUrl, getJoinUrl } from '../lib/sessionUrl';
+import { SAMPLE_CAMPAIGNS, isSampleCampaign } from '../data/sampleCampaigns';
 
 interface CampaignHubModalProps {
   isOpen: boolean;
@@ -60,14 +61,20 @@ export const CampaignHubModal: React.FC<CampaignHubModalProps> = ({
   const loadCampaigns = async () => {
     setIsLoading(true);
     try {
-      const list = await getCampaignsList();
+      const list = await getCampaignsList() || [];
+      const sampleIds = new Set(SAMPLE_CAMPAIGNS.map(s => s.campaignId));
+      const mergedList = [
+        ...SAMPLE_CAMPAIGNS,
+        ...list.filter(c => !sampleIds.has(c.campaignId))
+      ];
       // Ensure all campaigns have invite codes and member structures
       const updatedList = await Promise.all(
-        list.map(c => ensureCampaignInvite(c, currentUser?.uid, currentUser?.displayName))
+        mergedList.map(c => ensureCampaignInvite(c, currentUser?.uid, currentUser?.displayName))
       );
       setCampaigns(updatedList);
     } catch (err) {
       console.warn('Failed to load campaigns:', err);
+      setCampaigns(SAMPLE_CAMPAIGNS);
     } finally {
       setIsLoading(false);
     }
@@ -141,7 +148,7 @@ export const CampaignHubModal: React.FC<CampaignHubModalProps> = ({
   // Separate owned (DM) vs joined (Player)
   const dmCampaigns = filteredCampaigns.filter(c => {
     if (!currentUser) return true;
-    return !c.ownerUid || c.ownerUid === currentUser.uid || c.coDmUids?.includes(currentUser.uid);
+    return isSampleCampaign(c.campaignId) || !c.ownerUid || c.ownerUid === currentUser.uid || c.coDmUids?.includes(currentUser.uid);
   });
 
   const playerCampaigns = filteredCampaigns.filter(c => {
@@ -347,6 +354,11 @@ export const CampaignHubModal: React.FC<CampaignHubModalProps> = ({
 
                         {/* Badges */}
                         <div className="flex flex-wrap items-center gap-2 text-[11px] text-zinc-400">
+                          {isSampleCampaign(camp.campaignId) && (
+                            <span className="px-2 py-0.5 rounded bg-purple-950/70 text-purple-300 border border-purple-500/50 font-bold text-[10px] tracking-wide">
+                              DEMO CAMPAIGN
+                            </span>
+                          )}
                           <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800">
                             <Layers className="w-3 h-3 text-zinc-500" />
                             {sceneCount} {sceneCount === 1 ? 'Scene' : 'Scenes'}

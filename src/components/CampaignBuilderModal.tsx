@@ -59,7 +59,7 @@ import { digestChapterPdf, digestChapterFlow } from '../services/aiService';
 import { CampaignPdfImporterModal } from './CampaignPdfImporterModal';
 import { ArenaManagerPanel } from './ArenaManagerPanel';
 import { isUniversalVttFile, parseUniversalVtt } from '../services/universalVttService';
-import { DEMO_GV_CAMPAIGN, DEMO_GV_CHAPTER, DEMO_GV_SCENE, DEMO_GV_ROOM_ZONES, DEMO_GV_TOKENS, DEMO_GV_PDF_DIGEST } from '../data/demoCampaignGv';
+import { SAMPLE_CAMPAIGNS, SAMPLE_CAMPAIGN_1, SAMPLE_CAMPAIGN_2 } from '../data/sampleCampaigns';
 
 interface CampaignBuilderModalProps {
   isOpen: boolean;
@@ -297,38 +297,20 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
         setExpandedCampaigns({});
         setExpandedChapters({});
       } else {
-        const enriched = list.some(c => c.campaignId === DEMO_GV_CAMPAIGN.campaignId)
-          ? list.map(c => {
-              if (c.campaignId !== DEMO_GV_CAMPAIGN.campaignId) return c;
-              return {
-                ...c,
-                chapters: c.chapters.map(ch => {
-                  if (ch.chapterId !== DEMO_GV_CHAPTER.chapterId) return ch;
-                  return {
-                    ...ch,
-                    pdfDigest: DEMO_GV_PDF_DIGEST,
-                    scenes: ch.scenes.map(sc => {
-                      if (sc.sceneId !== DEMO_GV_SCENE.sceneId) return sc;
-                      return {
-                        ...sc,
-                        roomAnnotations: DEMO_GV_ROOM_ZONES,
-                        tokens: DEMO_GV_TOKENS
-                      };
-                    })
-                  };
-                })
-              };
-            })
-          : [DEMO_GV_CAMPAIGN, ...list];
+        const sampleIds = new Set(SAMPLE_CAMPAIGNS.map(s => s.campaignId));
+        const enriched = [
+          ...SAMPLE_CAMPAIGNS,
+          ...list.filter(c => !sampleIds.has(c.campaignId))
+        ];
         setCampaigns(enriched);
         if (!selectedCampaignId && enriched.length > 0) {
           setSelectedCampaignId(enriched[0].campaignId);
           setExpandedCampaigns({});
-          if (list[0].chapters.length > 0) {
-            setSelectedChapterId(list[0].chapters[0].chapterId);
+          if (enriched[0].chapters.length > 0) {
+            setSelectedChapterId(enriched[0].chapters[0].chapterId);
             setExpandedChapters({});
-            if (list[0].chapters[0].scenes.length > 0) {
-              setSelectedSceneId(list[0].chapters[0].scenes[0].sceneId);
+            if (enriched[0].chapters[0].scenes.length > 0) {
+              setSelectedSceneId(enriched[0].chapters[0].scenes[0].sceneId);
             }
           }
         }
