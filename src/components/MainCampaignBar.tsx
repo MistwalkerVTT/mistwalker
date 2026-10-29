@@ -56,6 +56,7 @@ interface MainCampaignBarProps {
   isFirebaseConnected?: boolean;
   onRelinkMap?: () => void;
   onForceSync?: () => void;
+  onReloadPlayers?: () => void;
   campaignMode: CampaignMode;
   onModeChange: (mode: CampaignMode) => void;
   tool?: string;
@@ -172,6 +173,7 @@ export const MainCampaignBar: React.FC<MainCampaignBarProps> = React.memo(({
   isFirebaseConnected = true,
   onRelinkMap,
   onForceSync,
+  onReloadPlayers,
   campaignMode,
   onModeChange,
   tool,

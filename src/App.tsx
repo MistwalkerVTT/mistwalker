@@ -2813,6 +2813,28 @@ export default function App() {
       if (activeMapIdRef.current === liveMapIdRef.current) {
         broadcastFullStateRef.current?.();
       }
+
+      // Check if DM refreshed their browser
+      const wasReloaded = (() => {
+        try {
+          if (sessionStorage.getItem('dm_page_reloaded') === 'true') {
+            sessionStorage.removeItem('dm_page_reloaded');
+            return true;
+          }
+          const navEntries = performance.getEntriesByType('navigation');
+          if (navEntries.length > 0 && (navEntries[0] as PerformanceNavigationTiming).type === 'reload') {
+            return true;
+          }
+          return (performance as any).navigation?.type === 1;
+        } catch {
+          return false;
+        }
+      })();
+
+      if (wasReloaded) {
+        console.log('[DM Socket] DM browser refresh detected. Emitting DM_BROWSER_REFRESHED to reload player browsers...');
+        socket.emit('DM_BROWSER_REFRESHED');
+      }
     });
 
     socket.on('REQUEST_INITIAL_STATE', () => {
@@ -7953,6 +7975,7 @@ export default function App() {
           activeMapId={activeMapId}
           liveMapId={liveMapId}
           onForceSync={handleForceSyncToPlayers}
+                onReloadPlayers={handleReloadPlayers}
           activeEquippedAsset={activeEquippedAsset}
           onEquipAsset={handleEquipAsset}
           onQuickPlaceAsset={handleQuickPlaceAsset}

@@ -2482,6 +2482,17 @@ export default function PlayerView() {
       setIsConnected(false);
     });
 
+    // Automatically refresh player browser when DM mode refreshes
+    socket.on('FORCE_PLAYER_RELOAD', () => {
+      console.log('[PlayerView] Dungeon Master refreshed the browser. Reloading player table...');
+      toast.info('Dungeon Master refreshed the browser. Reloading table...', {
+        duration: 3000
+      });
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
+    });
+
     // 1. SYNC_IMAGE
     socket.on('SYNC_IMAGE', (url: string) => {
       if (url && !url.startsWith('blob:')) {
