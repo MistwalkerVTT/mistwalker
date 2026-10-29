@@ -19,14 +19,21 @@ import {
   MoreHorizontal,
   Library,
   Cloud,
-  CloudOff
+  CloudOff,
+  Compass,
+  User
 } from 'lucide-react';
+import type { UserAccount } from '../types/auth';
 import { toast } from 'sonner';
 import { getPlayerViewUrl, getActiveSessionId, getDmViewUrl } from '../lib/sessionUrl';
 import { Campaign, Scene } from '../lib/firebase';
 import { CampaignMode } from '../types';
 
 interface MainCampaignBarProps {
+  currentUser?: UserAccount | null;
+  onOpenAuthModal?: () => void;
+  onOpenCampaignHub?: () => void;
+  onOpenJoinModal?: () => void;
   activeSceneInfo: {
     campaignId: string;
     chapterId: string;
@@ -151,6 +158,10 @@ const MenuItem: React.FC<{
 );
 
 export const MainCampaignBar: React.FC<MainCampaignBarProps> = React.memo(({
+  currentUser,
+  onOpenAuthModal,
+  onOpenCampaignHub,
+  onOpenJoinModal,
   activeSceneInfo,
   campaigns,
   tokenCount,
@@ -236,6 +247,36 @@ export const MainCampaignBar: React.FC<MainCampaignBarProps> = React.memo(({
         >
           {isOnline ? <Cloud className="w-3 h-3" /> : <CloudOff className="w-3 h-3" />}
         </div>
+
+        {/* Campaign Hub Button */}
+        {onOpenCampaignHub && (
+          <button
+            type="button"
+            onClick={onOpenCampaignHub}
+            className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-gradient-to-r from-amber-500/20 to-amber-600/20 hover:from-amber-500/30 hover:to-amber-600/30 border border-amber-500/40 text-amber-300 text-[11px] font-bold transition shadow-sm"
+            title="Open MistWalker Campaign Hub: Multi-DM campaigns, player rosters & room invite codes"
+          >
+            <Compass className="w-3.5 h-3.5 text-amber-400" />
+            <span>Campaign Hub</span>
+          </button>
+        )}
+
+        {/* User Account Chip */}
+        {onOpenAuthModal && (
+          <button
+            type="button"
+            onClick={onOpenAuthModal}
+            className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 text-[11px] font-medium transition"
+            title="User Account & Cloud Authentication"
+          >
+            {currentUser?.photoURL ? (
+              <img src={currentUser.photoURL} alt="" className="w-3.5 h-3.5 rounded-full object-cover" />
+            ) : (
+              <User className="w-3.5 h-3.5 text-zinc-400" />
+            )}
+            <span className="max-w-[80px] truncate">{currentUser?.displayName || 'Sign In'}</span>
+          </button>
+        )}
 
         {/* Session Room Chip */}
         {(() => {

@@ -34,6 +34,7 @@ import {
   isVideoAsset
 } from './storageCache';
 import type { AnimatedFeature, WeatherEffectType } from '../types';
+import type { CampaignMember } from '../types/auth';
 
 // Initialize Firebase App
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
@@ -269,6 +270,15 @@ export interface Campaign {
   createdAt: number;
   updatedAt?: number;
   chapters: Chapter[];
+  // Multi-tenant & Commercial Multi-DM additions
+  ownerUid?: string;
+  ownerDisplayName?: string;
+  inviteCode?: string; // 6-character code (e.g. "VAULT9")
+  members?: Record<string, CampaignMember>; // Keyed by Firebase Auth UID
+  coDmUids?: string[];
+  bannerUrl?: string;
+  ddbCampaignId?: string;
+  ddbSyncEnabled?: boolean;
 }
 
 export interface ActiveSessionData {

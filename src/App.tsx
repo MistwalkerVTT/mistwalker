@@ -59,6 +59,12 @@ import {
 import { JB2A_REGISTRY, findJb2aAsset } from './effects/db/jb2aRegistry';
 import { getAuraVideoUrl } from './effects/db/tokenFxMap';
 import { CampaignBuilderModal } from './components/CampaignBuilderModal';
+import { AuthModal } from './components/AuthModal';
+import { CampaignHubModal } from './components/CampaignHubModal';
+import { PlayerJoinModal } from './components/PlayerJoinModal';
+import { subscribeToAuth } from './lib/authService';
+import { getInviteCodeFromUrl, getDmViewUrl } from './lib/sessionUrl';
+import type { UserAccount } from './types/auth';
 import { PlayerArenaMode } from './components/PlayerArenaMode';
 import { SaveToCampaignModal } from './components/SaveToCampaignModal';
 import { LoadCampaignModal } from './components/LoadCampaignModal';
@@ -1382,6 +1388,22 @@ export default function App() {
       setHasApiKey(status.hasKey);
     });
   }, []);
+  const [currentUser, setCurrentUser] = useState<UserAccount | null>(null);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showCampaignHubModal, setShowCampaignHubModal] = useState(false);
+  const [showPlayerJoinModal, setShowPlayerJoinModal] = useState(false);
+  const [initialJoinCode, setInitialJoinCode] = useState<string | null>(null);
+
+  useEffect(() => {
+    const unsub = subscribeToAuth(setCurrentUser);
+    const invite = getInviteCodeFromUrl();
+    if (invite) {
+      setInitialJoinCode(invite);
+      setShowPlayerJoinModal(true);
+    }
+    return unsub;
+  }, []);
+
   const [showDndChatbot, setShowDndChatbot] = useState(false);
   const [showCampaignBuilder, setShowCampaignBuilder] = useState(false);
   const [campaignBuilderInitialTab, setCampaignBuilderInitialTab] = useState<'campaigns' | 'arena'>('campaigns');
@@ -8291,6 +8313,13 @@ export default function App() {
               </div>
             )}
             <MainCampaignBar
+                currentUser={currentUser}
+                onOpenAuthModal={() => setShowAuthModal(true)}
+                onOpenCampaignHub={() => setShowCampaignHubModal(true)}
+                onOpenJoinModal={(code) => {
+                  if (code) setInitialJoinCode(code);
+                  setShowPlayerJoinModal(true);
+                }}
                 activeSceneInfo={activeSceneInfo}
                 campaigns={campaignsList}
                 tokenCount={tokens.length}
@@ -10976,6 +11005,43 @@ export default function App() {
            </button>
         </div>
       )}
+
+      {/* Multi-Tenant Account & Auth Modal */}
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        currentUser={currentUser}
+      />
+
+      {/* Multi-DM Campaign Hub Dashboard */}
+      <CampaignHubModal
+        isOpen={showCampaignHubModal}
+        onClose={() => setShowCampaignHubModal(false)}
+        currentUser={currentUser}
+        onOpenCampaignBuilder={() => {
+          setCampaignBuilderInitialTab('campaigns');
+          setShowCampaignBuilder(true);
+        }}
+        onOpenJoinModal={(code) => {
+          if (code) setInitialJoinCode(code);
+          setShowPlayerJoinModal(true);
+        }}
+        onSelectCampaignSession={(campaignId) => {
+          const url = getDmViewUrl(campaignId);
+          window.location.href = url;
+        }}
+      />
+
+      {/* Player Invite & Hero Claiming Modal */}
+      <PlayerJoinModal
+        isOpen={showPlayerJoinModal}
+        onClose={() => setShowPlayerJoinModal(false)}
+        initialInviteCode={initialJoinCode}
+        currentUser={currentUser}
+        onJoinedCampaign={(joinedCamp) => {
+          toast.success(`Joined campaign: ${joinedCamp.campaignTitle}!`);
+        }}
+      />
 
       {/* Campaign Builder & Scene Management Modal (Includes Battle Arena Manager Menu) */}
       <CampaignBuilderModal

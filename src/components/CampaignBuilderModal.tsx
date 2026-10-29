@@ -48,7 +48,9 @@ import {
   publishActiveSession
 } from '../lib/firebase';
 import { toast } from 'sonner';
-import { getPlayerViewUrl } from '../lib/sessionUrl';
+import { getPlayerViewUrl, getJoinUrl } from '../lib/sessionUrl';
+import { generateInviteCode } from '../lib/campaignInvite';
+import { getCurrentUser } from '../lib/authService';
 import { isVideoAsset, saveLocalAsset } from '../lib/storageCache';
 import { SceneTokenPlacementCanvas } from './SceneTokenPlacementCanvas';
 import { UploadedAsset, WallSegment, VisionConfig, RoomAnnotation, ChapterPdfDigest, ChapterSceneAssociation, normalizeRoomAnnotation, normalizeRoomAnnotations } from '../types';
@@ -401,11 +403,23 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
   // 1. Create New Campaign
   const handleCreateCampaign = async () => {
     if (!newCampaignTitle.trim()) return;
+    const user = getCurrentUser();
     const newCamp: Campaign = {
       campaignId: 'camp-' + Date.now().toString(36),
       campaignTitle: newCampaignTitle.trim(),
       description: newCampaignDesc.trim() || 'Custom adventure campaign',
       createdAt: Date.now(),
+      ownerUid: user?.uid,
+      ownerDisplayName: user?.displayName || 'Dungeon Master',
+      inviteCode: generateInviteCode(),
+      members: user?.uid ? {
+        [user.uid]: {
+          uid: user.uid,
+          displayName: user.displayName || 'Dungeon Master',
+          role: 'dm',
+          joinedAt: Date.now()
+        }
+      } : {},
       chapters: []
     };
 
