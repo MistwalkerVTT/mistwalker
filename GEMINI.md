@@ -18,11 +18,17 @@ MistWalker operates on **two distinct, isolated live cloud services and domains*
 
 ---
 
-## Mandatory Auto-Sync Rule (Stable -> Enterprise)
-- **Every bug fix, adjustment, or change made to `v1-stable` MUST immediately and automatically be merged into `enterprise-multi-dm`** so the enterprise version never falls behind on stable fixes.
-- **Workflow**:
-  1. Test compilation (`npm run build`).
-  2. Commit to `v1-stable` and push to `origin/v1-stable`.
-  3. Checkout `enterprise-multi-dm`, merge `v1-stable` (`git merge v1-stable`), and push to `origin/enterprise-multi-dm`.
-  4. Script helper: `node scripts/sync-and-deploy.cjs` or `node scripts/deploy.js`.
-  5. Verify both live endpoints are healthy (HTTP 200).
+## Deployment & Patch Policy (Auto-Push to Enterprise is PAUSED)
+
+- **Automatic pushing of stable updates into enterprise mode is PAUSED.**
+- **Stable Deployment Workflow**:
+  1. Make fixes/features on `v1-stable`.
+  2. Test compilation (`npm run build`).
+  3. Commit to `v1-stable` and push to `origin/v1-stable`.
+  4. Deploy to Production only: `node scripts/deploy.js --prod`.
+  5. Verify live production endpoint is healthy (HTTP 200).
+- **Tracking Stable Changes for Enterprise**:
+  - Every change made to `v1-stable` MUST be logged in `PENDING_ENTERPRISE_PATCHES.md`.
+  - Record the commit hash, date, affected files, and a concise summary.
+- **Enterprise Release Patches**:
+  - Pending stable updates will be batched and merged into `enterprise-multi-dm` only when explicitly requested by the user.
