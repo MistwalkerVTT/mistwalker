@@ -2734,6 +2734,17 @@ export default function PlayerView() {
       }
     });
 
+    socket.on('REVERT_TOKEN_POSITION', (data: { id: string; x: number; y: number }) => {
+      if (data?.id) {
+        setTokens(prev => {
+          const next = prev.map(t => t.id === data.id ? { ...t, x: data.x, y: data.y } : t);
+          tokensRef.current = next;
+          return next;
+        });
+        toast.error('Token position locked: You can only move your claimed character.');
+      }
+    });
+
     socket.on('SYNC_TOKENS', (syncedTokens: Token[]) => {
       if (Array.isArray(syncedTokens)) {
         const normalizedTokens = syncedTokens.map(normalizeToken);

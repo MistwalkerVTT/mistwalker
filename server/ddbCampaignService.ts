@@ -2152,7 +2152,7 @@ export class DdbHpSyncDaemon {
   private monitoredCharacters: Map<string, ActiveHpState> = new Map();
   private cachedCharacters: DdbCampaignCharacter[] = [];
   private cachedCampaigns: DdbCampaignSummary[] = [];
-  private activeCampaignId: string | null = '6738033';
+  private activeCampaignId: string | null = null;
   private isPolling = false;
 
   private constructor() {}
@@ -2232,7 +2232,7 @@ export class DdbHpSyncDaemon {
   }
 
   public async refreshAllCampaigns() {
-    const campaignIds = new Set<string>(['6738033', '3290944']);
+    const campaignIds = new Set<string>();
     if (process.env.DND_BEYOND_CAMPAIGN_ID) {
       process.env.DND_BEYOND_CAMPAIGN_ID.split(',').map(s => s.trim()).filter(Boolean).forEach(id => campaignIds.add(id));
     }

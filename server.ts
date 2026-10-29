@@ -600,7 +600,7 @@ async function startServer() {
     // DM refreshed browser - synchronize all connected players by reloading their windows
     socket.on("DM_BROWSER_REFRESHED", () => {
       console.log(`[Server] Socket ${socket.id} (DM) refreshed browser. Broadcasting FORCE_PLAYER_RELOAD to players...`);
-      socket.broadcast.emit("FORCE_PLAYER_RELOAD");
+      socket.to(getRoom()).emit("FORCE_PLAYER_RELOAD");
     });
 
     // Authoritative image change synchronization
@@ -762,12 +762,31 @@ async function startServer() {
 
     socket.on("MOVE_TOKEN", (data: any) => {
       const r = getRoom();
-      if (data?.id) {
-        const curr = sessionManager.getSession(r);
-        curr.tokens = curr.tokens.map((t: any) =>
-          t.id === data.id ? { ...t, x: data.x, y: data.y } : t
-        );
+      if (!data?.id) return;
+      const curr = sessionManager.getSession(r);
+      const user = sessionManager.getUser(r, socket.id);
+      const isDm = user?.role === 'dm' || socket.data.role === 'dm';
+      const targetToken = Array.isArray(curr.tokens) ? curr.tokens.find((t: any) => t.id === data.id) : null;
+
+      if (!targetToken) return;
+
+      if (!isDm) {
+        const claimedName = user?.characterName?.toLowerCase().trim();
+        const tokenName = (targetToken.name || '').toLowerCase().trim();
+        const isNameMatch = claimedName && tokenName && (claimedName === tokenName || tokenName.includes(claimedName));
+        const isUidMatch = user?.uid && Array.isArray(targetToken.controlledBy) && targetToken.controlledBy.includes(user.uid);
+        const isPlayerToken = targetToken.isPlayerToken || targetToken.isPlayer;
+
+        if (!isNameMatch && !isUidMatch && !isPlayerToken) {
+          console.warn(`[Security] Blocked unauthorized token move by ${socket.id} on token "${targetToken.name}"`);
+          socket.emit("REVERT_TOKEN_POSITION", { id: targetToken.id, x: targetToken.x, y: targetToken.y });
+          return;
+        }
       }
+
+      curr.tokens = curr.tokens.map((t: any) =>
+        t.id === data.id ? { ...t, x: data.x, y: data.y } : t
+      );
       socket.to(r).emit("MOVE_TOKEN", data);
     });
 
@@ -777,7 +796,29 @@ async function startServer() {
       const id = data?.tokenId || data?.id;
       const x = data?.x;
       const y = data?.y;
-      if (id && Array.isArray(curr.tokens)) {
+      if (!id) return;
+
+      const user = sessionManager.getUser(r, socket.id);
+      const isDm = user?.role === 'dm' || socket.data.role === 'dm';
+      const targetToken = Array.isArray(curr.tokens) ? curr.tokens.find((t: any) => t.id === id) : null;
+
+      if (!targetToken) return;
+
+      if (!isDm) {
+        const claimedName = user?.characterName?.toLowerCase().trim();
+        const tokenName = (targetToken.name || '').toLowerCase().trim();
+        const isNameMatch = claimedName && tokenName && (claimedName === tokenName || tokenName.includes(claimedName));
+        const isUidMatch = user?.uid && Array.isArray(targetToken.controlledBy) && targetToken.controlledBy.includes(user.uid);
+        const isPlayerToken = targetToken.isPlayerToken || targetToken.isPlayer;
+
+        if (!isNameMatch && !isUidMatch && !isPlayerToken) {
+          console.warn(`[Security] Blocked unauthorized player move by ${socket.id} on token "${targetToken.name}"`);
+          socket.emit("REVERT_TOKEN_POSITION", { id: targetToken.id, x: targetToken.x, y: targetToken.y });
+          return;
+        }
+      }
+
+      if (Array.isArray(curr.tokens)) {
         curr.tokens = curr.tokens.map((t: any) =>
           t.id === id ? { ...t, x, y } : t
         );

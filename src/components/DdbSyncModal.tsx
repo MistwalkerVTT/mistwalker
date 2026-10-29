@@ -872,6 +872,35 @@ export const DdbSyncModal: React.FC<DdbSyncModalProps> = ({
           {/* TAB: Campaign & Real-Time Live HP */}
           {activeTab === 'campaign' && (
             <div className="space-y-6">
+              {/* Quick Zero-Cookie URL Import Card */}
+              <form onSubmit={handleQuickUrlImport} className="p-4 rounded-xl bg-purple-950/30 border border-purple-500/30 flex flex-wrap items-center justify-between gap-3 shadow-md">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-purple-500/20 text-purple-400 flex items-center justify-center shrink-0">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-purple-200 block">Instant Zero-Cookie Import</span>
+                    <span className="text-[11px] text-zinc-400">Paste any public D&D Beyond Character or Campaign URL</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-1 min-w-[280px]">
+                  <input
+                    type="text"
+                    placeholder="https://www.dndbeyond.com/characters/146614740"
+                    value={quickUrlInput}
+                    onChange={e => setQuickUrlInput(e.target.value)}
+                    className="flex-1 px-3 py-1.5 bg-zinc-900 border border-purple-500/40 rounded-lg text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-purple-400 font-mono"
+                  />
+                  <button
+                    type="submit"
+                    disabled={isQuickImporting || !quickUrlInput.trim()}
+                    className="px-3.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition disabled:opacity-50 shrink-0 cursor-pointer flex items-center gap-1.5"
+                  >
+                    {isQuickImporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                    <span>Import</span>
+                  </button>
+                </div>
+              </form>
               
               {/* Campaign Control Bar */}
               <div className="p-4 rounded-xl bg-gradient-to-r from-slate-800/90 via-slate-800/60 to-slate-900/90 border border-slate-700/70 flex flex-wrap items-center justify-between gap-4 shadow-xl">

@@ -19,6 +19,7 @@ import type { Campaign } from '../lib/firebase';
 import type { UserAccount } from '../types/auth';
 import { getCampaignsList, saveCampaignDoc } from '../lib/firebase';
 import { ensureCampaignInvite, generateInviteCode } from '../lib/campaignInvite';
+import { extractDdbCampaignId } from '../lib/ddbUrlHelper';
 import { getDmViewUrl, getJoinUrl } from '../lib/sessionUrl';
 
 interface CampaignHubModalProps {
@@ -94,7 +95,7 @@ export const CampaignHubModal: React.FC<CampaignHubModalProps> = ({
       ownerUid: currentUser?.uid,
       ownerDisplayName: currentUser?.displayName || 'Dungeon Master',
       inviteCode: code,
-      ddbCampaignId: newDdbId.trim() || undefined,
+      ddbCampaignId: extractDdbCampaignId(newDdbId) || newDdbId.trim() || undefined,
       members: currentUser?.uid ? {
         [currentUser.uid]: {
           uid: currentUser.uid,

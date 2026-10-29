@@ -63,6 +63,7 @@ import { AuthModal } from './components/AuthModal';
 import { CampaignHubModal } from './components/CampaignHubModal';
 import { PlayerJoinModal } from './components/PlayerJoinModal';
 import { JoinLobbyScreen } from './components/JoinLobbyScreen';
+import { PlatformLandingGate } from './components/PlatformLandingGate';
 import { RoomManagerModal } from './components/RoomManagerModal';
 import { subscribeToAuth } from './lib/authService';
 import { getInviteCodeFromUrl, getDmViewUrl } from './lib/sessionUrl';
@@ -11132,6 +11133,19 @@ export default function App() {
             }
           }}
           onOpenAuthModal={() => setShowAuthModal(true)}
+        />
+      )}
+
+      {/* Platform Immediate Auth Gate */}
+      {!currentUser && !showJoinLobby && (
+        <PlatformLandingGate
+          onJoinWithCode={(code) => {
+            setInitialJoinCode(code);
+            setShowJoinLobby(true);
+          }}
+          onAuthenticated={() => {
+            setShowCampaignHubModal(true);
+          }}
         />
       )}
 

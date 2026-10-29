@@ -245,6 +245,12 @@ export class SessionManager {
     return removed;
   }
 
+  public getUser(sessionId: string, socketId: string): ConnectedLobbyUser | null {
+    const id = this.normalizeSessionId(sessionId);
+    const users = this.roomUsers.get(id);
+    return users?.get(socketId) || null;
+  }
+
   public getRoomUsers(sessionId: string): ConnectedLobbyUser[] {
     const id = this.normalizeSessionId(sessionId);
     const users = this.roomUsers.get(id);

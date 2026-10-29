@@ -7,7 +7,7 @@ import { CHARACTER_TOKEN_IMAGES, getCharacterTokenUrl } from '../src/data/defaul
 export class DdbGameLogDaemon {
   private static instance: DdbGameLogDaemon;
   private io: Server | null = null;
-  private monitoredCampaignIds = new Set<string>(['3290944', '6738033']);
+  private monitoredCampaignIds = new Set<string>();
   private firstSyncCampaigns = new Set<string>();
   private isPolling = false;
   private pollTimer: NodeJS.Timeout | null = null;
