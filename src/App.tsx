@@ -3591,6 +3591,20 @@ export default function App() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, []);
 
+  // Suppress browser default right-click context menu in DM mode (matching Player View)
+  useEffect(() => {
+    const handleGlobalContextMenu = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      // Allow browser context menu only within editable text fields for copy/paste
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+      e.preventDefault();
+    };
+    window.addEventListener('contextmenu', handleGlobalContextMenu);
+    return () => window.removeEventListener('contextmenu', handleGlobalContextMenu);
+  }, []);
+
   const handleReloadPlayers = useCallback(() => {
     if (socketRef.current?.connected) {
       socketRef.current.emit('DM_BROWSER_REFRESHED');
