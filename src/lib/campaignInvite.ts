@@ -32,6 +32,8 @@ export function formatInviteCode(code: string): string {
   return clean;
 }
 
+export const formatRoomCode = formatInviteCode;
+
 /**
  * Finds a campaign by its 6-character invite code
  */

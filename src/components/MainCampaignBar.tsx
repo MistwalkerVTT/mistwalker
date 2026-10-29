@@ -34,6 +34,7 @@ interface MainCampaignBarProps {
   onOpenAuthModal?: () => void;
   onOpenCampaignHub?: () => void;
   onOpenJoinModal?: () => void;
+  onOpenRoomManager?: () => void;
   activeSceneInfo: {
     campaignId: string;
     chapterId: string;
@@ -285,11 +286,15 @@ export const MainCampaignBar: React.FC<MainCampaignBarProps> = React.memo(({
             <button
               type="button"
               onClick={() => {
-                const target = prompt('Enter Room / Session Name (or leave blank for "default"):', currentSession === 'default' ? '' : currentSession);
-                if (target !== null) {
-                  const clean = target.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '_');
-                  const newUrl = getDmViewUrl(clean || 'default');
-                  window.location.href = newUrl;
+                if (onOpenRoomManager) {
+                  onOpenRoomManager();
+                } else {
+                  const target = prompt('Enter Room / Session Name (or leave blank for "default"):', currentSession === 'default' ? '' : currentSession);
+                  if (target !== null) {
+                    const clean = target.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+                    const newUrl = getDmViewUrl(clean || 'default');
+                    window.location.href = newUrl;
+                  }
                 }
               }}
               className={`flex items-center gap-1 px-1.5 py-0.5 rounded-lg border text-[10px] font-mono transition-all cursor-pointer ${

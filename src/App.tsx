@@ -62,6 +62,8 @@ import { CampaignBuilderModal } from './components/CampaignBuilderModal';
 import { AuthModal } from './components/AuthModal';
 import { CampaignHubModal } from './components/CampaignHubModal';
 import { PlayerJoinModal } from './components/PlayerJoinModal';
+import { JoinLobbyScreen } from './components/JoinLobbyScreen';
+import { RoomManagerModal } from './components/RoomManagerModal';
 import { subscribeToAuth } from './lib/authService';
 import { getInviteCodeFromUrl, getDmViewUrl } from './lib/sessionUrl';
 import type { UserAccount } from './types/auth';
@@ -1392,6 +1394,8 @@ export default function App() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showCampaignHubModal, setShowCampaignHubModal] = useState(false);
   const [showPlayerJoinModal, setShowPlayerJoinModal] = useState(false);
+  const [showJoinLobby, setShowJoinLobby] = useState(false);
+  const [showRoomManagerModal, setShowRoomManagerModal] = useState(false);
   const [initialJoinCode, setInitialJoinCode] = useState<string | null>(null);
 
   useEffect(() => {
@@ -1399,7 +1403,7 @@ export default function App() {
     const invite = getInviteCodeFromUrl();
     if (invite) {
       setInitialJoinCode(invite);
-      setShowPlayerJoinModal(true);
+      setShowJoinLobby(true);
     }
     return unsub;
   }, []);
@@ -8317,9 +8321,14 @@ export default function App() {
                 onOpenAuthModal={() => setShowAuthModal(true)}
                 onOpenCampaignHub={() => setShowCampaignHubModal(true)}
                 onOpenJoinModal={(code) => {
-                  if (code) setInitialJoinCode(code);
-                  setShowPlayerJoinModal(true);
+                  if (code) {
+                    setInitialJoinCode(code);
+                    setShowJoinLobby(true);
+                  } else {
+                    setShowPlayerJoinModal(true);
+                  }
                 }}
+                onOpenRoomManager={() => setShowRoomManagerModal(true)}
                 activeSceneInfo={activeSceneInfo}
                 campaigns={campaignsList}
                 tokenCount={tokens.length}
@@ -11023,8 +11032,12 @@ export default function App() {
           setShowCampaignBuilder(true);
         }}
         onOpenJoinModal={(code) => {
-          if (code) setInitialJoinCode(code);
-          setShowPlayerJoinModal(true);
+          if (code) {
+            setInitialJoinCode(code);
+            setShowJoinLobby(true);
+          } else {
+            setShowPlayerJoinModal(true);
+          }
         }}
         onSelectCampaignSession={(campaignId) => {
           const url = getDmViewUrl(campaignId);
@@ -11042,6 +11055,32 @@ export default function App() {
           toast.success(`Joined campaign: ${joinedCamp.campaignTitle}!`);
         }}
       />
+
+      {/* DM Session Room Manager Modal */}
+      <RoomManagerModal
+        isOpen={showRoomManagerModal}
+        onClose={() => setShowRoomManagerModal(false)}
+        socketRef={socketRef}
+      />
+
+      {/* Full-Screen Join Lobby Screen */}
+      {showJoinLobby && initialJoinCode && (
+        <JoinLobbyScreen
+          roomCode={initialJoinCode}
+          currentUser={currentUser}
+          onExitLobby={() => {
+            setShowJoinLobby(false);
+            if (typeof window !== 'undefined') {
+              const url = new URL(window.location.href);
+              url.searchParams.delete('join');
+              url.searchParams.delete('invite');
+              url.searchParams.delete('code');
+              window.history.replaceState({}, '', url.toString());
+            }
+          }}
+          onOpenAuthModal={() => setShowAuthModal(true)}
+        />
+      )}
 
       {/* Campaign Builder & Scene Management Modal (Includes Battle Arena Manager Menu) */}
       <CampaignBuilderModal

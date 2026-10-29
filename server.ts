@@ -102,6 +102,37 @@ async function startServer() {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
   });
 
+  // Multi-tenant Room Code & Lobby inspection API
+  apiRouter.get("/rooms/:code", (req, res) => {
+    const rawCode = req.params.code;
+    const resolvedSession = sessionManager.resolveRoomCode(rawCode);
+    const roomCode = sessionManager.getOrCreateRoomCode(resolvedSession);
+    const state = sessionManager.getSession(resolvedSession);
+    const users = sessionManager.getRoomUsers(resolvedSession);
+    const isLocked = sessionManager.isRoomLocked(resolvedSession);
+
+    res.json({
+      valid: true,
+      sessionId: resolvedSession,
+      roomCode,
+      sceneTitle: state.activeSceneInfo?.sceneTitle || null,
+      campaignId: state.activeSceneInfo?.campaignId || null,
+      connectedCount: users.length,
+      users,
+      isLocked
+    });
+  });
+
+  // DM room lock toggle
+  apiRouter.post("/rooms/:code/lock", (req, res) => {
+    const rawCode = req.params.code;
+    const { locked } = req.body || {};
+    const resolvedSession = sessionManager.resolveRoomCode(rawCode);
+    const result = sessionManager.setRoomLock(resolvedSession, !!locked);
+    io.to(resolvedSession).emit("ROOM_LOCK_UPDATED", { sessionId: resolvedSession, isLocked: result });
+    res.json({ success: true, isLocked: result });
+  });
+
   // Multi-session listing & state inspection endpoints
   apiRouter.get("/sessions", (req, res) => {
     res.json({ sessions: sessionManager.listSessions() });
@@ -467,25 +498,89 @@ async function startServer() {
       }
     }
 
-    // Explicit session room join or switch
-    socket.on("JOIN_SESSION", (data: { sessionId?: string; roomCode?: string; role?: string }) => {
+    // Explicit session room join or switch with 6-character room codes and lobby tracking
+    socket.on("JOIN_SESSION", (data: {
+      sessionId?: string;
+      roomCode?: string;
+      role?: 'dm' | 'player' | 'spectator';
+      displayName?: string;
+      uid?: string;
+      characterName?: string;
+      characterAvatar?: string;
+    }) => {
       const prev = getRoom();
-      const next = sessionManager.normalizeSessionId(data?.sessionId || data?.roomCode);
+      const rawTarget = data?.roomCode || data?.sessionId || 'default';
+      const resolvedSession = sessionManager.resolveRoomCode(rawTarget);
+      const next = sessionManager.normalizeSessionId(resolvedSession);
+
+      // Enforce Room Lock (only DM may bypass lock)
+      if (sessionManager.isRoomLocked(next) && data?.role !== 'dm') {
+        socket.emit("JOIN_ERROR", {
+          message: "This room is currently locked by the Dungeon Master.",
+          code: "ROOM_LOCKED"
+        });
+        return;
+      }
+
       if (prev !== next) {
         socket.leave(prev);
+        sessionManager.removeUserFromRoom(prev, socket.id);
+        io.to(prev).emit("LOBBY_USERS_UPDATED", sessionManager.getRoomUsers(prev));
+
         socket.join(next);
         socket.data.sessionId = next;
-        console.log(`[Server] Socket ${socket.id} switched session: "${prev}" -> "${next}"`);
+        console.log(`[Server] Socket ${socket.id} joined session: "${next}" (from "${prev}")`);
       }
+
+      const userRecord = {
+        socketId: socket.id,
+        uid: data?.uid,
+        displayName: data?.displayName || (data?.role === 'dm' ? 'Dungeon Master' : 'Adventurer'),
+        role: data?.role || 'player',
+        characterName: data?.characterName,
+        characterAvatar: data?.characterAvatar,
+        joinedAt: Date.now()
+      };
+      sessionManager.addUserToRoom(next, userRecord);
+
       const state = sessionManager.getSession(next);
+      const activeRoomCode = sessionManager.getOrCreateRoomCode(next);
+      const isLocked = sessionManager.isRoomLocked(next);
+
       socket.emit("SYNC_STATE", state);
       if (state.imageFile) {
         socket.emit("SYNC_IMAGE", state.imageFile);
       }
+      socket.emit("SESSION_RESOLVED", {
+        sessionId: next,
+        roomCode: activeRoomCode,
+        isLocked
+      });
+
+      // Broadcast live lobby roster update to everyone in the room
+      io.to(next).emit("LOBBY_USERS_UPDATED", sessionManager.getRoomUsers(next));
+
       socket.to(next).emit("USER_JOINED_SESSION", {
         socketId: socket.id,
         sessionId: next,
-        role: data?.role || 'player'
+        role: userRecord.role,
+        user: userRecord
+      });
+    });
+
+    socket.on("TOGGLE_ROOM_LOCK", (data: { locked: boolean }) => {
+      const r = getRoom();
+      const isLocked = sessionManager.setRoomLock(r, !!data?.locked);
+      io.to(r).emit("ROOM_LOCK_UPDATED", { sessionId: r, isLocked });
+    });
+
+    socket.on("REQUEST_ROOM_INFO", () => {
+      const r = getRoom();
+      socket.emit("ROOM_INFO", {
+        sessionId: r,
+        roomCode: sessionManager.getOrCreateRoomCode(r),
+        users: sessionManager.getRoomUsers(r),
+        isLocked: sessionManager.isRoomLocked(r)
       });
     });
 
@@ -848,7 +943,10 @@ async function startServer() {
     });
 
     socket.on("disconnect", (reason) => {
-      console.log(`[Server] User disconnected: ${socket.id} (Session: "${getRoom()}", reason: ${reason})`);
+      const r = getRoom();
+      sessionManager.removeUserFromRoom(r, socket.id);
+      io.to(r).emit("LOBBY_USERS_UPDATED", sessionManager.getRoomUsers(r));
+      console.log(`[Server] User disconnected: ${socket.id} (Session: "${r}", reason: ${reason})`);
     }); });
 
   // Local static JB2A animated assets directory (zero-network-latency serving)
