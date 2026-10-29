@@ -14,7 +14,21 @@
 
 ## Pending Changes Queue for Future Enterprise Patch
 
-*No pending stable changes yet. As new changes are committed to `v1-stable`, they will be logged below with commit hashes, descriptions, and affected files.*
+### [2026-10-29] feat(silo): complete air-gap isolation between v1-stable and enterprise beta
+- **Commit**: `f8f6f48`
+- **Files Changed**:
+  - `server.ts`
+  - `src/lib/firebase.ts`
+  - `src/lib/updateRoomAnnotation.ts`
+  - `src/services/arenaConfigService.ts`
+- **Summary**:
+  - Implemented runtime domain detection (`IS_ENTERPRISE_BETA`), query filtering, and write boundaries across campaigns, uploadedAssets, monsters, allies, characters, mapZones, arenaConfig, and activeSession.
+  - Added strict deletion barriers: Beta cannot delete non-beta assets/campaigns/monsters, and Stable cannot delete Beta documents.
+  - Configured server-level static upload recovery filtering by service domain.
+- **Impact / Testing Notes**:
+  - Verify that Beta operates using the seeded `beta_` document namespace without affecting any Stable production records.
+
+---
 
 ### Template for Incoming Entries:
 ```markdown
