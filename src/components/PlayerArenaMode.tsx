@@ -3161,29 +3161,31 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
 
       const hitsTarget = isCrit || (!isFumble && attackTotal >= target.ac);
 
+      // Trigger 3D Physics To-Hit D20 roll independently
+      if (onTrigger3dDice) {
+        onTrigger3dDice({
+          id: `arena-atk-${Date.now()}`,
+          characterName: actor.name,
+          action: `${action.name}${isThreatened ? ' (Disadvantage)' : ''} — ${isCrit ? 'CRITICAL HIT!' : hitsTarget ? `HIT (vs AC ${target.ac})` : `MISS (vs AC ${target.ac})`}`,
+          rollType: 'attack',
+          formula: rollFormula,
+          diceNotation: isThreatened ? '2d20kl1' : '1d20',
+          dice: isThreatened
+            ? [
+                { sides: 20, result: d20Roll1, type: 'd20' },
+                { sides: 20, result: d20Roll2, type: 'd20' }
+              ]
+            : [{ sides: 20, result: d20, type: 'd20' }],
+          modifier: rawHitBonus,
+          total: attackTotal,
+          isCritical: isCrit,
+          isFumble,
+          timestamp: Date.now(),
+          source: 'player'
+        });
+      }
+
       if (!hitsTarget) {
-        if (onTrigger3dDice) {
-          onTrigger3dDice({
-            id: `arena-atk-${Date.now()}`,
-            characterName: actor.name,
-            action: `${action.name}${isThreatened ? ' (Disadvantage)' : ''} — MISS (vs AC ${target.ac})`,
-            rollType: 'attack',
-            formula: rollFormula,
-            diceNotation: isThreatened ? '2d20kl1' : '1d20',
-            dice: isThreatened
-              ? [
-                  { sides: 20, result: d20Roll1, type: 'd20' },
-                  { sides: 20, result: d20Roll2, type: 'd20' }
-                ]
-              : [{ sides: 20, result: d20, type: 'd20' }],
-            modifier: rawHitBonus,
-            total: attackTotal,
-            isCritical: isCrit,
-            isFumble,
-            timestamp: Date.now(),
-            source: 'player'
-          });
-        }
         setCombatants((prev) => prev.map((c) => (c.id === actor.id ? markActorUsed(c) : c)));
         addCombatLog(
           actor.name,
@@ -3202,24 +3204,27 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         actor.team === 'crimson' && actor.isAI ? arenaConfig.monsterDamageMultiplier || 1 : 1;
       const finalDamage = Math.max(1, Math.round(dmgRoll.total * dmgMult));
 
-      // Trigger 3D physics roll with all the spell/weapon damage dice so the exact dice count tumbles and adds up!
-      if (onTrigger3dDice && dmgRoll.dice.length > 0) {
-        onTrigger3dDice({
-          id: `arena-hit-dmg-${Date.now()}`,
-          characterName: actor.name,
-          action: `${action.name}${action.castAtLevel ? ` (L${action.castAtLevel})` : ''} — ${isCrit ? 'CRIT HIT!' : `HIT (${attackTotal} vs AC ${target.ac})`}`,
-          rollType: 'damage',
-          formula: `${atkDamageFormula} → ${dmgRoll.breakdown}`,
-          diceNotation: atkDamageFormula,
-          dice: dmgRoll.dice,
-          modifier: dmgRoll.bonus,
-          total: finalDamage,
-          isCritical: isCrit,
-          isFumble: false,
-          timestamp: Date.now(),
-          source: 'player'
-        });
-      }
+      // Trigger 3D physics roll with all the spell/weapon damage dice so the exact dice count and dice types tumble independently!
+      const damageDelayMs = onTrigger3dDice ? 1350 : 0;
+      window.setTimeout(() => {
+        if (onTrigger3dDice && dmgRoll.dice.length > 0) {
+          onTrigger3dDice({
+            id: `arena-hit-dmg-${Date.now()}`,
+            characterName: actor.name,
+            action: `${action.name}${action.castAtLevel ? ` (L${action.castAtLevel})` : ''} (${action.damageType || 'Damage'}${isCrit ? ' • Critical' : ''})`,
+            rollType: 'damage',
+            formula: `${atkDamageFormula} → ${dmgRoll.breakdown}`,
+            diceNotation: atkDamageFormula,
+            dice: dmgRoll.dice,
+            modifier: dmgRoll.bonus,
+            total: finalDamage,
+            isCritical: isCrit,
+            isFumble: false,
+            timestamp: Date.now(),
+            source: 'player'
+          });
+        }
+      }, damageDelayMs);
 
       setCombatants((prev) =>
         prev.map((c) => {
