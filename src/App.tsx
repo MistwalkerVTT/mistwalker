@@ -3582,6 +3582,22 @@ export default function App() {
     toast.success(`Force-synced ${currentSlot} to Player View!`);
   }, [broadcastFullState, getMapDimensions, imageFile, activeSceneInfo, activeDmNotes, tokens, compendiumMonsters, combatTrackerCombatants, prepareTokensForSync, sortedCombatTrackerCombatants, combatTrackerRound, combatTrackerTurnIndex, showCombatTracker, gridSize, gridOpacity, isFogVisible, walls, visionConfig, roomAnnotations, mapType, videoSize, mapRotation, stageScale, stagePos, reveals, polygonReveals, gridVisible, gridOffsetX, gridOffsetY, boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect]);
 
+  // Track DM browser refresh so player browsers are automatically reloaded
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      sessionStorage.setItem('dm_page_reloaded', 'true');
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
+
+  const handleReloadPlayers = useCallback(() => {
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('DM_BROWSER_REFRESHED');
+      toast.success('Sent reload command to all connected player browsers');
+    }
+  }, []);
+
   const handleSpawnMonsterToken = useCallback((tokenData: {
     name: string;
     avatarUrl: string;
@@ -8006,7 +8022,6 @@ export default function App() {
           activeMapId={activeMapId}
           liveMapId={liveMapId}
           onForceSync={handleForceSyncToPlayers}
-                onReloadPlayers={handleReloadPlayers}
           activeEquippedAsset={activeEquippedAsset}
           onEquipAsset={handleEquipAsset}
           onQuickPlaceAsset={handleQuickPlaceAsset}
@@ -8378,6 +8393,7 @@ export default function App() {
                 isFirebaseConnected={isFirebaseConnected}
                 onRelinkMap={() => relinkMapFileInputRef.current?.click()}
                 onForceSync={handleForceSyncToPlayers}
+                onReloadPlayers={handleReloadPlayers}
                 campaignMode={campaignMode}
                 onModeChange={handleModeChange}
                 tool={tool}
