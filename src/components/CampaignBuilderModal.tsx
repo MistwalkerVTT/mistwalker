@@ -48,6 +48,7 @@ import {
   publishActiveSession
 } from '../lib/firebase';
 import { toast } from 'sonner';
+import { getPlayerViewUrl } from '../lib/sessionUrl';
 import { isVideoAsset, saveLocalAsset } from '../lib/storageCache';
 import { SceneTokenPlacementCanvas } from './SceneTokenPlacementCanvas';
 import { UploadedAsset, WallSegment, VisionConfig, RoomAnnotation, ChapterPdfDigest, ChapterSceneAssociation, normalizeRoomAnnotation, normalizeRoomAnnotations } from '../types';
@@ -2005,7 +2006,7 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
             <button
               id="btn-share-player-view-modal"
               onClick={() => {
-                const playerUrl = `${window.location.origin}${window.location.pathname}?view=player`;
+                const playerUrl = getPlayerViewUrl();
                 navigator.clipboard.writeText(playerUrl);
                 window.open(playerUrl, '_blank');
                 toast.success('Player View link copied to clipboard and opened in new window!', {

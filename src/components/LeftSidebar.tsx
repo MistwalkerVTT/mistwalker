@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { Character } from '../types/character';
 import { DEFAULT_CHARACTERS, getCharacterTokenUrl } from '../data/defaultCharacters';
 import { resolveCharacterCampaign, groupCharactersByCampaign } from '../data/ddbCampaignRegistry';
+import { getPlayerViewUrl } from '../lib/sessionUrl';
 import {
   Map as MapIcon,
   Upload,
@@ -1333,7 +1334,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                         <button
                           id="btn-share-player-view-flyout"
                           onClick={() => {
-                            const playerUrl = `${window.location.origin}${window.location.pathname}?view=player`;
+                            const playerUrl = getPlayerViewUrl();
                             navigator.clipboard.writeText(playerUrl);
                             window.open(playerUrl, '_blank');
                             toast.success('Player View link copied to clipboard and opened in new window!', {
@@ -1349,7 +1350,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                         <button
                           type="button"
                           onClick={() => {
-                            const playerUrl = `${window.location.origin}${window.location.pathname}?view=player`;
+                            const playerUrl = getPlayerViewUrl();
                             window.open(playerUrl, '_blank');
                           }}
                           className="py-2 px-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-850 text-zinc-300 hover:text-white border border-zinc-700/80 text-xs flex items-center justify-center transition-all cursor-pointer"

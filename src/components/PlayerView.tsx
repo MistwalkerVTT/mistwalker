@@ -82,6 +82,7 @@ import {
 } from '../data/defaultCharacters';
 import { repairMonsterToken } from '../data/srdMonstersCatalog';
 import { Character } from '../types/character';
+import { getActiveSessionId } from '../lib/sessionUrl';
 import {
   computeVisibilityPolygon,
   isPointInPolygon,
@@ -2466,14 +2467,18 @@ export default function PlayerView() {
   // Socket.io Pure Consumer Setup
   // ==========================================
   useEffect(() => {
-    const socket = io();
+    const activeSessionId = getActiveSessionId();
+    const socket = io({
+      query: { sessionId: activeSessionId }
+    });
     socketRef.current = socket;
     (window as any).__mistwalkerSocket = socket;
     setSocketInstance(socket);
 
     socket.on('connect', () => {
-      console.log('[PlayerView] Connected to socket. Requesting initial state...');
+      console.log(`[PlayerView] Connected to socket as ID: ${socket.id} (Session: "${activeSessionId}"). Requesting initial state...`);
       setIsConnected(true);
+      socket.emit('JOIN_SESSION', { sessionId: activeSessionId, role: 'player' });
       socket.emit('REQUEST_INITIAL_STATE');
     });
 

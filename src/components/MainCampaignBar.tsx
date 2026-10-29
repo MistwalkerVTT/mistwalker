@@ -22,6 +22,7 @@ import {
   CloudOff
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { getPlayerViewUrl, getActiveSessionId, getDmViewUrl } from '../lib/sessionUrl';
 import { Campaign, Scene } from '../lib/firebase';
 import { CampaignMode } from '../types';
 
@@ -235,6 +236,33 @@ export const MainCampaignBar: React.FC<MainCampaignBarProps> = React.memo(({
         >
           {isOnline ? <Cloud className="w-3 h-3" /> : <CloudOff className="w-3 h-3" />}
         </div>
+
+        {/* Session Room Chip */}
+        {(() => {
+          const currentSession = getActiveSessionId();
+          return (
+            <button
+              type="button"
+              onClick={() => {
+                const target = prompt('Enter Room / Session Name (or leave blank for "default"):', currentSession === 'default' ? '' : currentSession);
+                if (target !== null) {
+                  const clean = target.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+                  const newUrl = getDmViewUrl(clean || 'default');
+                  window.location.href = newUrl;
+                }
+              }}
+              className={`flex items-center gap-1 px-1.5 py-0.5 rounded-lg border text-[10px] font-mono transition-all cursor-pointer ${
+                currentSession !== 'default'
+                  ? 'bg-purple-950/40 border-purple-500/40 text-purple-300 hover:bg-purple-900/50'
+                  : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200'
+              }`}
+              title={`Active Session Room: "${currentSession}". Click to switch room or create an isolated session for another DM.`}
+            >
+              <Radio className={`w-3 h-3 ${currentSession !== 'default' ? 'text-purple-400' : 'text-zinc-500'}`} />
+              <span className="font-bold">{currentSession === 'default' ? 'Room: Main' : `Room: ${currentSession}`}</span>
+            </button>
+          );
+        })()}
       </div>
 
       <Divider />
@@ -440,7 +468,7 @@ export const MainCampaignBar: React.FC<MainCampaignBarProps> = React.memo(({
         <button
           id="btn-main-share-player-view"
           onClick={() => {
-            const playerUrl = `${window.location.origin}${window.location.pathname}?view=player`;
+            const playerUrl = getPlayerViewUrl();
             navigator.clipboard.writeText(playerUrl);
             window.open(playerUrl, '_blank');
             toast.success('Player View link copied to clipboard and opened in new window!', {

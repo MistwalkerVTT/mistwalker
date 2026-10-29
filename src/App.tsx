@@ -179,6 +179,7 @@ import ReactMarkdown from 'react-markdown';
 import { snapPointToGrid, findNearestWall, segmentsIntersect } from './lib/visionEngine';
 import { Toaster, toast } from 'sonner';
 import { undoRedo } from './services/undoRedoService';
+import { getActiveSessionId, getPlayerViewUrl } from './lib/sessionUrl';
 import homeBackgroundImage from './assets/images/home_background.jpg';
 import sceneBackdropImage from './assets/images/scene_backdrop.jpg';
 
@@ -2803,13 +2804,17 @@ export default function App() {
 
   // Dedicated permanent socket connection & event handlers for DM view
   useEffect(() => {
-    const socket = io();
+    const activeSessionId = getActiveSessionId();
+    const socket = io({
+      query: { sessionId: activeSessionId }
+    });
     socketRef.current = socket;
     (window as any).__mistwalkerSocket = socket;
     setSocketInstance(socket);
 
     socket.on('connect', () => {
-      console.log('[DM Socket] Connected to server as ID:', socket.id);
+      console.log(`[DM Socket] Connected to server as ID: ${socket.id} (Session: "${activeSessionId}")`);
+      socket.emit('JOIN_SESSION', { sessionId: activeSessionId, role: 'dm' });
       if (activeMapIdRef.current === liveMapIdRef.current) {
         broadcastFullStateRef.current?.();
       }
