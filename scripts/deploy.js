@@ -1,28 +1,52 @@
 // scripts/deploy.js
-// Automated CI/CD deployment script for MistWalker 3.0 on Render
+// Automated CI/CD deployment script for MistWalker on Render (Dual-Domain: Stable vs Enterprise)
 
 import { execSync } from 'child_process';
 
-const SERVICE_ID = process.env.RENDER_SERVICE_ID || 'srv-db93bu3bc2fs73cn795g';
 const API_KEY = process.env.RENDER_API_KEY || 'rnd_M6nAOrAtFKciTjyntqu8Q9ZsNxXz';
-const APP_URL = 'https://mistwalker.onrender.com';
+
+// Render Service Targets
+const SERVICES = {
+  prod: {
+    id: 'srv-db93bu3bc2fs73cn795g',
+    name: 'Production (Stable v1.0.0)',
+    url: 'https://mistwalker.onrender.com',
+    branch: 'v1-stable'
+  },
+  beta: {
+    id: 'srv-dbhqc7afngtc73cau1i0',
+    name: 'Enterprise Multi-DM (Beta)',
+    url: 'https://mistwalker-beta.onrender.com',
+    branch: 'enterprise-multi-dm'
+  }
+};
 
 function getGitCommit() {
   try {
     const gitPath = 'set "PATH=%LOCALAPPDATA%\\Microsoft\\WinGet\\Links;%PATH%" && git';
     const hash = execSync(`${gitPath} rev-parse HEAD`, { encoding: 'utf-8', shell: 'cmd.exe' }).trim();
     const message = execSync(`${gitPath} log -1 --pretty=%B`, { encoding: 'utf-8', shell: 'cmd.exe' }).trim();
-    return { hash, message };
+    const branch = execSync(`${gitPath} rev-parse --abbrev-ref HEAD`, { encoding: 'utf-8', shell: 'cmd.exe' }).trim();
+    return { hash, message, branch };
   } catch (err) {
-    return { hash: 'unknown', message: '' };
+    return { hash: 'unknown', message: '', branch: 'main' };
   }
 }
 
-async function triggerDeploy() {
-  const commit = getGitCommit();
-  console.log('🚀 Triggering Render deployment for commit:', commit.hash.slice(0, 7), '-', commit.message.slice(0, 60));
+function resolveTargetService(branch) {
+  const args = process.argv.slice(2);
+  if (args.includes('--prod')) return SERVICES.prod;
+  if (args.includes('--beta')) return SERVICES.beta;
+  if (branch === 'v1-stable') return SERVICES.prod;
+  return SERVICES.beta; // default enterprise development
+}
 
-  const res = await fetch(`https://api.render.com/v1/services/${SERVICE_ID}/deploys`, {
+async function triggerDeploy(target) {
+  const commit = getGitCommit();
+  console.log(`🚀 Deploying to ${target.name} [${target.url}]`);
+  console.log('📝 Commit:', commit.hash.slice(0, 7), '-', commit.message.slice(0, 60));
+
+  const res = await fetch(`https://api.render.com/v1/services/${target.id}/deploys`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${API_KEY}`,
@@ -33,7 +57,7 @@ async function triggerDeploy() {
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Failed to trigger deploy: HTTP ${res.status} ${text}`);
+    throw new Error(`Failed to trigger deploy on ${target.name}: HTTP ${res.status} ${text}`);
   }
 
   let deployId;
@@ -50,8 +74,7 @@ async function triggerDeploy() {
   }
 
   if (!deployId) {
-    // Render returned 202 Accepted with empty body; fetch latest deploy
-    const listRes = await fetch(`https://api.render.com/v1/services/${SERVICE_ID}/deploys?limit=1`, {
+    const listRes = await fetch(`https://api.render.com/v1/services/${target.id}/deploys?limit=1`, {
       headers: { 'Authorization': `Bearer ${API_KEY}`, 'Accept': 'application/json' }
     });
     if (listRes.ok) {
@@ -65,18 +88,18 @@ async function triggerDeploy() {
     throw new Error('Failed to retrieve deploy ID from Render');
   }
 
-  console.log(`📦 Deploy initiated: ${deployId} (Status: ${status})`);
+  console.log(`📦 Deploy initiated on ${target.name}: ${deployId} (Status: ${status})`);
   return deployId;
 }
 
-async function waitForLive(deployId) {
-  console.log('⏳ Monitoring deploy progress...');
+async function waitForLive(target, deployId) {
+  console.log(`⏳ Monitoring deploy progress on ${target.name}...`);
   const startTime = Date.now();
   let lastStatus = '';
 
   while (true) {
     await new Promise(r => setTimeout(r, 5000));
-    const res = await fetch(`https://api.render.com/v1/services/${SERVICE_ID}/deploys/${deployId}`, {
+    const res = await fetch(`https://api.render.com/v1/services/${target.id}/deploys/${deployId}`, {
       headers: { 'Authorization': `Bearer ${API_KEY}` }
     });
 
@@ -90,51 +113,54 @@ async function waitForLive(deployId) {
 
     if (status !== lastStatus) {
       const elapsed = Math.round((Date.now() - startTime) / 1000);
-      console.log(`⏱️ [${elapsed}s] Deploy status: ${status}`);
+      console.log(`⏱️ [${elapsed}s] Deploy status (${target.name}): ${status}`);
       lastStatus = status;
     }
 
     if (status === 'live') {
       const totalElapsed = Math.round((Date.now() - startTime) / 1000);
-      console.log(`✅ Deployment LIVE in ${totalElapsed}s!`);
+      console.log(`✅ ${target.name} LIVE in ${totalElapsed}s!`);
       break;
     }
 
     if (status === 'build_failed' || status === 'update_failed' || status === 'canceled') {
-      throw new Error(`❌ Deployment failed with status: ${status}`);
+      throw new Error(`❌ Deployment on ${target.name} failed with status: ${status}`);
     }
   }
 }
 
-async function verifyLiveHealth() {
-  console.log(`🔍 Verifying live health on ${APP_URL}...`);
+async function verifyLiveHealth(target) {
+  console.log(`🔍 Verifying live health on ${target.url}...`);
   try {
-    const res = await fetch(`${APP_URL}/api/health`);
+    const res = await fetch(`${target.url}/api/health`);
     if (res.ok) {
       const data = await res.json();
-      console.log(`🎉 Health check passed: HTTP 200`, data);
+      console.log(`🎉 Health check passed on ${target.name}: HTTP 200`, data);
       return true;
     }
   } catch (e) {
     // try root endpoint
   }
 
-  const rootRes = await fetch(APP_URL);
+  const rootRes = await fetch(target.url);
   if (rootRes.ok) {
-    console.log(`🎉 Root check passed: HTTP ${rootRes.status}`);
+    console.log(`🎉 Root check passed on ${target.name}: HTTP ${rootRes.status}`);
     return true;
   }
   throw new Error(`Health check returned HTTP ${rootRes.status}`);
 }
 
 async function main() {
+  const commit = getGitCommit();
+  const target = resolveTargetService(commit.branch);
+
   try {
-    const deployId = await triggerDeploy();
-    await waitForLive(deployId);
-    await verifyLiveHealth();
-    console.log(`\n🌟 MistWalker is successfully updated and running live at: ${APP_URL}`);
+    const deployId = await triggerDeploy(target);
+    await waitForLive(target, deployId);
+    await verifyLiveHealth(target);
+    console.log(`\n🌟 ${target.name} is successfully updated and running live at: ${target.url}`);
   } catch (err) {
-    console.error('\n💥 Deployment failed:', err.message);
+    console.error(`\n💥 Deployment on ${target.name} failed:`, err.message);
     process.exit(1);
   }
 }
