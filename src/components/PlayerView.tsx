@@ -110,6 +110,7 @@ import { PlayerCharacterSelectModal, PlayerCharacterChoiceItem } from './PlayerC
 import { PlayerDdbPrivacyModal } from './PlayerDdbPrivacyModal';
 import { PlayerHeroDock } from './PlayerHeroDock';
 import { WildShapeModal } from './WildShapeModal';
+import { CombatDicePromptModal, PendingCombatRoll, RollAdvantageMode } from './CombatDicePromptModal';
 import { WildShapeBeastForm, ActiveWildShapeState, GAIAH_WILD_SHAPE_FORMS } from '../types/wildShape';
 import { DndRuleInspectionModal } from './DndRuleInspectionModal';
 import { canTokenHaveHalo } from '../effects/db/tokenFxMap';
@@ -1771,6 +1772,7 @@ export default function PlayerView() {
     loadPlayerAutoRollMap()
   );
   const isAutoRollDiceEnabledRef = useRef<boolean>(true);
+  const [pendingCombatRoll, setPendingCombatRoll] = useState<PendingCombatRoll | null>(null);
   const [showCharacterSelectModal, setShowCharacterSelectModal] = useState<boolean>(false);
   const [isCurrentCharacterPrivate, setIsCurrentCharacterPrivate] = useState<boolean>(false);
   const [showWildShapeModal, setShowWildShapeModal] = useState<boolean>(false);
@@ -1946,12 +1948,163 @@ export default function PlayerView() {
         });
       } else {
         toast.info(`✨ Auto Roll turned OFF for ${heroLabel}`, {
-          description: `${heroLabel}'s HUD spells and actions will play spell animations only.`
+          description: `${heroLabel}'s HUD spells and actions will prompt for manual input or in-game rolls.`
         });
       }
     },
     [activePlayerAutoRollKey, activeWildShape?.originalName, claimedToken?.name, hudCharacterData?.name]
   );
+
+  const handleResolveCombatHit = useCallback(
+    (result: {
+      d20: number;
+      total: number;
+      isCrit: boolean;
+      isFumble: boolean;
+      hits: boolean;
+      advantageMode: RollAdvantageMode;
+    }) => {
+      if (!pendingCombatRoll) return;
+      const { actor, target, action } = pendingCombatRoll;
+
+      if (!result.hits) {
+        toast.error(
+          result.isFumble
+            ? `${actor.name}'s ${action.name} MISSED ${target.name} (Natural 1 Fumble)!`
+            : `${actor.name}'s ${action.name} missed ${target.name} (Rolled ${result.total} vs AC ${target.ac || 13}).`
+        );
+        setPendingCombatRoll(null);
+        return;
+      }
+
+      toast.success(
+        result.isCrit
+          ? `💥 ${actor.name} CRITICAL HIT on ${target.name}! (Nat 20) — Roll damage!`
+          : `🎯 ${actor.name} hits ${target.name}! (Rolled ${result.total} vs AC ${target.ac || 13}) — Roll damage!`
+      );
+
+      setPendingCombatRoll((prev) =>
+        prev
+          ? {
+              ...prev,
+              phase: 'damage',
+              d20Roll: result.d20,
+              toHitTotal: result.total,
+              isCrit: result.isCrit,
+              isFumble: result.isFumble
+            }
+          : null
+      );
+    },
+    [pendingCombatRoll]
+  );
+
+  const handleResolveCombatDamage = useCallback(
+    (result: {
+      damageTotal: number;
+      breakdown: string;
+      isCrit: boolean;
+      diceEvent?: DdbDiceRollEvent;
+    }) => {
+      if (!pendingCombatRoll) return;
+      const { actor, target, action, isHeal, expendedActionSlot } = pendingCombatRoll;
+      const targetToken = tokens.find((t) => t.id === target.id);
+      const calculatedDeltaHp = isHeal ? result.damageTotal : -result.damageTotal;
+
+      if (targetToken) {
+        const isTargetAlly = targetToken.category === 'ally' || Boolean((targetToken as any).allyId);
+        const isTargetMonster =
+          !isTargetAlly &&
+          (isMonsterToken(targetToken) ||
+            targetToken.isMonster === true ||
+            targetToken.category === 'monster' ||
+            targetToken.isPlayer === false);
+        const isTargetOtherPlayer = targetToken.isPlayer && targetToken.id !== actor.id && !isHeal;
+        const requiresApproval = isTargetOtherPlayer || (isTargetMonster && !autoApplyMonsterDamage);
+
+        const upcastActionLabel =
+          action.castAtLevel && action.castAtLevel > (action.level ?? 0)
+            ? (expendedActionSlot ?? 0) >= 1 && action.castAtLevel > (expendedActionSlot ?? 0)
+              ? `${action.name} (Level ${action.castAtLevel} • Uses Lvl ${expendedActionSlot} Slot)`
+              : `${action.name} (Level ${action.castAtLevel} Slot)`
+            : action.name;
+
+        const payload = {
+          sourceTokenId: actor.id,
+          sourceName: actor.name || 'Hero',
+          targetTokenId: targetToken.id,
+          targetName: targetToken.name || 'Target',
+          actionName: upcastActionLabel,
+          deltaHp: calculatedDeltaHp,
+          requiresApproval,
+          isMonster: isTargetMonster,
+          requestId: `req_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
+        };
+
+        if (socketRef.current?.connected) {
+          socketRef.current.emit('REQUEST_TOKEN_MUTATION', payload);
+        }
+
+        // Blessed Healer Automatic Trigger (Life Domain Cleric / Stavros)
+        const casterHasBlessedHealer = Boolean(
+          (actor.name || '').toLowerCase().includes('stavros') ||
+          (hudCharacterData?.name || '').toLowerCase().includes('stavros') ||
+          hudCharacterData?.special?.some((s) => (s.name || '').toLowerCase().includes('blessed healer'))
+        );
+        const effectiveCastSpellLevel = action.castAtLevel ?? action.level ?? 0;
+        const isLeveledHealingSpell = Boolean(
+          effectiveCastSpellLevel >= 1 &&
+          (action.category === 'spells' || action.subCategory === 'spell' || (action.level ?? 0) >= 1) &&
+          (action.isHeal || isHeal)
+        );
+        if (casterHasBlessedHealer && isLeveledHealingSpell && target.id !== actor.id) {
+          const blessedHealAmount = 2 + effectiveCastSpellLevel;
+          const bhPayload = {
+            sourceTokenId: actor.id,
+            sourceName: actor.name || 'Stavros',
+            targetTokenId: actor.id,
+            targetName: actor.name || 'Stavros',
+            actionName: `Blessed Healer (Lvl ${effectiveCastSpellLevel} Spell)`,
+            deltaHp: blessedHealAmount,
+            requiresApproval: false,
+            isMonster: false,
+            requestId: `req_bh_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
+          };
+          if (socketRef.current?.connected) {
+            socketRef.current.emit('REQUEST_TOKEN_MUTATION', bhPayload);
+          } else {
+            setHudCharacterData((prev) => {
+              if (!prev) return null;
+              return { ...prev, currentHp: Math.min(prev.maxHp, prev.currentHp + blessedHealAmount) };
+            });
+          }
+        }
+
+        toast.success(
+          isHeal
+            ? `💚 Restored +${result.damageTotal} HP to ${targetToken.name}!`
+            : `⚔️ Dealt ${result.damageTotal} damage to ${targetToken.name} with ${action.name}!`
+        );
+      }
+
+      setPendingCombatRoll(null);
+    },
+    [pendingCombatRoll, tokens, autoApplyMonsterDamage, hudCharacterData]
+  );
+
+  const handleEnableAutoRollAndContinueFromPrompt = useCallback(() => {
+    if (!pendingCombatRoll) return;
+    const { action, target } = pendingCombatRoll;
+    handleToggleAutoRollDice(true);
+    setPendingCombatRoll(null);
+    const targetToken = tokens.find((t) => t.id === target.id);
+    if (targetToken) {
+      setActiveTargetingAction(action);
+      setTimeout(() => {
+        handleTargetToken(targetToken);
+      }, 60);
+    }
+  }, [pendingCombatRoll, handleToggleAutoRollDice, tokens]);
 
   const promptedPrivateCharIdRef = useRef<string | null>(null);
   const manualSpellSlotsRef = useRef<Record<string, Record<number, { available: number; total: number }>>>({});
@@ -5196,7 +5349,34 @@ export default function PlayerView() {
       }
 
       if (!isAutoRollDiceEnabledRef.current) {
-        toast.success(`Spiritual Weapon strikes ${targetToken.name}!`);
+        setPendingCombatRoll({
+          actor: {
+            id: claimedToken.id,
+            name: charName,
+            avatarUrl: hudCharacterData?.avatarUrl || claimedToken.avatarUrl || claimedToken.url
+          },
+          target: {
+            id: targetToken.id,
+            name: targetToken.name,
+            avatarUrl: targetToken.avatarUrl || targetToken.url,
+            ac: targetAc
+          },
+          action: {
+            id: 'spiritual_weapon_strike',
+            name: 'Spiritual Weapon Strike',
+            category: 'bonus_actions',
+            type: 'bonus_action',
+            hitBonus: rawHit,
+            damageFormula: sw.damageFormula,
+            damageType: 'force',
+            description: 'Spiritual Weapon melee spell attack'
+          },
+          phase: 'to_hit',
+          hitBonus: rawHit,
+          damageFormula: sw.damageFormula,
+          isHeal: false,
+          context: 'player_view'
+        });
         return;
       }
 
@@ -5520,7 +5700,44 @@ export default function PlayerView() {
         : action.name;
 
     if (!isAutoRollDiceEnabledRef.current) {
-      toast.success(`Cast ${upcastActionLabel} on ${targetToken.name}!`);
+      const isAttackAction = Boolean(
+        action.isAttack ||
+        action.hitBonus !== undefined ||
+        action.category === 'attacks' ||
+        action.subCategory === 'weapon' ||
+        action.subCategory === 'unarmed'
+      );
+
+      const rawHit = typeof action.hitBonus === 'number'
+        ? action.hitBonus
+        : parseInt(String(action.hitBonus || '+6').replace('+', ''), 10) || 6;
+
+      const targetAc = (targetToken as any).ac || (targetToken as any).armorClass || (targetToken as any).stats?.armorClass || 13;
+      const atkFormula = formula || action.damageFormula || (action as any).damage || (action.isHeal ? '1d8 + 3' : '1d8');
+
+      setPendingCombatRoll({
+        actor: {
+          id: caster.id,
+          name: caster.name || 'Hero',
+          avatarUrl: hudCharacterData?.avatarUrl || caster.avatarUrl || caster.url
+        },
+        target: {
+          id: targetToken.id,
+          name: targetToken.name || 'Target',
+          avatarUrl: targetToken.avatarUrl || targetToken.url,
+          ac: targetAc
+        },
+        action,
+        phase: isAttackAction ? 'to_hit' : 'damage',
+        hitBonus: rawHit,
+        damageFormula: atkFormula,
+        isHeal: Boolean(action.isHeal),
+        saveDc: action.saveDc ? Number(action.saveDc) : undefined,
+        saveAbility: action.saveAbility,
+        expendedActionSlot,
+        context: 'player_view'
+      });
+
       setActiveTargetingAction(null);
       setActiveEquippedAsset(null);
       setAimOrigin(null);
@@ -8628,6 +8845,23 @@ export default function PlayerView() {
           onClose={() => setInspectedRuleEntry(null)}
         />
       )}
+
+      {/* Interactive Combat Dice Prompt Modal when Auto Roll is OFF */}
+      <CombatDicePromptModal
+        pendingRoll={pendingCombatRoll}
+        onClose={() => setPendingCombatRoll(null)}
+        onResolveHit={handleResolveCombatHit}
+        onResolveDamage={handleResolveCombatDamage}
+        onEnableAutoRollAndContinue={handleEnableAutoRollAndContinueFromPrompt}
+        onTrigger3dDice={(evt) => {
+          if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+            (window as any).__mistwalkerRoll3d(evt);
+          }
+          if (socketRef.current?.connected) {
+            socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', evt);
+          }
+        }}
+      />
 
       {/* ========================================================= */}
       {/* D&D Beyond Tactical Character HUD (Synced to DDB)         */}

@@ -37,6 +37,7 @@ import {
   Folder
 } from 'lucide-react';
 import { WildShapeModal } from './WildShapeModal';
+import { ArenaDicePromptModal, PendingCombatRoll } from './ArenaDicePromptModal';
 import { WildShapeBeastForm, ActiveWildShapeState, GAIAH_WILD_SHAPE_FORMS } from '../types/wildShape';
 import { resolveCharacterCampaign, groupCharactersByCampaign } from '../data/ddbCampaignRegistry';
 import { toast } from 'sonner';
@@ -262,6 +263,25 @@ export function isActionHealing(action: HudActionItem | undefined | null): boole
     return true;
   }
   return false;
+}
+
+/**
+ * Detects whether an action represents a Teleportation spell or feature (e.g. Misty Step, Dimension Door)
+ */
+export function isActionTeleport(action: HudActionItem | undefined | null): boolean {
+  if (!action) return false;
+  const name = (action.name || '').toLowerCase();
+  const desc = (action.description || '').toLowerCase();
+  return (
+    name.includes('misty step') ||
+    name.includes('dimension door') ||
+    name === 'teleport' ||
+    name.includes('thunder step') ||
+    name.includes('jaunt') ||
+    name.includes('arcane charge') ||
+    desc.includes('teleport up to') ||
+    desc.includes('teleport yourself')
+  );
 }
 
 /**
@@ -541,6 +561,20 @@ function buildArenaCombatantHudData(
             : parseInt(rule.range.match(/\d+/)?.[0] || '60', 10) || 60
           : matchedAsset?.defaultSizeFt || (isHeal ? 30 : 60);
 
+        const isTeleportSpell =
+          lower.includes('misty step') ||
+          lower.includes('dimension door') ||
+          lower === 'teleport' ||
+          lower.includes('thunder step') ||
+          lower.includes('jaunt');
+        const effectiveRangeFt = isTeleportSpell
+          ? lower.includes('misty step')
+            ? 30
+            : lower.includes('dimension door')
+            ? 500
+            : 30
+          : rangeNum;
+
         const hudSpell: HudActionItem = {
           id: `arena-char-spell-${idx}`,
           name: rule?.name || spName,
@@ -563,13 +597,13 @@ function buildArenaCombatantHudData(
           damageType: rule?.damageType || (isHeal ? 'healing' : undefined),
           isHeal,
           isAttack: isAtk,
-          isSelfAction: Boolean(rule?.isSelfAction || (rangeNum === 0 && !isAtk && !saveAbil)),
+          isSelfAction: isTeleportSpell ? false : Boolean(rule?.isSelfAction || (rangeNum === 0 && !isAtk && !saveAbil)),
           spellSlotRequired: baseLvl > 0 ? baseLvl : undefined,
           description: rule?.description || `Cast ${spName}.`,
-          rangeFt: rangeNum,
+          rangeFt: effectiveRangeFt,
           jb2aAssetId:
             matchedAsset?.id ||
-            (isHeal ? 'cure_wounds' : lower.includes('eldritch') ? 'eldritch_blast' : 'fire_bolt'),
+            (isTeleportSpell ? 'misty_step' : isHeal ? 'cure_wounds' : lower.includes('eldritch') ? 'eldritch_blast' : 'fire_bolt'),
           iconUrl:
             matchedAsset?.thumb && !matchedAsset.thumb.endsWith('.webm')
               ? matchedAsset.thumb
@@ -1824,6 +1858,9 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
   const [activeWildShape, setActiveWildShape] = useState<ActiveWildShapeState | null>(null);
   const [hudCollapseTick, setHudCollapseTick] = useState<number>(0);
 
+  // Manual Dice Prompt State when Auto Roll is OFF and player casts a spell/action
+  const [pendingManualDicePrompt, setPendingManualDicePrompt] = useState<PendingCombatRoll | null>(null);
+
   // Player-specific Automatic Dice Rolling Toggle State (persisted per character/player in localStorage)
   const [autoRollByPlayerMap, setAutoRollByPlayerMap] = useState<Record<string, boolean>>(() =>
     loadPlayerAutoRollMap()
@@ -2376,7 +2413,11 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       actor: ArenaCombatant,
       target: ArenaCombatant,
       action: HudActionItem,
-      targetPointPx?: { x: number; y: number }
+      targetPointPx?: { x: number; y: number },
+      rollOverrides?: {
+        manualTotal?: number;
+        forceInGameRoll?: boolean;
+      }
     ) => {
       const actorCx = actor.x + ((actor.size || 1) * ARENA_GRID_SIZE) / 2;
       const actorCy = actor.y + ((actor.size || 1) * ARENA_GRID_SIZE) / 2;
@@ -2592,8 +2633,53 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       // Play JB2A visual effect (including persistent token-locked auras!)
       spawnArenaVisualEffect(actor, target, action, targetPointPx);
 
-      // If Automatic Dice Rolling is toggled OFF for this player's HUD, only play the spell/action animation!
-      if (!actor.isAI && !isCombatantAutoRollEnabled(actor)) {
+      // If Automatic Dice Rolling is toggled OFF for this player's HUD, intercept with manual dice prompt or proceed if rollOverrides provided
+      const autoRollOn = isCombatantAutoRollEnabled(actor);
+      if (!actor.isAI && !autoRollOn && !rollOverrides) {
+        // Intercept and prompt player to insert manual dice roll, roll 3D dice in-game, or turn Auto Roll ON!
+        const isSpellAction = action.category === 'spells' || action.subCategory === 'spell';
+        const hasAttack = Boolean(action.isAttack || action.hitBonus);
+        const hasDamage = Boolean(action.damageFormula && action.damageFormula !== '0');
+        const hasSave = Boolean(action.saveDc && !action.isAttack);
+        const isHealingAction = isActionHealing(action);
+
+        if (isSpellAction || hasAttack || hasDamage || hasSave || isHealingAction) {
+          const rawBonus = action.hitBonus !== undefined ? parseInt(String(action.hitBonus).replace('+', ''), 10) : 6;
+          const isRanged = (action.rangeFt && action.rangeFt >= 20) || action.description?.toLowerCase().includes('ranged');
+          let isThreatened = false;
+          if (isRanged) {
+            isThreatened = combatants.some((other) => {
+              if (other.id === actor.id || other.team === actor.team || other.currentHp <= 0) return false;
+              const ocx = other.x + ((other.size || 1) * ARENA_GRID_SIZE) / 2;
+              const ocy = other.y + ((other.size || 1) * ARENA_GRID_SIZE) / 2;
+              const distFromOther = Math.max(
+                0,
+                Math.round((Math.hypot(ocx - actorCx, ocy - actorCy) / ARENA_GRID_SIZE) * 5) -
+                  (actor.size - 1 + (other.size - 1)) * 2.5
+              );
+              return distFromOther <= 5;
+            });
+          }
+
+          setPendingManualDicePrompt({
+            actor,
+            target,
+            action,
+            targetPointPx,
+            phase: hasAttack ? 'to_hit' : 'damage',
+            hitBonus: !isNaN(Number(rawBonus)) ? rawBonus : 6,
+            isThreatened,
+            damageFormula: action.damageFormula || (isHealingAction ? '1d8 + 3' : '1d10 + 4'),
+            isHeal: isHealingAction,
+            saveDc: action.saveDc ? Number(action.saveDc) : undefined,
+            saveAbility: action.saveAbility,
+            isAttack: hasAttack,
+            context: 'arena'
+          });
+          return true;
+        }
+
+        // For non-damaging utility/buffs with no dice rolls:
         const upcastSuffix =
           action.castAtLevel && action.castAtLevel > (action.level ?? 0)
             ? ` (L${action.castAtLevel})`
@@ -2626,7 +2712,13 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             healFormula = '2d8 + 4';
           }
         }
-        const healRoll = rollDiceFormula(healFormula, false);
+        const baseHealRoll = rollDiceFormula(healFormula, false);
+        const healTotal = rollOverrides?.manualTotal !== undefined ? rollOverrides.manualTotal : baseHealRoll.total;
+        const healRoll = {
+          ...baseHealRoll,
+          total: healTotal,
+          breakdown: rollOverrides?.manualTotal !== undefined ? `[Manual Table Roll: ${healTotal}] = ${healTotal}` : baseHealRoll.breakdown
+        };
         const upcastSuffix =
           action.castAtLevel && action.castAtLevel > (action.level ?? 0)
             ? ` (L${action.castAtLevel})`
@@ -2767,7 +2859,13 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       // 4. Auto-Hit Spells (Magic Missile)
       if (lowerName.includes('magic missile')) {
         const mmFormula = action.damageFormula || '3d4 + 3';
-        const dmgRoll = rollDiceFormula(mmFormula, false);
+        const baseDmgRoll = rollDiceFormula(mmFormula, false);
+        const mmTotal = rollOverrides?.manualTotal !== undefined ? rollOverrides.manualTotal : baseDmgRoll.total;
+        const dmgRoll = {
+          ...baseDmgRoll,
+          total: mmTotal,
+          breakdown: rollOverrides?.manualTotal !== undefined ? `[Manual Table Roll: ${mmTotal}] = ${mmTotal}` : baseDmgRoll.breakdown
+        };
         if (onTrigger3dDice && dmgRoll.dice.length > 0) {
           onTrigger3dDice({
             id: `arena-mm-${Date.now()}`,
@@ -2804,7 +2902,13 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       // 5. Persistent Damaging Auras cast on Self (e.g., Spirit Guardians)
       if (lowerName.includes('spirit guardians')) {
         const sgFormula = action.damageFormula || '3d8';
-        const dmgRoll = rollDiceFormula(sgFormula, false);
+        const baseDmgRoll = rollDiceFormula(sgFormula, false);
+        const sgTotal = rollOverrides?.manualTotal !== undefined ? rollOverrides.manualTotal : baseDmgRoll.total;
+        const dmgRoll = {
+          ...baseDmgRoll,
+          total: sgTotal,
+          breakdown: rollOverrides?.manualTotal !== undefined ? `[Manual Table Roll: ${sgTotal}] = ${sgTotal}` : baseDmgRoll.breakdown
+        };
         const dc = Number(action.saveDc) || 16;
         if (onTrigger3dDice && dmgRoll.dice.length > 0) {
           onTrigger3dDice({
@@ -2863,9 +2967,16 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         const rule = lookupDndRuleDetails(action.name, 'spell');
         const aoeRadiusFt = rule?.radiusFeet || (lowerName.includes('fireball') ? 20 : lowerName.includes('shatter') || lowerName.includes('flame strike') ? 10 : 0);
 
-        const dmgRoll = action.damageFormula
-          ? rollDiceFormula(action.damageFormula, false)
-          : null;
+        let dmgRoll: any = null;
+        if (action.damageFormula) {
+          const baseDmgRoll = rollDiceFormula(action.damageFormula, false);
+          const saveTotal = rollOverrides?.manualTotal !== undefined ? rollOverrides.manualTotal : baseDmgRoll.total;
+          dmgRoll = {
+            ...baseDmgRoll,
+            total: saveTotal,
+            breakdown: rollOverrides?.manualTotal !== undefined ? `[Manual Table Roll: ${saveTotal}] = ${saveTotal}` : baseDmgRoll.breakdown
+          };
+        }
 
         if (dmgRoll && dmgRoll.dice.length > 0 && onTrigger3dDice) {
           onTrigger3dDice({
@@ -3033,14 +3144,18 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         });
       }
 
-      const d20Roll1 = Math.floor(Math.random() * 20) + 1;
+      const d20Roll1 = rollOverrides?.manualTotal !== undefined
+        ? Math.max(1, Math.min(20, rollOverrides.manualTotal))
+        : Math.floor(Math.random() * 20) + 1;
       const d20Roll2 = Math.floor(Math.random() * 20) + 1;
-      const d20 = isThreatened ? Math.min(d20Roll1, d20Roll2) : d20Roll1;
+      const d20 = isThreatened && rollOverrides?.manualTotal === undefined ? Math.min(d20Roll1, d20Roll2) : d20Roll1;
       const isCrit = d20 === 20;
       const isFumble = d20 === 1;
       const attackTotal = d20 + rawHitBonus;
 
-      const rollFormula = isThreatened
+      const rollFormula = rollOverrides?.manualTotal !== undefined
+        ? `[Manual Table d20: ${d20}] + ${rawHitBonus} = ${attackTotal}`
+        : isThreatened
         ? `1d20 Disadvantage [${d20Roll1}, ${d20Roll2}] (${d20}) + ${rawHitBonus} = ${attackTotal}`
         : `1d20 (${d20}) + ${rawHitBonus} = ${attackTotal}`;
 
@@ -3548,6 +3663,74 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
               c * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2,
               r * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2
             )
+          ) {
+            continue;
+          }
+          cells.push({ col: c, row: r });
+        }
+      }
+    }
+    return cells;
+  }, [phase, activeCombatant, winnerTeam, activeTargetingAction, combatants, arenaConfig.enforceWalls, activeMapWalls]);
+
+  // Compute reachable grid squares for Teleportation spells (e.g. Misty Step 30ft, Dimension Door)
+  const reachableTeleportSquares = useMemo<Array<{ col: number; row: number }>>(() => {
+    if (
+      phase !== 'battle' ||
+      !activeCombatant ||
+      activeCombatant.isAI ||
+      winnerTeam ||
+      !activeTargetingAction ||
+      !isActionTeleport(activeTargetingAction)
+    ) {
+      return [];
+    }
+
+    const rangeFt = activeTargetingAction.rangeFt && activeTargetingAction.rangeFt > 0
+      ? activeTargetingAction.rangeFt
+      : activeTargetingAction.name.toLowerCase().includes('dimension door')
+      ? 500
+      : 30;
+    const maxSteps = Math.floor(rangeFt / 5);
+    const curCol = Math.round(activeCombatant.x / ARENA_GRID_SIZE);
+    const curRow = Math.round(activeCombatant.y / ARENA_GRID_SIZE);
+
+    const occupied = new Set<string>();
+    combatants.forEach((c) => {
+      if (c.id === activeCombatant.id || c.currentHp <= 0) return;
+      const cCol = Math.round(c.x / ARENA_GRID_SIZE);
+      const cRow = Math.round(c.y / ARENA_GRID_SIZE);
+      const sz = Math.max(1, c.size || 1);
+      for (let r = cRow; r < cRow + sz; r++) {
+        for (let col = cCol; col < cCol + sz; col++) {
+          occupied.add(`${col},${r}`);
+        }
+      }
+    });
+
+    const cells: Array<{ col: number; row: number }> = [];
+    for (
+      let r = Math.max(0, curRow - maxSteps);
+      r <= Math.min(ARENA_ROWS - 1, curRow + maxSteps);
+      r++
+    ) {
+      for (
+        let c = Math.max(0, curCol - maxSteps);
+        c <= Math.min(ARENA_COLS - 1, curCol + maxSteps);
+        c++
+      ) {
+        if (c === curCol && r === curRow) continue;
+        const distSteps = Math.round(Math.hypot(c - curCol, r - curRow));
+        if (distSteps >= 1 && distSteps <= maxSteps && !occupied.has(`${c},${r}`)) {
+          // Misty Step requires a destination "that you can see" (LoS check)
+          const targetX = c * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2;
+          const targetY = r * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2;
+          const originX = curCol * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2;
+          const originY = curRow * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2;
+          if (
+            arenaConfig.enforceWalls &&
+            activeMapWalls.length > 0 &&
+            doesArenaWallBlockSight(activeMapWalls, originX, originY, targetX, targetY)
           ) {
             continue;
           }
@@ -4423,8 +4606,11 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                 x: Math.floor(worldX / ARENA_GRID_SIZE) * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2,
                 y: Math.floor(worldY / ARENA_GRID_SIZE) * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2
               };
+              const isTeleport = isActionTeleport(activeTargetingAction);
               const isHealing = isActionHealing(activeTargetingAction);
-              const targetCandidate = isHealing
+              const targetCandidate = isTeleport
+                ? activeCombatant
+                : isHealing
                 ? combatants
                     .filter((c) => c.team === activeCombatant.team && c.currentHp > 0)
                     .sort(
@@ -4458,8 +4644,11 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                 x: Math.floor(worldX / ARENA_GRID_SIZE) * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2,
                 y: Math.floor(worldY / ARENA_GRID_SIZE) * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2
               };
+              const isTeleport = isActionTeleport(activeTargetingAction);
               const isHealing = isActionHealing(activeTargetingAction);
-              const targetCandidate = isHealing
+              const targetCandidate = isTeleport
+                ? activeCombatant
+                : isHealing
                 ? combatants
                     .filter((c) => c.team === activeCombatant.team && c.currentHp > 0)
                     .sort(
@@ -4589,7 +4778,49 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
 
           {/* Arena Tokens & Tap-to-Move Layer */}
           <Layer>
-            {/* Tap-to-Move Reachable Grid Squares for Active Human Fighter */}
+            {/* Reachable Teleport Squares (e.g. Misty Step 30ft, Dimension Door) */}
+            {activeCombatant &&
+              !activeCombatant.isAI &&
+              activeTargetingAction &&
+              isActionTeleport(activeTargetingAction) &&
+              reachableTeleportSquares.map((cell) => (
+                <Rect
+                  key={`teleport_${cell.col}_${cell.row}`}
+                  x={cell.col * ARENA_GRID_SIZE + 2}
+                  y={cell.row * ARENA_GRID_SIZE + 2}
+                  width={ARENA_GRID_SIZE - 4}
+                  height={ARENA_GRID_SIZE - 4}
+                  cornerRadius={6}
+                  fill="rgba(168, 85, 247, 0.22)"
+                  stroke="rgba(192, 132, 252, 0.7)"
+                  strokeWidth={2}
+                  dash={[6, 4]}
+                  onClick={(e) => {
+                    e.cancelBubble = true;
+                    const snapCenter = {
+                      x: cell.col * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2,
+                      y: cell.row * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2
+                    };
+                    executeCombatAction(activeCombatant, activeCombatant, activeTargetingAction, snapCenter);
+                    setActiveTargetingAction(null);
+                    setActiveEquippedAsset(null);
+                    setAimOrigin(null);
+                    setAimCurrent(null);
+                  }}
+                  onTap={(e) => {
+                    e.cancelBubble = true;
+                    const snapCenter = {
+                      x: cell.col * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2,
+                      y: cell.row * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2
+                    };
+                    executeCombatAction(activeCombatant, activeCombatant, activeTargetingAction, snapCenter);
+                    setActiveTargetingAction(null);
+                    setActiveEquippedAsset(null);
+                    setAimOrigin(null);
+                    setAimCurrent(null);
+                  }}
+                />
+              ))}
             {activeCombatant &&
               !activeCombatant.isAI &&
               !activeTargetingAction &&
@@ -4753,13 +4984,15 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             }
 
             const lowerName = action.name.toLowerCase();
+            const isTeleport = isActionTeleport(action);
             const isHeal = isActionHealing(action);
             const isSelfHeal =
-              action.isSelfAction ||
-              lowerName.includes('potion') ||
-              lowerName.includes('second wind') ||
-              lowerName.includes('surge') ||
-              lowerName.includes('wholeness of body');
+              !isTeleport &&
+              (action.isSelfAction ||
+                lowerName.includes('potion') ||
+                lowerName.includes('second wind') ||
+                lowerName.includes('surge') ||
+                lowerName.includes('wholeness of body'));
 
             if (isSelfHeal) {
               executeCombatAction(activeCombatant, activeCombatant, action);
@@ -4791,7 +5024,9 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             setAimOrigin(originPt);
             setAimCurrent(originPt);
             toast.info(
-              isHeal
+              isTeleport
+                ? `🔮 Click any purple grid square or floor cell within ${action.rangeFt || 30}ft to teleport with ${action.name}!`
+                : isHeal
                 ? `💚 Aim & click a target token, ally, or grid cell for ${action.name} (or click "Self" on dock)`
                 : `🎯 Aim & click a target token or grid cell for ${action.name}`
             );
@@ -4931,6 +5166,108 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         activeWildShape={activeWildShape}
         druidLevel={6}
         wisModifier={4}
+      />
+
+      {/* Manual Table Dice Input & In-Game Roll Prompt Modal (when Auto Roll is OFF) */}
+      <ArenaDicePromptModal
+        pendingRoll={pendingManualDicePrompt}
+        onClose={() => setPendingManualDicePrompt(null)}
+        onResolveHit={(result) => {
+          if (!pendingManualDicePrompt) return;
+          const { actor, target, action } = pendingManualDicePrompt;
+          const markActorUsed = (c: ArenaCombatant) =>
+            action.type === 'bonus_action' ? { ...c, bonusActionUsed: true } : { ...c, actionUsed: true };
+
+          if (!result.hits) {
+            setCombatants((prev) => prev.map((c) => (c.id === actor.id ? markActorUsed(c) : c)));
+            addCombatLog(
+              actor.name,
+              actor.team,
+              `attacked ${target.name} with ${action.name} — MISS!`,
+              `Rolled ${result.total} (d20: ${result.d20} + ${pendingManualDicePrompt.hitBonus}) vs AC ${target.ac}`
+            );
+            toast.error(`${actor.name}'s ${action.name} missed ${target.name} (${result.total} vs AC ${target.ac})`);
+            setPendingManualDicePrompt(null);
+            return;
+          }
+
+          toast.success(
+            result.isCrit
+              ? `💥 CRITICAL HIT! (Natural 20) — Roll damage!`
+              : `🎯 Attack hit ${target.name} (${result.total} vs AC ${target.ac}) — Roll damage!`
+          );
+
+          setPendingManualDicePrompt((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  phase: 'damage',
+                  d20Roll: result.d20,
+                  toHitTotal: result.total,
+                  isCrit: result.isCrit,
+                  isFumble: result.isFumble
+                }
+              : null
+          );
+        }}
+        onResolveDamage={(result) => {
+          if (!pendingManualDicePrompt) return;
+          const { actor, target, action, isHeal } = pendingManualDicePrompt;
+          const markActorUsed = (c: ArenaCombatant) =>
+            action.type === 'bonus_action' ? { ...c, bonusActionUsed: true } : { ...c, actionUsed: true };
+
+          if (isHeal) {
+            const healAmount = result.damageTotal;
+            setCombatants((prev) =>
+              prev.map((c) => {
+                if (c.id === target.id) {
+                  const newHp = Math.min(c.maxHp, c.currentHp + healAmount);
+                  return { ...c, currentHp: newHp, ...(c.id === actor.id ? markActorUsed(c) : {}) };
+                }
+                if (c.id === actor.id) return markActorUsed(c);
+                return c;
+              })
+            );
+            addCombatLog(
+              actor.name,
+              actor.team,
+              `healed ${target.name} with ${action.name} for +${healAmount} HP!`,
+              result.breakdown
+            );
+            toast.success(`💚 Restored +${healAmount} HP to ${target.name}!`);
+          } else {
+            const dmgAmount = result.damageTotal;
+            setCombatants((prev) =>
+              prev.map((c) => {
+                if (c.id === target.id) {
+                  const nextHp = Math.max(0, c.currentHp - dmgAmount);
+                  return { ...c, currentHp: nextHp };
+                }
+                if (c.id === actor.id) return markActorUsed(c);
+                return c;
+              })
+            );
+            addCombatLog(
+              actor.name,
+              actor.team,
+              `${result.isCrit ? '💥 CRITICAL HIT!' : 'hit'} ${target.name} with ${action.name} for ${dmgAmount} damage!`,
+              `Damage: ${result.breakdown}`,
+              result.isCrit
+            );
+            toast.success(`⚔️ ${actor.name} dealt ${dmgAmount} damage to ${target.name}!`);
+          }
+
+          setPendingManualDicePrompt(null);
+        }}
+        onEnableAutoRollAndContinue={() => {
+          if (!pendingManualDicePrompt) return;
+          const { actor, target, action, targetPointPx } = pendingManualDicePrompt;
+          setPendingManualDicePrompt(null);
+          handleToggleAutoRollDice(true);
+          toast.success(`Auto Roll enabled for ${actor.name}!`);
+          executeCombatActionRef.current(actor, target, action, targetPointPx);
+        }}
+        onTrigger3dDice={onTrigger3dDice}
       />
 
       {/* Right-Click Token Context Menu for Arena Combatants */}

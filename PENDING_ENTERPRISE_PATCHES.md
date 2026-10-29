@@ -49,6 +49,24 @@
 
 ---
 
+### [2026-10-29] feat(combat): interactive manual d20 to-hit and damage prompt when auto roll is off
+- **Commit**: `PENDING`
+- **Files Changed**:
+  - `src/components/CombatDicePromptModal.tsx`
+  - `src/components/ArenaDicePromptModal.tsx`
+  - `src/components/PlayerView.tsx`
+  - `src/components/PlayerArenaMode.tsx`
+- **Summary**:
+  - Implemented interactive two-step combat dice prompt modal when Auto Roll is toggled OFF for a player's HUD character.
+  - Step 1 (To-Hit): Prompts player to roll d20 to hit with real-time target AC comparison and advantage/disadvantage pills; allows entering physical d20 result or rolling in-game 3D dice.
+  - Misses resolve cleanly with audio and combat log announcement without prompting for damage.
+  - Step 2 (Damage): On a hit (or for spells/heals requiring no attack roll), prompts player to input physical damage total or roll exact formula in-game in 3D (with doubled dice on critical hits).
+  - Wired into both Player View (`PlayerView.tsx`) and Arena Mode (`PlayerArenaMode.tsx`), with live HP reduction, `REQUEST_TOKEN_MUTATION`, Blessed Healer auto-trigger, and on-the-fly "Turn On Auto Roll" toggle.
+- **Impact / Testing Notes**:
+  - Verify that when Auto Roll is OFF and an attack is cast from the HUD, the to-hit modal prompts first, followed by the damage modal on hit, supporting both manual input and 3D tumbling.
+
+---
+
 ### Template for Incoming Entries:
 ```markdown
 ### [YYYY-MM-DD] <Title / Commit Short Summary>
