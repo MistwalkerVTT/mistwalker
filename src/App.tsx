@@ -422,8 +422,9 @@ const TokenImage = React.memo(({
   onMouseEnter,
   onMouseLeave
 }: any) => {
-  const isGif = token.url.toLowerCase().endsWith('.gif');
-  const [image] = useImage(isGif ? null : token.url);
+  const effectiveTokenUrl = token.url || token.avatarUrl || token.imageUrl || token.customMonsterData?.avatarUrl || '';
+  const isGif = Boolean(effectiveTokenUrl && effectiveTokenUrl.toLowerCase().endsWith('.gif'));
+  const [image] = useImage(isGif ? null : (effectiveTokenUrl || null));
   const [isHovered, setIsHovered] = useState(false);
 
   const matchedCombatant = useMemo(() => {
@@ -776,7 +777,7 @@ const TokenImage = React.memo(({
         >
           {isGif ? (
             <GifImage
-              src={token.url}
+              src={effectiveTokenUrl}
               width={tokenWidth}
               height={tokenWidth}
             />
@@ -3656,6 +3657,7 @@ export default function App() {
         id: `token_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
         name: tokenData.name,
         url: tokenData.avatarUrl,
+        avatarUrl: tokenData.avatarUrl,
         x: baseSpawnX + offsetX,
         y: baseSpawnY + offsetY,
         size: tokenData.size || 1,
@@ -3833,11 +3835,13 @@ export default function App() {
         const isCond = Boolean(t.isCondition);
         const isAlly = t.category === 'ally' || Boolean(t.allyId);
         const isMonster = !isCond && !isAlly && (t.isMonster === true || t.category === 'monster' || t.isPlayer === false || isMonsterToken(t));
+        const effectiveTokenAvatar = t.url || t.avatarUrl || t.customMonsterData?.avatarUrl || (isMonster ? '' : 'https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/Varrak.png/:/rs=w:1440,h:1440');
         const rawTok = {
           ...t,
           id: t.id,
           name: t.name,
-          url: t.avatarUrl || t.url || 'https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/Varrak.png/:/rs=w:1440,h:1440',
+          url: effectiveTokenAvatar,
+          avatarUrl: effectiveTokenAvatar,
           x: t.x || 300,
           y: t.y || 300,
           size: t.size || (isCond ? 0.5 : 1),

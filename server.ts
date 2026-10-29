@@ -328,6 +328,27 @@ async function startServer() {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Accept-Ranges', 'bytes');
 
+    // Explicit MIME types to ensure .jfif and all images are served as proper image types (never application/octet-stream)
+    const ext = path.extname(filename).toLowerCase();
+    const mimeTypes: Record<string, string> = {
+      '.jfif': 'image/jpeg',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.webp': 'image/webp',
+      '.gif': 'image/gif',
+      '.svg': 'image/svg+xml',
+      '.mp4': 'video/mp4',
+      '.webm': 'video/webm',
+      '.pdf': 'application/pdf',
+      '.mp3': 'audio/mpeg',
+      '.wav': 'audio/wav',
+      '.ogg': 'audio/ogg'
+    };
+    if (mimeTypes[ext]) {
+      res.setHeader('Content-Type', mimeTypes[ext]);
+    }
+
     if (fs.existsSync(filePath)) {
       return res.sendFile(filePath);
     }
@@ -362,7 +383,25 @@ async function startServer() {
             }
           });
 
-          // If not in uploadedAssets, check campaigns and chapters
+          // If not in uploadedAssets, check monsters collection
+          if (!foundDataUrl) {
+            const monSnap = await getDocs(collection(db, 'monsters'));
+            monSnap.forEach(d => {
+              const mon = d.data();
+              if (mon?.avatarUrl && (mon.avatarUrl.endsWith(filename) || path.basename(mon.avatarUrl) === filename)) {
+                if (typeof mon.avatarUrl === 'string' && mon.avatarUrl.startsWith('data:image')) {
+                  foundDataUrl = mon.avatarUrl;
+                }
+              }
+              if (!foundDataUrl && mon?.statblockImageUrl && (mon.statblockImageUrl.endsWith(filename) || path.basename(mon.statblockImageUrl) === filename)) {
+                if (typeof mon.statblockImageUrl === 'string' && mon.statblockImageUrl.startsWith('data:image')) {
+                  foundDataUrl = mon.statblockImageUrl;
+                }
+              }
+            });
+          }
+
+          // If not in uploadedAssets or monsters, check campaigns and chapters
           if (!foundDataUrl) {
             const campSnap = await getDocs(collection(db, 'campaigns'));
             campSnap.forEach(d => {
@@ -415,7 +454,18 @@ async function startServer() {
     return res.status(404).json({ error: `Upload ${filename} not found` });
   });
 
-  app.use('/uploads', express.static(uploadsDir));
+  app.use('/uploads', express.static(uploadsDir, {
+    setHeaders: (res, filePath) => {
+      const ext = path.extname(filePath).toLowerCase();
+      if (ext === '.jfif' || ext === '.jpg' || ext === '.jpeg') {
+        res.setHeader('Content-Type', 'image/jpeg');
+      } else if (ext === '.png') {
+        res.setHeader('Content-Type', 'image/png');
+      } else if (ext === '.webp') {
+        res.setHeader('Content-Type', 'image/webp');
+      }
+    }
+  }));
 
   // Catch-all for API routes to prevent SPA fallback for missing API endpoints
   app.all("/api/*", (req, res) => {

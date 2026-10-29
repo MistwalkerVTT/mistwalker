@@ -1710,6 +1710,10 @@ export function repairMonsterToken<T extends Record<string, any>>(
   const isMon = token.isMonster === true || token.category === 'monster' || token.isPlayer === false;
   if (!isMon) return token;
   if (token.customMonsterData && (token.customMonsterData.isCustom || token.customMonsterData.isRoomCustom)) {
+    const customUrl = token.url || token.avatarUrl || token.customMonsterData.avatarUrl || '';
+    if (customUrl && (!token.url || !token.avatarUrl)) {
+      return { ...token, url: token.url || customUrl, avatarUrl: token.avatarUrl || customUrl };
+    }
     return token;
   }
 
@@ -1725,6 +1729,9 @@ export function repairMonsterToken<T extends Record<string, any>>(
   const res = resolveMonster(rawName, compendium);
   const resolved = res?.monster;
   if (!resolved || resolved.source === 'Encounter Notes') {
+    if (currentUrl && (!token.url || !token.avatarUrl)) {
+      return { ...token, url: token.url || currentUrl, avatarUrl: token.avatarUrl || currentUrl };
+    }
     return token;
   }
 
@@ -1737,7 +1744,7 @@ export function repairMonsterToken<T extends Record<string, any>>(
     gargantuan: 4
   };
   const expectedSize = sizeMap[String(resolved.size || 'medium').toLowerCase()] || 1;
-  const bestAvatar = (needsRepair && resolved.avatarUrl) ? resolved.avatarUrl : currentUrl;
+  const bestAvatar = (needsRepair && resolved.avatarUrl) ? resolved.avatarUrl : (currentUrl || resolved.avatarUrl || '');
   const bestSize = (needsRepair || ((token.size === undefined || token.size === 1) && expectedSize > 1))
     ? expectedSize
     : (token.size || expectedSize);

@@ -3800,6 +3800,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                     id: `token_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
                     name,
                     url,
+                    avatarUrl: url,
                     x: -stagePos.x / stageScale + 120,
                     y: -stagePos.y / stageScale + 120,
                     size: size || 1,
@@ -4357,6 +4358,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                                         const tokenData = {
                                           name: monster.name,
                                           url: avatarUrl,
+                                          avatarUrl,
+                                          customMonsterData: monster,
                                           size: monsterMultiplier,
                                           hp: monster.hp,
                                           maxHp: monster.hp,
