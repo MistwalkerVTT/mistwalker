@@ -597,6 +597,12 @@ async function startServer() {
       socket.to(r).emit("REQUEST_INITIAL_STATE");
     });
 
+    // DM refreshed browser - synchronize all connected players by reloading their windows
+    socket.on("DM_BROWSER_REFRESHED", () => {
+      console.log(`[Server] Socket ${socket.id} (DM) refreshed browser. Broadcasting FORCE_PLAYER_RELOAD to players...`);
+      socket.broadcast.emit("FORCE_PLAYER_RELOAD");
+    });
+
     // Authoritative image change synchronization
     socket.on("SYNC_IMAGE", (url: string) => {
       if (!url || url.startsWith('blob:')) return;
