@@ -50,7 +50,7 @@
 ---
 
 ### [2026-10-29] feat(combat): interactive manual d20 to-hit and damage prompt when auto roll is off
-- **Commit**: `PENDING`
+- **Commit**: `6e5f9fc`
 - **Files Changed**:
   - `src/components/CombatDicePromptModal.tsx`
   - `src/components/ArenaDicePromptModal.tsx`
