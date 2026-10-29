@@ -65,6 +65,27 @@
 - **Impact / Testing Notes**:
   - Verify that when Auto Roll is OFF and an attack is cast from the HUD, the to-hit modal prompts first, followed by the damage modal on hit, supporting both manual input and 3D tumbling.
 
+### [2026-10-29] feat(tokens): add debuff bubbles above enemy tokens and DM right-click bubble manager
+- **Commit**: `bcaa1ae`
+- **Files Changed**:
+  - `src/effects/types/bubble.ts`
+  - `src/effects/bubbles/bubbleCatalog.ts`
+  - `src/effects/ui/TokenBubblesKonvaOverlay.tsx`
+  - `src/effects/index.ts`
+  - `src/effects/render/DomEffectOverlay.tsx`
+  - `src/App.tsx`
+  - `src/components/PlayerView.tsx`
+- **Summary**:
+  - Implemented Token Status Bubbles system for lasting debuffs (Hunter's Mark, Hex, Hold Person, Faerie Fire, Bane, Slow, etc.) and DM monster indicator badges.
+  - After the main casting animation finishes (~2.8s), lasting debuffs automatically move into a small circular bubble above the enemy's head, looping the spell's animation inside the bubble.
+  - Created `TokenBubblesKonvaOverlay` to render AC-style and orb-style badges in Konva above the token rim.
+  - Updated `DomEffectOverlay` to composite hardware-accelerated looping WebM video animations inside debuff bubbles, complete with tooltips and click-to-remove.
+  - Added "Bubbles" tab in DM monster right-click context menu with 16 1-click AC-style presets and a Custom Bubble Creator (label, sublabel/AC tag, icon, color palette, and styles).
+  - All token status bubbles automatically sync between DM and Player View across the table.
+- **Impact / Testing Notes**:
+  - Cast Hunter's Mark or Hex on an enemy and verify the main animation plays for 2.8s, then transitions into a mini looping bubble above the enemy's head.
+  - Right-click any monster as DM, open the Bubbles tab, and verify adding presets or custom bubbles places them above the monster's head.
+
 ---
 
 ### Template for Incoming Entries:
