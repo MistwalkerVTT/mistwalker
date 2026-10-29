@@ -54,7 +54,7 @@ export const PlatformLandingGate: React.FC<PlatformLandingGateProps> = ({
     } catch (err: any) {
       console.error('Google Sign-in Error:', err);
       if (err?.code === 'auth/unauthorized-domain' || (err?.message && err.message.includes('auth/unauthorized-domain'))) {
-        setErrorMsg('UNAUTHORIZED_DOMAIN');
+        setErrorMsg('Google Sign-In is currently completing domain verification on this beta server. Please create an account or sign in with your email & password below!');
       } else if (err?.code === 'auth/popup-closed-by-user') {
         setErrorMsg('Sign-in window was closed before finishing.');
       } else {
@@ -183,7 +183,7 @@ export const PlatformLandingGate: React.FC<PlatformLandingGateProps> = ({
                   type="button"
                   onClick={() => { setAuthMode('login'); setErrorMsg(null); }}
                   className={`px-3 py-1 rounded-lg text-xs font-semibold transition ${
-                    authMode === 'login' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200'
+                    authMode === 'login' ? 'bg-purple-600 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200'
                   }`}
                 >
                   Log In
@@ -192,41 +192,16 @@ export const PlatformLandingGate: React.FC<PlatformLandingGateProps> = ({
                   type="button"
                   onClick={() => { setAuthMode('signup'); setErrorMsg(null); }}
                   className={`px-3 py-1 rounded-lg text-xs font-semibold transition ${
-                    authMode === 'signup' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200'
+                    authMode === 'signup' ? 'bg-purple-600 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200'
                   }`}
                 >
-                  Register
+                  Create Account
                 </button>
               </div>
             </div>
 
             {/* Error & Success Feedback */}
-            {errorMsg === 'UNAUTHORIZED_DOMAIN' ? (
-              <div className="mb-4 p-3.5 rounded-xl bg-amber-950/50 border border-amber-500/40 text-amber-200 text-xs space-y-2">
-                <div className="flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-semibold text-white">Firebase Domain Authorization Required:</span>
-                    <p className="mt-1 text-amber-200/90 leading-relaxed">
-                      Google OAuth requires <code className="bg-amber-900/60 px-1 py-0.5 rounded text-amber-100 font-mono">mistwalker-beta.onrender.com</code> to be authorized in Firebase Console under Authentication Settings.
-                    </p>
-                  </div>
-                </div>
-                <div className="pt-2 border-t border-amber-500/20 flex flex-wrap items-center gap-2">
-                  <a
-                    href="https://console.firebase.google.com/project/gen-lang-client-0800395076/authentication/settings"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500 text-zinc-950 font-bold hover:bg-amber-400 transition"
-                  >
-                    Open Firebase Settings &rarr;
-                  </a>
-                  <span className="text-[11px] text-amber-300">
-                    Or sign in below with <strong>Email & Password</strong> right now!
-                  </span>
-                </div>
-              </div>
-            ) : errorMsg && (
+            {errorMsg && (
               <div className="mb-4 p-3 rounded-xl bg-rose-950/40 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{errorMsg}</span>
@@ -272,7 +247,9 @@ export const PlatformLandingGate: React.FC<PlatformLandingGateProps> = ({
                 <div className="w-full border-t border-zinc-800" />
               </div>
               <div className="relative flex justify-center text-[11px] uppercase tracking-wider font-mono">
-                <span className="bg-zinc-900 px-2 text-zinc-500">or with email</span>
+                <span className="bg-zinc-900 px-2 text-zinc-500">
+                  {authMode === 'login' ? 'or sign in with email' : 'or create account with email'}
+                </span>
               </div>
             </div>
 
