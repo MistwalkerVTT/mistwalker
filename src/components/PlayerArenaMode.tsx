@@ -34,7 +34,11 @@ import {
   User,
   GripHorizontal,
   Lock,
-  Folder
+  Folder,
+  Save,
+  Edit3,
+  Bookmark,
+  Download
 } from 'lucide-react';
 import { WildShapeModal } from './WildShapeModal';
 import { ArenaDicePromptModal, PendingCombatRoll } from './ArenaDicePromptModal';
@@ -97,7 +101,14 @@ import {
 } from '../services/arenaConfigService';
 import { canCreatureBypassHazard } from '../lib/hazardGeometry';
 import { HazardZone } from '../types/hazard';
-import { subscribeToMonsters } from '../lib/firebase';
+import {
+  subscribeToMonsters,
+  getCampaignsList,
+  saveSceneToCampaign,
+  Scene,
+  SceneToken,
+  Campaign
+} from '../lib/firebase';
 
 export type ArenaMatchMode =
   | '1v1'
@@ -208,11 +219,11 @@ interface PlayerArenaModeProps {
   onTrigger3dDice?: (rollEvent: any) => void;
 }
 
-const ARENA_GRID_SIZE = 60;
-const ARENA_COLS = 22;
-const ARENA_ROWS = 14;
-const ARENA_WIDTH = ARENA_COLS * ARENA_GRID_SIZE; // 1320
-const ARENA_HEIGHT = ARENA_ROWS * ARENA_GRID_SIZE; // 840
+const DEFAULT_ARENA_GRID_SIZE = 60;
+const DEFAULT_ARENA_COLS = 22;
+const DEFAULT_ARENA_ROWS = 14;
+const DEFAULT_ARENA_WIDTH = DEFAULT_ARENA_COLS * DEFAULT_ARENA_GRID_SIZE; // 1320
+const DEFAULT_ARENA_HEIGHT = DEFAULT_ARENA_ROWS * DEFAULT_ARENA_GRID_SIZE; // 840
 
 /**
  * Parses a dice formula like "2d6 + 4" or "8d6" and rolls it
@@ -1032,6 +1043,9 @@ const ArenaTokenNode: React.FC<{
   onDragMoveToken?: (id: string, rawX: number, rawY: number) => void;
   onClickToken: (combatant: ArenaCombatant) => void;
   onContextMenu?: (combatant: ArenaCombatant, clientX: number, clientY: number) => void;
+  arenaWidth?: number;
+  arenaHeight?: number;
+  arenaGridSize?: number;
 }> = ({
   combatant,
   isCurrentTurn,
@@ -1041,10 +1055,13 @@ const ArenaTokenNode: React.FC<{
   onDragStartToken,
   onDragMoveToken,
   onClickToken,
-  onContextMenu
+  onContextMenu,
+  arenaWidth = DEFAULT_ARENA_WIDTH,
+  arenaHeight = DEFAULT_ARENA_HEIGHT,
+  arenaGridSize = DEFAULT_ARENA_GRID_SIZE
 }) => {
   const [img] = useImage(combatant.avatarUrl || '');
-  const pixelSize = (combatant.size || 1) * ARENA_GRID_SIZE;
+  const pixelSize = (combatant.size || 1) * arenaGridSize;
   const radius = pixelSize / 2;
   const isDead = combatant.currentHp <= 0;
 
@@ -1120,18 +1137,18 @@ const ArenaTokenNode: React.FC<{
     }
     const rawX = e.target.x();
     const rawY = e.target.y();
-    // Snap to 1-inch Arena Grid
+    // Snap to organic Arena Grid
     const snappedX = Math.max(
       0,
-      Math.min(ARENA_WIDTH - pixelSize, Math.round(rawX / ARENA_GRID_SIZE) * ARENA_GRID_SIZE)
+      Math.min(arenaWidth - pixelSize, Math.round(rawX / arenaGridSize) * arenaGridSize)
     );
     const snappedY = Math.max(
       0,
-      Math.min(ARENA_HEIGHT - pixelSize, Math.round(rawY / ARENA_GRID_SIZE) * ARENA_GRID_SIZE)
+      Math.min(arenaHeight - pixelSize, Math.round(rawY / arenaGridSize) * arenaGridSize)
     );
     const dx = snappedX - combatant.x;
     const dy = snappedY - combatant.y;
-    const distanceFt = Math.round(Math.hypot(dx, dy) / ARENA_GRID_SIZE) * 5;
+    const distanceFt = Math.round(Math.hypot(dx, dy) / arenaGridSize) * 5;
 
     // Check if movement exceeds available budget
     const budget = combatant.remainingMoveFt ?? combatant.speedFt ?? 30;
@@ -1472,6 +1489,50 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
 
   const [bgImage] = useImage(selectedMap.url);
 
+  const [arenaName, setArenaName] = useState<string>(() => {
+    return selectedMap?.arenaTitle || selectedMap?.name || 'Grand Colosseum';
+  });
+  const [isEditingArenaName, setIsEditingArenaName] = useState<boolean>(false);
+  const [showSaveArenaModal, setShowSaveArenaModal] = useState<boolean>(false);
+  const [saveArenaTitle, setSaveArenaTitle] = useState<string>('');
+  const [saveTargetType, setSaveTargetType] = useState<'arena_preset' | 'campaign_scene'>('arena_preset');
+  const [availableCampaigns, setAvailableCampaigns] = useState<Campaign[]>([]);
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string>('');
+  const [selectedChapterId, setSelectedChapterId] = useState<string>('');
+  const [isSavingArena, setIsSavingArena] = useState<boolean>(false);
+
+  useEffect(() => {
+    setArenaName(selectedMap.arenaTitle || selectedMap.name);
+  }, [selectedMap.id, selectedMap.arenaTitle, selectedMap.name]);
+
+  const dynamicArenaDims = useMemo(() => {
+    const rawW = selectedMap.mapWidth || bgImage?.naturalWidth || (bgImage as any)?.width || DEFAULT_ARENA_WIDTH;
+    const rawH = selectedMap.mapHeight || bgImage?.naturalHeight || (bgImage as any)?.height || DEFAULT_ARENA_HEIGHT;
+    const gridSize = selectedMap.gridSize || DEFAULT_ARENA_GRID_SIZE;
+
+    const cols = selectedMap.gridCols || Math.max(8, Math.round(rawW / gridSize));
+    const rows = selectedMap.gridRows || Math.max(6, Math.round(rawH / gridSize));
+    const width = cols * gridSize;
+    const height = rows * gridSize;
+
+    return {
+      width,
+      height,
+      cols,
+      rows,
+      gridSize,
+      aspect: width / Math.max(1, height),
+      rawWidth: rawW,
+      rawHeight: rawH
+    };
+  }, [selectedMap, bgImage]);
+
+  const arenaWidth = dynamicArenaDims.width;
+  const arenaHeight = dynamicArenaDims.height;
+  const arenaCols = dynamicArenaDims.cols;
+  const arenaRows = dynamicArenaDims.rows;
+  const arenaGridSize = dynamicArenaDims.gridSize;
+
   useEffect(() => {
     const onResize = () => {
       const w = window.visualViewport?.width || window.innerWidth;
@@ -1493,16 +1554,345 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       const padY = mobile ? 170 : 230;
       const fitScale = Math.max(
         mobile ? 0.24 : 0.45,
-        Math.min(0.95, (w - padX) / ARENA_WIDTH, (h - padY) / ARENA_HEIGHT)
+        Math.min(0.95, (w - padX) / arenaWidth, (h - padY) / arenaHeight)
       );
       setStageScale(fitScale);
       setStagePos({
-        x: Math.round((w - ARENA_WIDTH * fitScale) / 2),
+        x: Math.round((w - arenaWidth * fitScale) / 2),
         y: mobile ? 48 : 56
       });
     },
-    [dimensions.width, dimensions.height]
+    [dimensions.width, dimensions.height, arenaWidth, arenaHeight]
   );
+
+  useEffect(() => {
+    fitArenaCamera();
+  }, [selectedMap.id, arenaWidth, arenaHeight, fitArenaCamera]);
+
+  const handleOpenSaveArenaModal = async () => {
+    setSaveArenaTitle(arenaName);
+    setShowSaveArenaModal(true);
+    try {
+      const list = await getCampaignsList();
+      setAvailableCampaigns(list || []);
+      if (list && list.length > 0) {
+        setSelectedCampaignId(list[0].campaignId);
+        if (list[0].chapters && list[0].chapters.length > 0) {
+          setSelectedChapterId(list[0].chapters[0].chapterId);
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to load campaigns for arena save:', err);
+    }
+  };
+
+  const commitConfigUpdate = useCallback(
+    async (updater: (prev: ArenaConfig) => ArenaConfig) => {
+      const next = updater(arenaConfig);
+      setArenaConfig(next);
+      await saveArenaConfig(next, socketRef.current);
+    },
+    [arenaConfig, socketRef]
+  );
+
+  const handleSaveArenaSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const finalTitle = saveArenaTitle.trim() || arenaName || selectedMap.name;
+    setIsSavingArena(true);
+
+    try {
+      if (saveTargetType === 'arena_preset') {
+        const newPresetId = selectedMap.isCustomUploaded ? selectedMap.id : `arena_${Date.now()}`;
+        const updatedPreset: PresetBattlemap = {
+          ...selectedMap,
+          id: newPresetId,
+          name: finalTitle,
+          arenaTitle: finalTitle,
+          url: selectedMap.url,
+          thumbnailUrl: selectedMap.thumbnailUrl || selectedMap.url,
+          type: 'Custom Arena Scene',
+          desc: `Custom Battle Arena: ${finalTitle}`,
+          isCustomUploaded: true,
+          mapWidth: arenaWidth,
+          mapHeight: arenaHeight,
+          gridSize: arenaGridSize,
+          gridCols: arenaCols,
+          gridRows: arenaRows
+        };
+
+        await commitConfigUpdate((prev) => {
+          const list = [...(prev.customMaps || [])];
+          const idx = list.findIndex((m) => m.id === newPresetId);
+          if (idx >= 0) {
+            list[idx] = updatedPreset;
+          } else {
+            list.push(updatedPreset);
+          }
+          return {
+            ...prev,
+            defaultMapId: newPresetId,
+            customMaps: list,
+            mapWalls: {
+              ...(prev.mapWalls || {}),
+              [newPresetId]: activeMapWalls
+            },
+            mapHazards: {
+              ...(prev.mapHazards || {}),
+              [newPresetId]: activeMapHazards
+            }
+          };
+        });
+
+        setSelectedMap(updatedPreset);
+        setArenaName(finalTitle);
+        toast.success(`Arena "${finalTitle}" saved to Battle Arena library!`);
+        setShowSaveArenaModal(false);
+      } else {
+        if (!selectedCampaignId) {
+          toast.warning('Please select a campaign to save the arena into.');
+          setIsSavingArena(false);
+          return;
+        }
+
+        const targetCampaign = availableCampaigns.find((c) => c.campaignId === selectedCampaignId);
+        const chapterId = selectedChapterId || targetCampaign?.chapters?.[0]?.chapterId || 'default_chapter';
+
+        const tokensToSave: SceneToken[] = (combatants.length > 0
+          ? combatants.map((c) => ({
+              id: c.id,
+              name: c.name,
+              x: c.x,
+              y: c.y,
+              size: c.size || 1,
+              imageUrl: c.avatarUrl,
+              category: (c.team === 'gold' ? 'player' : 'monster') as any,
+              hp: c.currentHp,
+              maxHp: c.maxHp,
+              ac: c.ac,
+              speed: c.speedFt,
+              conditions: c.conditions || []
+            }))
+          : goldHeroes.map((h, i) => ({
+              id: `token_hero_${i}_${Date.now()}`,
+              name: h.name,
+              x: 2 * arenaGridSize,
+              y: (2 + i * 2) * arenaGridSize,
+              size: 1,
+              imageUrl: h.avatarUrl || getCharacterTokenUrl(h.name),
+              category: 'player' as const,
+              hp: h.maxHp || h.hp || 45,
+              maxHp: h.maxHp || h.hp || 45,
+              ac: h.ac || 15,
+              speed: 30,
+              conditions: []
+            }))
+        );
+
+        const newScene: Scene = {
+          sceneId: `arena_scene_${Date.now()}`,
+          sceneTitle: finalTitle,
+          mapUrl: selectedMap.url,
+          mapThumbnailUrl: selectedMap.thumbnailUrl || selectedMap.url,
+          mapWidth: arenaWidth,
+          mapHeight: arenaHeight,
+          gridSize: arenaGridSize,
+          gridOpacity: arenaConfig.gridOpacity ?? 0.38,
+          gridVisible: true,
+          walls: activeMapWalls,
+          tokens: tokensToSave,
+          dmNotes: `Saved from Battle Arena (${matchMode.toUpperCase()} match). Arena: ${finalTitle}. Tokens: ${tokensToSave.length}, Walls: ${activeMapWalls.length}.`
+        };
+
+        await saveSceneToCampaign(selectedCampaignId, chapterId, newScene);
+        setArenaName(finalTitle);
+        toast.success(`Saved scene "${finalTitle}" to Campaign "${targetCampaign?.campaignTitle || 'Campaign'}"!`);
+        setShowSaveArenaModal(false);
+      }
+    } catch (err: any) {
+      console.error('Error saving arena scene:', err);
+      toast.error('Failed to save arena: ' + (err?.message || 'Unknown error'));
+    } finally {
+      setIsSavingArena(false);
+    }
+  };
+
+  const renderSaveArenaModal = () => {
+    if (!showSaveArenaModal) return null;
+    return (
+      <div className="fixed inset-0 z-[300] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+        <div className="bg-zinc-900 border border-amber-500/50 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-5 animate-in zoom-in-95 duration-150">
+          <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                <Bookmark className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold font-mono text-white">Save Battle Arena</h3>
+                <p className="text-xs text-zinc-400">Save arena preset or export to Campaign Scene</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowSaveArenaModal(false)}
+              className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <form onSubmit={handleSaveArenaSubmit} className="space-y-4">
+            <div>
+              <label className="block text-xs font-mono uppercase tracking-wider text-zinc-400 mb-1.5 font-bold">
+                Arena Name
+              </label>
+              <input
+                type="text"
+                value={saveArenaTitle}
+                onChange={(e) => setSaveArenaTitle(e.target.value)}
+                placeholder="e.g. Grand Colosseum"
+                className="w-full bg-zinc-950 border border-zinc-700 focus:border-amber-400 rounded-xl px-3.5 py-2.5 text-sm font-mono text-white placeholder-zinc-600 focus:outline-none"
+                autoFocus
+                required
+              />
+            </div>
+
+            {/* Destination Selector */}
+            <div>
+              <label className="block text-xs font-mono uppercase tracking-wider text-zinc-400 mb-1.5 font-bold">
+                Save Destination
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSaveTargetType('arena_preset')}
+                  className={`p-3 rounded-2xl border text-left flex flex-col gap-1 transition-all cursor-pointer ${
+                    saveTargetType === 'arena_preset'
+                      ? 'bg-amber-500/20 border-amber-400 text-white'
+                      : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-mono font-bold">Arena Preset</span>
+                    {saveTargetType === 'arena_preset' && <Check className="w-3.5 h-3.5 text-amber-400" />}
+                  </div>
+                  <span className="text-[10px] text-zinc-400 leading-tight">
+                    Save to Battle Arena library with organic aspect ratio & walls
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSaveTargetType('campaign_scene')}
+                  className={`p-3 rounded-2xl border text-left flex flex-col gap-1 transition-all cursor-pointer ${
+                    saveTargetType === 'campaign_scene'
+                      ? 'bg-amber-500/20 border-amber-400 text-white'
+                      : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-mono font-bold">Campaign Scene</span>
+                    {saveTargetType === 'campaign_scene' && <Check className="w-3.5 h-3.5 text-amber-400" />}
+                  </div>
+                  <span className="text-[10px] text-zinc-400 leading-tight">
+                    Save as full scene into an existing Campaign and Chapter
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            {/* Campaign Picker (if campaign_scene selected) */}
+            {saveTargetType === 'campaign_scene' && (
+              <div className="space-y-3 p-3.5 rounded-2xl bg-zinc-950 border border-zinc-800">
+                <div>
+                  <label className="block text-[11px] font-mono text-zinc-400 mb-1">Select Campaign</label>
+                  <select
+                    value={selectedCampaignId}
+                    onChange={(e) => {
+                      setSelectedCampaignId(e.target.value);
+                      const c = availableCampaigns.find((camp) => camp.campaignId === e.target.value);
+                      if (c && c.chapters && c.chapters.length > 0) {
+                        setSelectedChapterId(c.chapters[0].chapterId);
+                      }
+                    }}
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2 text-xs font-mono text-zinc-200 focus:outline-none"
+                  >
+                    {availableCampaigns.length === 0 ? (
+                      <option value="">No Campaigns Found</option>
+                    ) : (
+                      availableCampaigns.map((camp) => (
+                        <option key={camp.campaignId} value={camp.campaignId}>
+                          {camp.campaignTitle}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+
+                {(() => {
+                  const activeCamp = availableCampaigns.find((c) => c.campaignId === selectedCampaignId);
+                  const chaps = activeCamp?.chapters || [];
+                  return chaps.length > 0 ? (
+                    <div>
+                      <label className="block text-[11px] font-mono text-zinc-400 mb-1">Select Chapter</label>
+                      <select
+                        value={selectedChapterId}
+                        onChange={(e) => setSelectedChapterId(e.target.value)}
+                        className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2 text-xs font-mono text-zinc-200 focus:outline-none"
+                      >
+                        {chaps.map((ch) => (
+                          <option key={ch.chapterId} value={ch.chapterId}>
+                            {ch.chapterTitle} ({ch.scenes?.length || 0} scenes)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : null;
+                })()}
+              </div>
+            )}
+
+            {/* Arena Details Summary */}
+            <div className="p-3 rounded-2xl bg-zinc-950/70 border border-zinc-800 text-[11px] font-mono text-zinc-400 space-y-1">
+              <div className="flex justify-between">
+                <span>Map:</span>
+                <span className="text-zinc-200">{selectedMap.name}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Organic Grid:</span>
+                <span className="text-zinc-200">{arenaCols}×{arenaRows} ({arenaWidth}×{arenaHeight}px)</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Aspect Ratio:</span>
+                <span className="text-zinc-200">{(arenaWidth / arenaHeight).toFixed(2)}:1</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Tactical Walls/Doors:</span>
+                <span className="text-zinc-200">{activeMapWalls.length}</span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowSaveArenaModal(false)}
+                className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-mono text-xs cursor-pointer transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSavingArena}
+                className="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-zinc-950 font-mono font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-lg disabled:opacity-50 transition-all"
+              >
+                <Save className="w-4 h-4" />
+                <span>{isSavingArena ? 'Saving...' : 'Save Arena'}</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  };
 
   // Re-generate scaled random encounter when player count or difficulty changes in 'random_encounter' mode
   useEffect(() => {
@@ -1629,7 +2019,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       const initBonus = typeof hero.initiativeBonus === 'number' ? hero.initiativeBonus : 2;
       const slot = goldSpawnSlots[idx] || {
         col: 2 + (idx % 2),
-        row: Math.min(ARENA_ROWS - 2, Math.max(2, 2 + idx * 2))
+        row: Math.min(arenaRows - 2, Math.max(2, 2 + idx * 2))
       };
       roster.push({
         id: `arena_gold_${idx}_${Date.now()}`,
@@ -1647,8 +2037,8 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         remainingMoveFt: 30,
         initiativeBonus: initBonus,
         initiativeRoll: d20 + initBonus,
-        x: slot.col * ARENA_GRID_SIZE,
-        y: slot.row * ARENA_GRID_SIZE,
+        x: slot.col * arenaGridSize,
+        y: slot.row * arenaGridSize,
         size: 1,
         conditions: [],
         actionUsed: false,
@@ -1665,21 +2055,22 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         .map((id) => heroPool.find((h) => h.id === id))
         .filter(Boolean) as Character[];
 
+      const crimsonCol = Math.max(4, arenaCols - 4);
       const crimsonSpawnSlots = [
-        { col: ARENA_COLS - 4, row: 4 },
-        { col: ARENA_COLS - 4, row: 7 },
-        { col: ARENA_COLS - 3, row: 3 },
-        { col: ARENA_COLS - 3, row: 6 },
-        { col: ARENA_COLS - 4, row: 10 },
-        { col: ARENA_COLS - 3, row: 9 }
+        { col: crimsonCol, row: Math.min(arenaRows - 2, 4) },
+        { col: crimsonCol, row: Math.min(arenaRows - 2, 7) },
+        { col: Math.min(arenaCols - 2, crimsonCol + 1), row: Math.min(arenaRows - 2, 3) },
+        { col: Math.min(arenaCols - 2, crimsonCol + 1), row: Math.min(arenaRows - 2, 6) },
+        { col: crimsonCol, row: Math.min(arenaRows - 2, 10) },
+        { col: Math.min(arenaCols - 2, crimsonCol + 1), row: Math.min(arenaRows - 2, 9) }
       ];
 
       crimsonHeroes.forEach((hero, idx) => {
         const d20 = Math.floor(Math.random() * 20) + 1;
         const initBonus = typeof hero.initiativeBonus === 'number' ? hero.initiativeBonus : 2;
         const slot = crimsonSpawnSlots[idx] || {
-          col: ARENA_COLS - 4 + (idx % 2),
-          row: Math.min(ARENA_ROWS - 2, Math.max(2, 2 + idx * 2))
+          col: Math.min(arenaCols - 2, crimsonCol + (idx % 2)),
+          row: Math.min(arenaRows - 2, Math.max(2, 2 + idx * 2))
         };
         roster.push({
           id: `arena_crimson_hero_${idx}_${Date.now()}`,
@@ -1697,8 +2088,8 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           remainingMoveFt: 30,
           initiativeBonus: initBonus,
           initiativeRoll: d20 + initBonus,
-          x: slot.col * ARENA_GRID_SIZE,
-          y: slot.row * ARENA_GRID_SIZE,
+          x: slot.col * arenaGridSize,
+          y: slot.row * arenaGridSize,
           size: 1,
           conditions: [],
           actionUsed: false,
@@ -1721,9 +2112,9 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       monstersToSpawn.forEach((mon, idx) => {
         const d20 = Math.floor(Math.random() * 20) + 1;
         const initBonus = mon.initiativeBonus ?? Math.floor(((mon.dex || 12) - 10) / 2);
-        const startRow = monsterSpawnRows[idx % monsterSpawnRows.length] ?? Math.min(ARENA_ROWS - 3, Math.max(2, 2 + (idx % 5) * 2));
+        const startRow = monsterSpawnRows[idx % monsterSpawnRows.length] ?? Math.min(arenaRows - 3, Math.max(2, 2 + (idx % 5) * 2));
         const colOffset = Math.floor(idx / 3) * 2 + (idx % 2);
-        const startCol = Math.max(ARENA_COLS - 8, ARENA_COLS - 4 - colOffset);
+        const startCol = Math.max(Math.floor(arenaCols / 2) + 1, arenaCols - 4 - colOffset);
         const sizeSq = mon.size === 'Huge' || mon.size === 'Gargantuan' ? 3 : mon.size === 'Large' ? 2 : 1;
         const duplicateCount = monstersToSpawn.slice(0, idx).filter((m) => m.name === mon.name).length;
         const displayName = duplicateCount > 0 ? `${mon.name} #${duplicateCount + 1}` : mon.name;
@@ -1745,8 +2136,8 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           remainingMoveFt: 30,
           initiativeBonus: initBonus,
           initiativeRoll: d20 + initBonus,
-          x: startCol * ARENA_GRID_SIZE,
-          y: startRow * ARENA_GRID_SIZE,
+          x: startCol * arenaGridSize,
+          y: startRow * arenaGridSize,
           size: sizeSq,
           isFlying: mon.speed?.toLowerCase().includes('fly'),
           elevation: mon.speed?.toLowerCase().includes('fly') ? 15 : 0,
@@ -1969,7 +2360,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       const dx = rawX - prev.originX;
       const dy = rawY - prev.originY;
       const distancePx = Math.hypot(dx, dy);
-      const distanceFt = Math.round(distancePx / ARENA_GRID_SIZE) * 5;
+      const distanceFt = Math.round(distancePx / arenaGridSize) * 5;
       const remainingFt = prev.baseSpeed - distanceFt;
       return {
         ...prev,
@@ -1980,7 +2371,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         remainingFt
       };
     });
-  }, []);
+  }, [arenaGridSize]);
 
   // Global pointerup to ensure drag ruler cleanly releases
   useEffect(() => {
@@ -2062,7 +2453,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       soundCatalog.play('druid_bloom', 1.0);
 
       // Spawn Nature Transformation Effect on Combatant
-      const tokenRadius = ((targetCombatant.size || 1) * ARENA_GRID_SIZE) / 2;
+      const tokenRadius = ((targetCombatant.size || 1) * arenaGridSize) / 2;
       const burstEffect: VttEffectInstance = {
         id: `arena_eff_ws_${Date.now()}`,
         name: 'Wild Shape Transformation',
@@ -2127,7 +2518,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
 
     soundCatalog.play('nature_rustle', 0.8);
 
-    const tokenRadius = ((targetCombatant.size || 1) * ARENA_GRID_SIZE) / 2;
+    const tokenRadius = ((targetCombatant.size || 1) * arenaGridSize) / 2;
     const revertEffect: VttEffectInstance = {
       id: `arena_eff_revert_${Date.now()}`,
       name: 'Revert Wild Shape',
@@ -2257,12 +2648,12 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       if (!asset) return;
 
       const casterCenter = {
-        x: caster.x + ((caster.size || 1) * ARENA_GRID_SIZE) / 2,
-        y: caster.y + ((caster.size || 1) * ARENA_GRID_SIZE) / 2
+        x: caster.x + ((caster.size || 1) * arenaGridSize) / 2,
+        y: caster.y + ((caster.size || 1) * arenaGridSize) / 2
       };
       const targetCenter = targetPointPx || {
-        x: target.x + ((target.size || 1) * ARENA_GRID_SIZE) / 2,
-        y: target.y + ((target.size || 1) * ARENA_GRID_SIZE) / 2
+        x: target.x + ((target.size || 1) * arenaGridSize) / 2,
+        y: target.y + ((target.size || 1) * arenaGridSize) / 2
       };
 
       const lowerName = action.name.toLowerCase();
@@ -2386,7 +2777,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       return arenaConfig.mapHazards[selectedMap.id];
     }
     if (selectedMap.id === 'lavapit' || selectedMap.name.toLowerCase().includes('lava')) {
-      return generateLavapitDefaultHazards(ARENA_GRID_SIZE, ARENA_COLS, ARENA_ROWS);
+      return generateLavapitDefaultHazards(arenaGridSize, arenaCols, arenaRows);
     }
     return [];
   }, [arenaConfig.mapHazards, selectedMap.id, selectedMap.name]);
@@ -2434,17 +2825,17 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         forceInGameRoll?: boolean;
       }
     ) => {
-      const actorCx = actor.x + ((actor.size || 1) * ARENA_GRID_SIZE) / 2;
-      const actorCy = actor.y + ((actor.size || 1) * ARENA_GRID_SIZE) / 2;
+      const actorCx = actor.x + ((actor.size || 1) * arenaGridSize) / 2;
+      const actorCy = actor.y + ((actor.size || 1) * arenaGridSize) / 2;
       const targetCx = targetPointPx
         ? targetPointPx.x
-        : target.x + ((target.size || 1) * ARENA_GRID_SIZE) / 2;
+        : target.x + ((target.size || 1) * arenaGridSize) / 2;
       const targetCy = targetPointPx
         ? targetPointPx.y
-        : target.y + ((target.size || 1) * ARENA_GRID_SIZE) / 2;
+        : target.y + ((target.size || 1) * arenaGridSize) / 2;
       const distFt = Math.max(
         0,
-        Math.round((Math.hypot(targetCx - actorCx, targetCy - actorCy) / ARENA_GRID_SIZE) * 5) -
+        Math.round((Math.hypot(targetCx - actorCx, targetCy - actorCy) / arenaGridSize) * 5) -
           (actor.size - 1 + (target.size - 1)) * 2.5
       );
 
@@ -2582,9 +2973,9 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         const healedComps: string[] = [];
         setCombatants((prev) =>
           prev.map((c) => {
-            const cx = c.x + ((c.size || 1) * ARENA_GRID_SIZE) / 2;
-            const cy = c.y + ((c.size || 1) * ARENA_GRID_SIZE) / 2;
-            const d = Math.round((Math.hypot(cx - actorCx, cy - actorCy) / ARENA_GRID_SIZE) * 5);
+            const cx = c.x + ((c.size || 1) * arenaGridSize) / 2;
+            const cy = c.y + ((c.size || 1) * arenaGridSize) / 2;
+            const d = Math.round((Math.hypot(cx - actorCx, cy - actorCy) / arenaGridSize) * 5);
             if (d <= 10 && c.currentHp > 0) {
               const newHp = Math.min(c.maxHp, c.currentHp + incenseRoll.total);
               healedComps.push(c.name);
@@ -2620,10 +3011,10 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
 
       if (isSelfTeleport) {
         const destX = targetPointPx
-          ? Math.floor(targetPointPx.x / ARENA_GRID_SIZE) * ARENA_GRID_SIZE
+          ? Math.floor(targetPointPx.x / arenaGridSize) * arenaGridSize
           : target.x;
         const destY = targetPointPx
-          ? Math.floor(targetPointPx.y / ARENA_GRID_SIZE) * ARENA_GRID_SIZE
+          ? Math.floor(targetPointPx.y / arenaGridSize) * arenaGridSize
           : target.y;
         spawnArenaVisualEffect(actor, actor, action);
         setCombatants((prev) =>
@@ -2665,11 +3056,11 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           if (isRanged) {
             isThreatened = combatants.some((other) => {
               if (other.id === actor.id || other.team === actor.team || other.currentHp <= 0) return false;
-              const ocx = other.x + ((other.size || 1) * ARENA_GRID_SIZE) / 2;
-              const ocy = other.y + ((other.size || 1) * ARENA_GRID_SIZE) / 2;
+              const ocx = other.x + ((other.size || 1) * arenaGridSize) / 2;
+              const ocy = other.y + ((other.size || 1) * arenaGridSize) / 2;
               const distFromOther = Math.max(
                 0,
-                Math.round((Math.hypot(ocx - actorCx, ocy - actorCy) / ARENA_GRID_SIZE) * 5) -
+                Math.round((Math.hypot(ocx - actorCx, ocy - actorCy) / arenaGridSize) * 5) -
                   (actor.size - 1 + (other.size - 1)) * 2.5
               );
               return distFromOther <= 5;
@@ -2946,9 +3337,9 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           prev.map((c) => {
             if (c.id === actor.id) return markActorUsed(c);
             if (c.team !== actor.team && c.currentHp > 0) {
-              const ecx = c.x + ((c.size || 1) * ARENA_GRID_SIZE) / 2;
-              const ecy = c.y + ((c.size || 1) * ARENA_GRID_SIZE) / 2;
-              const d = Math.round((Math.hypot(ecx - actorCx, ecy - actorCy) / ARENA_GRID_SIZE) * 5);
+              const ecx = c.x + ((c.size || 1) * arenaGridSize) / 2;
+              const ecy = c.y + ((c.size || 1) * arenaGridSize) / 2;
+              const d = Math.round((Math.hypot(ecx - actorCx, ecy - actorCy) / arenaGridSize) * 5);
               if (d <= 15) {
                 const saveRoll = Math.floor(Math.random() * 20) + 1 + 2;
                 const saved = saveRoll >= dc;
@@ -3013,10 +3404,10 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           aoeRadiusFt >= 10
             ? combatants.filter((c) => {
                 if (c.team === actor.team || c.currentHp <= 0) return false;
-                const cx = c.x + ((c.size || 1) * ARENA_GRID_SIZE) / 2;
-                const cy = c.y + ((c.size || 1) * ARENA_GRID_SIZE) / 2;
+                const cx = c.x + ((c.size || 1) * arenaGridSize) / 2;
+                const cy = c.y + ((c.size || 1) * arenaGridSize) / 2;
                 const distFromCenterFt = Math.round(
-                  (Math.hypot(cx - targetCx, cy - targetCy) / ARENA_GRID_SIZE) * 5
+                  (Math.hypot(cx - targetCx, cy - targetCy) / arenaGridSize) * 5
                 );
                 return distFromCenterFt <= aoeRadiusFt;
               })
@@ -3148,11 +3539,11 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         isThreatened = combatants.some((other) => {
           if (other.id === actor.id || other.team === actor.team || other.currentHp <= 0)
             return false;
-          const ocx = other.x + ((other.size || 1) * ARENA_GRID_SIZE) / 2;
-          const ocy = other.y + ((other.size || 1) * ARENA_GRID_SIZE) / 2;
+          const ocx = other.x + ((other.size || 1) * arenaGridSize) / 2;
+          const ocy = other.y + ((other.size || 1) * arenaGridSize) / 2;
           const distFromOther = Math.max(
             0,
-            Math.round((Math.hypot(ocx - actorCx, ocy - actorCy) / ARENA_GRID_SIZE) * 5) -
+            Math.round((Math.hypot(ocx - actorCx, ocy - actorCy) / arenaGridSize) * 5) -
               (actor.size - 1 + (other.size - 1)) * 2.5
           );
           return distFromOther <= 5;
@@ -3385,9 +3776,9 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           liveActor,
           liveCombatants,
           aiHud,
-          ARENA_COLS,
-          ARENA_ROWS,
-          ARENA_GRID_SIZE,
+          arenaCols,
+          arenaRows,
+          arenaGridSize,
           rechargedAbilities,
           activeMapHazards
         );
@@ -3572,7 +3963,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           const moveCostFt =
             distanceMovedFt !== undefined
               ? distanceMovedFt
-              : Math.round(Math.hypot(newX - c.x, newY - c.y) / ARENA_GRID_SIZE) * 5;
+              : Math.round(Math.hypot(newX - c.x, newY - c.y) / arenaGridSize) * 5;
           if (moveCostFt > c.remainingMoveFt) {
             toast.warning(
               `Only ${c.remainingMoveFt} ft of movement remaining this turn! (Use Dash for +${c.speedFt} ft)`
@@ -3585,10 +3976,10 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             !c.isFlying &&
             doesArenaWallBlockMovement(
               activeMapWalls,
-              c.x + ((c.size || 1) * ARENA_GRID_SIZE) / 2,
-              c.y + ((c.size || 1) * ARENA_GRID_SIZE) / 2,
-              newX + ((c.size || 1) * ARENA_GRID_SIZE) / 2,
-              newY + ((c.size || 1) * ARENA_GRID_SIZE) / 2
+              c.x + ((c.size || 1) * arenaGridSize) / 2,
+              c.y + ((c.size || 1) * arenaGridSize) / 2,
+              newX + ((c.size || 1) * arenaGridSize) / 2,
+              newY + ((c.size || 1) * arenaGridSize) / 2
             )
           ) {
             toast.warning(
@@ -3598,9 +3989,9 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           }
           // Check Unsafe Environmental Hazards (Lava, Chasms)
           if (arenaConfig.enforceHazards !== false && activeMapHazards.length > 0) {
-            const hx = newX + ((c.size || 1) * ARENA_GRID_SIZE) / 2;
-            const hy = newY + ((c.size || 1) * ARENA_GRID_SIZE) / 2;
-            const hazard = getArenaHazardAt(activeMapHazards, hx, hy, ARENA_WIDTH, ARENA_HEIGHT);
+            const hx = newX + ((c.size || 1) * arenaGridSize) / 2;
+            const hy = newY + ((c.size || 1) * arenaGridSize) / 2;
+            const hazard = getArenaHazardAt(activeMapHazards, hx, hy, arenaWidth, arenaHeight);
             if (hazard) {
               const immunities = c.sourceMonster?.damageImmunities || (c.sourceMonster as any)?.damage_immunities || (c.sourceCharacter as any)?.damageImmunities || [];
               const bypass = canCreatureBypassHazard({
@@ -3697,13 +4088,13 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       return [];
     }
     const maxSteps = Math.floor(activeCombatant.remainingMoveFt / 5);
-    const curCol = Math.round(activeCombatant.x / ARENA_GRID_SIZE);
-    const curRow = Math.round(activeCombatant.y / ARENA_GRID_SIZE);
+    const curCol = Math.round(activeCombatant.x / arenaGridSize);
+    const curRow = Math.round(activeCombatant.y / arenaGridSize);
     const occupied = new Set<string>();
     combatants.forEach((c) => {
       if (c.id === activeCombatant.id || c.currentHp <= 0) return;
-      const cCol = Math.round(c.x / ARENA_GRID_SIZE);
-      const cRow = Math.round(c.y / ARENA_GRID_SIZE);
+      const cCol = Math.round(c.x / arenaGridSize);
+      const cRow = Math.round(c.y / arenaGridSize);
       const sz = Math.max(1, c.size || 1);
       for (let r = cRow; r < cRow + sz; r++) {
         for (let col = cCol; col < cCol + sz; col++) {
@@ -3715,12 +4106,12 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
     const cells: Array<{ col: number; row: number }> = [];
     for (
       let r = Math.max(0, curRow - maxSteps);
-      r <= Math.min(ARENA_ROWS - 1, curRow + maxSteps);
+      r <= Math.min(arenaRows - 1, curRow + maxSteps);
       r++
     ) {
       for (
         let c = Math.max(0, curCol - maxSteps);
-        c <= Math.min(ARENA_COLS - 1, curCol + maxSteps);
+        c <= Math.min(arenaCols - 1, curCol + maxSteps);
         c++
       ) {
         if (c === curCol && r === curRow) continue;
@@ -3732,10 +4123,10 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             !activeCombatant.isFlying &&
             doesArenaWallBlockMovement(
               activeMapWalls,
-              curCol * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2,
-              curRow * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2,
-              c * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2,
-              r * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2
+              curCol * arenaGridSize + arenaGridSize / 2,
+              curRow * arenaGridSize + arenaGridSize / 2,
+              c * arenaGridSize + arenaGridSize / 2,
+              r * arenaGridSize + arenaGridSize / 2
             )
           ) {
             continue;
@@ -3766,14 +4157,14 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       ? 500
       : 30;
     const maxSteps = Math.floor(rangeFt / 5);
-    const curCol = Math.round(activeCombatant.x / ARENA_GRID_SIZE);
-    const curRow = Math.round(activeCombatant.y / ARENA_GRID_SIZE);
+    const curCol = Math.round(activeCombatant.x / arenaGridSize);
+    const curRow = Math.round(activeCombatant.y / arenaGridSize);
 
     const occupied = new Set<string>();
     combatants.forEach((c) => {
       if (c.id === activeCombatant.id || c.currentHp <= 0) return;
-      const cCol = Math.round(c.x / ARENA_GRID_SIZE);
-      const cRow = Math.round(c.y / ARENA_GRID_SIZE);
+      const cCol = Math.round(c.x / arenaGridSize);
+      const cRow = Math.round(c.y / arenaGridSize);
       const sz = Math.max(1, c.size || 1);
       for (let r = cRow; r < cRow + sz; r++) {
         for (let col = cCol; col < cCol + sz; col++) {
@@ -3785,22 +4176,22 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
     const cells: Array<{ col: number; row: number }> = [];
     for (
       let r = Math.max(0, curRow - maxSteps);
-      r <= Math.min(ARENA_ROWS - 1, curRow + maxSteps);
+      r <= Math.min(arenaRows - 1, curRow + maxSteps);
       r++
     ) {
       for (
         let c = Math.max(0, curCol - maxSteps);
-        c <= Math.min(ARENA_COLS - 1, curCol + maxSteps);
+        c <= Math.min(arenaCols - 1, curCol + maxSteps);
         c++
       ) {
         if (c === curCol && r === curRow) continue;
         const distSteps = Math.round(Math.hypot(c - curCol, r - curRow));
         if (distSteps >= 1 && distSteps <= maxSteps && !occupied.has(`${c},${r}`)) {
           // Misty Step requires a destination "that you can see" (LoS check)
-          const targetX = c * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2;
-          const targetY = r * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2;
-          const originX = curCol * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2;
-          const originY = curRow * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2;
+          const targetX = c * arenaGridSize + arenaGridSize / 2;
+          const targetY = r * arenaGridSize + arenaGridSize / 2;
+          const originX = curCol * arenaGridSize + arenaGridSize / 2;
+          const originY = curRow * arenaGridSize + arenaGridSize / 2;
           if (
             arenaConfig.enforceWalls &&
             activeMapWalls.length > 0 &&
@@ -3869,13 +4260,57 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                   Stand-Alone Mode
                 </span>
               </div>
-              <p className="text-[11px] sm:text-xs text-zinc-400 truncate">
-                1v1 up to 6v6 • Scaled Random Encounters (1–6P) • vs NPCs
-              </p>
+              <div className="flex items-center gap-2 mt-0.5">
+                {isEditingArenaName ? (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      setIsEditingArenaName(false);
+                    }}
+                    className="flex items-center gap-1.5"
+                  >
+                    <input
+                      type="text"
+                      value={arenaName}
+                      onChange={(e) => setArenaName(e.target.value)}
+                      onBlur={() => setIsEditingArenaName(false)}
+                      autoFocus
+                      className="bg-zinc-950 border border-amber-400 rounded-lg px-2 py-0.5 text-xs font-mono text-amber-300 focus:outline-none"
+                    />
+                    <button type="submit" className="p-1 rounded bg-amber-500/20 text-amber-300 text-xs">
+                      <Check className="w-3 h-3" />
+                    </button>
+                  </form>
+                ) : (
+                  <div
+                    className="flex items-center gap-1.5 group cursor-pointer"
+                    onClick={() => setIsEditingArenaName(true)}
+                    title="Click to rename arena"
+                  >
+                    <span className="text-[11px] sm:text-xs font-mono font-bold text-amber-300 truncate max-w-[200px]">
+                      🏟️ {arenaName}
+                    </span>
+                    <Edit3 className="w-3 h-3 text-amber-400 opacity-60 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                )}
+                <span className="text-zinc-600 hidden md:inline">•</span>
+                <p className="text-[11px] sm:text-xs text-zinc-400 truncate hidden md:inline">
+                  1v1 to 6v6 • Scaled Random Encounters (1–6P)
+                </p>
+              </div>
             </div>
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleOpenSaveArenaModal}
+              className="px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 hover:to-orange-500/30 border border-amber-500/50 text-amber-300 text-[11px] sm:text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer shadow-sm transition-all"
+              title="Save Arena Scene to presets or Campaign Mode"
+            >
+              <Save className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" />
+              <span className="hidden sm:inline">Save Arena</span>
+            </button>
             {hasLiveDmMap && (
               <button
                 type="button"
@@ -4331,15 +4766,29 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           {/* Step 3: Select Arena Battlemap & Launch Match */}
           <div className="bg-zinc-900/75 border border-zinc-800 rounded-3xl p-4 sm:p-5 flex flex-col md:flex-row items-center justify-between gap-5">
             <div className="flex-1 w-full">
-              <div className="flex items-center justify-between gap-2 mb-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
                 <span className="text-xs font-mono uppercase tracking-wider text-zinc-400 font-bold">
                   3. Choose Colosseum Battlemap ({availableMaps.length} Available)
                 </span>
-                {activeMapWalls.length > 0 && (
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/35 text-amber-300">
-                    🧱 {activeMapWalls.length} Tactical Wall(s) / Door(s) Active
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-300">
+                    Organic Aspect: {(arenaWidth / arenaHeight).toFixed(2)}:1 ({arenaCols}×{arenaRows} Grid • {arenaWidth}×{arenaHeight}px)
                   </span>
-                )}
+                  {activeMapWalls.length > 0 && (
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/35 text-amber-300">
+                      🧱 {activeMapWalls.length} Wall(s) / Door(s) Active
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleOpenSaveArenaModal}
+                    className="px-2.5 py-1 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 font-mono text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all"
+                    title="Save Arena Scene to presets or Campaign Mode"
+                  >
+                    <Save className="w-3 h-3 text-amber-400" />
+                    <span>Save Arena</span>
+                  </button>
+                </div>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 max-h-48 overflow-y-auto pr-1">
                 {availableMaps.map((map) => {
@@ -4401,6 +4850,9 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>
+
+        {/* Save Arena Modal */}
+        {renderSaveArenaModal()}
       </div>
     );
   }
@@ -4428,6 +4880,15 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             <span className="sm:hidden">R{round}</span>
             <span className="hidden sm:inline">Round {round}</span>
           </div>
+          <button
+            type="button"
+            onClick={handleOpenSaveArenaModal}
+            className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-amber-500/30 text-amber-300 text-xs font-mono font-bold cursor-pointer transition-all"
+            title="Save Arena Scene to presets or Campaign Mode"
+          >
+            <Save className="w-3.5 h-3.5 text-amber-400" />
+            <span className="truncate max-w-[130px]">{arenaName}</span>
+          </button>
         </div>
 
         {/* Turn Order Ribbon */}
@@ -4484,6 +4945,14 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
               <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </button>
           )}
+          <button
+            type="button"
+            onClick={handleOpenSaveArenaModal}
+            className="md:hidden p-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-amber-500/30 text-amber-400 text-xs font-mono font-bold flex items-center cursor-pointer"
+            title="Save Arena Scene"
+          >
+            <Save className="w-3.5 h-3.5" />
+          </button>
           <button
             type="button"
             onClick={onExitArena}
@@ -4675,10 +5144,10 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
               if (!ptr) return;
               const worldX = (ptr.x - stagePos.x) / stageScale;
               const worldY = (ptr.y - stagePos.y) / stageScale;
-              if (worldX < 0 || worldX > ARENA_WIDTH || worldY < 0 || worldY > ARENA_HEIGHT) return;
+              if (worldX < 0 || worldX > arenaWidth || worldY < 0 || worldY > arenaHeight) return;
               const snapCenter = {
-                x: Math.floor(worldX / ARENA_GRID_SIZE) * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2,
-                y: Math.floor(worldY / ARENA_GRID_SIZE) * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2
+                x: Math.floor(worldX / arenaGridSize) * arenaGridSize + arenaGridSize / 2,
+                y: Math.floor(worldY / arenaGridSize) * arenaGridSize + arenaGridSize / 2
               };
               const isTeleport = isActionTeleport(activeTargetingAction);
               const isHealing = isActionHealing(activeTargetingAction);
@@ -4713,10 +5182,10 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
               if (!ptr) return;
               const worldX = (ptr.x - stagePos.x) / stageScale;
               const worldY = (ptr.y - stagePos.y) / stageScale;
-              if (worldX < 0 || worldX > ARENA_WIDTH || worldY < 0 || worldY > ARENA_HEIGHT) return;
+              if (worldX < 0 || worldX > arenaWidth || worldY < 0 || worldY > arenaHeight) return;
               const snapCenter = {
-                x: Math.floor(worldX / ARENA_GRID_SIZE) * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2,
-                y: Math.floor(worldY / ARENA_GRID_SIZE) * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2
+                x: Math.floor(worldX / arenaGridSize) * arenaGridSize + arenaGridSize / 2,
+                y: Math.floor(worldY / arenaGridSize) * arenaGridSize + arenaGridSize / 2
               };
               const isTeleport = isActionTeleport(activeTargetingAction);
               const isHealing = isActionHealing(activeTargetingAction);
@@ -4746,8 +5215,8 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             }}
           >
             <Rect
-              width={ARENA_WIDTH}
-              height={ARENA_HEIGHT}
+              width={arenaWidth}
+              height={arenaHeight}
               fill="#1c1917"
               stroke="#f59e0b"
               strokeWidth={4}
@@ -4756,17 +5225,17 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             {bgImage && (
               <KonvaImage
                 image={bgImage}
-                width={ARENA_WIDTH}
-                height={ARENA_HEIGHT}
+                width={arenaWidth}
+                height={arenaHeight}
               />
             )}
           </Layer>
 
           {/* 1-Inch Tactical Grid Layer (Direct child of Stage) */}
           <GridLayer
-            mapWidth={ARENA_WIDTH}
-            mapHeight={ARENA_HEIGHT}
-            gridSize={ARENA_GRID_SIZE}
+            mapWidth={arenaWidth}
+            mapHeight={arenaHeight}
+            gridSize={arenaGridSize}
             gridOffsetX={0}
             gridOffsetY={0}
             gridOpacity={arenaConfig.gridOpacity ?? 0.38}
@@ -4777,8 +5246,8 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           {activeMapHazards.length > 0 && (
             <Layer listening={false}>
               {activeMapHazards.map((hazard) => {
-                const mapW = ARENA_COLS * ARENA_GRID_SIZE;
-                const mapH = ARENA_ROWS * ARENA_GRID_SIZE;
+                const mapW = arenaWidth;
+                const mapH = arenaHeight;
                 const isPoly = hazard.polygonPoints && hazard.polygonPoints.length >= 6;
                 const points = isPoly
                   ? hazard.polygonPoints.map((val, idx) =>
@@ -4929,10 +5398,10 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
               reachableTeleportSquares.map((cell) => (
                 <Rect
                   key={`teleport_${cell.col}_${cell.row}`}
-                  x={cell.col * ARENA_GRID_SIZE + 2}
-                  y={cell.row * ARENA_GRID_SIZE + 2}
-                  width={ARENA_GRID_SIZE - 4}
-                  height={ARENA_GRID_SIZE - 4}
+                  x={cell.col * arenaGridSize + 2}
+                  y={cell.row * arenaGridSize + 2}
+                  width={arenaGridSize - 4}
+                  height={arenaGridSize - 4}
                   cornerRadius={6}
                   fill="rgba(168, 85, 247, 0.22)"
                   stroke="rgba(192, 132, 252, 0.7)"
@@ -4941,8 +5410,8 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                   onClick={(e) => {
                     e.cancelBubble = true;
                     const snapCenter = {
-                      x: cell.col * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2,
-                      y: cell.row * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2
+                      x: cell.col * arenaGridSize + arenaGridSize / 2,
+                      y: cell.row * arenaGridSize + arenaGridSize / 2
                     };
                     executeCombatAction(activeCombatant, activeCombatant, activeTargetingAction, snapCenter);
                     setActiveTargetingAction(null);
@@ -4953,8 +5422,8 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                   onTap={(e) => {
                     e.cancelBubble = true;
                     const snapCenter = {
-                      x: cell.col * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2,
-                      y: cell.row * ARENA_GRID_SIZE + ARENA_GRID_SIZE / 2
+                      x: cell.col * arenaGridSize + arenaGridSize / 2,
+                      y: cell.row * arenaGridSize + arenaGridSize / 2
                     };
                     executeCombatAction(activeCombatant, activeCombatant, activeTargetingAction, snapCenter);
                     setActiveTargetingAction(null);
@@ -4970,28 +5439,28 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
               reachableMoveSquares.map((cell) => (
                 <Rect
                   key={`move_${cell.col}_${cell.row}`}
-                  x={cell.col * ARENA_GRID_SIZE + 2}
-                  y={cell.row * ARENA_GRID_SIZE + 2}
-                  width={ARENA_GRID_SIZE - 4}
-                  height={ARENA_GRID_SIZE - 4}
+                  x={cell.col * arenaGridSize + 2}
+                  y={cell.row * arenaGridSize + 2}
+                  width={arenaGridSize - 4}
+                  height={arenaGridSize - 4}
                   cornerRadius={6}
-                  fill="rgba(16, 185, 129, 0.14)"
+                  fill="rgba(160, 185, 129, 0.14)"
                   stroke="rgba(52, 211, 153, 0.45)"
                   strokeWidth={1.5}
                   onClick={(e) => {
                     e.cancelBubble = true;
                     handleMoveArenaToken(
                       activeCombatant.id,
-                      cell.col * ARENA_GRID_SIZE,
-                      cell.row * ARENA_GRID_SIZE
+                      cell.col * arenaGridSize,
+                      cell.row * arenaGridSize
                     );
                   }}
                   onTap={(e) => {
                     e.cancelBubble = true;
                     handleMoveArenaToken(
                       activeCombatant.id,
-                      cell.col * ARENA_GRID_SIZE,
-                      cell.row * ARENA_GRID_SIZE
+                      cell.col * arenaGridSize,
+                      cell.row * arenaGridSize
                     );
                   }}
                 />
@@ -5001,8 +5470,8 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             {aiPathPreviewPx.length >= 2 && (
               <Line
                 points={aiPathPreviewPx.flatMap((pt) => [
-                  pt.x + ARENA_GRID_SIZE / 2,
-                  pt.y + ARENA_GRID_SIZE / 2
+                  pt.x + arenaGridSize / 2,
+                  pt.y + arenaGridSize / 2
                 ])}
                 stroke="#f43f5e"
                 strokeWidth={4}
@@ -5024,6 +5493,9 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                   isCurrentTurn={isCurr}
                   isTargetable={isTargetable}
                   canDrag={canDrag}
+                  arenaWidth={arenaWidth}
+                  arenaHeight={arenaHeight}
+                  arenaGridSize={arenaGridSize}
                   onMove={handleMoveArenaToken}
                   onDragStartToken={handleDragStartToken}
                   onDragMoveToken={handleDragMoveToken}
@@ -5050,7 +5522,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             <Layer listening={false}>
               <TokenDragRuler
                 dragState={tokenDragState}
-                gridSize={ARENA_GRID_SIZE}
+                gridSize={arenaGridSize}
                 stageScale={stageScale}
               />
             </Layer>
@@ -5063,7 +5535,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                 asset={activeEquippedAsset}
                 origin={aimOrigin}
                 current={aimCurrent}
-                gridSize={ARENA_GRID_SIZE}
+                gridSize={arenaGridSize}
                 stageScale={stageScale}
               />
             </Layer>
@@ -5076,7 +5548,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           setEffects={setArenaEffects}
           stagePos={stagePos}
           stageScale={stageScale}
-          gridSize={ARENA_GRID_SIZE}
+          gridSize={arenaGridSize}
           tokens={combatants as any}
           combatants={[]}
           activeEquippedAsset={null}
@@ -5159,7 +5631,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             setActiveTargetingAction({ ...action, isHeal });
             setActiveEquippedAsset(matchedAsset || null);
 
-            const tokenRadius = ((activeCombatant.size || 1) * ARENA_GRID_SIZE) / 2;
+            const tokenRadius = ((activeCombatant.size || 1) * arenaGridSize) / 2;
             const originPt = {
               x: activeCombatant.x + tokenRadius,
               y: activeCombatant.y + tokenRadius
@@ -5927,6 +6399,9 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           </div>
         </div>
       )}
+
+      {/* Save Arena Modal */}
+      {renderSaveArenaModal()}
     </div>
   );
 };

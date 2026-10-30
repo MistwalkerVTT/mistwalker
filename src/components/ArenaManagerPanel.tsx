@@ -208,14 +208,16 @@ export const ArenaManagerPanel: React.FC<ArenaManagerPanelProps> = ({
       return;
     }
     const existingWalls = (config.mapWalls?.[mapItem.id] || []).map((w) => normalizeArenaWallSegment(w));
+    const mWidth = mapItem.mapWidth || ARENA_WIDTH;
+    const mHeight = mapItem.mapHeight || ARENA_HEIGHT;
     const arenaScene: Scene = {
       sceneId: mapItem.id,
       sceneTitle: `Arena: ${mapItem.name}`,
       mapUrl: mapItem.url,
       mapThumbnailUrl: mapItem.thumbnailUrl || mapItem.url,
-      mapWidth: ARENA_WIDTH,
-      mapHeight: ARENA_HEIGHT,
-      gridSize: ARENA_GRID_SIZE,
+      mapWidth: mWidth,
+      mapHeight: mHeight,
+      gridSize: mapItem.gridSize || ARENA_GRID_SIZE,
       gridOpacity: config.gridOpacity ?? 0.35,
       gridVisible: true,
       isFogVisible: false,
@@ -249,30 +251,52 @@ export const ArenaManagerPanel: React.FC<ArenaManagerPanelProps> = ({
     try {
       let uploadFile = file;
       let extractedWalls: WallSegment[] = [];
+      let detectedW = 1920;
+      let detectedH = 1080;
+      let detectedGridSize = ARENA_GRID_SIZE;
 
       if (isUniversalVttFile(file)) {
         try {
           const parsed = await parseUniversalVtt(file);
           uploadFile = parsed.imageFile;
+          detectedW = parsed.pixelWidth || 1920;
+          detectedH = parsed.pixelHeight || 1080;
+          detectedGridSize = parsed.gridSize || ARENA_GRID_SIZE;
           if (Array.isArray(parsed.walls) && parsed.walls.length > 0) {
-            const scaleX = ARENA_WIDTH / Math.max(1, parsed.pixelWidth || ARENA_WIDTH);
-            const scaleY = ARENA_HEIGHT / Math.max(1, parsed.pixelHeight || ARENA_HEIGHT);
             extractedWalls = parsed.walls.map((w, idx) => ({
               ...w,
-              id: `uvtt_arena_${idx}_${Date.now()}`,
-              x1: Math.round(w.x1 * scaleX),
-              y1: Math.round(w.y1 * scaleY),
-              x2: Math.round(w.x2 * scaleX),
-              y2: Math.round(w.y2 * scaleY)
+              id: `uvtt_arena_${idx}_${Date.now()}`
             }));
           }
         } catch (uvttErr) {
           console.warn('[ArenaManager] UVTT parse notice:', uvttErr);
         }
+      } else {
+        // Read natural image dimensions
+        try {
+          const objUrl = URL.createObjectURL(file);
+          const probeImg = new Image();
+          await new Promise<void>((resolve) => {
+            probeImg.onload = () => {
+              detectedW = probeImg.naturalWidth || 1920;
+              detectedH = probeImg.naturalHeight || 1080;
+              URL.revokeObjectURL(objUrl);
+              resolve();
+            };
+            probeImg.onerror = () => {
+              URL.revokeObjectURL(objUrl);
+              resolve();
+            };
+            probeImg.src = objUrl;
+          });
+        } catch {}
       }
 
       const asset = await uploadAndRegisterAsset(uploadFile, 'map');
       if (onMapUploaded) onMapUploaded(asset);
+
+      const detectedCols = Math.max(8, Math.round(detectedW / detectedGridSize));
+      const detectedRows = Math.max(6, Math.round(detectedH / detectedGridSize));
 
       const newArenaMap: PresetBattlemap = {
         id: `arena_map_${Date.now()}`,
@@ -281,7 +305,12 @@ export const ArenaManagerPanel: React.FC<ArenaManagerPanelProps> = ({
         thumbnailUrl: asset.thumbnailUrl || asset.url,
         type: 'Custom Uploaded Arena',
         desc: 'Uploaded by DM in Battle Arena Manager',
-        isCustomUploaded: true
+        isCustomUploaded: true,
+        mapWidth: detectedW,
+        mapHeight: detectedH,
+        gridSize: detectedGridSize,
+        gridCols: detectedCols,
+        gridRows: detectedRows
       };
 
       await commitConfigUpdate((prev) => ({
@@ -427,6 +456,12 @@ export const ArenaManagerPanel: React.FC<ArenaManagerPanelProps> = ({
       return;
     }
     const newId = `arena_scene_${Date.now()}`;
+    const srcW = mapW || 1920;
+    const srcH = mapH || 1080;
+    const gSize = gridSize || ARENA_GRID_SIZE;
+    const gCols = Math.max(8, Math.round(srcW / gSize));
+    const gRows = Math.max(6, Math.round(srcH / gSize));
+
     const newMap: PresetBattlemap = {
       id: newId,
       name: sceneTitle || 'Campaign Arena Scene',
@@ -434,22 +469,19 @@ export const ArenaManagerPanel: React.FC<ArenaManagerPanelProps> = ({
       thumbnailUrl: mapUrl,
       type: 'Campaign Scene',
       desc: `Imported from Campaign Scene "${sceneTitle}"`,
-      isCustomUploaded: true
+      isCustomUploaded: true,
+      mapWidth: srcW,
+      mapHeight: srcH,
+      gridSize: gSize,
+      gridCols: gCols,
+      gridRows: gRows
     };
 
     let scaledWalls: WallSegment[] = [];
     if (Array.isArray(walls) && walls.length > 0) {
-      const srcW = mapW || 1920;
-      const srcH = mapH || 1080;
-      const scaleX = ARENA_WIDTH / Math.max(1, srcW);
-      const scaleY = ARENA_HEIGHT / Math.max(1, srcH);
       scaledWalls = walls.map((w, idx) => ({
         ...w,
-        id: `scene_wall_${idx}_${Date.now()}`,
-        x1: Math.round(w.x1 * scaleX),
-        y1: Math.round(w.y1 * scaleY),
-        x2: Math.round(w.x2 * scaleX),
-        y2: Math.round(w.y2 * scaleY)
+        id: `scene_wall_${idx}_${Date.now()}`
       }));
     }
 
@@ -924,7 +956,10 @@ export const ArenaManagerPanel: React.FC<ArenaManagerPanelProps> = ({
                 <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono text-zinc-400 mt-1">
                   <span className="text-emerald-400 font-medium">{currentMapWalls.length} walls/doors</span>
                   <span>•</span>
-                  <span>22×14 Tactical Grid (1320×840)</span>
+                  <span>
+                    {selectedMap.gridCols || Math.max(8, Math.round((selectedMap.mapWidth || ARENA_WIDTH) / (selectedMap.gridSize || ARENA_GRID_SIZE)))}×
+                    {selectedMap.gridRows || Math.max(6, Math.round((selectedMap.mapHeight || ARENA_HEIGHT) / (selectedMap.gridSize || ARENA_GRID_SIZE)))} Tactical Grid ({selectedMap.mapWidth || ARENA_WIDTH}×{selectedMap.mapHeight || ARENA_HEIGHT})
+                  </span>
                 </div>
               </div>
 
@@ -989,157 +1024,175 @@ export const ArenaManagerPanel: React.FC<ArenaManagerPanelProps> = ({
               </div>
             </div>
 
-            {/* Arena Map Preview & Spawn Zones */}
-            <div className="flex-1 flex flex-col items-center justify-center min-h-[380px]">
-              <div
-                onClick={() => onLoadScene && handleLaunchArenaMapLive(selectedMap)}
-                className={`relative w-full max-w-[920px] aspect-[22/14] rounded-2xl overflow-hidden border-2 border-amber-500/50 shadow-2xl bg-zinc-900 select-none group ${
-                  onLoadScene ? 'cursor-pointer' : ''
-                }`}
-                title="Click to load this Arena map onto the live VTT canvas for editing"
-              >
-                <img
-                  src={selectedMap.url}
-                  alt={selectedMap.name}
-                  className="absolute inset-0 w-full h-full object-cover pointer-events-none"
-                />
+            {/* Arena Map Preview & Spawn Zones (Organic Aspect Ratio) */}
+            {(() => {
+              const prevW = selectedMap.mapWidth || (selectedMap.gridCols ? selectedMap.gridCols * ARENA_GRID_SIZE : ARENA_WIDTH);
+              const prevH = selectedMap.mapHeight || (selectedMap.gridRows ? selectedMap.gridRows * ARENA_GRID_SIZE : ARENA_HEIGHT);
+              const prevGSize = selectedMap.gridSize || ARENA_GRID_SIZE;
+              const prevCols = selectedMap.gridCols || Math.max(8, Math.round(prevW / prevGSize));
+              const prevRows = selectedMap.gridRows || Math.max(6, Math.round(prevH / prevGSize));
+              const goldSpawnTopRow = Math.max(1, Math.floor(prevRows * 0.15));
+              const goldSpawnHeightRows = Math.max(2, Math.floor(prevRows * 0.7));
+              const crimsonSpawnCol = Math.max(4, prevCols - 4);
 
-                <svg
-                  viewBox={`0 0 ${ARENA_WIDTH} ${ARENA_HEIGHT}`}
-                  className="absolute inset-0 w-full h-full pointer-events-none"
-                >
-                  {/* 22x14 Tactical Grid Lines */}
-                  {Array.from({ length: ARENA_COLS + 1 }).map((_, c) => (
-                    <line
-                      key={`v_${c}`}
-                      x1={c * ARENA_GRID_SIZE}
-                      y1={0}
-                      x2={c * ARENA_GRID_SIZE}
-                      y2={ARENA_HEIGHT}
-                      stroke="rgba(255,255,255,0.18)"
-                      strokeWidth={1}
-                    />
-                  ))}
-                  {Array.from({ length: ARENA_ROWS + 1 }).map((_, r) => (
-                    <line
-                      key={`h_${r}`}
-                      x1={0}
-                      y1={r * ARENA_GRID_SIZE}
-                      x2={ARENA_WIDTH}
-                      y2={r * ARENA_GRID_SIZE}
-                      stroke="rgba(255,255,255,0.18)"
-                      strokeWidth={1}
-                    />
-                  ))}
-
-                  {/* Team Gold & Team Crimson Spawn Zone Indicators */}
-                  <rect
-                    x={2.5 * ARENA_GRID_SIZE}
-                    y={2 * ARENA_GRID_SIZE}
-                    width={2 * ARENA_GRID_SIZE}
-                    height={10 * ARENA_GRID_SIZE}
-                    rx={12}
-                    fill="rgba(245, 158, 11, 0.10)"
-                    stroke="rgba(245, 158, 11, 0.45)"
-                    strokeDasharray="8 6"
-                    strokeWidth={2}
-                  />
-                  <text
-                    x={3.5 * ARENA_GRID_SIZE}
-                    y={1.6 * ARENA_GRID_SIZE}
-                    textAnchor="middle"
-                    fill="#fbbf24"
-                    fontSize={16}
-                    fontFamily="monospace"
-                    fontWeight="bold"
+              return (
+                <div className="flex-1 flex flex-col items-center justify-center min-h-[380px] w-full">
+                  <div
+                    onClick={() => onLoadScene && handleLaunchArenaMapLive(selectedMap)}
+                    style={{ aspectRatio: `${prevW} / ${prevH}` }}
+                    className={`relative w-full max-w-[920px] max-h-[500px] rounded-2xl overflow-hidden border-2 border-amber-500/50 shadow-2xl bg-zinc-900 select-none group ${
+                      onLoadScene ? 'cursor-pointer' : ''
+                    }`}
+                    title="Click to load this Arena map onto the live VTT canvas for editing"
                   >
-                    GOLD SPAWN
-                  </text>
+                    <img
+                      src={selectedMap.url}
+                      alt={selectedMap.name}
+                      className="absolute inset-0 w-full h-full object-contain pointer-events-none"
+                    />
 
-                  <rect
-                    x={(ARENA_COLS - 5.5) * ARENA_GRID_SIZE}
-                    y={2 * ARENA_GRID_SIZE}
-                    width={2.5 * ARENA_GRID_SIZE}
-                    height={10 * ARENA_GRID_SIZE}
-                    rx={12}
-                    fill="rgba(239, 68, 68, 0.10)"
-                    stroke="rgba(239, 68, 68, 0.45)"
-                    strokeDasharray="8 6"
-                    strokeWidth={2}
-                  />
-                  <text
-                    x={(ARENA_COLS - 4.25) * ARENA_GRID_SIZE}
-                    y={1.6 * ARENA_GRID_SIZE}
-                    textAnchor="middle"
-                    fill="#f87171"
-                    fontSize={16}
-                    fontFamily="monospace"
-                    fontWeight="bold"
-                  >
-                    CRIMSON SPAWN
-                  </text>
-
-                  {/* Existing Wall Segments Preview */}
-                  {currentMapWalls.map((w) => {
-                    const wx1 = w.x1 ?? w.p1?.x ?? 0;
-                    const wy1 = w.y1 ?? w.p1?.y ?? 0;
-                    const wx2 = w.x2 ?? w.p2?.x ?? 0;
-                    const wy2 = w.y2 ?? w.p2?.y ?? 0;
-                    const wType = w.type || w.wallType || 'solid';
-                    const isDoor = wType === 'door' || wType === 'secret_door';
-                    const isWindow = wType === 'window' || wType === 'terrain';
-                    const isOpenDoor = isDoor && (w.doorState === 'open' || w.isOpen);
-                    const strokeColor = isDoor
-                      ? isOpenDoor
-                        ? '#34d399'
-                        : '#22d3ee'
-                      : isWindow
-                      ? '#60a5fa'
-                      : '#f59e0b';
-
-                    return (
-                      <g key={w.id}>
+                    <svg
+                      viewBox={`0 0 ${prevW} ${prevH}`}
+                      className="absolute inset-0 w-full h-full pointer-events-none"
+                    >
+                      {/* Tactical Grid Lines */}
+                      {Array.from({ length: prevCols + 1 }).map((_, c) => (
                         <line
-                          x1={wx1}
-                          y1={wy1}
-                          x2={wx2}
-                          y2={wy2}
-                          stroke="#000000"
-                          strokeWidth={11}
-                          strokeLinecap="round"
-                          opacity={0.65}
+                          key={`v_${c}`}
+                          x1={c * prevGSize}
+                          y1={0}
+                          x2={c * prevGSize}
+                          y2={prevH}
+                          stroke="rgba(255,255,255,0.18)"
+                          strokeWidth={1}
                         />
+                      ))}
+                      {Array.from({ length: prevRows + 1 }).map((_, r) => (
                         <line
-                          x1={wx1}
-                          y1={wy1}
-                          x2={wx2}
-                          y2={wy2}
-                          stroke={strokeColor}
-                          strokeWidth={7}
-                          strokeLinecap="round"
-                          strokeDasharray={isOpenDoor ? '8 8' : isWindow ? '12 6' : undefined}
+                          key={`h_${r}`}
+                          x1={0}
+                          y1={r * prevGSize}
+                          x2={prevW}
+                          y2={r * prevGSize}
+                          stroke="rgba(255,255,255,0.18)"
+                          strokeWidth={1}
                         />
-                        <circle cx={wx1} cy={wy1} r={5} fill="#ffffff" stroke={strokeColor} strokeWidth={2} />
-                        <circle cx={wx2} cy={wy2} r={5} fill="#ffffff" stroke={strokeColor} strokeWidth={2} />
-                      </g>
-                    );
-                  })}
-                </svg>
+                      ))}
 
-                {onLoadScene && (
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
-                    <div className="px-4 py-2.5 rounded-2xl bg-emerald-600/95 text-white font-mono font-bold text-xs flex items-center gap-2 shadow-2xl border border-emerald-400/50">
-                      <Play className="w-4 h-4 fill-white" />
-                      <span>Click to Load &ldquo;{selectedMap.name}&rdquo; Live on VTT to Edit</span>
+                      {/* Team Gold & Team Crimson Spawn Zone Indicators */}
+                      <rect
+                        x={2 * prevGSize}
+                        y={goldSpawnTopRow * prevGSize}
+                        width={2 * prevGSize}
+                        height={goldSpawnHeightRows * prevGSize}
+                        rx={12}
+                        fill="rgba(245, 158, 11, 0.10)"
+                        stroke="rgba(245, 158, 11, 0.45)"
+                        strokeDasharray="8 6"
+                        strokeWidth={2}
+                      />
+                      <text
+                        x={3 * prevGSize}
+                        y={Math.max(14, goldSpawnTopRow * prevGSize - 8)}
+                        textAnchor="middle"
+                        fill="#fbbf24"
+                        fontSize={14}
+                        fontFamily="monospace"
+                        fontWeight="bold"
+                      >
+                        GOLD SPAWN
+                      </text>
+
+                      <rect
+                        x={crimsonSpawnCol * prevGSize}
+                        y={goldSpawnTopRow * prevGSize}
+                        width={2 * prevGSize}
+                        height={goldSpawnHeightRows * prevGSize}
+                        rx={12}
+                        fill="rgba(239, 68, 68, 0.10)"
+                        stroke="rgba(239, 68, 68, 0.45)"
+                        strokeDasharray="8 6"
+                        strokeWidth={2}
+                      />
+                      <text
+                        x={(crimsonSpawnCol + 1) * prevGSize}
+                        y={Math.max(14, goldSpawnTopRow * prevGSize - 8)}
+                        textAnchor="middle"
+                        fill="#f87171"
+                        fontSize={14}
+                        fontFamily="monospace"
+                        fontWeight="bold"
+                      >
+                        CRIMSON SPAWN
+                      </text>
+
+                      {/* Existing Wall Segments Preview */}
+                      {currentMapWalls.map((w) => {
+                        const wx1 = w.x1 ?? w.p1?.x ?? 0;
+                        const wy1 = w.y1 ?? w.p1?.y ?? 0;
+                        const wx2 = w.x2 ?? w.p2?.x ?? 0;
+                        const wy2 = w.y2 ?? w.p2?.y ?? 0;
+                        const wType = w.type || w.wallType || 'solid';
+                        const isDoor = wType === 'door' || wType === 'secret_door';
+                        const isWindow = wType === 'window' || wType === 'terrain';
+                        const isOpenDoor = isDoor && (w.doorState === 'open' || w.isOpen);
+                        const strokeColor = isDoor
+                          ? isOpenDoor
+                            ? '#34d399'
+                            : '#22d3ee'
+                          : isWindow
+                          ? '#60a5fa'
+                          : '#f59e0b';
+
+                        return (
+                          <g key={w.id}>
+                            <line
+                              x1={wx1}
+                              y1={wy1}
+                              x2={wx2}
+                              y2={wy2}
+                              stroke="#000000"
+                              strokeWidth={11}
+                              strokeLinecap="round"
+                              opacity={0.65}
+                            />
+                            <line
+                              x1={wx1}
+                              y1={wy1}
+                              x2={wx2}
+                              y2={wy2}
+                              stroke={strokeColor}
+                              strokeWidth={7}
+                              strokeLinecap="round"
+                              strokeDasharray={isOpenDoor ? '8 8' : isWindow ? '12 6' : undefined}
+                            />
+                            <circle cx={wx1} cy={wy1} r={5} fill="#ffffff" stroke={strokeColor} strokeWidth={2} />
+                            <circle cx={wx2} cy={wy2} r={5} fill="#ffffff" stroke={strokeColor} strokeWidth={2} />
+                          </g>
+                        );
+                      })}
+                    </svg>
+
+                    <div className="absolute bottom-2 right-2 px-2 py-1 rounded bg-black/75 border border-zinc-700 text-[10px] font-mono text-zinc-300">
+                      {prevCols}×{prevRows} Grid ({prevW}×{prevH})
                     </div>
-                  </div>
-                )}
-              </div>
 
-              <p className="text-[11px] font-mono text-zinc-400 mt-2.5 text-center">
-                Click <strong className="text-emerald-400">Load Live to Edit</strong> (or click the map preview) to open this Arena map on the live VTT canvas and edit walls, doors, windows, and obstacles using the full DM tools — changes automatically sync back to this Arena map.
-              </p>
-            </div>
+                    {onLoadScene && (
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                        <div className="px-4 py-2.5 rounded-2xl bg-emerald-600/95 text-white font-mono font-bold text-xs flex items-center gap-2 shadow-2xl border border-emerald-400/50">
+                          <Play className="w-4 h-4 fill-white" />
+                          <span>Click to Load &ldquo;{selectedMap.name}&rdquo; Live on VTT to Edit</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <p className="text-[11px] font-mono text-zinc-400 mt-2.5 text-center">
+                    Click <strong className="text-emerald-400">Load Live to Edit</strong> (or click the map preview) to open this Arena map on the live VTT canvas and edit walls, doors, windows, and obstacles using the full DM tools — changes automatically sync back to this Arena map.
+                  </p>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}

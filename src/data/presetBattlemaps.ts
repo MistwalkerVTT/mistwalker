@@ -11,6 +11,12 @@ export interface PresetBattlemap {
   desc: string;
   thumbnailUrl?: string;
   isCustomUploaded?: boolean;
+  mapWidth?: number;
+  mapHeight?: number;
+  gridSize?: number;
+  gridCols?: number;
+  gridRows?: number;
+  arenaTitle?: string;
 }
 
 export const PRESET_BATTLEMAPS: PresetBattlemap[] = [
@@ -20,7 +26,12 @@ export const PRESET_BATTLEMAPS: PresetBattlemap[] = [
     url: forestRuinsImg,
     thumbnailUrl: forestRuinsImg,
     type: 'Wilderness / Ruins',
-    desc: 'Ancient moss-covered stone shrine with glowing green druidic runes, overgrown tree roots, and mystical forest clearing'
+    desc: 'Ancient moss-covered stone shrine with glowing green druidic runes, overgrown tree roots, and mystical forest clearing',
+    mapWidth: 1376,
+    mapHeight: 768,
+    gridSize: 60,
+    gridCols: 23,
+    gridRows: 13
   },
   {
     id: 'subterranean-maze',
@@ -28,7 +39,12 @@ export const PRESET_BATTLEMAPS: PresetBattlemap[] = [
     url: subterraneanMazeImg,
     thumbnailUrl: subterraneanMazeImg,
     type: 'Subterranean / Sewers',
-    desc: 'Flooded ancient temple ruins, submerged stone columns, wooden bridges, and a brick sewer labyrinth'
+    desc: 'Flooded ancient temple ruins, submerged stone columns, wooden bridges, and a brick sewer labyrinth',
+    mapWidth: 1264,
+    mapHeight: 848,
+    gridSize: 60,
+    gridCols: 21,
+    gridRows: 14
   },
   {
     id: 'skeleton-crypt',
@@ -36,7 +52,12 @@ export const PRESET_BATTLEMAPS: PresetBattlemap[] = [
     url: skeletonCryptImg,
     thumbnailUrl: skeletonCryptImg,
     type: 'Crypt / Catacombs',
-    desc: 'Octagonal catacomb sanctuary with stacked skull pillars, ornate central sarcophagus, and skeletal remains'
+    desc: 'Octagonal catacomb sanctuary with stacked skull pillars, ornate central sarcophagus, and skeletal remains',
+    mapWidth: 1264,
+    mapHeight: 848,
+    gridSize: 60,
+    gridCols: 21,
+    gridRows: 14
   },
   {
     id: 'lavapit',
@@ -44,6 +65,11 @@ export const PRESET_BATTLEMAPS: PresetBattlemap[] = [
     url: lavapitImg,
     thumbnailUrl: lavapitImg,
     type: 'Cavern / Boss',
-    desc: 'Active volcanic magma caverns with boiling lava streams and a slumbering red dragon atop a hoard of gold'
+    desc: 'Active volcanic magma caverns with boiling lava streams and a slumbering red dragon atop a hoard of gold',
+    mapWidth: 1376,
+    mapHeight: 768,
+    gridSize: 60,
+    gridCols: 23,
+    gridRows: 13
   }
 ];
