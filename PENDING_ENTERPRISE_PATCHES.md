@@ -114,6 +114,18 @@
 
 ---
 
+### [2026-10-30] fix(player): define autoApplyMonsterDamage state before callback dependencies to eliminate TDZ error
+- **Commit**: `e70c2e9`
+- **Files Changed**:
+  - `src/components/PlayerView.tsx`
+- **Summary**:
+  - Moved `const [autoApplyMonsterDamage, setAutoApplyMonsterDamage] = useState<boolean>(true)` to the top state section of `PlayerView.tsx`, preceding `handleResolveCombatDamage` and `handleResolveCombatHit`.
+  - Fixes the runtime exception `Cannot access 'yn' before initialization` caught by `CrashRecoveryBoundary` when mounting Player View.
+- **Impact / Testing Notes**:
+  - Load Adventurer (Player Mode) and verify the battlemap, tokens, HUD, and dice modals initialize cleanly without triggering the crash recovery screen.
+
+---
+
 ### Template for Incoming Entries:
 ```markdown
 ### [YYYY-MM-DD] <Title / Commit Short Summary>
