@@ -216,6 +216,22 @@
 
 ---
 
+### [2026-10-30] fix(arena): restore original tactical dimensions and unhide actions for original battle maps
+- **Commit**: `0a04255`
+- **Files Changed**:
+  - `src/data/presetBattlemaps.ts`
+  - `src/components/PlayerArenaMode.tsx`
+  - `src/components/ArenaManagerPanel.tsx`
+- **Summary**:
+  - Restored original 4 preset battle maps (`forest-ruins`, `subterranean-maze`, `skeleton-crypt`, `lavapit`) in `presetBattlemaps.ts` to their authored 22×14 tactical colosseum specifications: `mapWidth: 1320, mapHeight: 840, gridSize: 60, gridCols: 22, gridRows: 14`.
+  - In `PlayerArenaMode.tsx`, updated `dynamicArenaDims` to lock preset battle maps strictly to their authored 22×14 dimensions (1320×840 px, 60px grid) while retaining natural aspect ratio calculations for custom uploaded maps and imported campaign scenes.
+  - Added "Restore Originals" button in `PlayerArenaMode.tsx` (Lobby map selector) and `ArenaManagerPanel.tsx` (Arena Map Pool toolbar) to clear `deletedPresetMapIds` and re-enable any disabled preset maps, immediately bringing back all original battle maps.
+- **Impact / Testing Notes**:
+  - Verify all 4 original battle maps load with their exact 22×14 grid and proper wall/hazard alignments.
+  - Verify that clicking "Restore Originals" un-hides and recovers any deleted original maps.
+
+---
+
 ### Template for Incoming Entries:
 ```markdown
 ### [YYYY-MM-DD] <Title / Commit Short Summary>
