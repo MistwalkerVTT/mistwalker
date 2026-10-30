@@ -101,6 +101,19 @@
 
 ---
 
+### [2026-10-30] fix(intro): persist intro seen session state and wrap mode views in reactive crash recovery boundary
+- **Commit**: `3fb8c81`
+- **Files Changed**:
+  - `src/main.tsx`
+- **Summary**:
+  - Added `sessionStorage.setItem(INTRO_SEEN_KEY, '1')` when choosing Adventurer (Player Mode) from the Intro Screen, preventing page reloads or crash recovery from bouncing the user back to the main menu.
+  - Converted the static top-level `isPlayerView` constant into reactive `currentMode` state (`'dm' | 'player'`).
+  - Wrapped both mode views inside `<CrashRecoveryBoundary>` dynamically, ensuring fallback title and recovery context accurately reflect the active mode.
+- **Impact / Testing Notes**:
+  - Click "Adventurer" from the main menu and verify it mounts Player View directly and stays on Player View without kicking back to the menu.
+
+---
+
 ### Template for Incoming Entries:
 ```markdown
 ### [YYYY-MM-DD] <Title / Commit Short Summary>
