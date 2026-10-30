@@ -235,7 +235,7 @@ export function computeUpcastFormula(
 
 export interface EvaluatedDiceRoll {
   total: number;
-  dice: Array<{ sides: number; result: number; type: string }>;
+  dice: Array<{ sides: number; result: number; type?: string }>;
   rolls: number[];
   sides: number;
   bonus: number;

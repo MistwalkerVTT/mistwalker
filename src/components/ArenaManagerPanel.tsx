@@ -25,7 +25,8 @@ import {
   Unlock,
   Play,
   ArrowRight,
-  CheckCircle2
+  CheckCircle2,
+  X
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Campaign, Scene, uploadAndRegisterAsset, subscribeToMonsters } from '../lib/firebase';
@@ -39,7 +40,10 @@ import {
   loadArenaConfig,
   saveArenaConfig,
   subscribeToArenaConfig,
-  normalizeArenaWallSegment
+  normalizeArenaWallSegment,
+  generateColosseumPillarWalls,
+  generateChokepointDivideWalls,
+  generateTacticalBarricadeWalls
 } from '../services/arenaConfigService';
 import { generateScaledRandomEncounter } from './PlayerArenaMode';
 

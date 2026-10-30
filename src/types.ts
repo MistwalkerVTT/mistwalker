@@ -189,6 +189,8 @@ export interface RoomAnnotation {
   roomName?: string; // e.g. "The Parlor", "Guard Post"
   icon?: string; // e.g. "stairs-up", "stairs-down", "ladder", "portal", "door", "arrow-up", "arrow-down", "sign"
   visibleToPlayers?: boolean; // If true, label renders on player view screen too
+  x?: number;
+  y?: number;
   bounds: {
     x: number; // percentage (0 - 100)
     y: number; // percentage (0 - 100)
@@ -332,6 +334,7 @@ export interface ChapterStoryBeat {
   phase: 'hook' | 'arrival' | 'event' | 'climax' | 'conclusion';
   title: string;
   trigger?: string; // e.g. "At the start of the adventure", "When the alarm is raised", "At midnight"
+  triggerCondition?: string;
   boxedText?: string; // Verbatim read-aloud player text for this non-room beat
   dmNotes: string; // Verbatim DM guidance, rules, consequences, or rewards
   monsters?: string[]; // Any creatures spawned during this story beat
@@ -348,6 +351,7 @@ export interface ChapterGeneralFeature {
 export interface ChapterRoamingEncounter {
   id: string;
   name: string; // e.g. "Clockwork Guard Patrol", "Rival Crew Ambush"
+  title?: string;
   routeOrTrigger: string; // e.g. "Patrols G2 -> G5 -> G8 every 15 minutes" or "Roll 1d6 every hour"
   description: string; // Tactical behavior, attitude, or schedule
   monsters: string[]; // Sanitized monster strings, e.g. ["2x Guard", "1x Veteran"]
@@ -463,4 +467,6 @@ export type { Scene, Chapter, Campaign, SceneToken } from './lib/firebase';
 export * from './types/aura';
 export * from './types/monsterHud';
 export type { Ally, AllyAction, AllyTrait } from './types/ally';
+export type { Monster } from './types/monster';
+export type { SceneToken as Token } from './lib/firebase';
 

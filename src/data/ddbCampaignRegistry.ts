@@ -4,6 +4,7 @@ export interface CharacterCampaignInfo {
   campaignId: string;
   campaignTitle: string;
   isPrimaryCampaign?: boolean;
+  playerName?: string;
 }
 
 export const KNOWN_DDB_CAMPAIGNS: Record<string, string> = {

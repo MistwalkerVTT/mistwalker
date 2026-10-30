@@ -91,8 +91,12 @@ import {
   saveArenaConfig,
   getAvailableArenaMaps,
   doesArenaWallBlockMovement,
-  doesArenaWallBlockSight
+  doesArenaWallBlockSight,
+  generateLavapitDefaultHazards,
+  getArenaHazardAt
 } from '../services/arenaConfigService';
+import { canCreatureBypassHazard } from '../lib/hazardGeometry';
+import { HazardZone } from '../types/hazard';
 import { subscribeToMonsters } from '../lib/firebase';
 
 export type ArenaMatchMode =
@@ -216,7 +220,7 @@ const ARENA_HEIGHT = ARENA_ROWS * ARENA_GRID_SIZE; // 840
 function rollDiceFormula(formula: string | undefined, isCrit = false): {
   total: number;
   rolls: number[];
-  dice: Array<{ sides: number; result: number; type: string }>;
+  dice: Array<{ sides: number; result: number; type?: string }>;
   sides: number;
   bonus: number;
   breakdown: string;
@@ -3324,7 +3328,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         const rawLiveActor = combatantsRef.current.find((c) => c.id === currentActor.id) || currentActor;
         const liveActor = {
           ...rawLiveActor,
-          damageImmunities: rawLiveActor.sourceMonster?.damage_immunities || (rawLiveActor.sourceCharacter as any)?.damageImmunities || [],
+          damageImmunities: rawLiveActor.sourceMonster?.damageImmunities || (rawLiveActor.sourceMonster as any)?.damage_immunities || (rawLiveActor.sourceCharacter as any)?.damageImmunities || [],
           creatureType: rawLiveActor.raceOrType
         };
         const liveCombatants = combatantsRef.current;
@@ -3598,7 +3602,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             const hy = newY + ((c.size || 1) * ARENA_GRID_SIZE) / 2;
             const hazard = getArenaHazardAt(activeMapHazards, hx, hy, ARENA_WIDTH, ARENA_HEIGHT);
             if (hazard) {
-              const immunities = c.sourceMonster?.damage_immunities || (c.sourceCharacter as any)?.damageImmunities || [];
+              const immunities = c.sourceMonster?.damageImmunities || (c.sourceMonster as any)?.damage_immunities || (c.sourceCharacter as any)?.damageImmunities || [];
               const bypass = canCreatureBypassHazard({
                 isFlying: c.isFlying,
                 elevation: c.elevation,
@@ -5321,7 +5325,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             setCombatants((prev) => prev.map((c) => (c.id === actor.id ? markActorUsed(c) : c)));
             addCombatLog(
               actor.name,
-              actor.team,
+              (actor.team as 'gold' | 'crimson') || 'gold',
               `attacked ${target.name} with ${action.name} — MISS!`,
               `Rolled ${result.total} (d20: ${result.d20} + ${pendingManualDicePrompt.hitBonus}) vs AC ${target.ac}`
             );
@@ -5369,7 +5373,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             );
             addCombatLog(
               actor.name,
-              actor.team,
+              (actor.team as 'gold' | 'crimson') || 'gold',
               `healed ${target.name} with ${action.name} for +${healAmount} HP!`,
               result.breakdown
             );
@@ -5388,7 +5392,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             );
             addCombatLog(
               actor.name,
-              actor.team,
+              (actor.team as 'gold' | 'crimson') || 'gold',
               `${result.isCrit ? '💥 CRITICAL HIT!' : 'hit'} ${target.name} with ${action.name} for ${dmgAmount} damage!`,
               `Damage: ${result.breakdown}`,
               result.isCrit
@@ -5404,7 +5408,11 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           setPendingManualDicePrompt(null);
           handleToggleAutoRollDice(true);
           toast.success(`Auto Roll enabled for ${actor.name}!`);
-          executeCombatActionRef.current(actor, target, action, targetPointPx);
+          const fullActor = combatants.find((c) => c.id === actor.id);
+          const fullTarget = combatants.find((c) => c.id === target.id);
+          if (fullActor && fullTarget) {
+            executeCombatActionRef.current(fullActor, fullTarget, action, targetPointPx);
+          }
         }}
         onTrigger3dDice={onTrigger3dDice}
       />

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Character } from '../types/character';
 import { DEFAULT_CHARACTERS, getCharacterTokenUrl } from '../data/defaultCharacters';
-import { resolveCharacterCampaign, groupCharactersByCampaign } from '../data/ddbCampaignRegistry';
+import { resolveCharacterCampaign, groupCharactersByCampaign, KNOWN_DDB_CHARACTER_TO_CAMPAIGN } from '../data/ddbCampaignRegistry';
 import {
   Map as MapIcon,
   Upload,

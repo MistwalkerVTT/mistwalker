@@ -84,6 +84,16 @@ export class CrashRecoveryBoundary extends Component<Props, State> {
   }
 
   handleAttemptRecovery = () => {
+    const isTokenOrModuleError =
+      this.state.error?.message?.includes('token') ||
+      this.state.error?.message?.includes('Failed to fetch') ||
+      this.state.error?.message?.includes('is not defined');
+
+    if (isTokenOrModuleError) {
+      window.location.reload();
+      return;
+    }
+
     this.setState({
       hasError: false,
       error: null,

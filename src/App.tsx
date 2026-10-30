@@ -32,6 +32,7 @@ import {
   Plus
 } from 'lucide-react';
 import { Stage, Layer, Image as KonvaImage, Rect, Circle, Line, Text, Group, Wedge } from 'react-konva';
+import Konva from 'konva';
 import useImage from 'use-image';
 import 'gifler';
 import { generateDescription, chatWithLore, generateTTS, chatWithAutoDM, checkActionRules, generateVoiceScript, checkApiKeyStatus } from './services/aiService';
@@ -203,6 +204,7 @@ interface Token {
   id: string;
   name: string;
   url: string;
+  avatarUrl?: string;
   x: number;
   y: number;
   size: number;
@@ -1873,6 +1875,7 @@ export default function App() {
   const [customAuraRadiusInput, setCustomAuraRadiusInput] = useState<number>(10);
   const [customAuraColorInput, setCustomAuraColorInput] = useState<string>('rgba(234, 179, 8, 0.4)');
   const [customAuraOpacityInput, setCustomAuraOpacityInput] = useState<number>(0.35);
+  const [customAuraNameInput, setCustomAuraNameInput] = useState<string>('');
 
   // Environmental Animated FX & Weather State on Main Board (Uploaded & Generated Maps)
   const [boardAnimatedFeatures, setBoardAnimatedFeatures] = useState<AnimatedFeature[]>([]);
@@ -4379,7 +4382,7 @@ export default function App() {
       rolledDamage = evalDmg.total;
       damageBreakdown = evalDmg.breakdown;
       if (action.hitBonus === undefined) {
-        diceResults.push(...evalDmg.dice);
+        diceResults.push(...evalDmg.dice.map(d => ({ sides: d.sides, result: d.result, type: d.type || `d${d.sides}` })));
       }
     }
 
@@ -9192,9 +9195,9 @@ export default function App() {
                         const currentAnnos = roomAnnotations || [];
                         const activeHazards = currentAnnos.filter((a: any) => a.type === 'hazard' || a.isHazard);
                         for (const hz of activeHazards) {
-                          if (isPointInHazard(snappedX + gridSize / 2, snappedY + gridSize / 2, hz, mapW, mapH)) {
+                          if (isPointInHazard(snappedX + gridSize / 2, snappedY + gridSize / 2, hz as any, mapW, mapH)) {
                             const isFlying = Boolean(token.isFlying || (token.elevation && token.elevation > 0));
-                            const bypass = canCreatureBypassHazard({ isFlying, elevation: token.elevation }, hz);
+                            const bypass = canCreatureBypassHazard({ isFlying, elevation: token.elevation }, hz as any);
                             if (!bypass) {
                               if (hz.hazardType === 'lava') {
                                 toast.error(`🔥 ${token.name || 'Token'} stepped into ${hz.label || 'Lava Pit'}! (10d10 fire damage)`);
@@ -11679,6 +11682,7 @@ export default function App() {
               id: `pdf-room-${digestRoom.roomNumber}`,
               x: 50,
               y: 50,
+              bounds: { x: 50, y: 50, width: 0, height: 0 },
               label: `${digestRoom.roomNumber} - ${digestRoom.roomName}`,
               roomNumber: digestRoom.roomNumber,
               roomName: digestRoom.roomName,

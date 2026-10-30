@@ -268,6 +268,7 @@ export interface Chapter {
 }
 
 export interface Campaign {
+  id?: string;
   campaignId: string;
   campaignTitle: string;
   description: string;
@@ -278,6 +279,7 @@ export interface Campaign {
 
 export interface ActiveSessionData {
   sessionId: string;
+  id?: string;
   campaignId: string;
   chapterId: string;
   sceneId: string;
@@ -461,7 +463,7 @@ export async function getUploadedAssetsList(
         };
       })
       .filter(a => {
-        const isBetaDoc = Boolean(a.assetId?.startsWith('beta_') || a.id?.startsWith('beta_') || (a as any).isBeta);
+        const isBetaDoc = Boolean(a.assetId?.startsWith('beta_') || (a as any).id?.startsWith('beta_') || (a as any).isBeta);
         return IS_ENTERPRISE_BETA ? isBetaDoc : !isBetaDoc;
       });
 
@@ -500,7 +502,7 @@ export function subscribeToUploadedAssets(
           };
         })
         .filter(a => {
-          const isBetaDoc = Boolean(a.assetId?.startsWith('beta_') || a.id?.startsWith('beta_') || (a as any).isBeta);
+          const isBetaDoc = Boolean(a.assetId?.startsWith('beta_') || (a as any).id?.startsWith('beta_') || (a as any).isBeta);
           return IS_ENTERPRISE_BETA ? isBetaDoc : !isBetaDoc;
         });
       if (typeFilter !== 'all') {

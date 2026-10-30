@@ -4213,7 +4213,8 @@ export default function PlayerView() {
       castRotation = Math.atan2(target.y - coneInfo.tokenCenter.y, target.x - coneInfo.tokenCenter.x) * (180 / Math.PI);
     }
 
-    const lastingDebuff = findLastingDebuffConfig(activeEquippedAsset.id || activeEquippedAsset.name || aimedAction?.name);
+    const aimedAction = activeTargetingAction;
+    const lastingDebuff = findLastingDebuffConfig(activeEquippedAsset.id || activeEquippedAsset.name || (aimedAction as any)?.name);
     const targetCreatureToken = tokens.find(t => {
       const tRad = ((t.size || 1) * gridSize) / 2;
       const tcX = (t.x ?? 0) + tRad;
@@ -4223,7 +4224,6 @@ export default function PlayerView() {
 
     const isDebuffOnTarget = Boolean(lastingDebuff && targetCreatureToken);
 
-    const aimedAction = activeTargetingAction;
     const newEffect: VttEffectInstance = {
       id: `eff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       name: hitToken && hitToken.id !== claimedToken?.id ? `${activeEquippedAsset.name} (${hitToken.name})` : activeEquippedAsset.name,
@@ -4462,12 +4462,12 @@ export default function PlayerView() {
         socketRef.current.emit('EFFECT_SPAWN', newEffect);
       }
 
-      const lastingDebuff = findLastingDebuffConfig(asset.id || action.name);
-      if (lastingDebuff && targetToken) {
-        const targetTokenId = targetToken.id;
-        const targetTokenName = targetToken.name;
+      const lastingDebuff = findLastingDebuffConfig(asset.id || asset.name);
+      if (lastingDebuff && claimedToken) {
+        const targetTokenId = claimedToken.id;
+        const targetTokenName = claimedToken.name;
         setTimeout(() => {
-          const bubble = createDebuffBubbleFromConfig(lastingDebuff, caster.name || 'Hero');
+          const bubble = createDebuffBubbleFromConfig(lastingDebuff, claimedToken.name || 'Hero');
           setTokens(prev => {
             const next = prev.map(t => {
               if (t.id !== targetTokenId) return t;

@@ -394,7 +394,7 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
       const url = await uploadAndRegisterAsset(file, 'token');
       setEditingRoomMonster(prev => prev ? {
         ...prev,
-        monster: { ...prev.monster, avatarUrl: url }
+        monster: { ...prev.monster, avatarUrl: url.url }
       } : null);
       toast.success('Monster token avatar uploaded!');
     } catch (err) {
@@ -685,6 +685,8 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
               activeDmNotes={activeDmNotes}
               roomAnnotations={roomAnnotations}
               availableMonsters={allAvailableMonsters}
+              selectedVoice={selectedVoice}
+              onSelectVoice={setSelectedVoice}
               onBroadcastReadAloud={onBroadcastReadAloud}
               onSpawnMonsterToken={(tokenData) => {
                 if (onSpawnMonsterToken) {
@@ -694,7 +696,7 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
                   });
                 }
               }}
-              onSelectRoomByNumber={(rNum) => {
+              onSelectRoom={(rNum) => {
                 if (onSelectRoomByNumber) {
                   onSelectRoomByNumber(rNum);
                   setDrawerTab('room');

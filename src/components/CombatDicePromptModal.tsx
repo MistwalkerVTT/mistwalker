@@ -58,6 +58,7 @@ export interface PendingCombatRoll {
   isSave?: boolean;
   saveDc?: number;
   saveAbility?: string;
+  isAttack?: boolean;
   // Context & Metadata
   targetPointPx?: { x: number; y: number };
   expendedActionSlot?: number;

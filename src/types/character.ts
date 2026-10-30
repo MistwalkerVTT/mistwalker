@@ -57,6 +57,7 @@ export interface Character {
   ddbCharacterId?: string | number;
   ddbCampaignId?: string;
   ddbCampaignTitle?: string;
+  ddbUrl?: string;
   playerName?: string;
   name: string;
   race: string;
