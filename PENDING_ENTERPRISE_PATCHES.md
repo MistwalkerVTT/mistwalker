@@ -168,6 +168,35 @@
 
 ---
 
+### [2026-10-30] fix(player-view,dm-view): resolve runtime crashes, missing hazard/arena imports, and tsc errors
+- **Commit**: `e43dea7`
+- **Files Changed**:
+  - `src/App.tsx`
+  - `src/components/ArenaManagerPanel.tsx`
+  - `src/components/CombatDicePromptModal.tsx`
+  - `src/components/CrashRecoveryBoundary.tsx`
+  - `src/components/LeftSidebar.tsx`
+  - `src/components/PlayerArenaMode.tsx`
+  - `src/components/PlayerView.tsx`
+  - `src/components/RoomBriefingDrawer.tsx`
+  - `src/data/ddbCampaignRegistry.ts`
+  - `src/lib/firebase.ts`
+  - `src/types.ts`
+  - `src/types/character.ts`
+  - `src/types/hud.ts`
+- **Summary**:
+  - Fixed Player View TDZ runtime crash: hoisted `aimedAction` before `findLastingDebuffConfig` reference, and resolved unbound variables `targetToken`, `action`, `caster` in `handleQuickPlaceAsset`.
+  - Fixed Player Arena Mode crash: imported missing `generateLavapitDefaultHazards`, `getArenaHazardAt`, `canCreatureBypassHazard`, and `HazardZone`.
+  - Fixed DM View Arena Manager panel: imported missing `X` icon and wall generation algorithms (`generateColosseumPillarWalls`, `generateChokepointDivideWalls`, `generateTacticalBarricadeWalls`).
+  - Fixed DM View `customAuraNameInput` and Konva drag cleanup references in `App.tsx`.
+  - Improved `CrashRecoveryBoundary` to perform cache-busting refresh when catching unexpected token, import, or undefined module errors.
+  - Resolved all TypeScript compiler errors across all components (`tsc --noEmit` clean with 0 errors).
+- **Impact / Testing Notes**:
+  - Verify Player View loads immediately without "Cannot access before initialization" or "generateLavapitDefaultHazards is not defined" crashes.
+  - Verify DM View and Arena Manager load and operate without interruption.
+
+---
+
 ### Template for Incoming Entries:
 ```markdown
 ### [YYYY-MM-DD] <Title / Commit Short Summary>
