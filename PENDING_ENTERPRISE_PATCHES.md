@@ -126,6 +126,20 @@
 
 ---
 
+### [2026-10-30] feat(arena): allow dm to create and delete battle arenas with custom walls and battlemaps
+- **Commit**: `eebae43`
+- **Files Changed**:
+  - `src/components/ArenaManagerPanel.tsx`
+  - `src/services/arenaConfigService.ts`
+- **Summary**:
+  - Added "+ Create Arena" button and modal dialog in Campaign Manager -> Battle Arena Manager allowing the DM to configure arena title, category tags, lore, background battlemap, and architectural wall presets (4 Tactical Pillars, Central Chokepoint Divide, Tactical Barricades, or Open Arena).
+  - Added delete capability to all battle arenas in the pool (custom arenas removed from `customMaps`, preset arenas tracked in `deletedPresetMapIds`), including fallback default selection when the active arena is deleted.
+  - Added "Delete Arena" button in the Arena Inspector panel for quick deletion with confirmation toast.
+- **Impact / Testing Notes**:
+  - Open Campaign Manager -> Battle Arena tab. Click "+ Create Arena", pick a name and backdrop, and verify the arena is created, selected, and immediately editable. Click "Delete Arena" or trash icon on any arena in the list to remove it from the pool.
+
+---
+
 ### Template for Incoming Entries:
 ```markdown
 ### [YYYY-MM-DD] <Title / Commit Short Summary>
