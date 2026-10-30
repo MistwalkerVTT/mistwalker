@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { Volume2, VolumeX } from 'lucide-react';
 import { audioNarration } from '../services/audioNarrationService';
 
 const LOGO_URL = 'https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/blob-c3567a0.png/:/rs=w:1440,h:1440';
@@ -11,7 +12,7 @@ interface IntroScreenProps {
 }
 
 /** Procedural ambient audio (no asset files): low drone + shimmer, and a swell on selection. */
-function createAmbience() {
+function createAmbience(initialMuted = false) {
   try {
     const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext;
     if (!Ctx) return null;
@@ -43,7 +44,9 @@ function createAmbience() {
     lfo.connect(lfoGain).connect(shimmer.frequency);
     lfo.start();
 
-    master.gain.linearRampToValueAtTime(0.55, ctx.currentTime + 3);
+    if (!initialMuted) {
+      master.gain.linearRampToValueAtTime(0.55, ctx.currentTime + 3);
+    }
 
     return {
       swell() {
@@ -74,8 +77,16 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onSelectDm, onSelectPl
   const [stage, setStage] = useState(0); // 0 black, 1 logo, 2 title, 3 tagline, 4 choices
   const [leaving, setLeaving] = useState<null | 'dm' | 'player'>(null);
   const [fadingOut, setFadingOut] = useState(false);
-  const [muted, setMuted] = useState(false);
+  const [muted, setMuted] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('mistwalker_intro_muted') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [audioOn, setAudioOn] = useState(false);
+  const mutedRef = useRef(muted);
+  mutedRef.current = muted;
 
   // Cinematic sequence timing + preload high-res JB2A magical portal transition videos
   useEffect(() => {
@@ -116,16 +127,44 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onSelectDm, onSelectPl
     setStage((s) => (s < 4 ? 4 : s));
   }, []);
 
-  const ensureAudio = useCallback(() => {
+  const ensureAudio = useCallback((forcePlay = false) => {
     if (!audioRef.current) {
-      audioRef.current = createAmbience();
+      audioRef.current = createAmbience(forcePlay ? false : mutedRef.current);
       if (audioRef.current) setAudioOn(true);
     }
   }, []);
 
+  const toggleMute = useCallback((e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    setMuted((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('mistwalker_intro_muted', String(next));
+      } catch { /* ignore */ }
+      if (audioRef.current) {
+        audioRef.current.setMuted(next);
+      } else if (!next) {
+        ensureAudio(true);
+      }
+      if (next) {
+        audioNarration.stop();
+      }
+      return next;
+    });
+  }, [ensureAudio]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      ensureAudio();
+      if (e.key.toLowerCase() === 'm') {
+        toggleMute();
+        return;
+      }
+      if (!mutedRef.current) {
+        ensureAudio();
+      }
       if (stage < 4) skipToChoices();
       else if (!leaving) {
         if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'd') choose('dm');
@@ -141,10 +180,22 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onSelectDm, onSelectPl
 
   const choose = (mode: 'dm' | 'player') => {
     if (leaving) return;
-    ensureAudio();
+    setLeaving(mode);
+
+    // If user has sound muted, transition silently and immediately
+    if (mutedRef.current) {
+      audioRef.current?.setMuted(true);
+      audioNarration.stop();
+      if (mode === 'dm') onSelectDm();
+      else onSelectPlayer();
+      setFadingOut(true);
+      setTimeout(() => onFinished?.(), 1600);
+      return;
+    }
+
+    ensureAudio(true);
     // Fade out the drone; the custom transition sound takes over
     audioRef.current?.setMuted(true);
-    setLeaving(mode);
 
     // 1) ElevenLabs Portal & Runic Shockwave Transition Sound starts immediately
     const sfxUrl = mode === 'dm' ? '/audio/portal_dm.mp3' : '/audio/portal_player.mp3';
@@ -623,21 +674,32 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onSelectDm, onSelectPl
         </p>
       </div>
 
-      {/* Sound toggle */}
-      {audioOn && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            const next = !muted;
-            setMuted(next);
-            audioRef.current?.setMuted(next);
-          }}
-          className="absolute bottom-4 right-4 z-20 text-[10px] tracking-[0.3em] uppercase font-mono text-zinc-400 hover:text-amber-300 border border-zinc-700/70 hover:border-amber-500/60 rounded-full px-3 py-1.5 bg-black/50 cursor-pointer"
-        >
-          Sound: {muted ? 'Off' : 'On'}
-        </button>
-      )}
+      {/* Prominent Always-Visible Mute / Unmute Button */}
+      <button
+        type="button"
+        id="btn-intro-mute-toggle"
+        onClick={toggleMute}
+        onMouseDown={(e) => e.stopPropagation()}
+        className={`fixed top-4 right-4 sm:top-6 sm:right-6 z-50 flex items-center gap-2 px-3.5 py-2 rounded-full border backdrop-blur-md transition-all cursor-pointer shadow-xl select-none group ${
+          muted
+            ? 'bg-zinc-950/90 border-rose-500/50 text-rose-300 hover:bg-rose-950/50 hover:border-rose-400 shadow-rose-950/40 ring-1 ring-rose-500/20'
+            : 'bg-zinc-950/90 border-amber-500/50 text-amber-300 hover:bg-amber-950/50 hover:border-amber-400 shadow-amber-950/40 ring-1 ring-amber-500/20'
+        }`}
+        title={muted ? 'Unmute audio & sound effects (Hot-key: M)' : 'Mute all audio & sound effects (Hot-key: M)'}
+        aria-label={muted ? 'Unmute Audio' : 'Mute Audio'}
+      >
+        {muted ? (
+          <>
+            <VolumeX className="w-4 h-4 text-rose-400 shrink-0 transition-transform group-hover:scale-110" />
+            <span className="text-xs font-mono font-bold tracking-wider uppercase">Muted</span>
+          </>
+        ) : (
+          <>
+            <Volume2 className="w-4 h-4 text-amber-400 shrink-0 transition-transform group-hover:scale-110 animate-pulse" />
+            <span className="text-xs font-mono font-bold tracking-wider uppercase">Sound On</span>
+          </>
+        )}
+      </button>
 
       {/* High-definition JB2A Magical Arcane Portal & Runic Shockwave Transition */}
       {leaving && (
