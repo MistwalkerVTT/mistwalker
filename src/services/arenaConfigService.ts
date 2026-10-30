@@ -23,6 +23,7 @@ export interface ArenaConfig {
   defaultDifficulty: ArenaDifficultyConfig;
   defaultMapId: string;
   disabledMapIds: string[];
+  deletedPresetMapIds?: string[];
   customMaps: PresetBattlemap[];
   mapWalls: Record<string, WallSegment[]>;
   enforceWalls: boolean;
@@ -48,6 +49,7 @@ export const DEFAULT_ARENA_CONFIG: ArenaConfig = {
   defaultDifficulty: 'standard',
   defaultMapId: PRESET_BATTLEMAPS[3]?.id || PRESET_BATTLEMAPS[0]?.id || 'lavapit',
   disabledMapIds: [],
+  deletedPresetMapIds: [],
   customMaps: [],
   mapWalls: {},
   enforceWalls: true,
@@ -141,6 +143,7 @@ export function normalizeArenaConfig(raw: any): ArenaConfig {
       ? raw.defaultMapId
       : DEFAULT_ARENA_CONFIG.defaultMapId,
     disabledMapIds: Array.isArray(raw.disabledMapIds) ? raw.disabledMapIds : [],
+    deletedPresetMapIds: Array.isArray(raw.deletedPresetMapIds) ? raw.deletedPresetMapIds : [],
     customMaps: Array.isArray(raw.customMaps) ? raw.customMaps : [],
     mapWalls: normalizedMapWalls,
     enforceWalls: typeof raw.enforceWalls === 'boolean' ? raw.enforceWalls : true,
@@ -271,10 +274,12 @@ export function subscribeToArenaConfig(callback: (config: ArenaConfig) => void):
  */
 export function getAvailableArenaMaps(config: ArenaConfig): PresetBattlemap[] {
   const disabledSet = new Set(config.disabledMapIds || []);
+  const deletedSet = new Set(config.deletedPresetMapIds || []);
   const combined: PresetBattlemap[] = [];
   const seenIds = new Set<string>();
+  const presets = PRESET_BATTLEMAPS.filter((m) => !deletedSet.has(m.id));
 
-  for (const m of [...PRESET_BATTLEMAPS, ...(config.customMaps || [])]) {
+  for (const m of [...presets, ...(config.customMaps || [])]) {
     if (!m || !m.id || seenIds.has(m.id)) continue;
     seenIds.add(m.id);
     if (!disabledSet.has(m.id)) {

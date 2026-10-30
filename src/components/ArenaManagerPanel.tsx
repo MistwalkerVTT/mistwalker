@@ -78,13 +78,15 @@ export const ArenaManagerPanel: React.FC<ArenaManagerPanelProps> = ({
   const allMaps = useMemo<PresetBattlemap[]>(() => {
     const merged: PresetBattlemap[] = [];
     const seen = new Set<string>();
-    for (const m of [...PRESET_BATTLEMAPS, ...(config.customMaps || [])]) {
+    const deletedSet = new Set(config.deletedPresetMapIds || []);
+    const presets = PRESET_BATTLEMAPS.filter((m) => !deletedSet.has(m.id));
+    for (const m of [...presets, ...(config.customMaps || [])]) {
       if (!m || !m.id || seen.has(m.id)) continue;
       seen.add(m.id);
       merged.push(m);
     }
     return merged;
-  }, [config.customMaps]);
+  }, [config.customMaps, config.deletedPresetMapIds]);
 
   const [selectedMapId, setSelectedMapId] = useState<string>(() => config.defaultMapId || PRESET_BATTLEMAPS[0].id);
   const selectedMap = useMemo(
@@ -99,6 +101,12 @@ export const ArenaManagerPanel: React.FC<ArenaManagerPanelProps> = ({
   const [customMapTypeInput, setCustomMapTypeInput] = useState<string>('Custom Arena');
   const [showSavedLibraryPicker, setShowSavedLibraryPicker] = useState<boolean>(false);
   const [showSceneImportPicker, setShowSceneImportPicker] = useState<boolean>(false);
+  const [showCreateArenaModal, setShowCreateArenaModal] = useState<boolean>(false);
+  const [createArenaName, setCreateArenaName] = useState<string>('');
+  const [createArenaType, setCreateArenaType] = useState<string>('Colosseum / Arena');
+  const [createArenaDesc, setCreateArenaDesc] = useState<string>('');
+  const [createArenaWallPreset, setCreateArenaWallPreset] = useState<'none' | 'pillars' | 'divide' | 'barricades'>('pillars');
+  const [createArenaAssetId, setCreateArenaAssetId] = useState<string>('');
 
   const fileUploadRef = useRef<HTMLInputElement | null>(null);
 
@@ -291,6 +299,89 @@ export const ArenaManagerPanel: React.FC<ArenaManagerPanelProps> = ({
       toast.error('Failed to upload Arena map: ' + (err?.message || 'Unknown error'));
     } finally {
       setIsUploadingArenaMap(false);
+    }
+  };
+
+  // Handle creating a brand new battle arena (with custom walls, presets, and background)
+  const handleCreateCustomArena = (asset?: UploadedAsset) => {
+    const finalName = createArenaName.trim() || asset?.name.replace(/\.[^/.]+$/, '') || 'Custom Battle Arena';
+    const finalUrl = asset?.url || selectedMap?.url || PRESET_BATTLEMAPS[0]?.url || '';
+    const finalThumb = asset?.thumbnailUrl || asset?.url || selectedMap?.thumbnailUrl || selectedMap?.url || '';
+    const newId = `arena_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+    let initialWalls: WallSegment[] = [];
+    if (createArenaWallPreset === 'pillars') {
+      initialWalls = generateColosseumPillarWalls();
+    } else if (createArenaWallPreset === 'divide') {
+      initialWalls = generateChokepointDivideWalls();
+    } else if (createArenaWallPreset === 'barricades') {
+      initialWalls = generateTacticalBarricadeWalls();
+    }
+
+    const newMap: PresetBattlemap = {
+      id: newId,
+      name: finalName,
+      url: finalUrl,
+      thumbnailUrl: finalThumb,
+      type: createArenaType.trim() || 'Custom Arena',
+      desc: createArenaDesc.trim() || 'Created by Dungeon Master in Battle Arena Manager',
+      isCustomUploaded: true
+    };
+
+    commitConfigUpdate(
+      (prev) => ({
+        ...prev,
+        defaultMapId: newId,
+        customMaps: [...(prev.customMaps || []), newMap],
+        mapWalls: initialWalls.length > 0
+          ? { ...(prev.mapWalls || {}), [newId]: initialWalls }
+          : prev.mapWalls
+      }),
+      `Created "${newMap.name}" Battle Arena!`
+    );
+
+    setSelectedMapId(newId);
+    setCreateArenaName('');
+    setCreateArenaDesc('');
+    setCreateArenaAssetId('');
+    setShowCreateArenaModal(false);
+  };
+
+  // Delete any Arena Map (custom maps removed from customMaps, preset maps added to deletedPresetMapIds)
+  const handleDeleteArenaMap = (mapToDelete: PresetBattlemap) => {
+    const isPreset = PRESET_BATTLEMAPS.some((pm) => pm.id === mapToDelete.id);
+    const isCustom = (config.customMaps || []).some((cm) => cm.id === mapToDelete.id);
+
+    commitConfigUpdate(
+      (prev) => {
+        const nextCustom = (prev.customMaps || []).filter((cm) => cm.id !== mapToDelete.id);
+        const nextDeletedPresets = isPreset
+          ? Array.from(new Set([...(prev.deletedPresetMapIds || []), mapToDelete.id]))
+          : (prev.deletedPresetMapIds || []);
+        
+        // Find next viable fallback map
+        const remainingMaps = allMaps.filter((m) => m.id !== mapToDelete.id);
+        const nextDefault = prev.defaultMapId === mapToDelete.id
+          ? (remainingMaps[0]?.id || PRESET_BATTLEMAPS.find((p) => !nextDeletedPresets.includes(p.id))?.id || '')
+          : prev.defaultMapId;
+
+        const nextMapWalls = { ...(prev.mapWalls || {}) };
+        delete nextMapWalls[mapToDelete.id];
+
+        return {
+          ...prev,
+          defaultMapId: nextDefault,
+          customMaps: nextCustom,
+          deletedPresetMapIds: nextDeletedPresets,
+          mapWalls: nextMapWalls
+        };
+      },
+      `Deleted arena "${mapToDelete.name}" from Battle Arena!`
+    );
+
+    const remainingMaps = allMaps.filter((m) => m.id !== mapToDelete.id);
+    if (selectedMap.id === mapToDelete.id && remainingMaps.length > 0) {
+      setSelectedMapId(remainingMaps[0].id);
     }
   };
 
@@ -507,7 +598,14 @@ export const ArenaManagerPanel: React.FC<ArenaManagerPanelProps> = ({
                   <ImageIcon className="w-3.5 h-3.5" />
                   <span>Arena Map Pool ({allMaps.length})</span>
                 </h3>
-                <span className="text-[10px] font-mono text-zinc-500">Select or Load Live</span>
+                <button
+                  type="button"
+                  onClick={() => setShowCreateArenaModal(true)}
+                  className="px-2 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 text-[10px] font-mono font-bold flex items-center gap-1 shadow cursor-pointer transition-all active:scale-95"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>Create Arena</span>
+                </button>
               </div>
 
               <div className="space-y-2">
@@ -599,27 +697,14 @@ export const ArenaManagerPanel: React.FC<ArenaManagerPanelProps> = ({
                           >
                             {isDisabled ? 'Enable' : 'Hide'}
                           </button>
-                          {m.isCustomUploaded && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                commitConfigUpdate(
-                                  (prev) => ({
-                                    ...prev,
-                                    customMaps: (prev.customMaps || []).filter((cm) => cm.id !== m.id)
-                                  }),
-                                  `Removed "${m.name}" from Arena Maps`
-                                );
-                                if (selectedMap.id === m.id) {
-                                  setSelectedMapId(PRESET_BATTLEMAPS[0].id);
-                                }
-                              }}
-                              className="p-1 rounded bg-zinc-800 hover:bg-rose-500/20 text-zinc-400 hover:text-rose-400 cursor-pointer ml-auto"
-                              title="Delete custom Arena map"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteArenaMap(m)}
+                            className="p-1 rounded bg-zinc-800 hover:bg-rose-500/20 text-zinc-400 hover:text-rose-400 cursor-pointer ml-auto transition-colors"
+                            title={`Delete "${m.name}" from Battle Arena`}
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -841,6 +926,15 @@ export const ArenaManagerPanel: React.FC<ArenaManagerPanelProps> = ({
 
               {/* Campaign-Mode Live Editing Controls */}
               <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleDeleteArenaMap(selectedMap)}
+                  className="px-3 py-2 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/50 text-rose-300 font-mono text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                  title={`Delete "${selectedMap.name}" from Battle Arena`}
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                  <span>Delete Arena</span>
+                </button>
                 {onLoadScene && (
                   <div className="flex items-center gap-1">
                     <button
@@ -1137,7 +1231,137 @@ export const ArenaManagerPanel: React.FC<ArenaManagerPanelProps> = ({
               </div>
             </div>
 
-            {/* Custom Monster Creator Form */}
+      {/* Create New Battle Arena Modal */}
+      {showCreateArenaModal && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-2xl bg-zinc-900 border border-amber-500/30 p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400">
+                  <Plus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold font-mono text-white">Create New Battle Arena</h3>
+                  <p className="text-xs text-zinc-400 font-sans">Configure name, background battlemap, and tactical wall layout</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCreateArenaModal(false)}
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 font-mono text-xs">
+              <div>
+                <label className="block text-zinc-400 mb-1 font-bold">Arena Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Pit of the Blood Moon"
+                  value={createArenaName}
+                  onChange={(e) => setCreateArenaName(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-zinc-400 mb-1 font-bold">Arena Type / Tag</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Colosseum / Boss"
+                    value={createArenaType}
+                    onChange={(e) => setCreateArenaType(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-zinc-400 mb-1 font-bold">Wall Architecture Preset</label>
+                  <select
+                    value={createArenaWallPreset}
+                    onChange={(e) => setCreateArenaWallPreset(e.target.value as any)}
+                    className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white focus:outline-none focus:border-amber-400"
+                  >
+                    <option value="pillars">4 Tactical Pillars</option>
+                    <option value="divide">Central Chokepoint Divide</option>
+                    <option value="barricades">Tactical Cover Barricades</option>
+                    <option value="none">Open Arena (No Walls)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-zinc-400 mb-1 font-bold">Arena Description / Lore</label>
+                <textarea
+                  rows={2}
+                  placeholder="Brief description or hazard cues for players..."
+                  value={createArenaDesc}
+                  onChange={(e) => setCreateArenaDesc(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white font-sans focus:outline-none focus:border-amber-400 resize-none text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-zinc-400 mb-1 font-bold">Background Battlemap</label>
+                <div className="grid grid-cols-3 gap-2 max-h-36 overflow-y-auto p-1.5 rounded-xl bg-zinc-950 border border-zinc-800">
+                  {savedMaps.map((sm) => {
+                    const isSelected = createArenaAssetId === sm.assetId;
+                    return (
+                      <div
+                        key={sm.assetId}
+                        onClick={() => {
+                          setCreateArenaAssetId(sm.assetId);
+                          if (!createArenaName) setCreateArenaName(sm.name.replace(/\.[^/.]+$/, ''));
+                        }}
+                        className={`p-1.5 rounded-lg border transition-all cursor-pointer flex flex-col items-center gap-1 ${
+                          isSelected ? 'bg-amber-500/20 border-amber-400' : 'bg-zinc-900 border-zinc-800 hover:border-zinc-700'
+                        }`}
+                      >
+                        <img
+                          src={sm.thumbnailUrl || sm.url}
+                          alt={sm.name}
+                          className="w-full h-12 rounded object-cover"
+                        />
+                        <span className="text-[10px] text-zinc-300 truncate w-full text-center">{sm.name}</span>
+                      </div>
+                    );
+                  })}
+                  {savedMaps.length === 0 && (
+                    <div className="col-span-3 text-center py-3 text-[11px] text-zinc-500">
+                      No uploaded maps found. Will use standard tactical backdrop.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setShowCreateArenaModal(false)}
+                className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-mono text-xs cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const asset = savedMaps.find((m) => m.assetId === createArenaAssetId);
+                  handleCreateCustomArena(asset);
+                }}
+                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-mono font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-amber-500/20 cursor-pointer active:scale-95 transition-all"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Create & Open Arena</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Monster Creator Form */}
             {showCustomMonsterModal && (
               <div className="p-4 rounded-2xl bg-zinc-900 border border-rose-500/40 space-y-3">
                 <div className="flex items-center justify-between">
