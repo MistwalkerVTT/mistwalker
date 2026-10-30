@@ -197,6 +197,25 @@
 
 ---
 
+### [2026-10-30] feat(arena): preserve organic map aspect ratio, add arena naming, and save arenas like campaign scenes
+- **Commit**: `4083207`
+- **Files Changed**:
+  - `src/data/presetBattlemaps.ts`
+  - `src/components/ArenaManagerPanel.tsx`
+  - `src/components/PlayerArenaMode.tsx`
+- **Summary**:
+  - Removed hardcoded 22:14 (1320x840) distortion and aspect ratio forcing across the Battle Arena.
+  - Added organic dimensions and aspect ratio support in `PresetBattlemap` (`mapWidth`, `mapHeight`, `gridSize`, `gridCols`, `gridRows`, `arenaTitle`).
+  - Added dynamic aspect ratio calculation in `PlayerArenaMode.tsx` from `bgImage.naturalWidth` / `naturalHeight` and preset definitions, updating Stage, background `<Rect>`, `<KonvaImage>`, `<GridLayer>`, token bounds, camera centering/fitting, hazard checks, and spawn points to dynamically adapt without squashing or stretching.
+  - Added Arena Naming feature: users can view and edit the Arena Name directly via inline input in the Lobby header, in the active battle top bar, and when saving.
+  - Added Save Arena modal: allows naming and saving the arena into Arena Presets (`customMaps` with organic dimensions and walls) or saving directly into an existing Campaign and Chapter as a full Campaign Scene with combatants converted to `SceneTokens`.
+  - Updated `ArenaManagerPanel.tsx`: image uploads automatically probe and store natural dimensions and grid layout; scene imports retain original dimensions and unscaled walls; the map preview renders with dynamic `aspectRatio` and grid lines matching the organic dimensions.
+- **Impact / Testing Notes**:
+  - When loading or uploading maps into Battle Arena (wide, square, or tall), verify the background image maintains its organic aspect ratio without distortion.
+  - Verify editing the arena name in the Lobby and saving it to Arena Presets or Campaign Scenes.
+
+---
+
 ### Template for Incoming Entries:
 ```markdown
 ### [YYYY-MM-DD] <Title / Commit Short Summary>
