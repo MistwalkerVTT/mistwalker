@@ -140,6 +140,34 @@
 
 ---
 
+### [2026-10-30] feat(hazards): implement unsafe zones, lava pits, chasm fall damage, and tactical AI avoidance
+- **Commit**: `accde65`
+- **Files Changed**:
+  - `src/types/hazard.ts`
+  - `src/lib/hazardGeometry.ts`
+  - `src/types.ts`
+  - `src/services/arenaConfigService.ts`
+  - `src/services/arenaTacticalAi.ts`
+  - `src/services/ai/arenaYukaBrain.ts`
+  - `src/components/PlayerArenaMode.tsx`
+  - `src/components/RoomHotspotLayer.tsx`
+  - `src/components/AssignPolygonRoomModal.tsx`
+  - `src/components/RoomBriefingDrawer.tsx`
+  - `src/App.tsx`
+- **Summary**:
+  - Defined comprehensive Environmental Hazard models (`HazardType`, `HazardSeverity`, `HazardBypassRules`, `HazardZone`, `HAZARD_PRESETS` for lava, chasm fall damage, acid pool, spike pit, poison cloud, deep water, difficult ground).
+  - Implemented `isPointInPolygon`, `isPointInHazard`, `isGridCellInHazard`, and `canCreatureBypassHazard` in `src/lib/hazardGeometry.ts`.
+  - Added AI navigation constraint in `buildArenaWalkabilityGrid` and `YukaArenaMonsterBrain`: Ground AI strictly avoids pathfinding into lethal/dangerous hazards unless flying or damage-immune, preventing monsters from wandering into lava or off cliffs unconstrained.
+  - Added preset lava hazards for volcanic `lavapit` battlemap and support in `ArenaConfig`.
+  - Rendered hazard zones with ominous glowing dashed perimeters and danger badges on both Arena and Campaign battlemaps.
+  - Added Unsafe Hazard Zone toggle and quick-select presets to `AssignPolygonRoomModal` and hazard configuration/briefing to `RoomBriefingDrawer`.
+  - Added real-time hazard entry collision detection for token dragging with damage rolls, fall damage with prone condition, and warning notifications.
+- **Impact / Testing Notes**:
+  - In Arena Mode (e.g. `lavapit`), observe ground monsters pathfinding around the magma pools while flying monsters traverse them safely.
+  - In Campaign Mode, trace a polygon and select "Unsafe Hazard Zone" to assign a lava pit or chasm, verifying visual rendering and movement triggers.
+
+---
+
 ### Template for Incoming Entries:
 ```markdown
 ### [YYYY-MM-DD] <Title / Commit Short Summary>
