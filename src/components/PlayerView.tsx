@@ -1778,6 +1778,7 @@ export default function PlayerView() {
     loadPlayerAutoRollMap()
   );
   const isAutoRollDiceEnabledRef = useRef<boolean>(true);
+  const [autoApplyMonsterDamage, setAutoApplyMonsterDamage] = useState<boolean>(true);
   const [pendingCombatRoll, setPendingCombatRoll] = useState<PendingCombatRoll | null>(null);
   const [showCharacterSelectModal, setShowCharacterSelectModal] = useState<boolean>(false);
   const [isCurrentCharacterPrivate, setIsCurrentCharacterPrivate] = useState<boolean>(false);
@@ -2410,7 +2411,6 @@ export default function PlayerView() {
   } | null>(null);
 
   // Player view turn order list visibility (with persistent user preference)
-  const [autoApplyMonsterDamage, setAutoApplyMonsterDamage] = useState<boolean>(true);
   const [showPlayerCombatTracker, setShowPlayerCombatTracker] = useState(() => {
     if (typeof window === 'undefined') return true;
     const saved = localStorage.getItem('mistwalker_player_turn_order_visible');
