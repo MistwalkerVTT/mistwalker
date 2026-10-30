@@ -232,6 +232,22 @@
 
 ---
 
+### [2026-10-30] feat(intro): add prominent mute toggle button to launch screen with audio and greeting silence
+- **Commit**: `22f4303`
+- **Files Changed**:
+  - `src/components/IntroScreen.tsx`
+- **Summary**:
+  - Added a prominent, always-visible glassmorphism Mute / Unmute Audio toggle button in the top-right corner of the DM/Player selection launch screen (`IntroScreen.tsx`).
+  - Uses `Volume2` and `VolumeX` icons from `lucide-react` with animated glow, state pill badges, and hotkey support (`M`).
+  - Persists the user's mute preference across sessions in `localStorage` (`mistwalker_intro_muted`).
+  - When muted, completely suppresses all audio: ambient synthesizer drone gain is kept at 0, portal transition explosion sound effects are skipped, and ElevenLabs spoken greetings ("Welcome Dungeon Master" / "Welcome Adventurer") are bypassed, instantly revealing the next screen in silence.
+- **Impact / Testing Notes**:
+  - Load the launch screen on a fresh session.
+  - Verify the mute button is immediately visible in the top-right corner.
+  - Click "Muted" or press `M`, select "Dungeon Master" or "Adventurer", and verify no audio/voice plays and the screen transitions smoothly into the app.
+
+---
+
 ### Template for Incoming Entries:
 ```markdown
 ### [YYYY-MM-DD] <Title / Commit Short Summary>
