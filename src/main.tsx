@@ -64,7 +64,7 @@ function Root() {
   const initialIntro = useState<boolean>(shouldShowIntro)[0];
   const [introMounted, setIntroMounted] = useState<boolean>(initialIntro);
   const [appRevealed, setAppRevealed] = useState<boolean>(!initialIntro);
-  const [chosePlayer, setChosePlayer] = useState(false);
+  const [currentMode, setCurrentMode] = useState<'dm' | 'player'>(() => isPlayerView ? 'player' : 'dm');
 
   // Warm up both app bundles while the intro plays so the reveal is instant
   useEffect(() => {
@@ -75,7 +75,7 @@ function Root() {
   }, [initialIntro]);
 
   return (
-    <>
+    <CrashRecoveryBoundary fallbackTitle={currentMode === 'player' ? "MistWalker Player View Interrupted" : "MistWalker DM View Interrupted"}>
       <style>{`
         @keyframes mw-menu-emerge {
           0% {
@@ -101,43 +101,43 @@ function Root() {
               : undefined
           }
         >
-          {isPlayerView || chosePlayer ? <PlayerView /> : <App />}
+          {currentMode === 'player' ? <PlayerView /> : <App />}
         </div>
       )}
       {introMounted && (
         <IntroScreen
           onSelectDm={() => {
             try { sessionStorage.setItem(INTRO_SEEN_KEY, '1'); } catch { /* ignore */ }
+            setCurrentMode('dm');
             setAppRevealed(true);
           }}
           onSelectPlayer={() => {
+            try { sessionStorage.setItem(INTRO_SEEN_KEY, '1'); } catch { /* ignore */ }
             // Switch in-place (no page reload) so the spoken greeting keeps playing
             const url = new URL(window.location.href);
             url.searchParams.set('view', 'player');
             window.history.replaceState({}, '', url.toString());
-            setChosePlayer(true);
+            setCurrentMode('player');
             setAppRevealed(true);
           }}
           onFinished={() => setIntroMounted(false)}
         />
       )}
-    </>
+    </CrashRecoveryBoundary>
   );
 }
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <CrashRecoveryBoundary fallbackTitle={isPlayerView ? "MistWalker Player View Interrupted" : "MistWalker DM View Interrupted"}>
-      <Suspense fallback={
-        <div className="flex items-center justify-center h-screen bg-zinc-950 text-amber-400 font-mono text-sm">
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-8 h-8 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-            <span>Loading MistWalker...</span>
-          </div>
+    <Suspense fallback={
+      <div className="flex items-center justify-center h-screen bg-zinc-950 text-amber-400 font-mono text-sm">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+          <span>Loading MistWalker...</span>
         </div>
-      }>
-        <Root />
-      </Suspense>
-    </CrashRecoveryBoundary>
+      </div>
+    }>
+      <Root />
+    </Suspense>
   </StrictMode>,
 );
 
