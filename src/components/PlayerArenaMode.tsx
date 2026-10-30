@@ -1506,6 +1506,26 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
   }, [selectedMap.id, selectedMap.arenaTitle, selectedMap.name]);
 
   const dynamicArenaDims = useMemo(() => {
+    // Original preset battlemaps have meticulously designed 22x14 (1320x840) tactical layouts
+    const isOriginalPreset = ['forest-ruins', 'subterranean-maze', 'skeleton-crypt', 'lavapit'].includes(selectedMap.id) || !selectedMap.isCustomUploaded;
+    if (isOriginalPreset && !selectedMap.isCustomUploaded) {
+      const width = selectedMap.mapWidth || DEFAULT_ARENA_WIDTH;
+      const height = selectedMap.mapHeight || DEFAULT_ARENA_HEIGHT;
+      const cols = selectedMap.gridCols || 22;
+      const rows = selectedMap.gridRows || 14;
+      const gridSize = selectedMap.gridSize || DEFAULT_ARENA_GRID_SIZE;
+      return {
+        width,
+        height,
+        cols,
+        rows,
+        gridSize,
+        aspect: width / Math.max(1, height),
+        rawWidth: width,
+        rawHeight: height
+      };
+    }
+
     const rawW = selectedMap.mapWidth || bgImage?.naturalWidth || (bgImage as any)?.width || DEFAULT_ARENA_WIDTH;
     const rawH = selectedMap.mapHeight || bgImage?.naturalHeight || (bgImage as any)?.height || DEFAULT_ARENA_HEIGHT;
     const gridSize = selectedMap.gridSize || DEFAULT_ARENA_GRID_SIZE;
@@ -1594,6 +1614,21 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
     },
     [arenaConfig, socketRef]
   );
+
+  const handleRestoreOriginalMaps = useCallback(async () => {
+    await commitConfigUpdate((prev) => ({
+      ...prev,
+      deletedPresetMapIds: [],
+      disabledMapIds: (prev.disabledMapIds || []).filter(
+        (id) => !PRESET_BATTLEMAPS.some((pm) => pm.id === id)
+      )
+    }));
+    const originalFirst = PRESET_BATTLEMAPS[0];
+    if (originalFirst) {
+      setSelectedMap(originalFirst);
+    }
+    toast.success('Restored all original battle maps!');
+  }, [commitConfigUpdate]);
 
   const handleSaveArenaSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -4779,6 +4814,15 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                       🧱 {activeMapWalls.length} Wall(s) / Door(s) Active
                     </span>
                   )}
+                  <button
+                    type="button"
+                    onClick={handleRestoreOriginalMaps}
+                    className="px-2.5 py-1 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 font-mono text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all"
+                    title="Restore original preset battle maps (Forest Ruins, Subterranean Maze, Skeleton Crypt, Lavapit)"
+                  >
+                    <RotateCcw className="w-3 h-3 text-amber-400" />
+                    <span>Restore Originals</span>
+                  </button>
                   <button
                     type="button"
                     onClick={handleOpenSaveArenaModal}

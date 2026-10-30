@@ -27,11 +27,11 @@ export const PRESET_BATTLEMAPS: PresetBattlemap[] = [
     thumbnailUrl: forestRuinsImg,
     type: 'Wilderness / Ruins',
     desc: 'Ancient moss-covered stone shrine with glowing green druidic runes, overgrown tree roots, and mystical forest clearing',
-    mapWidth: 1376,
-    mapHeight: 768,
+    mapWidth: 1320,
+    mapHeight: 840,
     gridSize: 60,
-    gridCols: 23,
-    gridRows: 13
+    gridCols: 22,
+    gridRows: 14
   },
   {
     id: 'subterranean-maze',
@@ -40,10 +40,10 @@ export const PRESET_BATTLEMAPS: PresetBattlemap[] = [
     thumbnailUrl: subterraneanMazeImg,
     type: 'Subterranean / Sewers',
     desc: 'Flooded ancient temple ruins, submerged stone columns, wooden bridges, and a brick sewer labyrinth',
-    mapWidth: 1264,
-    mapHeight: 848,
+    mapWidth: 1320,
+    mapHeight: 840,
     gridSize: 60,
-    gridCols: 21,
+    gridCols: 22,
     gridRows: 14
   },
   {
@@ -53,10 +53,10 @@ export const PRESET_BATTLEMAPS: PresetBattlemap[] = [
     thumbnailUrl: skeletonCryptImg,
     type: 'Crypt / Catacombs',
     desc: 'Octagonal catacomb sanctuary with stacked skull pillars, ornate central sarcophagus, and skeletal remains',
-    mapWidth: 1264,
-    mapHeight: 848,
+    mapWidth: 1320,
+    mapHeight: 840,
     gridSize: 60,
-    gridCols: 21,
+    gridCols: 22,
     gridRows: 14
   },
   {
@@ -66,10 +66,10 @@ export const PRESET_BATTLEMAPS: PresetBattlemap[] = [
     thumbnailUrl: lavapitImg,
     type: 'Cavern / Boss',
     desc: 'Active volcanic magma caverns with boiling lava streams and a slumbering red dragon atop a hoard of gold',
-    mapWidth: 1376,
-    mapHeight: 768,
+    mapWidth: 1320,
+    mapHeight: 840,
     gridSize: 60,
-    gridCols: 23,
-    gridRows: 13
+    gridCols: 22,
+    gridRows: 14
   }
 ];

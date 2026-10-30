@@ -418,6 +418,22 @@ export const ArenaManagerPanel: React.FC<ArenaManagerPanelProps> = ({
     }
   };
 
+  const handleRestoreOriginalMaps = () => {
+    commitConfigUpdate(
+      (prev) => ({
+        ...prev,
+        deletedPresetMapIds: [],
+        disabledMapIds: (prev.disabledMapIds || []).filter(
+          (id) => !PRESET_BATTLEMAPS.some((pm) => pm.id === id)
+        )
+      }),
+      'Restored all original battle maps!'
+    );
+    if (PRESET_BATTLEMAPS[0]) {
+      setSelectedMapId(PRESET_BATTLEMAPS[0].id);
+    }
+  };
+
   // Add a map from URL
   const handleAddMapByUrl = () => {
     const cleanName = customMapNameInput.trim();
@@ -634,14 +650,25 @@ export const ArenaManagerPanel: React.FC<ArenaManagerPanelProps> = ({
                   <ImageIcon className="w-3.5 h-3.5" />
                   <span>Arena Map Pool ({allMaps.length})</span>
                 </h3>
-                <button
-                  type="button"
-                  onClick={() => setShowCreateArenaModal(true)}
-                  className="px-2 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 text-[10px] font-mono font-bold flex items-center gap-1 shadow cursor-pointer transition-all active:scale-95"
-                >
-                  <Plus className="w-3 h-3" />
-                  <span>Create Arena</span>
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={handleRestoreOriginalMaps}
+                    className="px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] font-mono font-bold flex items-center gap-1 border border-zinc-700 cursor-pointer transition-all"
+                    title="Restore original preset battle maps (Forest Ruins, Subterranean Maze, Skeleton Crypt, Lavapit)"
+                  >
+                    <RotateCcw className="w-3 h-3 text-amber-400" />
+                    <span>Restore Originals</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateArenaModal(true)}
+                    className="px-2 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 text-[10px] font-mono font-bold flex items-center gap-1 shadow cursor-pointer transition-all active:scale-95"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>Create Arena</span>
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-2">
