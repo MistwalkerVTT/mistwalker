@@ -176,7 +176,10 @@ export interface VisionConfig {
   showDoorBadges?: boolean;
 }
 
-export type RoomAnnotationType = 'room' | 'label';
+export * from './types/hazard';
+import { HazardType, HazardSeverity, HazardBypassRules } from './types/hazard';
+
+export type RoomAnnotationType = 'room' | 'label' | 'hazard';
 
 export interface RoomAnnotation {
   id: string;
@@ -202,6 +205,16 @@ export interface RoomAnnotation {
   sceneId?: string;
   monsters?: any[];
   hiddenMonsterNames?: string[];
+  // Environmental Hazard attributes
+  isHazard?: boolean;
+  hazardType?: HazardType;
+  hazardSeverity?: HazardSeverity;
+  damageFormula?: string;
+  fallDepthFt?: number;
+  saveDc?: number;
+  saveAbility?: 'dex' | 'con' | 'str';
+  hazardCondition?: string;
+  bypassRules?: HazardBypassRules;
   createdAt?: number;
   updatedAt?: number;
 }
@@ -228,10 +241,12 @@ export function normalizeRoomAnnotation(
       campaignId: fallbackCampaignId,
     };
   }
+  const isHazard = raw.type === 'hazard' || Boolean(raw.isHazard);
   const isLabel =
-    raw.type === 'label' ||
-    Boolean(raw.icon) ||
-    typeof raw.visibleToPlayers === 'boolean';
+    !isHazard &&
+    (raw.type === 'label' ||
+      Boolean(raw.icon) ||
+      typeof raw.visibleToPlayers === 'boolean');
   const id =
     typeof raw.id === 'string' && raw.id.trim().length > 0
       ? raw.id
@@ -251,7 +266,16 @@ export function normalizeRoomAnnotation(
   return {
     ...raw,
     id,
-    type: isLabel ? 'label' : 'room',
+    type: isHazard ? 'hazard' : isLabel ? 'label' : 'room',
+    isHazard: isHazard || Boolean(raw.isHazard),
+    hazardType: raw.hazardType || (isHazard ? 'lava' : undefined),
+    hazardSeverity: raw.hazardSeverity || (isHazard ? 'lethal' : undefined),
+    damageFormula: raw.damageFormula,
+    fallDepthFt: typeof raw.fallDepthFt === 'number' ? raw.fallDepthFt : undefined,
+    saveDc: typeof raw.saveDc === 'number' ? raw.saveDc : undefined,
+    saveAbility: raw.saveAbility,
+    hazardCondition: raw.hazardCondition,
+    bypassRules: raw.bypassRules,
     label,
     roomNumber: isLabel ? undefined : raw.roomNumber,
     roomName: raw.roomName || label,

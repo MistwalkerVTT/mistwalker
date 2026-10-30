@@ -64,7 +64,7 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
   // In Player View, only display annotations explicitly marked as 'label' with visibleToPlayers === true.
   // Room polygons, secret rooms, and DM briefings are NEVER rendered to player clients.
   const visibleAnnotations = isPlayerView
-    ? safeAnnotations.filter((a) => a.type === 'label' && a.visibleToPlayers === true)
+    ? safeAnnotations.filter((a) => (a.type === 'label' || a.type === 'hazard' || a.isHazard) && a.visibleToPlayers === true)
     : safeAnnotations;
 
   if (visibleAnnotations.length === 0) return null;
@@ -259,7 +259,11 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
         // 2. ROOM ZONE POLYGON & NUMBERED BADGE (e.g. "V8", "12")
         // =========================================================================
         const displayLabel = anno.label || (anno.roomNumber ? `${anno.roomNumber}: ${anno.roomName || 'Zone'}` : 'Room');
-        const badgeText = (anno.roomNumber || displayLabel.substring(0, 4)).toUpperCase();
+        const isHazardAnno = anno.type === 'hazard' || anno.isHazard;
+        const hazardGlyph = anno.hazardType === 'lava' ? '🔥' : anno.hazardType === 'chasm_fall' ? '🕳️' : anno.hazardType === 'acid_pool' ? '🧪' : '⚠️';
+        const badgeText = isHazardAnno
+          ? `${hazardGlyph} ${(anno.roomNumber || anno.hazardType || 'HAZARD').toUpperCase()}`
+          : (anno.roomNumber || displayLabel.substring(0, 4)).toUpperCase();
 
         const fontSize = Math.max(10, Math.min(18, 11 / stageScale));
         const badgePadding = 8 / stageScale;
@@ -268,31 +272,31 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
 
         return (
           <Group key={anno.id} id={`hotspot-${anno.id}`}>
-            {/* Room Zone Polygon: ONLY shows up when directly hovering over the button associated with the zone */}
-            {isHovered && (
+            {/* Hazard Zone or Room Zone Polygon */}
+            {((anno.type === 'hazard' || anno.isHazard) || isHovered) && (
               hasPolygon ? (
                 <Group listening={false}>
-                  {/* Glowing shaded room polygon fill & primary dashed border */}
                   <Line
                     points={pixelPolyPoints}
                     closed={true}
-                    fill="rgba(245, 158, 11, 0.28)"
-                    stroke="#fbbf24"
-                    strokeWidth={3 / stageScale}
-                    shadowColor="#f59e0b"
-                    shadowBlur={14 / stageScale}
+                    fill={anno.isHazard || anno.type === 'hazard'
+                      ? (isHovered ? 'rgba(239, 68, 68, 0.38)' : 'rgba(239, 68, 68, 0.16)')
+                      : 'rgba(245, 158, 11, 0.28)'}
+                    stroke={anno.color || (anno.isHazard || anno.type === 'hazard' ? '#ef4444' : '#fbbf24')}
+                    strokeWidth={(isHovered ? 3 : 2) / stageScale}
+                    shadowColor={anno.color || '#ef4444'}
+                    shadowBlur={(isHovered ? 14 : 6) / stageScale}
                     shadowOpacity={0.9}
                     dash={[8 / stageScale, 4 / stageScale]}
                     listening={false}
                   />
-                  {/* Crisp white accent border */}
                   <Line
                     points={pixelPolyPoints}
                     closed={true}
                     fill="transparent"
                     stroke="#ffffff"
                     strokeWidth={1.5 / stageScale}
-                    opacity={0.85}
+                    opacity={isHovered ? 0.9 : 0.4}
                     listening={false}
                   />
                 </Group>
@@ -303,11 +307,13 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
                     y={pixelY}
                     width={pixelW}
                     height={pixelH}
-                    fill="rgba(245, 158, 11, 0.28)"
-                    stroke="#fbbf24"
-                    strokeWidth={3 / stageScale}
-                    shadowColor="#f59e0b"
-                    shadowBlur={14 / stageScale}
+                    fill={anno.isHazard || anno.type === 'hazard'
+                      ? (isHovered ? 'rgba(239, 68, 68, 0.38)' : 'rgba(239, 68, 68, 0.16)')
+                      : 'rgba(245, 158, 11, 0.28)'}
+                    stroke={anno.color || (anno.isHazard || anno.type === 'hazard' ? '#ef4444' : '#fbbf24')}
+                    strokeWidth={(isHovered ? 3 : 2) / stageScale}
+                    shadowColor={anno.color || '#ef4444'}
+                    shadowBlur={(isHovered ? 14 : 6) / stageScale}
                     shadowOpacity={0.9}
                     dash={[8 / stageScale, 4 / stageScale]}
                     cornerRadius={4 / stageScale}
@@ -321,7 +327,7 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
                     fill="transparent"
                     stroke="#ffffff"
                     strokeWidth={1.5 / stageScale}
-                    opacity={0.85}
+                    opacity={isHovered ? 0.9 : 0.4}
                     cornerRadius={4 / stageScale}
                     listening={false}
                   />

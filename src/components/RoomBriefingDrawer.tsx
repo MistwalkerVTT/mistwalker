@@ -34,6 +34,8 @@ import {
 import ReactMarkdown from 'react-markdown';
 import { RoomAnnotation, ChapterPdfDigest } from '../types';
 import { Monster } from '../types/monster';
+import { HazardType, HazardSeverity, HAZARD_PRESETS } from '../types/hazard';
+import { AlertTriangle, Flame } from 'lucide-react';
 import { updateRoomAnnotation } from '../lib/updateRoomAnnotation';
 import { saveMonster, uploadAndRegisterAsset } from '../lib/firebase';
 import { resolveMonster, isExactMonsterMatch, isNonCreatureStatOrItem, SRD_MONSTERS } from '../data/srdMonstersCatalog';
@@ -135,6 +137,11 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
   const [editPdfSection, setEditPdfSection] = useState('');
   const [editPdfPage, setEditPdfPage] = useState<number | ''>('');
   const [editColor, setEditColor] = useState('#f59e0b');
+  const [editIsHazard, setEditIsHazard] = useState(false);
+  const [editHazardType, setEditHazardType] = useState<HazardType>('lava');
+  const [editHazardDamage, setEditHazardDamage] = useState('');
+  const [editHazardFallDepth, setEditHazardFallDepth] = useState<number | ''>('');
+  const [editHazardDc, setEditHazardDc] = useState<number | ''>('');
 
   // Chapter PDF room linking states in drawer
   const [showDrawerRoomsDropdown, setShowDrawerRoomsDropdown] = useState(false);
@@ -600,7 +607,12 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
       setEditDmNotes(effectiveNotes);
       setEditPdfSection(effectivePdfSection);
       setEditPdfPage(room.pdfPage !== undefined ? room.pdfPage : (matchedDigestRoom ? 1 : ''));
-      setEditColor(room.color || '#f59e0b');
+      setEditColor(room.color || (room.isHazard || room.type === 'hazard' ? '#ef4444' : '#f59e0b'));
+      setEditIsHazard(Boolean(room.isHazard || room.type === 'hazard'));
+      setEditHazardType(room.hazardType || 'lava');
+      setEditHazardDamage(room.damageFormula || (room.hazardType ? HAZARD_PRESETS[room.hazardType]?.defaultDamageFormula : ''));
+      setEditHazardFallDepth(typeof room.fallDepthFt === 'number' ? room.fallDepthFt : '');
+      setEditHazardDc(typeof room.saveDc === 'number' ? room.saveDc : '');
       setManualMonsters(effectiveMonsters);
       setHiddenMonsterNames((room as any).hiddenMonsterNames || []);
       setSelectedPdfRoomNum(roomNum);

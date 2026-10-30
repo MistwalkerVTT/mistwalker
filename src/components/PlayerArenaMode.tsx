@@ -2376,6 +2376,17 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
     [arenaConfig.mapWalls, selectedMap.id]
   );
 
+  // Active environmental hazards (Lava pits, Chasms, Acid pools) for current battlemap
+  const activeMapHazards = useMemo<HazardZone[]>(() => {
+    if (arenaConfig.mapHazards && arenaConfig.mapHazards[selectedMap.id]) {
+      return arenaConfig.mapHazards[selectedMap.id];
+    }
+    if (selectedMap.id === 'lavapit' || selectedMap.name.toLowerCase().includes('lava')) {
+      return generateLavapitDefaultHazards(ARENA_GRID_SIZE, ARENA_COLS, ARENA_ROWS);
+    }
+    return [];
+  }, [arenaConfig.mapHazards, selectedMap.id, selectedMap.name]);
+
   // Toggle a door wall open/closed during Arena Battle
   const handleToggleArenaDoor = useCallback(
     (wallId: string) => {
@@ -3310,7 +3321,12 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       if (cancelled) return;
 
       try {
-        const liveActor = combatantsRef.current.find((c) => c.id === currentActor.id) || currentActor;
+        const rawLiveActor = combatantsRef.current.find((c) => c.id === currentActor.id) || currentActor;
+        const liveActor = {
+          ...rawLiveActor,
+          damageImmunities: rawLiveActor.sourceMonster?.damage_immunities || (rawLiveActor.sourceCharacter as any)?.damageImmunities || [],
+          creatureType: rawLiveActor.raceOrType
+        };
         const liveCombatants = combatantsRef.current;
         const aiHud = buildArenaCombatantHudData(liveActor);
 
@@ -3368,7 +3384,8 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           ARENA_COLS,
           ARENA_ROWS,
           ARENA_GRID_SIZE,
-          rechargedAbilities
+          rechargedAbilities,
+          activeMapHazards
         );
 
         setAiTacticalBanner(goal.reason);
@@ -3575,6 +3592,54 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             );
             return c;
           }
+          // Check Unsafe Environmental Hazards (Lava, Chasms)
+          if (arenaConfig.enforceHazards !== false && activeMapHazards.length > 0) {
+            const hx = newX + ((c.size || 1) * ARENA_GRID_SIZE) / 2;
+            const hy = newY + ((c.size || 1) * ARENA_GRID_SIZE) / 2;
+            const hazard = getArenaHazardAt(activeMapHazards, hx, hy, ARENA_WIDTH, ARENA_HEIGHT);
+            if (hazard) {
+              const immunities = c.sourceMonster?.damage_immunities || (c.sourceCharacter as any)?.damageImmunities || [];
+              const bypass = canCreatureBypassHazard({
+                isFlying: c.isFlying,
+                elevation: c.elevation,
+                damageImmunities: immunities,
+                creatureType: c.raceOrType
+              }, hazard);
+
+              if (!bypass) {
+                if (hazard.type === 'lava') {
+                  const dmg = Math.floor(Math.random() * 35) + 35; // 35-70 avg 52
+                  toast.error(`🔥 ${c.name} entered ${hazard.name} taking ${dmg} fire damage!`);
+                  soundCatalog.play('spell_fireball', 0.85);
+                  addCombatLog(c.name, c.team, `🔥 Stepped into ${hazard.name}! Took ${dmg} fire damage.`);
+                  return {
+                    ...c,
+                    x: newX,
+                    y: newY,
+                    currentHp: Math.max(0, c.currentHp - dmg),
+                    remainingMoveFt: Math.max(0, c.remainingMoveFt - moveCostFt)
+                  };
+                } else if (hazard.type === 'chasm_fall') {
+                  const fallDmg = Math.floor(Math.random() * 16) + 8; // 8-24
+                  toast.error(`🕳️ ${c.name} fell into ${hazard.name}! Took ${fallDmg} fall damage and knocked Prone!`);
+                  soundCatalog.play('damage', 0.85);
+                  addCombatLog(c.name, c.team, `🕳️ Plunged into ${hazard.name}! Took ${fallDmg} fall damage & fell Prone.`);
+                  const nextConds = c.conditions.includes('Prone') ? c.conditions : [...c.conditions, 'Prone'];
+                  return {
+                    ...c,
+                    x: newX,
+                    y: newY,
+                    currentHp: Math.max(0, c.currentHp - fallDmg),
+                    conditions: nextConds,
+                    remainingMoveFt: 0
+                  };
+                } else {
+                  toast.warning(`⚠️ ${c.name} entered hazard: ${hazard.name}`);
+                }
+              }
+            }
+          }
+
           return {
             ...c,
             x: newX,
@@ -3584,7 +3649,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         })
       );
     },
-    [arenaConfig.enforceWalls, activeMapWalls]
+    [arenaConfig.enforceWalls, arenaConfig.enforceHazards, activeMapWalls, activeMapHazards, addCombatLog]
   );
 
   // Build `<PlayerHeroDock />` data for the currently active human-controlled fighter
@@ -4703,6 +4768,75 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             gridOpacity={arenaConfig.gridOpacity ?? 0.38}
             stageScale={stageScale}
           />
+
+                    {/* Unsafe Environmental Hazards (Lava, Chasms, Acid, Spikes) */}
+          {activeMapHazards.length > 0 && (
+            <Layer listening={false}>
+              {activeMapHazards.map((hazard) => {
+                const mapW = ARENA_COLS * ARENA_GRID_SIZE;
+                const mapH = ARENA_ROWS * ARENA_GRID_SIZE;
+                const isPoly = hazard.polygonPoints && hazard.polygonPoints.length >= 6;
+                const points = isPoly
+                  ? hazard.polygonPoints.map((val, idx) =>
+                      idx % 2 === 0 ? (val / 100) * mapW : (val / 100) * mapH
+                    )
+                  : [];
+                const bx = (hazard.bounds.x / 100) * mapW;
+                const by = (hazard.bounds.y / 100) * mapH;
+                const bw = (hazard.bounds.width / 100) * mapW;
+                const bh = (hazard.bounds.height / 100) * mapH;
+                const strokeColor = hazard.color || (hazard.type === 'lava' ? '#ef4444' : '#6366f1');
+                const fillColor = strokeColor + '28';
+
+                return (
+                  <Group key={hazard.id}>
+                    {isPoly ? (
+                      <Line
+                        points={points}
+                        closed={true}
+                        fill={fillColor}
+                        stroke={strokeColor}
+                        strokeWidth={2.5}
+                        dash={[8, 6]}
+                      />
+                    ) : (
+                      <Rect
+                        x={bx}
+                        y={by}
+                        width={bw}
+                        height={bh}
+                        fill={fillColor}
+                        stroke={strokeColor}
+                        strokeWidth={2.5}
+                        dash={[8, 6]}
+                        cornerRadius={4}
+                      />
+                    )}
+                    <Group x={isPoly ? points[0] + 8 : bx + 8} y={isPoly ? points[1] + 8 : by + 8}>
+                      <Rect
+                        x={0}
+                        y={0}
+                        width={Math.min(160, hazard.name.length * 8 + 32)}
+                        height={22}
+                        fill="#0f172aee"
+                        stroke={strokeColor}
+                        strokeWidth={1}
+                        cornerRadius={4}
+                      />
+                      <Text
+                        x={6}
+                        y={4}
+                        text={`${hazard.type === 'lava' ? '🔥' : hazard.type === 'chasm_fall' ? '🕳️' : '⚠️'} ${hazard.name}`}
+                        fill="#f8fafc"
+                        fontSize={11}
+                        fontStyle="bold"
+                      />
+                    </Group>
+                  </Group>
+                );
+              })}
+            </Layer>
+          )}
 
           {/* DM Tactical Arena Walls, Cover & Interactive Doorways Layer */}
           {activeMapWalls.length > 0 && (

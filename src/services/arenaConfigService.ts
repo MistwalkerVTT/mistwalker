@@ -1,6 +1,8 @@
 import { doc, setDoc, onSnapshot } from 'firebase/firestore';
 import { db, ensureAuth, IS_ENTERPRISE_BETA } from '../lib/firebase';
 import { WallSegment } from '../types';
+import { HazardZone, HAZARD_PRESETS } from '../types/hazard';
+import { isPointInHazard, canCreatureBypassHazard } from '../lib/hazardGeometry';
 import { Monster } from '../types/monster';
 import { PRESET_BATTLEMAPS, PresetBattlemap } from '../data/presetBattlemaps';
 import { DEFAULT_MONSTERS } from '../data/defaultMonsters';
@@ -27,6 +29,8 @@ export interface ArenaConfig {
   customMaps: PresetBattlemap[];
   mapWalls: Record<string, WallSegment[]>;
   enforceWalls: boolean;
+  mapHazards?: Record<string, HazardZone[]>;
+  enforceHazards?: boolean;
   gridOpacity: number;
   monsterHpMultiplier: number;
   monsterDamageMultiplier: number;
@@ -53,6 +57,8 @@ export const DEFAULT_ARENA_CONFIG: ArenaConfig = {
   customMaps: [],
   mapWalls: {},
   enforceWalls: true,
+  mapHazards: {},
+  enforceHazards: true,
   gridOpacity: 0.38,
   monsterHpMultiplier: 1.0,
   monsterDamageMultiplier: 1.0,
@@ -147,6 +153,8 @@ export function normalizeArenaConfig(raw: any): ArenaConfig {
     customMaps: Array.isArray(raw.customMaps) ? raw.customMaps : [],
     mapWalls: normalizedMapWalls,
     enforceWalls: typeof raw.enforceWalls === 'boolean' ? raw.enforceWalls : true,
+    mapHazards: raw.mapHazards && typeof raw.mapHazards === 'object' ? raw.mapHazards : {},
+    enforceHazards: typeof raw.enforceHazards === 'boolean' ? raw.enforceHazards : true,
     gridOpacity: typeof raw.gridOpacity === 'number' ? Math.max(0, Math.min(1, raw.gridOpacity)) : 0.38,
     monsterHpMultiplier: typeof raw.monsterHpMultiplier === 'number' ? Math.max(0.25, Math.min(5, raw.monsterHpMultiplier)) : 1.0,
     monsterDamageMultiplier: typeof raw.monsterDamageMultiplier === 'number' ? Math.max(0.25, Math.min(4, raw.monsterDamageMultiplier)) : 1.0,
@@ -537,4 +545,132 @@ export function generateTacticalBarricadeWalls(gridSize = 60): WallSegment[] {
       blocksMovement: true
     }
   ];
+}
+
+/**
+ * Preset Lava Pit Hazard Zones for the Lavapit Arena Battlemap (22x14 grid, 1320x840 px)
+ * Covers the molten lava streams in the cavern, with high stone bridges/islands in between.
+ */
+export function generateLavapitDefaultHazards(gridSize = 60, cols = 22, rows = 14): HazardZone[] {
+  const mapW = cols * gridSize;
+  const mapH = rows * gridSize;
+
+  // Convert pixel coords to percentage bounds
+  const toPct = (x: number, y: number, w: number, h: number) => ({
+    x: Math.round((x / mapW) * 1000) / 10,
+    y: Math.round((y / mapH) * 1000) / 10,
+    width: Math.round((w / mapW) * 1000) / 10,
+    height: Math.round((h / mapH) * 1000) / 10
+  });
+
+  return [
+    // Magma Pool 1: Central-North bubbling pool (cols 7 to 14, rows 1 to 4)
+    {
+      id: 'hazard_lava_north',
+      name: 'North Magma Pool',
+      type: 'lava',
+      severity: 'lethal',
+      bounds: toPct(7 * gridSize, 1 * gridSize, 8 * gridSize, 3 * gridSize),
+      polygonPoints: [
+        (7 / cols) * 100, (1 / rows) * 100,
+        (15 / cols) * 100, (1 / rows) * 100,
+        (15 / cols) * 100, (4 / rows) * 100,
+        (7 / cols) * 100, (4 / rows) * 100
+      ],
+      damageFormula: '10d10 fire',
+      conditionInflicted: 'burning',
+      color: '#ef4444',
+      bypassRules: {
+        requiresFlight: true,
+        immuneDamageTypes: ['fire']
+      },
+      visibleToPlayers: true
+    },
+    // Magma Pool 2: South-East fissure stream (cols 13 to 21, rows 9 to 13)
+    {
+      id: 'hazard_lava_southeast',
+      name: 'South-East Molten Trench',
+      type: 'lava',
+      severity: 'lethal',
+      bounds: toPct(13 * gridSize, 9 * gridSize, 8 * gridSize, 4 * gridSize),
+      polygonPoints: [
+        (13 / cols) * 100, (9 / rows) * 100,
+        (21 / cols) * 100, (9 / rows) * 100,
+        (21 / cols) * 100, (13 / rows) * 100,
+        (13 / cols) * 100, (13 / rows) * 100
+      ],
+      damageFormula: '10d10 fire',
+      conditionInflicted: 'burning',
+      color: '#ef4444',
+      bypassRules: {
+        requiresFlight: true,
+        immuneDamageTypes: ['fire']
+      },
+      visibleToPlayers: true
+    },
+    // Magma Pool 3: South-West fissure stream (cols 1 to 8, rows 9 to 13)
+    {
+      id: 'hazard_lava_southwest',
+      name: 'South-West Molten Trench',
+      type: 'lava',
+      severity: 'lethal',
+      bounds: toPct(1 * gridSize, 9 * gridSize, 7 * gridSize, 4 * gridSize),
+      polygonPoints: [
+        (1 / cols) * 100, (9 / rows) * 100,
+        (8 / cols) * 100, (9 / rows) * 100,
+        (8 / cols) * 100, (13 / rows) * 100,
+        (1 / cols) * 100, (13 / rows) * 100
+      ],
+      damageFormula: '10d10 fire',
+      conditionInflicted: 'burning',
+      color: '#ef4444',
+      bypassRules: {
+        requiresFlight: true,
+        immuneDamageTypes: ['fire']
+      },
+      visibleToPlayers: true
+    }
+  ];
+}
+
+/**
+ * Checks whether an arena coordinate is blocked by an unsafe hazard for a specific actor
+ */
+export function doesArenaHazardBlockMovement(
+  hazards: HazardZone[] | undefined,
+  x: number,
+  y: number,
+  actor?: { isFlying?: boolean; elevation?: number; damageImmunities?: string[] },
+  mapW = 1320,
+  mapH = 840
+): { blocked: boolean; hazard?: HazardZone } {
+  if (!hazards || hazards.length === 0) return { blocked: false };
+
+  for (const h of hazards) {
+    if (isPointInHazard(x, y, h, mapW, mapH)) {
+      if (actor && canCreatureBypassHazard(actor, h)) {
+        continue;
+      }
+      // Non-flying, non-immune ground creature in lethal or dangerous hazard
+      if (h.severity === 'lethal' || h.severity === 'dangerous') {
+        return { blocked: true, hazard: h };
+      }
+    }
+  }
+
+  return { blocked: false };
+}
+
+/**
+ * Returns any hazard zone occupying a given world coordinate
+ */
+export function getArenaHazardAt(
+  hazards: HazardZone[] | undefined,
+  x: number,
+  y: number,
+  mapW = 1320,
+  mapH = 840
+): HazardZone | null {
+  if (!hazards || hazards.length === 0) return null;
+  return hazards.find((h) => isPointInHazard(x, y, h, mapW, mapH)) || null;
 }

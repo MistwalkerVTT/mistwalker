@@ -1,6 +1,9 @@
 import * as PF from 'pathfinding';
 import { BehaviourTree, State } from 'mistreevous';
 import { HudActionItem, HudCharacterData } from '../types/hud';
+import { HazardZone } from '../types/hazard';
+import { isGridCellInHazard, canCreatureBypassHazard } from '../lib/hazardGeometry';
+import { WallSegment } from '../types';
 
 export type AiArchetypeRole = 'brute' | 'artillery' | 'skirmisher' | 'support';
 
@@ -19,6 +22,9 @@ export interface TacticalCombatantView {
   size: number; // 1 = Medium, 2 = Large, 3 = Huge
   isFlying?: boolean;
   elevation?: number;
+  damageImmunities?: string[];
+  creatureType?: string;
+  hasSpiderClimb?: boolean;
 }
 
 export interface GridCoord {
@@ -184,10 +190,13 @@ export function buildArenaWalkabilityGrid(
   rows: number,
   gridSize: number,
   actor: TacticalCombatantView,
-  allCombatants: TacticalCombatantView[]
+  allCombatants: TacticalCombatantView[],
+  hazards?: HazardZone[],
+  walls?: WallSegment[]
 ): PF.Grid {
   const matrix: number[][] = Array.from({ length: rows }, () => Array(cols).fill(0));
 
+  // 1. Block cells occupied by other living combatants
   for (const other of allCombatants) {
     if (other.id === actor.id || other.currentHp <= 0) continue;
     const { col, row } = pxToGrid(other.x, other.y, gridSize);
@@ -196,6 +205,26 @@ export function buildArenaWalkabilityGrid(
       for (let c = col; c < col + sz; c++) {
         if (r >= 0 && r < rows && c >= 0 && c < cols) {
           matrix[r][c] = 1; // Blocked by living token
+        }
+      }
+    }
+  }
+
+  // 2. Unsafe Environmental Hazards: ground AI strictly avoids lethal/dangerous hazards
+  if (hazards && hazards.length > 0) {
+    const mapW = cols * gridSize;
+    const mapH = rows * gridSize;
+    for (const h of hazards) {
+      if (canCreatureBypassHazard(actor, h)) {
+        continue;
+      }
+      if (h.severity === 'lethal' || h.severity === 'dangerous') {
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            if (matrix[r][c] === 0 && isGridCellInHazard(c, r, gridSize, h, mapW, mapH)) {
+              matrix[r][c] = 1; // Blocked by lethal/dangerous hazard
+            }
+          }
         }
       }
     }
@@ -379,13 +408,14 @@ export function computeTacticalAiTurnPlan(
   hud: HudCharacterData,
   cols: number,
   rows: number,
-  gridSize: number
+  gridSize: number,
+  hazards?: HazardZone[]
 ): AiTurnPlan {
   const { role, roleLabel } = classifyCombatantRole(actor, hud);
   const enemies = allCombatants.filter((c) => c.team !== actor.team && c.currentHp > 0);
   const allies = allCombatants.filter((c) => c.team === actor.team && c.currentHp > 0);
 
-  const walkGrid = buildArenaWalkabilityGrid(cols, rows, gridSize, actor, allCombatants);
+  const walkGrid = buildArenaWalkabilityGrid(cols, rows, gridSize, actor, allCombatants, hazards);
   const startCell = pxToGrid(actor.x, actor.y, gridSize);
   const maxWalkSteps = Math.max(1, Math.floor(actor.speedFt / 5));
 

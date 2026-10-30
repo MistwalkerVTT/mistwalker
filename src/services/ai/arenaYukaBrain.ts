@@ -3,6 +3,8 @@
 
 import * as YUKA from 'yuka';
 import { HudActionItem, HudCharacterData } from '../../types/hud';
+import { HazardZone } from '../../types/hazard';
+import { WallSegment } from '../../types';
 import {
   TacticalCombatantView,
   AiArchetypeRole,
@@ -153,12 +155,13 @@ export class YukaArenaMonsterBrain {
     cols: number,
     rows: number,
     gridSize: number,
-    rechargedAbilities: string[] = []
+    rechargedAbilities: string[] = [],
+    hazards?: HazardZone[]
   ): EvaluatedTacticalGoal {
     const enemies = allCombatants.filter((c) => c.team !== actor.team && c.currentHp > 0);
     const allies = allCombatants.filter((c) => c.team === actor.team && c.currentHp > 0);
     const startCell = pxToGrid(actor.x, actor.y, gridSize);
-    const walkGrid = buildArenaWalkabilityGrid(cols, rows, gridSize, actor, allCombatants);
+    const walkGrid = buildArenaWalkabilityGrid(cols, rows, gridSize, actor, allCombatants, hazards);
     const maxWalkSteps = Math.max(1, Math.floor(actor.speedFt / 5));
 
     const { threatened, nearestEnemy } = checkThreatenedInMelee(actor, enemies, gridSize);

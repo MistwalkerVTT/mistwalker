@@ -155,6 +155,7 @@ import { PresetBattlemap } from './data/presetBattlemaps';
 import { DynamicLightingLayer } from './components/DynamicLightingLayer';
 import { WallEditorToolbar } from './components/WallEditorToolbar';
 import { RoomHotspotLayer } from './components/RoomHotspotLayer';
+import { isPointInHazard, canCreatureBypassHazard } from './lib/hazardGeometry';
 import { RoomHotspotEditorModal } from './components/RoomHotspotEditorModal';
 import { RoomLabelEditorModal } from './components/RoomLabelEditorModal';
 import { AssignPolygonRoomModal } from './components/AssignPolygonRoomModal';
@@ -5656,6 +5657,15 @@ export default function App() {
     dmNotes: string;
     monsters: string[];
     pdfSection?: string;
+    isHazard?: boolean;
+    hazardType?: any;
+    hazardSeverity?: any;
+    damageFormula?: string;
+    fallDepthFt?: number;
+    saveDc?: number;
+    saveAbility?: any;
+    hazardCondition?: string;
+    color?: string;
   }) => {
     if (!pendingZonePolygonData) {
       setIsAssignRoomModalOpen(false);
@@ -5671,12 +5681,22 @@ export default function App() {
       polygonPoints: pendingZonePolygonData.pctPolyPoints,
       boxedText: roomData.boxedText,
       dmNotes: roomData.dmNotes,
-      color: '#f59e0b',
+      color: roomData.color || (roomData.isHazard ? '#ef4444' : '#f59e0b'),
       pdfSection: roomData.pdfSection || (activeSceneInfo?.sceneTitle ? `${activeSceneInfo.sceneTitle} - Room ${roomData.roomNumber}` : ''),
       pdfPage: undefined,
       monsters: roomData.monsters,
       campaignId: activeSceneInfo?.campaignId,
-      sceneId: activeSceneInfo?.sceneId
+      sceneId: activeSceneInfo?.sceneId,
+      isHazard: roomData.isHazard,
+      type: roomData.isHazard ? 'hazard' : 'room',
+      hazardType: roomData.hazardType,
+      hazardSeverity: roomData.hazardSeverity,
+      damageFormula: roomData.damageFormula,
+      fallDepthFt: roomData.fallDepthFt,
+      saveDc: roomData.saveDc,
+      saveAbility: roomData.saveAbility,
+      hazardCondition: roomData.hazardCondition,
+      visibleToPlayers: roomData.isHazard ? true : false
     };
 
     setIsAssignRoomModalOpen(false);
@@ -9165,6 +9185,30 @@ export default function App() {
                         nextTokens = tokens.map(t => t.id === token.id ? { ...t, x: snappedX, y: snappedY } : t);
                       }
                       setTokens(nextTokens);
+
+                      // Check Unsafe Environmental Hazards on Campaign Battlemap
+                      try {
+                        const { width: mapW, height: mapH } = getMapDimensions();
+                        const currentAnnos = roomAnnotations || [];
+                        const activeHazards = currentAnnos.filter((a: any) => a.type === 'hazard' || a.isHazard);
+                        for (const hz of activeHazards) {
+                          if (isPointInHazard(snappedX + gridSize / 2, snappedY + gridSize / 2, hz, mapW, mapH)) {
+                            const isFlying = Boolean(token.isFlying || (token.elevation && token.elevation > 0));
+                            const bypass = canCreatureBypassHazard({ isFlying, elevation: token.elevation }, hz);
+                            if (!bypass) {
+                              if (hz.hazardType === 'lava') {
+                                toast.error(`🔥 ${token.name || 'Token'} stepped into ${hz.label || 'Lava Pit'}! (10d10 fire damage)`);
+                              } else if (hz.hazardType === 'chasm_fall') {
+                                toast.error(`🕳️ ${token.name || 'Token'} fell into ${hz.label || 'Chasm'}! (Fall damage & Prone)`);
+                              } else {
+                                toast.warning(`⚠️ ${token.name || 'Token'} entered ${hz.label || 'Hazard Zone'}!`);
+                              }
+                            }
+                          }
+                        }
+                      } catch (hazardErr) {
+                        console.warn('[Hazard Movement Check] error:', hazardErr);
+                      }
                       if (mapsDataRef.current[activeMapId]) {
                         mapsDataRef.current[activeMapId].tokens = nextTokens;
                       }

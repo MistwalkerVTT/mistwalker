@@ -14,6 +14,8 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { ChapterPdfDigest, ChapterRoomDetail, RoomAnnotation } from '../types';
+import { HazardType, HazardSeverity, HAZARD_PRESETS } from '../types/hazard';
+import { Flame, ShieldAlert, AlertTriangle } from 'lucide-react';
 import { sanitizeMonsterStringList } from '../services/roomMonsterExtractor';
 
 export interface AssignPolygonRoomModalProps {
@@ -32,6 +34,15 @@ export interface AssignPolygonRoomModalProps {
     monsters: string[];
     pdfSection?: string;
     matchedPdfRoom?: ChapterRoomDetail | null;
+    isHazard?: boolean;
+    hazardType?: HazardType;
+    hazardSeverity?: HazardSeverity;
+    damageFormula?: string;
+    fallDepthFt?: number;
+    saveDc?: number;
+    saveAbility?: 'dex' | 'con' | 'str';
+    hazardCondition?: string;
+    color?: string;
   }) => void;
 }
 
@@ -102,6 +113,11 @@ export const AssignPolygonRoomModal: React.FC<AssignPolygonRoomModalProps> = ({
 }) => {
   const [roomNumberInput, setRoomNumberInput] = useState('');
   const [roomNameInput, setRoomNameInput] = useState('');
+  const [zoneType, setZoneType] = useState<'room' | 'hazard'>('room');
+  const [selectedHazardType, setSelectedHazardType] = useState<HazardType>('lava');
+  const [hazardDamage, setHazardDamage] = useState('10d10 fire');
+  const [hazardDepth, setHazardDepth] = useState<number | ''>(40);
+  const [hazardDc, setHazardDc] = useState<number | ''>(15);
   const [filterQuery, setFilterQuery] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const wasOpenRef = useRef(false);
@@ -199,14 +215,25 @@ export const AssignPolygonRoomModal: React.FC<AssignPolygonRoomModalProps> = ({
       matchedRoom?.roomName ||
       `Room ${assignedNumber}`;
 
+    const isHazard = zoneType === 'hazard';
+    const preset = HAZARD_PRESETS[selectedHazardType];
     onConfirm({
-      roomNumber: assignedNumber,
-      roomName: assignedName,
-      boxedText: matchedRoom?.boxedText || '',
-      dmNotes: matchedRoom?.dmNotes || '',
-      monsters: sanitizeMonsterStringList(matchedRoom?.monsters || []),
-      pdfSection: matchedRoom?.sceneTitle || undefined,
-      matchedPdfRoom: matchedRoom
+      roomNumber: isHazard ? (selectedHazardType.toUpperCase().slice(0, 4)) : assignedNumber,
+      roomName: isHazard ? (roomNameInput.trim() || preset.label) : assignedName,
+      boxedText: isHazard ? (preset.description) : (matchedRoom?.boxedText || ''),
+      dmNotes: isHazard ? `Hazard Severity: ${preset.severity.toUpperCase()}. ${preset.bypassRules.requiresFlight ? 'Flying creatures bypass ground contact.' : ''}` : (matchedRoom?.dmNotes || ''),
+      monsters: isHazard ? [] : sanitizeMonsterStringList(matchedRoom?.monsters || []),
+      pdfSection: isHazard ? undefined : (matchedRoom?.sceneTitle || undefined),
+      matchedPdfRoom: isHazard ? null : matchedRoom,
+      isHazard,
+      hazardType: isHazard ? selectedHazardType : undefined,
+      hazardSeverity: isHazard ? preset.severity : undefined,
+      damageFormula: isHazard ? (hazardDamage || preset.defaultDamageFormula) : undefined,
+      fallDepthFt: isHazard && selectedHazardType === 'chasm_fall' ? Number(hazardDepth || 40) : undefined,
+      saveDc: isHazard && hazardDc !== '' ? Number(hazardDc) : preset.defaultSaveDc,
+      saveAbility: isHazard ? preset.defaultSaveAbility : undefined,
+      hazardCondition: isHazard ? preset.defaultCondition : undefined,
+      color: isHazard ? preset.color : '#f59e0b'
     });
   };
 
@@ -254,8 +281,96 @@ export const AssignPolygonRoomModal: React.FC<AssignPolygonRoomModalProps> = ({
           </button>
         </div>
 
+                {/* Mode Selector: Dungeon Room Zone vs Unsafe Hazard Zone */}
+        <div className="flex items-center border-b border-zinc-800 bg-zinc-900/40 p-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setZoneType('room')}
+            className={`flex-1 py-2 px-3 rounded-xl font-mono text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+              zoneType === 'room'
+                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/50 shadow-sm'
+                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850/60'
+            }`}
+          >
+            <BookOpen className="w-4 h-4" />
+            <span>🏰 Dungeon Room Zone</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setZoneType('hazard');
+              setHazardDamage(HAZARD_PRESETS[selectedHazardType].defaultDamageFormula);
+            }}
+            className={`flex-1 py-2 px-3 rounded-xl font-mono text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+              zoneType === 'hazard'
+                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/50 shadow-sm'
+                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850/60'
+            }`}
+          >
+            <Flame className="w-4 h-4" />
+            <span>⚠️ Unsafe Hazard Zone</span>
+          </button>
+        </div>
+
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
+                    {zoneType === 'hazard' && (
+            <div className="p-4 rounded-xl bg-rose-950/20 border border-rose-500/30 space-y-4">
+              <div className="flex items-center gap-2 text-xs font-mono font-bold text-rose-300 uppercase">
+                <AlertTriangle className="w-4 h-4 text-rose-400" />
+                <span>Select Environmental Hazard Preset</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {Object.values(HAZARD_PRESETS).map((p) => (
+                  <button
+                    key={p.type}
+                    type="button"
+                    onClick={() => {
+                      setSelectedHazardType(p.type);
+                      setHazardDamage(p.defaultDamageFormula);
+                      if (p.defaultFallDepthFt) setHazardDepth(p.defaultFallDepthFt);
+                      if (p.defaultSaveDc) setHazardDc(p.defaultSaveDc);
+                    }}
+                    className={`p-2.5 rounded-xl border text-left flex flex-col gap-1 transition-all cursor-pointer ${
+                      selectedHazardType === p.type
+                        ? 'bg-rose-500/25 border-rose-400 text-white shadow-md'
+                        : 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:border-zinc-700'
+                    }`}
+                  >
+                    <span className="text-base">{p.glyph}</span>
+                    <span className="text-xs font-bold">{p.label}</span>
+                    <span className="text-[10px] text-zinc-400 font-mono">{p.defaultDamageFormula || p.severity}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <div>
+                  <label className="text-[10px] font-mono text-zinc-400 uppercase font-bold">Damage Formula</label>
+                  <input
+                    type="text"
+                    value={hazardDamage}
+                    onChange={(e) => setHazardDamage(e.target.value)}
+                    className="w-full px-3 py-1.5 bg-zinc-900 border border-zinc-750 rounded-lg text-xs font-mono text-zinc-100"
+                    placeholder="e.g. 10d10 fire"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-mono text-zinc-400 uppercase font-bold">Saving Throw DC</label>
+                  <input
+                    type="number"
+                    value={hazardDc}
+                    onChange={(e) => setHazardDc(e.target.value ? Number(e.target.value) : '')}
+                    className="w-full px-3 py-1.5 bg-zinc-900 border border-zinc-750 rounded-lg text-xs font-mono text-zinc-100"
+                    placeholder="e.g. 15"
+                  />
+                </div>
+              </div>
+              <p className="text-[11px] text-zinc-400 italic">
+                🛡️ AI Navigation Rule: Ground monsters and enemies strictly avoid entering this zone unless flying or damage-immune.
+              </p>
+            </div>
+          )}
+
           {/* Main Input Row */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="sm:col-span-1 space-y-1.5">
