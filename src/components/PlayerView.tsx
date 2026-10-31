@@ -1739,10 +1739,14 @@ export default function PlayerView() {
   // Stage Pan & Zoom
   const [stageScale, setStageScale] = useState<number>(() => initialBackup?.stageScale || 1);
   const stageScaleRef = useRef<number>(initialBackup?.stageScale || 1);
-  stageScaleRef.current = stageScale;
+  useEffect(() => {
+    stageScaleRef.current = stageScale;
+  }, [stageScale]);
   const [stagePos, setStagePos] = useState<{ x: number; y: number }>(() => initialBackup?.stagePos || { x: 0, y: 0 });
   const stagePosRef = useRef<{ x: number; y: number }>(initialBackup?.stagePos || { x: 0, y: 0 });
-  stagePosRef.current = stagePos;
+  useEffect(() => {
+    stagePosRef.current = stagePos;
+  }, [stagePos]);
   const stageDragRafIdRef = useRef<number | null>(null);
   const wheelRafIdRef = useRef<number | null>(null);
   const pendingWheelStateRef = useRef<{ scale: number; pos: { x: number; y: number } } | null>(null);
@@ -3333,8 +3337,13 @@ export default function PlayerView() {
     };
   }, []);
 
-  // Real-time automatic D&D Beyond HP registration for Player View active tokens and characters
+  // Real-time automatic D&D Beyond HP registration for Player View active tokens and characters (deduplicated by ID set)
+  const lastRegisteredDdbIdsRef = useRef<string>('');
   useEffect(() => {
+    if (!isConnected) {
+      lastRegisteredDdbIdsRef.current = '';
+      return;
+    }
     const ddbIdSet = new Set<string>();
     tokens.forEach((t: any) => {
       if (t.ddbCharacterId) ddbIdSet.add(String(t.ddbCharacterId).trim());
@@ -3343,21 +3352,23 @@ export default function PlayerView() {
       if (c.ddbCharacterId) ddbIdSet.add(String(c.ddbCharacterId).trim());
     });
 
-    const ddbIds = Array.from(ddbIdSet).filter(id => id && !isNaN(Number(id)));
-    if (ddbIds.length > 0) {
+    const ddbIds = Array.from(ddbIdSet).filter(id => id && !isNaN(Number(id))).sort();
+    const ddbIdsKey = ddbIds.join(',');
+    if (ddbIds.length > 0 && ddbIdsKey !== lastRegisteredDdbIdsRef.current) {
+      lastRegisteredDdbIdsRef.current = ddbIdsKey;
       fetch('/api/ddb/monitor-characters', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ characterIds: ddbIds })
       }).catch(() => {});
     }
-  }, [tokens, compendiumCharacters]);
+  }, [tokens, compendiumCharacters, isConnected]);
 
-  // Periodic heartbeat poll to trigger D&D Beyond HP refresh cycle every 4 seconds in Player View
+  // Fallback heartbeat poll for D&D Beyond HP refresh in Player View (server daemon + DM already poll every 4s)
   useEffect(() => {
     const interval = setInterval(() => {
       fetch('/api/ddb/campaigns/poll-now', { method: 'POST' }).catch(() => {});
-    }, 4000);
+    }, 15000);
     return () => clearInterval(interval);
   }, []);
 
@@ -6153,6 +6164,10 @@ export default function PlayerView() {
       if (!stage) return;
       if (stage.isDragging()) {
         stage.stopDrag();
+        const sx = stage.x();
+        const sy = stage.y();
+        stagePosRef.current = { x: sx, y: sy };
+        setStagePos(prev => (prev.x === sx && prev.y === sy) ? prev : { x: sx, y: sy });
       }
       const t1 = touches[0];
       const t2 = touches[1];
@@ -6196,6 +6211,10 @@ export default function PlayerView() {
       if (!stage) return;
       if (stage.isDragging()) {
         stage.stopDrag();
+        const sx = stage.x();
+        const sy = stage.y();
+        stagePosRef.current = { x: sx, y: sy };
+        setStagePos(prev => (prev.x === sx && prev.y === sy) ? prev : { x: sx, y: sy });
       }
 
       const t1 = touches[0];
@@ -6228,8 +6247,29 @@ export default function PlayerView() {
           };
 
           if (Number.isFinite(newScale) && Number.isFinite(newPos.x) && Number.isFinite(newPos.y)) {
-            setStageScale(newScale);
-            setStagePos(newPos);
+            stageScaleRef.current = newScale;
+            stagePosRef.current = newPos;
+            stage.scale({ x: newScale, y: newScale });
+            stage.position(newPos);
+            stage.batchDraw();
+
+            const fxWorld = document.getElementById('mistwalker-dom-effects-overlay-world');
+            if (fxWorld) {
+              fxWorld.style.transform = `translate3d(${newPos.x}px, ${newPos.y}px, 0) scale(${newScale})`;
+            }
+
+            pendingWheelStateRef.current = { scale: newScale, pos: newPos };
+            if (!wheelRafIdRef.current) {
+              wheelRafIdRef.current = requestAnimationFrame(() => {
+                wheelRafIdRef.current = null;
+                if (pendingWheelStateRef.current) {
+                  const { scale, pos } = pendingWheelStateRef.current;
+                  pendingWheelStateRef.current = null;
+                  setStageScale(scale);
+                  setStagePos(pos);
+                }
+              });
+            }
           }
 
           touchStateRef.current.lastDist = dist;
@@ -6304,43 +6344,49 @@ export default function PlayerView() {
     }
   }, [targetMapW, targetMapH, gridSize, applyTvScale]);
 
+  // Keep a mutable ref to the latest backup payload builder so beforeunload registers only once
+  // and debounced background saves never block mid-drag frames.
+  const buildPlayerBackupPayloadRef = useRef<() => any>(() => null);
+  buildPlayerBackupPayloadRef.current = () => ({
+    imageFile,
+    mapRotation,
+    tokens,
+    walls,
+    reveals,
+    polygonReveals,
+    isFogVisible,
+    fogResetKey,
+    boardAnimatedFeatures,
+    boardAnimatedEnabled,
+    boardWeatherEffect,
+    gridVisible,
+    gridOpacity,
+    gridSize,
+    gridOffsetX,
+    gridOffsetY,
+    visionConfig,
+    stageScale: stageScaleRef.current,
+    stagePos: stagePosRef.current,
+    activeSceneInfo,
+    combatState,
+    claimedTokenId,
+    targetMapW,
+    targetMapH,
+    timestamp: Date.now()
+  });
+
   // Continuous debounced state snapshot saving to localStorage for instant crash recovery
   useEffect(() => {
+    if (activeDraggingTokenIdRef.current) return;
     const timer = setTimeout(() => {
-      if (typeof window === 'undefined') return;
+      if (typeof window === 'undefined' || activeDraggingTokenIdRef.current) return;
       try {
-        const stateToSave = {
-          imageFile,
-          mapRotation,
-          tokens,
-          walls,
-          reveals,
-          polygonReveals,
-          isFogVisible,
-          fogResetKey,
-          boardAnimatedFeatures,
-          boardAnimatedEnabled,
-          boardWeatherEffect,
-          gridVisible,
-          gridOpacity,
-          gridSize,
-          gridOffsetX,
-          gridOffsetY,
-          visionConfig,
-          stageScale,
-          stagePos,
-          activeSceneInfo,
-          combatState,
-          claimedTokenId,
-          targetMapW,
-          targetMapH,
-          timestamp: Date.now()
-        };
+        const stateToSave = buildPlayerBackupPayloadRef.current();
         localStorage.setItem('mistwalker_player_state_backup_v1', JSON.stringify(stateToSave));
       } catch (err) {
         // Safe against storage quota
       }
-    }, 1000);
+    }, 2000);
     return () => clearTimeout(timer);
   }, [
     imageFile, mapRotation, tokens, walls, reveals, polygonReveals, isFogVisible, fogResetKey,
@@ -6349,48 +6395,17 @@ export default function PlayerView() {
     activeSceneInfo, combatState, claimedTokenId, targetMapW, targetMapH
   ]);
 
-  // Synchronous beforeunload snapshot
+  // Synchronous beforeunload snapshot (registered once using ref to avoid listener churn during token drags)
   useEffect(() => {
     const handleBeforeUnload = () => {
       try {
-        const stateToSave = {
-          imageFile,
-          mapRotation,
-          tokens,
-          walls,
-          reveals,
-          polygonReveals,
-          isFogVisible,
-          fogResetKey,
-          boardAnimatedFeatures,
-          boardAnimatedEnabled,
-          boardWeatherEffect,
-          gridVisible,
-          gridOpacity,
-          gridSize,
-          gridOffsetX,
-          gridOffsetY,
-          visionConfig,
-          stageScale,
-          stagePos,
-          activeSceneInfo,
-          combatState,
-          claimedTokenId,
-          targetMapW,
-          targetMapH,
-          timestamp: Date.now()
-        };
+        const stateToSave = buildPlayerBackupPayloadRef.current();
         localStorage.setItem('mistwalker_player_state_backup_v1', JSON.stringify(stateToSave));
       } catch {}
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [
-    imageFile, mapRotation, tokens, walls, reveals, polygonReveals, isFogVisible, fogResetKey,
-    boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect, gridVisible,
-    gridOpacity, gridSize, gridOffsetX, gridOffsetY, visionConfig, stageScale, stagePos,
-    activeSceneInfo, combatState, claimedTokenId, targetMapW, targetMapH
-  ]);
+  }, []);
 
 
   const handleSelectDicePreset = useCallback((preset: DiceColorPreset) => {
@@ -6612,6 +6627,11 @@ export default function PlayerView() {
     // If not in active vision or manual reveal, the token is behind a wall or in the fog -> NEVER visible
     return false;
   }, [isFogVisible, claimedTokenId, gridSize, reveals, polygonReveals, visionConfig.enabled, activeFovPolygons, walls]);
+
+  const visibleTokens = useMemo(
+    () => tokens.filter(isTokenVisibleToPlayer),
+    [tokens, isTokenVisibleToPlayer]
+  );
 
 
 
@@ -7658,10 +7678,10 @@ export default function PlayerView() {
         ref={stageRef}
         width={dimensions.width}
         height={dimensions.height}
-        scaleX={stageScale}
-        scaleY={stageScale}
-        x={stagePos.x}
-        y={stagePos.y}
+        scaleX={stageScaleRef.current}
+        scaleY={stageScaleRef.current}
+        x={stagePosRef.current.x}
+        y={stagePosRef.current.y}
         draggable={!isDraggingToken && !activeEquippedAsset}
         className={activeEquippedAsset ? "cursor-crosshair" : "cursor-default"}
         onContextMenu={(e) => e.evt.preventDefault()}
@@ -7671,6 +7691,11 @@ export default function PlayerView() {
         onTouchStart={handleStageTouchStart}
         onTouchMove={handleStageTouchMove}
         onTouchEnd={handleStageTouchEnd}
+        onDragStart={(e) => {
+          if (e.target === e.target.getStage() && !activeDraggingTokenIdRef.current) {
+            if (!tokenMenuPinnedRef.current) setActiveTokenMenu(null);
+          }
+        }}
         onDragMove={(e) => {
           if (e.target === e.target.getStage() && !activeDraggingTokenIdRef.current) {
             const newX = e.target.x();
@@ -7839,9 +7864,7 @@ export default function PlayerView() {
 
         {/* Layer 5: Tokens Layer (Rendered on top of fog so token opacity is 100% solid, while monsters in fog are filtered out) */}
         <Layer>
-          {tokens
-            .filter(isTokenVisibleToPlayer)
-            .map((token) => (
+          {visibleTokens.map((token) => (
               <PlayerToken
                 showHp={showHpDisplay}
                 key={token.id}
@@ -7915,10 +7938,10 @@ export default function PlayerView() {
       <DomEffectOverlay
         effects={effects}
         setEffects={setEffects}
-        stagePos={stagePos}
-        stageScale={stageScale}
+        stagePos={stagePosRef.current}
+        stageScale={stageScaleRef.current}
         gridSize={gridSize}
-        tokens={tokens.filter(isTokenVisibleToPlayer)}
+        tokens={visibleTokens}
         combatants={combatState?.combatants}
         activeEquippedAsset={activeEquippedAsset}
         aimOrigin={aimOrigin}

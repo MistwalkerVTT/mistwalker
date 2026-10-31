@@ -1753,9 +1753,11 @@ export const AnimatedMapOverlay: React.FC<AnimatedMapOverlayProps> = ({
     return () => window.removeEventListener('pointermove', handleWindowPointerMove);
   }, [isDrawing]);
 
+  const hasActiveDomContent = Boolean(enabled && renderCanvas && (features.length > 0 || (weatherEffect && weatherEffect !== 'none')));
+
   // Animation render loop
   useEffect(() => {
-    if (!enabled || !renderCanvas) {
+    if (!hasActiveDomContent) {
       if (animFrameIdRef.current) {
         cancelAnimationFrame(animFrameIdRef.current);
         animFrameIdRef.current = null;
@@ -1765,6 +1767,7 @@ export const AnimatedMapOverlay: React.FC<AnimatedMapOverlayProps> = ({
         const ctx = canvas.getContext('2d');
         if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
       }
+      particlesRef.current = [];
       return;
     }
 
@@ -1826,7 +1829,7 @@ export const AnimatedMapOverlay: React.FC<AnimatedMapOverlayProps> = ({
         animFrameIdRef.current = null;
       }
     };
-  }, [enabled, renderCanvas]);
+  }, [hasActiveDomContent]);
 
   // Handle pointer down for Shift-pan or middle-click pan
   const handleContainerPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -2425,17 +2428,20 @@ export const AnimatedFeaturesKonvaImage: React.FC<AnimatedFeaturesKonvaImageProp
     canvasRef.current = document.createElement('canvas');
   }
 
+  const hasActiveKonvaContent = Boolean(enabled && (features.length > 0 || (weatherEffect && weatherEffect !== 'none')));
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    if (!enabled) {
+    if (!hasActiveKonvaContent) {
       if (animFrameIdRef.current) {
         cancelAnimationFrame(animFrameIdRef.current);
         animFrameIdRef.current = null;
       }
       const ctx = canvas.getContext('2d');
       if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+      particlesRef.current = [];
       imageRef.current?.getLayer()?.batchDraw();
       return;
     }
@@ -2466,7 +2472,7 @@ export const AnimatedFeaturesKonvaImage: React.FC<AnimatedFeaturesKonvaImageProp
       if (currentFeatures.length === 0 && currentWeather === 'none') {
         ctx.clearRect(0, 0, width, height);
         imageRef.current?.getLayer()?.batchDraw();
-        animFrameIdRef.current = requestAnimationFrame(render);
+        animFrameIdRef.current = null;
         return;
       }
 
@@ -2503,9 +2509,9 @@ export const AnimatedFeaturesKonvaImage: React.FC<AnimatedFeaturesKonvaImageProp
         animFrameIdRef.current = null;
       }
     };
-  }, [enabled]);
+  }, [hasActiveKonvaContent]);
 
-  if (!canvasRef.current || !enabled || mapDimensions.width <= 0 || mapDimensions.height <= 0) return null;
+  if (!canvasRef.current || !hasActiveKonvaContent || mapDimensions.width <= 0 || mapDimensions.height <= 0) return null;
 
   return (
     <KonvaImage

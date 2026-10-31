@@ -1342,6 +1342,10 @@ export default function App() {
     showDoorBadges: false
   });
   const [selectedTokenIds, setSelectedTokenIds] = useState<string[]>([]);
+  const selectedTokenIdsRef = useRef<string[]>([]);
+  selectedTokenIdsRef.current = selectedTokenIds;
+  const tokensRef = useRef<Token[]>([]);
+  tokensRef.current = tokens;
   const [editingTokenNameId, setEditingTokenNameId] = useState<string | null>(null);
   const [editingTokenNameText, setEditingTokenNameText] = useState<string>('');
 
@@ -1373,12 +1377,16 @@ export default function App() {
   } | null>(null);
   const [stageScale, setStageScale] = useState<number>(1);
   const stageScaleRef = useRef<number>(1);
-  stageScaleRef.current = stageScale;
+  useEffect(() => {
+    stageScaleRef.current = stageScale;
+  }, [stageScale]);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
   const [stagePos, setStagePos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const stagePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  stagePosRef.current = stagePos;
+  useEffect(() => {
+    stagePosRef.current = stagePos;
+  }, [stagePos]);
   const stageDragRafIdRef = useRef<number | null>(null);
   const wheelRafIdRef = useRef<number | null>(null);
   const pendingWheelStateRef = useRef<{ scale: number; pos: { x: number; y: number } } | null>(null);
@@ -1387,6 +1395,8 @@ export default function App() {
   const [gridSize, setGridSize] = useState<number>(50);
   const [gridOffsetX, setGridOffsetX] = useState<number>(0);
   const [gridOffsetY, setGridOffsetY] = useState<number>(0);
+  const gridOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  gridOffsetRef.current = { x: gridOffsetX, y: gridOffsetY };
   const [mapRotation, setMapRotation] = useState<number>(0);
 
 
@@ -1911,6 +1921,8 @@ export default function App() {
 
   // Campaign Map Zones & Interactive Hotspots State
   const [roomAnnotations, setRoomAnnotations] = useState<RoomAnnotation[]>([]);
+  const roomAnnotationsRef = useRef<RoomAnnotation[]>([]);
+  roomAnnotationsRef.current = roomAnnotations;
   const [currentZonePolygonPoints, setCurrentZonePolygonPoints] = useState<number[]>([]);
   const [isZoneEditorOpen, setIsZoneEditorOpen] = useState(false);
   const [editingZone, setEditingZone] = useState<RoomAnnotation | null>(null);
@@ -2564,53 +2576,62 @@ export default function App() {
     }
   }, [tokens, walls, reveals, polygonReveals, roomAnnotations, activeDmNotes, visionConfig, gridSize]);
 
+  // Keep a mutable ref to the latest backup payload builder so beforeunload registers only once
+  // and debounced background saves never block mid-drag frames.
+  const buildDmBackupPayloadRef = useRef<() => any>(() => null);
+  buildDmBackupPayloadRef.current = () => {
+    if (!imageFile) return null;
+    return {
+      activeMapId: activeMapIdRef.current,
+      liveMapId: liveMapIdRef.current,
+      mapsData: mapsDataRef.current,
+      imageFile: (!imageFile.startsWith('blob:')) ? imageFile : null,
+      mapType,
+      videoSize,
+      mapRotation,
+      stageScale: stageScaleRef.current,
+      stagePos: stagePosRef.current,
+      tokens,
+      walls,
+      reveals,
+      polygonReveals,
+      isFogVisible,
+      fogResetKey,
+      visionConfig,
+      gridVisible,
+      gridOpacity,
+      gridSize,
+      gridOffsetX,
+      gridOffsetY,
+      roomAnnotations,
+      activeSceneInfo,
+      activeDmNotes,
+      boardAnimatedFeatures,
+      boardAnimatedEnabled,
+      boardWeatherEffect,
+      combatTrackerCombatants,
+      combatTrackerRound,
+      combatTrackerTurnIndex,
+      showCombatTracker,
+      isSaved: isSceneSavedRef.current,
+      timestamp: Date.now()
+    };
+  };
+
   // Continuous debounced state snapshot saving to localStorage for instant DM crash recovery
   useEffect(() => {
+    // Skip scheduling localStorage serialization while actively dragging a token
+    if (isDraggingTokenRef.current) return;
     const timer = setTimeout(() => {
-      if (typeof window === 'undefined') return;
-      // Do not overwrite previous session backups when idling on the home screen without an active scene
-      if (!imageFile) return;
+      if (typeof window === 'undefined' || isDraggingTokenRef.current) return;
+      const stateToSave = buildDmBackupPayloadRef.current();
+      if (!stateToSave) return;
       try {
-        const stateToSave = {
-          activeMapId: activeMapIdRef.current,
-          liveMapId: liveMapIdRef.current,
-          mapsData: mapsDataRef.current,
-          imageFile: (!imageFile.startsWith('blob:')) ? imageFile : null,
-          mapType,
-          videoSize,
-          mapRotation,
-          stageScale,
-          stagePos,
-          tokens,
-          walls,
-          reveals,
-          polygonReveals,
-          isFogVisible,
-          fogResetKey,
-          visionConfig,
-          gridVisible,
-          gridOpacity,
-          gridSize,
-          gridOffsetX,
-          gridOffsetY,
-          roomAnnotations,
-          activeSceneInfo,
-          activeDmNotes,
-          boardAnimatedFeatures,
-          boardAnimatedEnabled,
-          boardWeatherEffect,
-          combatTrackerCombatants,
-          combatTrackerRound,
-          combatTrackerTurnIndex,
-          showCombatTracker,
-          isSaved: isSceneSavedRef.current,
-          timestamp: Date.now()
-        };
         localStorage.setItem('mistwalker_dm_state_backup_v1', JSON.stringify(stateToSave));
       } catch (err) {
         // Safe against storage quota
       }
-    }, 1000);
+    }, 2000);
     return () => clearTimeout(timer);
   }, [
     imageFile, mapType, videoSize, mapRotation, stageScale, stagePos, tokens, walls,
@@ -2620,58 +2641,18 @@ export default function App() {
     combatTrackerCombatants, combatTrackerRound, combatTrackerTurnIndex, showCombatTracker
   ]);
 
-  // Synchronous beforeunload snapshot
+  // Synchronous beforeunload snapshot (registered once using ref to avoid listener churn during token drags)
   useEffect(() => {
     const handleBeforeUnload = () => {
-      if (!imageFile) return;
+      const stateToSave = buildDmBackupPayloadRef.current();
+      if (!stateToSave) return;
       try {
-        const stateToSave = {
-          activeMapId: activeMapIdRef.current,
-          liveMapId: liveMapIdRef.current,
-          mapsData: mapsDataRef.current,
-          imageFile: (!imageFile.startsWith('blob:')) ? imageFile : null,
-          mapType,
-          videoSize,
-          mapRotation,
-          stageScale,
-          stagePos,
-          tokens,
-          walls,
-          reveals,
-          polygonReveals,
-          isFogVisible,
-          fogResetKey,
-          visionConfig,
-          gridVisible,
-          gridOpacity,
-          gridSize,
-          gridOffsetX,
-          gridOffsetY,
-          roomAnnotations,
-          activeSceneInfo,
-          activeDmNotes,
-          boardAnimatedFeatures,
-          boardAnimatedEnabled,
-          boardWeatherEffect,
-          combatTrackerCombatants,
-          combatTrackerRound,
-          combatTrackerTurnIndex,
-          showCombatTracker,
-          isSaved: isSceneSavedRef.current,
-          timestamp: Date.now()
-        };
         localStorage.setItem('mistwalker_dm_state_backup_v1', JSON.stringify(stateToSave));
       } catch {}
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [
-    imageFile, mapType, videoSize, mapRotation, stageScale, stagePos, tokens, walls,
-    reveals, polygonReveals, isFogVisible, fogResetKey, visionConfig, gridVisible,
-    gridOpacity, gridSize, gridOffsetX, gridOffsetY, roomAnnotations, activeSceneInfo,
-    activeDmNotes, boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect,
-    combatTrackerCombatants, combatTrackerRound, combatTrackerTurnIndex, showCombatTracker
-  ]);
+  }, []);
 
   // Automatically convert any local blob: map URL into a persistent server /uploads/ URL so remote Player Views can load it
   useEffect(() => {
@@ -2800,6 +2781,22 @@ export default function App() {
   const lastRemoteTokenUpdateTimeRef = useRef<number>(0);
   const isInitialTokenMountRef = useRef<boolean>(true);
 
+  // Global failsafe so isDraggingTokenRef never stays stuck true if mouse/touch releases outside browser window
+  useEffect(() => {
+    const clearDragState = () => {
+      if (isDraggingTokenRef.current) {
+        isDraggingTokenRef.current = false;
+        setIsDraggingToken(false);
+      }
+    };
+    window.addEventListener('pointerup', clearDragState);
+    window.addEventListener('blur', clearDragState);
+    return () => {
+      window.removeEventListener('pointerup', clearDragState);
+      window.removeEventListener('blur', clearDragState);
+    };
+  }, []);
+
   // Real-time synchronization of DM token updates (conditions, monster spawns, edits, deletions) to Player View
   useEffect(() => {
     const currentSlot = activeMapIdRef.current;
@@ -2814,6 +2811,8 @@ export default function App() {
       isRemoteTokenUpdateRef.current = false;
       return;
     }
+    // Skip full-array SYNC_TOKENS while actively dragging a token (throttled MOVE_TOKEN handles live movement, and onDragEnd emits SYNC_TOKENS)
+    if (isDraggingTokenRef.current) return;
     // Prevent echo loop when tokens were updated remotely by a player within the last 1200ms
     if (Date.now() - lastRemoteTokenUpdateTimeRef.current < 1200) return;
     if (isSwitchingMapSlotRef.current || (Date.now() - lastSlotSwitchTimeRef.current < 1500)) return;
@@ -2848,6 +2847,9 @@ export default function App() {
   // Flag to prevent echoing back updates initiated remotely
   const isRemoteUpdateRef = useRef<boolean>(false);
 
+  const lastRegisteredDdbIdsRef = useRef<string>('');
+  const [socketReconnectTick, setSocketReconnectTick] = useState<number>(0);
+
   // Dedicated permanent socket connection & event handlers for DM view
   useEffect(() => {
     const socket = io();
@@ -2857,6 +2859,8 @@ export default function App() {
 
     socket.on('connect', () => {
       console.log('[DM Socket] Connected to server as ID:', socket.id);
+      lastRegisteredDdbIdsRef.current = '';
+      setSocketReconnectTick(t => t + 1);
       if (activeMapIdRef.current === liveMapIdRef.current) {
         broadcastFullStateRef.current?.();
       }
@@ -3465,7 +3469,7 @@ export default function App() {
     };
   }, []);
 
-  // Real-time automatic D&D Beyond HP registration for all active characters and tokens
+  // Real-time automatic D&D Beyond HP registration for all active characters and tokens (deduplicated by ID set)
   useEffect(() => {
     const ddbIdSet = new Set<string>();
     tokens.forEach((t: any) => {
@@ -3475,15 +3479,17 @@ export default function App() {
       if (c.ddbCharacterId) ddbIdSet.add(String(c.ddbCharacterId).trim());
     });
 
-    const ddbIds = Array.from(ddbIdSet).filter(id => id && !isNaN(Number(id)));
-    if (ddbIds.length > 0) {
+    const ddbIds = Array.from(ddbIdSet).filter(id => id && !isNaN(Number(id))).sort();
+    const ddbIdsKey = ddbIds.join(',');
+    if (ddbIds.length > 0 && ddbIdsKey !== lastRegisteredDdbIdsRef.current) {
+      lastRegisteredDdbIdsRef.current = ddbIdsKey;
       fetch('/api/ddb/monitor-characters', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ characterIds: ddbIds })
       }).catch(err => console.warn('[App] D&D Beyond monitor registration note:', err));
     }
-  }, [tokens, compendiumCharacters]);
+  }, [tokens, compendiumCharacters, socketReconnectTick]);
 
   // Periodic heartbeat poll to trigger D&D Beyond HP refresh cycle every 4 seconds
   useEffect(() => {
@@ -3518,6 +3524,7 @@ export default function App() {
       broadcastFullStateRef.current?.();
     }, 150);
 
+    return () => clearTimeout(timer);
   }, [reveals, polygonReveals, isFogVisible, fogResetKey, visionConfig, walls, gridSize, gridOpacity, gridVisible, mapRotation]);
 
   // Manual "Force Sync to Players" action
@@ -6363,6 +6370,10 @@ export default function App() {
       cancelHoldPing();
       if (stage && typeof stage.stopDrag === 'function') {
         stage.stopDrag();
+        const sx = stage.x();
+        const sy = stage.y();
+        stagePosRef.current = { x: sx, y: sy };
+        setStagePos(prev => (prev.x === sx && prev.y === sy) ? prev : { x: sx, y: sy });
       }
       return;
     }
@@ -8532,10 +8543,10 @@ export default function App() {
               width={Math.max(100, (dimensions.width || (typeof window !== 'undefined' ? window.innerWidth : 1920)) - 64)}
               height={Math.max(100, dimensions.height || (typeof window !== 'undefined' ? window.innerHeight : 1080))}
               ref={stageRef}
-              scaleX={stageScale}
-              scaleY={stageScale}
-              x={stagePos.x}
-              y={stagePos.y}
+              scaleX={stageScaleRef.current}
+              scaleY={stageScaleRef.current}
+              x={stagePosRef.current.x}
+              y={stagePosRef.current.y}
               onWheel={handleWheel}
               onContextMenu={(e) => {
                 e.evt.preventDefault();
@@ -8543,8 +8554,8 @@ export default function App() {
                 if (!stage) return;
                 const pointer = stage.getPointerPosition();
                 if (!pointer) return;
-                const mapX = (pointer.x - stagePos.x) / stageScale;
-                const mapY = (pointer.y - stagePos.y) / stageScale;
+                const mapX = (pointer.x - stagePosRef.current.x) / stageScaleRef.current;
+                const mapY = (pointer.y - stagePosRef.current.y) / stageScaleRef.current;
                 const dims = getMapDimensions();
                 const mW = dims.width || 1;
                 const mH = dims.height || 1;
@@ -8564,6 +8575,13 @@ export default function App() {
                 }
               }}
               draggable={(tool === 'pan' || isSpacePressed || isShiftPanActive) && !isDraggingToken && !hoveredZoneId && !isRoomDrawerOpen}
+              onDragStart={(e) => {
+                if (e.target === stageRef.current && !isDraggingTokenRef.current) {
+                  setActiveTokenMenu(null);
+                  setActiveMenu(null);
+                  setEffectContextMenu(null);
+                }
+              }}
               onDragMove={(e) => {
                 if (e.target === stageRef.current && !isDraggingTokenRef.current) {
                   const newX = e.target.x();
@@ -8993,6 +9011,10 @@ export default function App() {
                     cancelHoldPing();
                     if (stageRef.current && typeof stageRef.current.stopDrag === 'function') {
                       stageRef.current.stopDrag();
+                      const sx = stageRef.current.x();
+                      const sy = stageRef.current.y();
+                      stagePosRef.current = { x: sx, y: sy };
+                      setStagePos(prev => (prev.x === sx && prev.y === sy) ? prev : { x: sx, y: sy });
                     }
                     try {
                       const dd = (Konva as any)?.DD;
@@ -9017,6 +9039,10 @@ export default function App() {
                     cancelHoldPing();
                     if (stageRef.current && typeof stageRef.current.stopDrag === 'function') {
                       stageRef.current.stopDrag();
+                      const sx = stageRef.current.x();
+                      const sy = stageRef.current.y();
+                      stagePosRef.current = { x: sx, y: sy };
+                      setStagePos(prev => (prev.x === sx && prev.y === sy) ? prev : { x: sx, y: sy });
                     }
                     try {
                       const dd = (Konva as any)?.DD;
@@ -9187,17 +9213,22 @@ export default function App() {
                       isDraggingTokenRef.current = true;
                       setIsDraggingToken(true);
                       setActiveMenu(null);
+                      setActiveTokenMenu(null);
                       if (stageRef.current) {
                         const sx = stageRef.current.x();
                         const sy = stageRef.current.y();
+                        stagePosRef.current = { x: sx, y: sy };
                         setStagePos(prev => (prev.x === sx && prev.y === sy) ? prev : { x: sx, y: sy });
                       }
-                      if (!selectedTokenIds.includes(token.id)) {
-                        setSelectedTokenIds([token.id]);
+                      const curSelected = selectedTokenIdsRef.current;
+                      const effectiveSelected = curSelected.includes(token.id) ? curSelected : [token.id];
+                      if (!curSelected.includes(token.id)) {
+                        selectedTokenIdsRef.current = effectiveSelected;
+                        setSelectedTokenIds(effectiveSelected);
                       }
                       const posMap: Record<string, { x: number; y: number }> = {};
-                      tokens.forEach(t => {
-                        if (selectedTokenIds.includes(t.id) || t.id === token.id) {
+                      tokensRef.current.forEach(t => {
+                        if (effectiveSelected.includes(t.id) || t.id === token.id) {
                           posMap[t.id] = { x: t.x, y: t.y };
                         }
                       });
@@ -9210,10 +9241,11 @@ export default function App() {
                       const startPos = dragStartPositionsRef.current[token.id] || { x: token.x, y: token.y };
                       const deltaX = rawX - startPos.x;
                       const deltaY = rawY - startPos.y;
+                      const curSelected = selectedTokenIdsRef.current;
 
-                      if (selectedTokenIds.length > 1 && selectedTokenIds.includes(token.id)) {
+                      if (curSelected.length > 1 && curSelected.includes(token.id)) {
                         setTokens(prev => prev.map(t => {
-                          if (selectedTokenIds.includes(t.id)) {
+                          if (curSelected.includes(t.id)) {
                             const init = dragStartPositionsRef.current[t.id] || { x: t.x, y: t.y };
                             return { ...t, x: init.x + deltaX, y: init.y + deltaY };
                           }
@@ -9227,7 +9259,16 @@ export default function App() {
                       if (now - lastTokenMoveEmitTimeRef.current > 35) {
                         lastTokenMoveEmitTimeRef.current = now;
                         if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) {
-                          socketRef.current.emit('MOVE_TOKEN', { id: token.id, x: rawX, y: rawY });
+                          if (curSelected.length > 1 && curSelected.includes(token.id)) {
+                            curSelected.forEach(id => {
+                              const init = dragStartPositionsRef.current[id];
+                              if (init) {
+                                socketRef.current.emit('MOVE_TOKEN', { id, x: init.x + deltaX, y: init.y + deltaY });
+                              }
+                            });
+                          } else {
+                            socketRef.current.emit('MOVE_TOKEN', { id: token.id, x: rawX, y: rawY });
+                          }
                         }
                       }
                     }}
@@ -9238,19 +9279,23 @@ export default function App() {
                       if (stageRef.current) {
                         const sx = stageRef.current.x();
                         const sy = stageRef.current.y();
+                        stagePosRef.current = { x: sx, y: sy };
                         setStagePos(prev => (prev.x === sx && prev.y === sy) ? prev : { x: sx, y: sy });
                       }
-                      const snappedX = Math.round((e.target.x() - gridOffsetX) / gridSize) * gridSize + gridOffsetX;
-                      const snappedY = Math.round((e.target.y() - gridOffsetY) / gridSize) * gridSize + gridOffsetY;
+                      const { x: curGridOffX, y: curGridOffY } = gridOffsetRef.current;
+                      const snappedX = Math.round((e.target.x() - curGridOffX) / gridSize) * gridSize + curGridOffX;
+                      const snappedY = Math.round((e.target.y() - curGridOffY) / gridSize) * gridSize + curGridOffY;
                       
                       const startPos = dragStartPositionsRef.current[token.id] || { x: token.x, y: token.y };
                       const deltaX = snappedX - startPos.x;
                       const deltaY = snappedY - startPos.y;
+                      const curSelected = selectedTokenIdsRef.current;
+                      const curTokens = tokensRef.current;
 
                       let nextTokens: Token[];
-                      if (selectedTokenIds.length > 1 && selectedTokenIds.includes(token.id)) {
-                        nextTokens = tokens.map(t => {
-                          if (selectedTokenIds.includes(t.id)) {
+                      if (curSelected.length > 1 && curSelected.includes(token.id)) {
+                        nextTokens = curTokens.map(t => {
+                          if (curSelected.includes(t.id)) {
                             const init = dragStartPositionsRef.current[t.id] || { x: t.x, y: t.y };
                             return {
                               ...t,
@@ -9261,14 +9306,15 @@ export default function App() {
                           return t;
                         });
                       } else {
-                        nextTokens = tokens.map(t => t.id === token.id ? { ...t, x: snappedX, y: snappedY } : t);
+                        nextTokens = curTokens.map(t => t.id === token.id ? { ...t, x: snappedX, y: snappedY } : t);
                       }
+                      tokensRef.current = nextTokens;
                       setTokens(nextTokens);
 
                       // Check Unsafe Environmental Hazards on Campaign Battlemap
                       try {
                         const { width: mapW, height: mapH } = getMapDimensions();
-                        const currentAnnos = roomAnnotations || [];
+                        const currentAnnos = roomAnnotationsRef.current || [];
                         const activeHazards = currentAnnos.filter((a: any) => a.type === 'hazard' || a.isHazard);
                         for (const hz of activeHazards) {
                           if (isPointInHazard(snappedX + gridSize / 2, snappedY + gridSize / 2, hz as any, mapW, mapH)) {
@@ -9288,8 +9334,9 @@ export default function App() {
                       } catch (hazardErr) {
                         console.warn('[Hazard Movement Check] error:', hazardErr);
                       }
-                      if (mapsDataRef.current[activeMapId]) {
-                        mapsDataRef.current[activeMapId].tokens = nextTokens;
+                      const curSlot = activeMapIdRef.current;
+                      if (mapsDataRef.current[curSlot]) {
+                        mapsDataRef.current[curSlot].tokens = nextTokens;
                       }
 
                       if (startPos.x !== snappedX || startPos.y !== snappedY) {
@@ -9307,32 +9354,38 @@ export default function App() {
 
                       dragStartPositionsRef.current = {};
 
-                      if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) {
-                        if (selectedTokenIds.length > 1 && selectedTokenIds.includes(token.id)) {
-                          selectedTokenIds.forEach(id => {
+                      if (socketRef.current?.connected && (curSlot === liveMapIdRef.current)) {
+                        if (curSelected.length > 1 && curSelected.includes(token.id)) {
+                          curSelected.forEach(id => {
                             const tok = nextTokens.find(t => t.id === id);
                             if (tok) socketRef.current.emit('MOVE_TOKEN', { id: tok.id, x: tok.x, y: tok.y });
                           });
                         } else {
                           socketRef.current.emit('MOVE_TOKEN', { id: token.id, x: snappedX, y: snappedY });
                         }
-                        socketRef.current.emit('SYNC_TOKENS', nextTokens);
+                        const syncedTokens = prepareTokensForSync(nextTokens, compendiumMonsters, combatTrackerCombatants);
+                        socketRef.current.emit('SYNC_TOKENS', syncedTokens);
                       }
                     }}
                     onDelete={() => {
+                      const curTokens = tokensRef.current;
+                      const latestToken = curTokens.find(t => t.id === token.id) || token;
                       undoRedo.recordAction({
                         type: 'TOKEN_DELETE',
-                        description: `Delete ${token.name || 'Token'}`,
-                        payload: { tokens: [token] }
+                        description: `Delete ${latestToken.name || 'Token'}`,
+                        payload: { tokens: [latestToken] }
                       });
-                      const next = tokens.filter(t => t.id !== token.id);
+                      const next = curTokens.filter(t => t.id !== token.id);
+                      tokensRef.current = next;
                       setTokens(next);
                       setSelectedTokenIds(prev => prev.filter(id => id !== token.id));
-                      if (mapsDataRef.current[activeMapId]) {
-                        mapsDataRef.current[activeMapId].tokens = next;
+                      const curSlot = activeMapIdRef.current;
+                      if (mapsDataRef.current[curSlot]) {
+                        mapsDataRef.current[curSlot].tokens = next;
                       }
-                      if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) {
-                        socketRef.current.emit('SYNC_TOKENS', next);
+                      if (socketRef.current?.connected && (curSlot === liveMapIdRef.current)) {
+                        const syncedTokens = prepareTokensForSync(next, compendiumMonsters, combatTrackerCombatants);
+                        socketRef.current.emit('SYNC_TOKENS', syncedTokens);
                       }
                     }}
                     onContextMenu={(e: any) => {
@@ -9399,8 +9452,8 @@ export default function App() {
             <DomEffectOverlay
               effects={effects}
               setEffects={setEffects}
-              stagePos={stagePos}
-              stageScale={stageScale}
+              stagePos={stagePosRef.current}
+              stageScale={stageScaleRef.current}
               gridSize={gridSize}
               tokens={tokens}
               combatants={combatTrackerCombatants}
@@ -9440,10 +9493,10 @@ export default function App() {
                       : 'pointer-events-none'
                   }`}
                   style={{
-                    left: `${stagePos.x}px`,
-                    top: `${stagePos.y}px`,
-                    width: `${mapWidth * stageScale}px`,
-                    height: `${mapHeight * stageScale}px`,
+                    left: `${stagePosRef.current.x}px`,
+                    top: `${stagePosRef.current.y}px`,
+                    width: `${mapWidth * stageScaleRef.current}px`,
+                    height: `${mapHeight * stageScaleRef.current}px`,
                     zIndex: 12
                   }}
                 >

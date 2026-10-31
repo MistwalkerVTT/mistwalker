@@ -187,6 +187,22 @@ function normalizeAngle(angle: number): number {
 }
 
 
+// Per-walls-reference cache so stationary tokens & torches reuse computed raycast polygons in O(1)
+// during single-token drags and between PlayerView + DynamicLightingLayer renders.
+const visibilityCacheByWalls = new WeakMap<WallSegment[], Map<string, VisibilityPolygon>>();
+const emptyWallsVisibilityCache = new Map<string, VisibilityPolygon>();
+
+function getWallsDoorSignature(walls: WallSegment[]): string {
+  let sig = `${walls.length}:`;
+  for (let i = 0; i < walls.length; i++) {
+    const w = walls[i];
+    if (w.wallType === 'door' || w.wallType === 'secret_door') {
+      sig += `${w.id}=${w.doorState || 'closed'},`;
+    }
+  }
+  return sig;
+}
+
 /**
  * Computes a 2D visibility polygon for a vision source against a set of wall segments.
  * Sweeps rays at wall endpoints, along wall faces, and samples circle / cone arcs.
@@ -201,6 +217,26 @@ export function computeVisibilityPolygon(
   const coneAngleDeg = source.angleDegrees !== undefined ? source.angleDegrees : 360;
   const dirAngleDeg = source.directionDegrees !== undefined ? source.directionDegrees : 0;
   const isOmnidirectional = coneAngleDeg >= 360;
+
+  // Check per-source raycast cache (quantized to 0.5px for sub-pixel stability)
+  let wallCacheMap: Map<string, VisibilityPolygon>;
+  if (walls && walls.length > 0) {
+    let existing = visibilityCacheByWalls.get(walls);
+    if (!existing) {
+      existing = new Map<string, VisibilityPolygon>();
+      visibilityCacheByWalls.set(walls, existing);
+    }
+    wallCacheMap = existing;
+  } else {
+    wallCacheMap = emptyWallsVisibilityCache;
+  }
+
+  const doorSig = walls && walls.length > 0 ? getWallsDoorSignature(walls) : '0';
+  const cacheKey = `${source.id}|${Math.round(cx * 2)}|${Math.round(cy * 2)}|${Math.round(maxRadius)}|${coneAngleDeg}|${dirAngleDeg}|${Math.round(mapBounds?.width || 0)}x${Math.round(mapBounds?.height || 0)}|${doorSig}`;
+  const cachedPoly = wallCacheMap.get(cacheKey);
+  if (cachedPoly) {
+    return cachedPoly;
+  }
 
   const dirAngleRad = (dirAngleDeg * Math.PI) / 180;
   const halfConeRad = ((coneAngleDeg / 2) * Math.PI) / 180;
@@ -246,12 +282,15 @@ export function computeVisibilityPolygon(
       }
       points.push(px, py);
     }
-    return {
+    const fastResult: VisibilityPolygon = {
       sourceId: source.id,
       points,
       center: { x: cx, y: cy },
       radius: maxRadius
     };
+    if (wallCacheMap.size > 500) wallCacheMap.clear();
+    wallCacheMap.set(cacheKey, fastResult);
+    return fastResult;
   }
 
   // 1b. Weld near-endpoints within SNAP_TOL (5.0px) so imperfect hand-drawn corners or doors never leak rays
@@ -401,12 +440,15 @@ export function computeVisibilityPolygon(
     points.push(hit.x, hit.y);
   }
 
-  return {
+  const finalResult: VisibilityPolygon = {
     sourceId: source.id,
     points,
     center: { x: cx, y: cy },
     radius: maxRadius
   };
+  if (wallCacheMap.size > 500) wallCacheMap.clear();
+  wallCacheMap.set(cacheKey, finalResult);
+  return finalResult;
 }
 
 /**
