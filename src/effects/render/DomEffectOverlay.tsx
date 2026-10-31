@@ -126,6 +126,52 @@ function resolveAttachedToken(
   return nearest;
 }
 
+
+const applySnappyPlayback = (el: HTMLVideoElement | null) => {
+  if (!el) return;
+  try {
+    el.playbackRate = 1.35;
+    el.play().catch(() => {});
+  } catch (err) {
+    // ignore
+  }
+};
+
+function getAuraVisualMeta(nameOrKey?: string, defaultColor?: string) {
+  const n = (nameOrKey || '').toLowerCase();
+  if (n.includes('life')) {
+    return { isCircleAura: true, borderColor: 'rgba(34, 197, 94, 0.85)', glowColor: 'rgba(34, 197, 94, 0.35)', opacity: 0.35 };
+  }
+  if (n.includes('vitality')) {
+    return { isCircleAura: true, borderColor: 'rgba(16, 185, 129, 0.85)', glowColor: 'rgba(16, 185, 129, 0.35)', opacity: 0.35 };
+  }
+  if (n.includes('twilight') || n.includes('faerie')) {
+    return { isCircleAura: true, borderColor: 'rgba(168, 85, 247, 0.85)', glowColor: 'rgba(168, 85, 247, 0.35)', opacity: 0.45 };
+  }
+  if (n.includes('crusader') || n.includes('mantle')) {
+    return { isCircleAura: true, borderColor: 'rgba(245, 158, 11, 0.9)', glowColor: 'rgba(245, 158, 11, 0.4)', opacity: 0.45 };
+  }
+  if (n.includes('antilife') || n.includes('anti-life')) {
+    return { isCircleAura: true, borderColor: 'rgba(56, 189, 248, 0.95)', glowColor: 'rgba(56, 189, 248, 0.5)', opacity: 0.8 };
+  }
+  if (n.includes('protection') || n.includes('paladin')) {
+    return { isCircleAura: true, borderColor: 'rgba(234, 179, 8, 0.85)', glowColor: 'rgba(234, 179, 8, 0.35)', opacity: 0.35 };
+  }
+  if (n.includes('courage')) {
+    return { isCircleAura: true, borderColor: 'rgba(251, 191, 36, 0.85)', glowColor: 'rgba(251, 191, 36, 0.35)', opacity: 0.35 };
+  }
+  if (n.includes('agathys') || n.includes('ice barrier') || n.includes('frost')) {
+    return { isCircleAura: true, borderColor: 'rgba(147, 197, 253, 0.9)', glowColor: 'rgba(147, 197, 253, 0.45)', opacity: 0.8 };
+  }
+  if (n.includes('spirit') || n.includes('guardian')) {
+    return { isCircleAura: true, borderColor: 'rgba(59, 130, 246, 0.85)', glowColor: 'rgba(59, 130, 246, 0.35)', opacity: 0.85 };
+  }
+  if (defaultColor) {
+    return { isCircleAura: true, borderColor: defaultColor, glowColor: defaultColor, opacity: 0.5 };
+  }
+  return { isCircleAura: false, borderColor: '', glowColor: '', opacity: 1.0 };
+}
+
 export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
   effects,
   setEffects,
@@ -291,43 +337,48 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
             );
             if (alreadyRenderedByEffect) return null;
 
-            const auraPixelRadius = auraFt >= 10
-              ? tokenRadius + (auraFt / 5) * gridSize
-              : Math.max(tokenRadius * 1.5, ((auraFt * 2) / 5) * gridSize / 2);
+            const auraPixelRadius = tokenRadius + (auraFt / 5) * gridSize;
             const auraDiameter = auraPixelRadius * 2;
-            const rawOp = aura.opacity ?? 0.9;
-            // Upgrade legacy static-circle default opacities (0.35 - 0.5) to vibrant video opacity (0.9)
-            const auraOpacity = (rawOp >= 0.34 && rawOp <= 0.5) ? 0.9 : rawOp;
+            const meta = getAuraVisualMeta(aura.name, aura.color);
+            const auraOpacity = typeof aura.opacity === 'number' ? aura.opacity : meta.opacity;
 
             return (
-              <video
+              <div
                 key={`aura-${token.id}-${idx}-${auraVideo}`}
-                src={auraVideo}
-                autoPlay
-                muted
-                loop
-                playsInline
-                preload="auto"
-                onLoadedData={(e) => (e.target as HTMLVideoElement).play().catch(() => {})}
-                onError={(e) => console.warn('Aura video load failed:', auraVideo, e)}
                 style={{
                   position: 'absolute',
                   left: `${centerX}px`,
                   top: `${centerY}px`,
                   width: `${auraDiameter}px`,
                   height: `${auraDiameter}px`,
-                  maxWidth: 'none',
-                  maxHeight: 'none',
-                  minWidth: `${auraDiameter}px`,
-                  minHeight: `${auraDiameter}px`,
                   transform: 'translate(-50%, -50%) translateZ(0)',
-                  transformOrigin: '50% 50%',
-                  objectFit: 'fill',
-                  opacity: auraOpacity,
+                  borderRadius: '50%',
+                  border: meta.isCircleAura ? `2px solid ${meta.borderColor}` : undefined,
+                  boxShadow: meta.isCircleAura ? `0 0 12px 2px ${meta.glowColor}, inset 0 0 8px 1px ${meta.glowColor}` : undefined,
                   pointerEvents: 'none',
-                  filter: 'drop-shadow(0 0 12px rgba(255, 255, 255, 0.25))'
+                  overflow: 'hidden'
                 }}
-              />
+              >
+                <video
+                  src={auraVideo}
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                  preload="auto"
+                  onLoadedData={(e) => applySnappyPlayback(e.target as HTMLVideoElement)}
+                  onError={(e) => console.warn('Aura video load failed:', auraVideo, e)}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    maxWidth: 'none',
+                    maxHeight: 'none',
+                    objectFit: 'cover',
+                    opacity: auraOpacity,
+                    pointerEvents: 'none'
+                  }}
+                />
+              </div>
             );
           });
         })}
@@ -358,7 +409,7 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                 muted
                 playsInline
                 preload="auto"
-                onLoadedData={(e) => (e.target as HTMLVideoElement).play().catch(() => {})}
+                onLoadedData={(e) => applySnappyPlayback(e.target as HTMLVideoElement)}
                 onError={(e) => console.warn('Effect video load failed:', effect.videoUrl, e)}
                 onEnded={() => handleEnded(effect)}
                 style={{
@@ -375,7 +426,7 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                   transformOrigin: `${projAnchorX} 50%`,
                   objectFit: 'fill',
                   opacity: effect.opacity ?? 1.0,
-                  filter: 'drop-shadow(0 0 12px rgba(255, 255, 255, 0.25))',
+                  filter: 'drop-shadow(0 0 4px rgba(255, 255, 255, 0.25))',
                   pointerEvents: 'none'
                 }}
               />
@@ -397,7 +448,7 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                 playsInline
                 preload="auto"
                 loop={Boolean(effect.loop || effect.isPersistent)}
-                onLoadedData={(e) => (e.target as HTMLVideoElement).play().catch(() => {})}
+                onLoadedData={(e) => applySnappyPlayback(e.target as HTMLVideoElement)}
                 onError={(e) => console.warn('Effect video load failed:', effect.videoUrl, e)}
                 onEnded={() => handleEnded(effect)}
                 style={{
@@ -414,7 +465,7 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                   transformOrigin: `${coneAnchorX} 50%`,
                   objectFit: 'fill',
                   opacity: effect.opacity ?? 1.0,
-                  filter: 'drop-shadow(0 0 12px rgba(255, 255, 255, 0.25))',
+                  filter: 'drop-shadow(0 0 4px rgba(255, 255, 255, 0.25))',
                   pointerEvents: 'none'
                 }}
               />
@@ -434,7 +485,7 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                 playsInline
                 preload="auto"
                 loop={Boolean(effect.loop || effect.isPersistent)}
-                onLoadedData={(e) => (e.target as HTMLVideoElement).play().catch(() => {})}
+                onLoadedData={(e) => applySnappyPlayback(e.target as HTMLVideoElement)}
                 onError={(e) => console.warn('Effect video load failed:', effect.videoUrl, e)}
                 onEnded={() => handleEnded(effect)}
                 style={{
@@ -451,7 +502,7 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                   transformOrigin: '10% 50%',
                   objectFit: 'fill',
                   opacity: effect.opacity ?? 1.0,
-                  filter: 'drop-shadow(0 0 12px rgba(255, 255, 255, 0.25))',
+                  filter: 'drop-shadow(0 0 4px rgba(255, 255, 255, 0.25))',
                   pointerEvents: 'none'
                 }}
               />
@@ -466,42 +517,53 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
           const posY = attachedToken ? (attachedToken.y ?? 0) + attachedTokenRadius : effect.y;
           const rawSizeFt = effect.sizeFt || 5;
           const pixelDiameter = attachedToken
-            ? (rawSizeFt >= 10
-                ? (attachedTokenRadius + (rawSizeFt / 5) * gridSize) * 2
-                : Math.max(attachedTokenSize * gridSize * 1.5, ((rawSizeFt * 2) / 5) * gridSize))
-            : Math.max(gridSize * 3.4, ((sizeFt * 2) / 5) * gridSize);
+            ? (attachedTokenRadius + (rawSizeFt / 5) * gridSize) * 2
+            : Math.max(gridSize * 1.5, ((rawSizeFt * 2) / 5) * gridSize);
+
+          const meta = getAuraVisualMeta(effect.name || effect.assetKey, effect.color);
+          const isAura = effect.paradigm === 'aura' || Boolean(attachedToken) || meta.isCircleAura;
+          const finalOpacity = (effect.opacity !== undefined && effect.opacity !== 1.0) ? effect.opacity : meta.opacity;
 
           return (
-            <video
+            <div
               key={effect.id}
-              src={effect.videoUrl}
-              autoPlay
-              muted
-              playsInline
-              preload="auto"
-              loop={Boolean(effect.loop || effect.isPersistent)}
-              className={(effect.fadeInMs || effect.fadeOutMs || effect.assetKey === 'dimension_door' || effect.assetKey === 'arcane_gate' || effect.name?.toLowerCase().includes('dimension door')) ? 'animate-effect-fade-portal' : undefined}
-              onLoadedData={(e) => (e.target as HTMLVideoElement).play().catch(() => {})}
-              onError={(e) => console.warn('Effect video load failed:', effect.videoUrl, e)}
-              onEnded={() => handleEnded(effect)}
               style={{
                 position: 'absolute',
                 left: `${posX}px`,
                 top: `${posY}px`,
                 width: `${pixelDiameter}px`,
                 height: `${pixelDiameter}px`,
-                maxWidth: 'none',
-                maxHeight: 'none',
-                minWidth: `${pixelDiameter}px`,
-                minHeight: `${pixelDiameter}px`,
                 transform: `translate(-50%, -50%) rotate(${effect.rotation || 0}deg) translateZ(0)`,
                 transformOrigin: '50% 50%',
-                objectFit: 'fill',
-                opacity: effect.opacity ?? 1.0,
-                filter: 'drop-shadow(0 0 12px rgba(255, 255, 255, 0.25))',
-                pointerEvents: 'none'
+                borderRadius: isAura ? '50%' : undefined,
+                border: (isAura && meta.isCircleAura) ? `2px solid ${meta.borderColor}` : undefined,
+                boxShadow: (isAura && meta.isCircleAura) ? `0 0 12px 2px ${meta.glowColor}, inset 0 0 8px 1px ${meta.glowColor}` : undefined,
+                pointerEvents: 'none',
+                overflow: isAura ? 'hidden' : undefined
               }}
-            />
+            >
+              <video
+                src={effect.videoUrl}
+                autoPlay
+                muted
+                playsInline
+                preload="auto"
+                loop={Boolean(effect.loop || effect.isPersistent)}
+                className={(effect.fadeInMs || effect.fadeOutMs || effect.assetKey === 'dimension_door' || effect.assetKey === 'arcane_gate' || effect.name?.toLowerCase().includes('dimension door')) ? 'animate-effect-fade-portal' : undefined}
+                onLoadedData={(e) => applySnappyPlayback(e.target as HTMLVideoElement)}
+                onError={(e) => console.warn('Effect video load failed:', effect.videoUrl, e)}
+                onEnded={() => handleEnded(effect)}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  maxWidth: 'none',
+                  maxHeight: 'none',
+                  objectFit: isAura ? 'cover' : 'fill',
+                  opacity: finalOpacity,
+                  pointerEvents: 'none'
+                }}
+              />
+            </div>
           );
         })}
 
@@ -742,7 +804,7 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                 loop
                 playsInline
                 preload="auto"
-                onLoadedData={(e) => (e.target as HTMLVideoElement).play().catch(() => {})}
+                onLoadedData={(e) => applySnappyPlayback(e.target as HTMLVideoElement)}
                 onError={(e) => console.warn('Condition video load failed:', fx.videoUrl, e)}
                 style={{
                   position: 'absolute',
@@ -840,7 +902,7 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                   transformOrigin: '50% 50%',
                   objectFit: 'fill',
                   opacity: 0.8,
-                  filter: 'drop-shadow(0 0 16px rgba(255, 255, 255, 0.4))',
+                  filter: 'drop-shadow(0 0 4px rgba(255, 255, 255, 0.3))',
                   pointerEvents: 'none'
                 }}
               />
@@ -891,7 +953,7 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                   transformOrigin: `${projAnchorX} 50%`,
                   objectFit: 'fill',
                   opacity: 0.8,
-                  filter: 'drop-shadow(0 0 16px rgba(255, 255, 255, 0.4))',
+                  filter: 'drop-shadow(0 0 4px rgba(255, 255, 255, 0.3))',
                   pointerEvents: 'none'
                 }}
               />
@@ -931,7 +993,7 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                   transformOrigin: `${projAnchorX} 50%`,
                   objectFit: 'fill',
                   opacity: 0.8,
-                  filter: 'drop-shadow(0 0 16px rgba(255, 255, 255, 0.4))',
+                  filter: 'drop-shadow(0 0 4px rgba(255, 255, 255, 0.3))',
                   pointerEvents: 'none'
                 }}
               />
