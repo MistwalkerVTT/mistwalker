@@ -7789,7 +7789,7 @@ export default function PlayerView() {
                 features={boardAnimatedFeatures}
                 weatherEffect={boardWeatherEffect}
                 walls={walls}
-                mapDimensions={{ width: targetMapW, height: targetMapH }}
+                mapDimensions={mapDimensions}
               />
             </Group>
           </Layer>
@@ -7802,7 +7802,7 @@ export default function PlayerView() {
           walls={walls}
           tokens={tokens}
           gridSize={gridSize}
-          mapDimensions={{ width: targetMapW, height: targetMapH }}
+          mapDimensions={mapDimensions}
           isPlayerView={true}
           claimedTokenId={claimedTokenId}
           campaignMode="run"
@@ -7810,13 +7810,13 @@ export default function PlayerView() {
           stageScale={stageScale}
           tool="select"
           selectedWallId={null}
-          onSelectWall={() => {}}
+          onSelectWall={noopSelectWall}
           onToggleDoor={handleToggleDoor}
           isFogVisible={isFogVisible}
           reveals={reveals}
           polygonReveals={polygonReveals}
           wallDrawStart={null}
-          mousePos={{ x: 0, y: 0 }}
+          mousePos={STATIC_MOUSE_POS}
           fogResetKey={fogResetKey}
           animatedFeatures={boardAnimatedFeatures}
         />
@@ -7826,13 +7826,13 @@ export default function PlayerView() {
           <Layer>
             <RoomHotspotLayer
               annotations={roomAnnotations}
-              mapDimensions={{ width: targetMapW, height: targetMapH }}
+              mapDimensions={mapDimensions}
               stageScale={stageScale}
               campaignMode="run"
               isPlayerView={true}
               selectedAnnotationId={null}
-              onSelectAnnotation={() => {}}
-              onOpenBriefing={() => {}}
+              onSelectAnnotation={noopSelectWall}
+              onOpenBriefing={noopSelectWall}
             />
           </Layer>
         )}

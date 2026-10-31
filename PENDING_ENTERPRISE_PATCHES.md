@@ -278,6 +278,32 @@
   - Load scenes across `DashboardHomeHub` ("Resume Primary Scene"), `LoadCampaignModal` ("Load Live" and slot buttons), and `CampaignBuilderModal` ("Launch Scene to VTT").
   - Verify full-resolution local static uploads (`/uploads/...`), external HTTP images, and thumbnail fallbacks all render smoothly without blank screens or false error toasts.
 
+---
+
+### [2026-10-31] feat(tokens): rename bubbles to Badges, remove AC Style text, and render menu icons directly on badges
+- **Commit**: `072c604`
+- **Files Changed**:
+  - `src/App.tsx`
+  - `src/components/PlayerView.tsx`
+  - `src/effects/bubbles/bubbleCatalog.ts`
+  - `src/effects/db/jb2aRegistry.ts`
+  - `src/effects/db/tokenFxMap.ts`
+  - `src/effects/index.ts`
+  - `src/effects/render/DomEffectOverlay.tsx`
+  - `src/effects/types/bubble.ts`
+  - `src/effects/ui/TokenBubblesKonvaOverlay.tsx`
+  - `src/types/aura.ts`
+- **Summary**:
+  - Renamed all UI references from "Bubbles" to "Badges" in DM and Player menus, active badge headers, removal actions, and creator controls.
+  - Removed "AC-Style" text from the 1-click preset badges section.
+  - Replaced tiny WebM micro-video animations on badges with the exact crisp, readable icons/emojis displayed in the Badges menu, eliminating slowdowns and visual clutter on tokens.
+- **Impact / Testing Notes**:
+  - Right-click an enemy or token as DM and open the "Badges" tab.
+  - Verify "AC-Style" label is gone.
+  - Click preset badges (e.g. Hunter's Mark, Hex, Bane, Shield Buff, Bloodied, Boss Monster) and verify the badge appears above the token displaying the exact clear icon from the menu.
+
+---
+
 ### Template for Incoming Entries:
 ```markdown
 ### [YYYY-MM-DD] <Title / Commit Short Summary>
