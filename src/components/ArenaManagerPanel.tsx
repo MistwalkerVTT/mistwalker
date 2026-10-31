@@ -466,7 +466,7 @@ export const ArenaManagerPanel: React.FC<ArenaManagerPanelProps> = ({
   };
 
   // Import a Scene (Map + Scaled Walls + Monsters) from any Campaign Chapter
-  const handleImportSceneIntoArena = (sceneTitle: string, mapUrl: string, walls?: WallSegment[], mapW?: number, mapH?: number) => {
+  const handleImportSceneIntoArena = (sceneTitle: string, mapUrl: string, walls?: WallSegment[], mapW?: number, mapH?: number, sceneGridSize?: number) => {
     if (!mapUrl) {
       toast.warning('Selected scene does not have a map image URL.');
       return;
@@ -474,7 +474,7 @@ export const ArenaManagerPanel: React.FC<ArenaManagerPanelProps> = ({
     const newId = `arena_scene_${Date.now()}`;
     const srcW = mapW || 1920;
     const srcH = mapH || 1080;
-    const gSize = gridSize || ARENA_GRID_SIZE;
+    const gSize = sceneGridSize || ARENA_GRID_SIZE;
     const gCols = Math.max(8, Math.round(srcW / gSize));
     const gRows = Math.max(6, Math.round(srcH / gSize));
 
@@ -914,7 +914,8 @@ export const ArenaManagerPanel: React.FC<ArenaManagerPanelProps> = ({
                           scene.mapUrl,
                           scene.walls,
                           scene.mapWidth,
-                          scene.mapHeight
+                          scene.mapHeight,
+                          scene.gridSize
                         )
                       }
                       className="w-full p-2 rounded-lg bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 text-left cursor-pointer"

@@ -1692,6 +1692,10 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         const targetCampaign = availableCampaigns.find((c) => c.campaignId === selectedCampaignId);
         const chapterId = selectedChapterId || targetCampaign?.chapters?.[0]?.chapterId || 'default_chapter';
 
+        const draftedGoldHeroes = goldHeroIds
+          .map((id) => heroPool.find((h) => h.id === id))
+          .filter(Boolean) as Character[];
+
         const tokensToSave: SceneToken[] = (combatants.length > 0
           ? combatants.map((c) => ({
               id: c.id,
@@ -1699,6 +1703,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
               x: c.x,
               y: c.y,
               size: c.size || 1,
+              avatarUrl: c.avatarUrl,
               imageUrl: c.avatarUrl,
               category: (c.team === 'gold' ? 'player' : 'monster') as any,
               hp: c.currentHp,
@@ -1707,20 +1712,24 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
               speed: c.speedFt,
               conditions: c.conditions || []
             }))
-          : goldHeroes.map((h, i) => ({
-              id: `token_hero_${i}_${Date.now()}`,
-              name: h.name,
-              x: 2 * arenaGridSize,
-              y: (2 + i * 2) * arenaGridSize,
-              size: 1,
-              imageUrl: h.avatarUrl || getCharacterTokenUrl(h.name),
-              category: 'player' as const,
-              hp: h.maxHp || h.hp || 45,
-              maxHp: h.maxHp || h.hp || 45,
-              ac: h.ac || 15,
-              speed: 30,
-              conditions: []
-            }))
+          : draftedGoldHeroes.map((h, i) => {
+              const avatar = h.avatarUrl || getCharacterTokenUrl(h.name);
+              return {
+                id: `token_hero_${i}_${Date.now()}`,
+                name: h.name,
+                x: 2 * arenaGridSize,
+                y: (2 + i * 2) * arenaGridSize,
+                size: 1,
+                avatarUrl: avatar,
+                imageUrl: avatar,
+                category: 'character' as const,
+                hp: h.maxHp || h.hp || 45,
+                maxHp: h.maxHp || h.hp || 45,
+                ac: h.ac || 15,
+                speed: 30,
+                conditions: []
+              };
+            })
         );
 
         const newScene: Scene = {

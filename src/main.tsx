@@ -75,14 +75,15 @@ function Root() {
       import('./App.tsx').catch(() => undefined);
       import('./components/PlayerView.tsx').catch(() => undefined);
     };
-    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-      idleId = (window as any).requestIdleCallback(warmUp, { timeout: 1200 });
-    } else {
-      timerId = window.setTimeout(warmUp, 600);
+    const win = typeof window !== 'undefined' ? (window as any) : null;
+    if (win && typeof win.requestIdleCallback === 'function') {
+      idleId = win.requestIdleCallback(warmUp, { timeout: 1200 });
+    } else if (win) {
+      timerId = win.setTimeout(warmUp, 600);
     }
     return () => {
-      if (idleId !== null && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
-        (window as any).cancelIdleCallback(idleId);
+      if (idleId !== null && win && typeof win.cancelIdleCallback === 'function') {
+        win.cancelIdleCallback(idleId);
       }
       if (timerId !== null) {
         clearTimeout(timerId);

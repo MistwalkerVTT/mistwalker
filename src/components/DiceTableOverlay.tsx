@@ -48,15 +48,16 @@ export const DiceTableOverlay: React.FC<Props> = ({
       ensureEngine();
     };
 
-    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-      idleId = (window as any).requestIdleCallback(initWhenIdle, { timeout: 1000 });
-    } else {
-      timerId = window.setTimeout(initWhenIdle, 500);
+    const win = typeof window !== 'undefined' ? (window as any) : null;
+    if (win && typeof win.requestIdleCallback === 'function') {
+      idleId = win.requestIdleCallback(initWhenIdle, { timeout: 1000 });
+    } else if (win) {
+      timerId = win.setTimeout(initWhenIdle, 500);
     }
 
     return () => {
-      if (idleId !== null && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
-        (window as any).cancelIdleCallback(idleId);
+      if (idleId !== null && win && typeof win.cancelIdleCallback === 'function') {
+        win.cancelIdleCallback(idleId);
       }
       if (timerId !== null) {
         clearTimeout(timerId);
