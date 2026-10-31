@@ -344,6 +344,26 @@
 
 ---
 
+### [2026-10-31] perf(vtt): harden stage pan/zoom edge cases, cache raycast visibility polygons, halt idle FX loops, and eliminate token-drag network storms
+- **Commit**: `35a70a0`
+- **Files Changed**:
+  - `src/lib/visionEngine.ts`
+  - `src/components/AnimatedMapOverlay.tsx`
+  - `src/App.tsx`
+  - `src/components/PlayerView.tsx`
+- **Summary**:
+  - Added a `WeakMap<WallSegment[], Map<string, VisibilityPolygon>>` raycast cache in `computeVisibilityPolygon` keyed by origin, radius, map dimensions, and a door-state signature (`getWallsDoorSignature`), so stationary tokens and torches reuse cached visibility polygons in $O(1)$ during single-token movement while immediately invalidating when doors open/close.
+  - Updated `AnimatedMapOverlay` and `AnimatedFeaturesKonvaImage` to clear once, batch-draw the Konva layer once, and halt the 60 FPS `requestAnimationFrame` loop whenever no animated features or weather are active.
+  - Guarded `stagePosRef` and `stageScaleRef` against mid-drag React re-render snap-backs, synced `stagePos` on programmatic `stopDrag()` and 2-finger pinch-to-zoom, and dismissed floating context menus on stage drag start.
+  - Prevented full-array `SYNC_TOKENS` broadcasts during token drags (`if (isDraggingTokenRef.current) return;`), added multi-token `MOVE_TOKEN` streaming, fixed stale `tokens` / `selectedTokenIds` closures inside memoized `TokenImage` callbacks via refs, and added a global `pointerup`/`blur` drag failsafe.
+  - Deduplicated `/api/ddb/monitor-characters` HTTP POST calls by sorted character ID set (`lastRegisteredDdbIdsRef`) with automatic re-registration on Socket.IO reconnect, fixed an uncancelled 150ms broadcast timer in `App.tsx`, stabilized `beforeunload` listeners, and memoized `visibleTokens` in `PlayerView.tsx`.
+- **Impact / Testing Notes**:
+  - Drag single and multiple selected tokens across maps with walls/doors and verify 60+ FPS movement with zero `SYNC_TOKENS` or `/api/ddb/monitor-characters` network storms.
+  - Open/close doors and verify line-of-sight updates immediately.
+  - Pan/zoom while socket events arrive and verify the camera never snaps back mid-drag.
+
+---
+
 ### Template for Incoming Entries:
 ```markdown
 ### [YYYY-MM-DD] <Title / Commit Short Summary>
