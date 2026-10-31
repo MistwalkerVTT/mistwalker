@@ -304,6 +304,24 @@
 
 ---
 
+### [2026-10-31] perf(vtt): 60+ FPS map movement & panning optimization (Phase 1)
+- **Commit**: `072c604`
+- **Files Changed**:
+  - `src/App.tsx`
+  - `src/components/PlayerView.tsx`
+- **Summary**:
+  - Decoupled stage dragging from continuous React state updates (`setStagePos`) during `onDragMove`, letting Konva manage hardware-accelerated canvas panning natively without triggering 120 React tree diffs per second. React state is now committed only on `onDragEnd`.
+  - Upgraded animated FX overlays and DOM effects layer (`mistwalker-dom-effects-overlay-world`) to translate via `requestAnimationFrame` with GPU-accelerated CSS `transform: translate3d(x, y, 0)`, eliminating layout thrashing.
+  - Batched wheel zooming via `requestAnimationFrame` and applied instant Konva canvas transform updates.
+  - Wrapped `mapDimensions` in `useMemo` in both DM view and Player view, and stabilized callbacks (`noopSelectWall`, `STATIC_MOUSE_POS`, `handleSelectWall`), enabling `React.memo` to properly skip re-rendering `DynamicLightingLayer`, `RoomHotspotLayer`, and animated features during pan/drag operations.
+- **Impact / Testing Notes**:
+  - Pan the map rapidly using right-click drag, pan tool, spacebar, or trackpad in both DM view and Player view.
+  - Verify map panning is buttery smooth (60+ FPS) with zero frame drops or lag spikes.
+  - Zoom in and out rapidly with mousewheel/trackpad and confirm smooth scaling with zero stutter.
+  - Verify dynamic lighting, fog of war, walls, doors, badges, and tokens stay perfectly positioned during and after dragging.
+
+---
+
 ### Template for Incoming Entries:
 ```markdown
 ### [YYYY-MM-DD] <Title / Commit Short Summary>
