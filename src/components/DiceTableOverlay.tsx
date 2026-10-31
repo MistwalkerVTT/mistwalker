@@ -20,25 +20,60 @@ export const DiceTableOverlay: React.FC<Props> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<ThreeDiceEngine | null>(null);
+  const themeRef = useRef<DiceThemeOptions | undefined>(theme);
+  themeRef.current = theme;
+  const lastAppliedThemeKeyRef = useRef<string>('');
   const [activeRollToast, setActiveRollToast] = useState<DdbDiceRollEvent | null>(null);
   const recentRollIdsRef = useRef<Set<string>>(new Set());
 
-  // Initialize Three.js + Cannon-es 3D physics dice engine
+  const ensureEngine = useCallback((): ThreeDiceEngine | null => {
+    if (!enabled || !containerRef.current) return null;
+    if (!engineRef.current) {
+      const currentTheme = themeRef.current;
+      engineRef.current = new ThreeDiceEngine(containerRef.current, currentTheme);
+      if (currentTheme) {
+        lastAppliedThemeKeyRef.current = `${currentTheme.primaryColor || ''}|${currentTheme.secondaryColor || ''}|${currentTheme.borderColor || ''}|${currentTheme.numberColor || ''}`;
+      }
+    }
+    return engineRef.current;
+  }, [enabled]);
+
+  // Initialize Three.js + Cannon-es 3D physics dice engine during browser idle time so initial page mount never stalls
   useEffect(() => {
     if (!enabled || !containerRef.current) return;
 
-    const engine = new ThreeDiceEngine(containerRef.current, theme);
-    engineRef.current = engine;
+    let timerId: number | null = null;
+    let idleId: number | null = null;
+    const initWhenIdle = () => {
+      ensureEngine();
+    };
+
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      idleId = (window as any).requestIdleCallback(initWhenIdle, { timeout: 1000 });
+    } else {
+      timerId = window.setTimeout(initWhenIdle, 500);
+    }
 
     return () => {
-      engine.destroy();
-      engineRef.current = null;
+      if (idleId !== null && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+        (window as any).cancelIdleCallback(idleId);
+      }
+      if (timerId !== null) {
+        clearTimeout(timerId);
+      }
+      if (engineRef.current) {
+        engineRef.current.destroy();
+        engineRef.current = null;
+      }
     };
-  }, [enabled]);
+  }, [enabled, ensureEngine]);
 
-  // Dynamically update materials when theme options change
+  // Dynamically update materials only when theme color values actually change
   useEffect(() => {
-    if (engineRef.current && theme) {
+    if (!engineRef.current || !theme) return;
+    const themeKey = `${theme.primaryColor || ''}|${theme.secondaryColor || ''}|${theme.borderColor || ''}|${theme.numberColor || ''}`;
+    if (themeKey !== lastAppliedThemeKeyRef.current) {
+      lastAppliedThemeKeyRef.current = themeKey;
       engineRef.current.setTheme(theme);
     }
   }, [theme]);
@@ -63,7 +98,8 @@ export const DiceTableOverlay: React.FC<Props> = ({
       onCriticalHit();
     }
 
-    if (!enabled || !engineRef.current) return;
+    const engine = ensureEngine();
+    if (!enabled || !engine) return;
 
     try {
       // Accurately resolve die types for incoming roll
@@ -124,11 +160,11 @@ export const DiceTableOverlay: React.FC<Props> = ({
       }
 
       console.log('[DiceTableOverlay] 🎲 Rolling predetermined 3D dice:', requests);
-      engineRef.current.roll(requests);
+      engine.roll(requests);
     } catch (err) {
       console.warn('[DiceTableOverlay] Error playing 3D predetermined roll:', err);
     }
-  }, [enabled, onCriticalHit]);
+  }, [enabled, onCriticalHit, ensureEngine]);
 
   // Listen for socket events with triple-layer resilience
   useEffect(() => {

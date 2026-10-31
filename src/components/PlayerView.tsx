@@ -109,11 +109,9 @@ import {
   createDebuffBubbleFromConfig,
   TokenBubblesKonvaOverlay
 } from '../effects';
-import { PlayerStationModal, PlayerStationMode } from './PlayerStationModal';
-import { PlayerCharacterSelectModal, PlayerCharacterChoiceItem } from './PlayerCharacterSelectModal';
-import { PlayerDdbPrivacyModal } from './PlayerDdbPrivacyModal';
+import type { PlayerStationMode } from './PlayerStationModal';
+import type { PlayerCharacterChoiceItem } from './PlayerCharacterSelectModal';
 import { PlayerHeroDock } from './PlayerHeroDock';
-import { WildShapeModal } from './WildShapeModal';
 import { CombatDicePromptModal, PendingCombatRoll, RollAdvantageMode } from './CombatDicePromptModal';
 import { WildShapeBeastForm, ActiveWildShapeState, GAIAH_WILD_SHAPE_FORMS } from '../types/wildShape';
 import { DndRuleInspectionModal } from './DndRuleInspectionModal';
@@ -146,7 +144,12 @@ import {
   useAudioMixerJukebox,
   MapAudioSourcesLayer
 } from './AudioMixerJukebox';
-import { PlayerArenaMode } from './PlayerArenaMode';
+
+const PlayerStationModal = React.lazy(() => import('./PlayerStationModal').then(m => ({ default: m.PlayerStationModal })));
+const PlayerCharacterSelectModal = React.lazy(() => import('./PlayerCharacterSelectModal').then(m => ({ default: m.PlayerCharacterSelectModal })));
+const PlayerDdbPrivacyModal = React.lazy(() => import('./PlayerDdbPrivacyModal').then(m => ({ default: m.PlayerDdbPrivacyModal })));
+const WildShapeModal = React.lazy(() => import('./WildShapeModal').then(m => ({ default: m.WildShapeModal })));
+const PlayerArenaMode = React.lazy(() => import('./PlayerArenaMode').then(m => ({ default: m.PlayerArenaMode })));
 
 const STATIC_MOUSE_POS = { x: 0, y: 0 };
 const noopSelectWall = () => {};
@@ -9093,77 +9096,91 @@ export default function PlayerView() {
       {/* ========================================================= */}
       {/* Druid Wild Shape Modal (Circle of the Moon)               */}
       {/* ========================================================= */}
-      <WildShapeModal
-        isOpen={showWildShapeModal}
-        onClose={() => setShowWildShapeModal(false)}
-        onSelectForm={handleTransformWildShape}
-        onRevertForm={handleRevertWildShape}
-        activeWildShape={activeWildShape}
-        druidLevel={hudCharacterData?.totalLevel || 6}
-        wisModifier={4}
-      />
+      {showWildShapeModal && (
+        <React.Suspense fallback={null}>
+          <WildShapeModal
+            isOpen={showWildShapeModal}
+            onClose={() => setShowWildShapeModal(false)}
+            onSelectForm={handleTransformWildShape}
+            onRevertForm={handleRevertWildShape}
+            activeWildShape={activeWildShape}
+            druidLevel={hudCharacterData?.totalLevel || 6}
+            wisModifier={4}
+          />
+        </React.Suspense>
+      )}
 
       {/* ========================================================= */}
       {/* Player Station Mode Modal (Digital TV Table / Remote)     */}
       {/* ========================================================= */}
-      <PlayerStationModal
-        isOpen={showStationModal}
-        onSelectStation={handleSelectStationMode}
-        onEnterArena={() => {
-          setShowStationModal(false);
-          setShowArenaMode(true);
-        }}
-        characterName={claimedToken?.name}
-      />
+      {showStationModal && (
+        <React.Suspense fallback={null}>
+          <PlayerStationModal
+            isOpen={showStationModal}
+            onSelectStation={handleSelectStationMode}
+            onEnterArena={() => {
+              setShowStationModal(false);
+              setShowArenaMode(true);
+            }}
+            characterName={claimedToken?.name}
+          />
+        </React.Suspense>
+      )}
 
       {/* ========================================================= */}
       {/* Player Character Select Modal (Choose Hero in Player View) */}
       {/* ========================================================= */}
-      <PlayerCharacterSelectModal
-        isOpen={showCharacterSelectModal}
-        onClose={() => setShowCharacterSelectModal(false)}
-        tokens={tokens}
-        compendiumCharacters={compendiumCharacters}
-        claimedTokenId={claimedTokenId}
-        onSelectCharacter={handleSelectCharacterChoice}
-        onReleaseCharacter={handleReleaseToken}
-        onPromptPrivacy={(details) => {
-          setPrivacyModalState({
-            isOpen: true,
-            characterId: details.characterId,
-            characterName: details.characterName,
-            avatarUrl: details.avatarUrl,
-            pendingChoice: details.choice
-          });
-        }}
-      />
+      {showCharacterSelectModal && (
+        <React.Suspense fallback={null}>
+          <PlayerCharacterSelectModal
+            isOpen={showCharacterSelectModal}
+            onClose={() => setShowCharacterSelectModal(false)}
+            tokens={tokens}
+            compendiumCharacters={compendiumCharacters}
+            claimedTokenId={claimedTokenId}
+            onSelectCharacter={handleSelectCharacterChoice}
+            onReleaseCharacter={handleReleaseToken}
+            onPromptPrivacy={(details) => {
+              setPrivacyModalState({
+                isOpen: true,
+                characterId: details.characterId,
+                characterName: details.characterName,
+                avatarUrl: details.avatarUrl,
+                pendingChoice: details.choice
+              });
+            }}
+          />
+        </React.Suspense>
+      )}
 
       {/* ========================================================= */}
       {/* D&D Beyond Character Sheet Privacy Notice Modal           */}
       {/* ========================================================= */}
       {privacyModalState && (
-        <PlayerDdbPrivacyModal
-          isOpen={privacyModalState.isOpen}
-          onClose={() => setPrivacyModalState(null)}
-          characterName={privacyModalState.characterName}
-          characterId={privacyModalState.characterId}
-          avatarUrl={privacyModalState.avatarUrl}
-          onPrivacyResolved={() => {
-            if (privacyModalState.pendingChoice) {
-              handleSelectCharacterChoice(privacyModalState.pendingChoice);
-            }
-            setIsCurrentCharacterPrivate(false);
-            syncHudFromDdb(true);
-            toast.success(`${privacyModalState.characterName}'s sheet is now Public and fully synced!`);
-          }}
-          onContinueLimited={() => {
-            promptedPrivateCharIdRef.current = String(privacyModalState.characterId);
-            if (privacyModalState.pendingChoice) {
-              handleSelectCharacterChoice(privacyModalState.pendingChoice);
-            }
-            toast.info(`Continuing with local character sheet for ${privacyModalState.characterName}.`);
-          }}
-        />
+        <React.Suspense fallback={null}>
+          <PlayerDdbPrivacyModal
+            isOpen={privacyModalState.isOpen}
+            onClose={() => setPrivacyModalState(null)}
+            characterName={privacyModalState.characterName}
+            characterId={privacyModalState.characterId}
+            avatarUrl={privacyModalState.avatarUrl}
+            onPrivacyResolved={() => {
+              if (privacyModalState.pendingChoice) {
+                handleSelectCharacterChoice(privacyModalState.pendingChoice);
+              }
+              setIsCurrentCharacterPrivate(false);
+              syncHudFromDdb(true);
+              toast.success(`${privacyModalState.characterName}'s sheet is now Public and fully synced!`);
+            }}
+            onContinueLimited={() => {
+              promptedPrivateCharIdRef.current = String(privacyModalState.characterId);
+              if (privacyModalState.pendingChoice) {
+                handleSelectCharacterChoice(privacyModalState.pendingChoice);
+              }
+              toast.info(`Continuing with local character sheet for ${privacyModalState.characterName}.`);
+            }}
+          />
+        </React.Suspense>
       )}
 
       {/* ========================================================= */}
@@ -9251,23 +9268,27 @@ export default function PlayerView() {
       />
 
       {/* Stand-Alone Player Battle Arena & Turn-Based Colosseum */}
-      <PlayerArenaMode
-        isOpen={showArenaMode}
-        onExitArena={() => setShowArenaMode(false)}
-        compendiumCharacters={compendiumCharacters}
-        claimedCharacterName={claimedToken?.name}
-        socketRef={socketRef}
-        hasLiveDmMap={Boolean(imageFile || image)}
-        onTrigger3dDice={(rollEvent) => {
-          if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
-            (window as any).__mistwalkerRoll3d({
-              ...rollEvent,
-              theme: selectedDicePreset.id,
-              themeColor: selectedDicePreset.theme.primaryColor
-            });
-          }
-        }}
-      />
+      {showArenaMode && (
+        <React.Suspense fallback={null}>
+          <PlayerArenaMode
+            isOpen={showArenaMode}
+            onExitArena={() => setShowArenaMode(false)}
+            compendiumCharacters={compendiumCharacters}
+            claimedCharacterName={claimedToken?.name}
+            socketRef={socketRef}
+            hasLiveDmMap={Boolean(imageFile || image)}
+            onTrigger3dDice={(rollEvent) => {
+              if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+                (window as any).__mistwalkerRoll3d({
+                  ...rollEvent,
+                  theme: selectedDicePreset.id,
+                  themeColor: selectedDicePreset.theme.primaryColor
+                });
+              }
+            }}
+          />
+        </React.Suspense>
+      )}
 
       {/* Toast Notification Container for Player View */}
       <Toaster position="bottom-right" theme="dark" richColors />

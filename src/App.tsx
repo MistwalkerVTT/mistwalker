@@ -37,9 +37,7 @@ import useImage from 'use-image';
 import 'gifler';
 import { generateDescription, chatWithLore, generateTTS, chatWithAutoDM, checkActionRules, generateVoiceScript, checkApiKeyStatus } from './services/aiService';
 import { audioNarration, NARRATION_VOICES, getNarrationVoice } from './services/audioNarrationService';
-import MapGenerator from './components/MapGenerator';
 import { ApiKeyModal } from './components/ApiKeyModal';
-import { SettingsModal } from './components/SettingsModal';
 import { CombatTracker } from './components/CombatTracker';
 import { LeftSidebar } from './components/LeftSidebar';
 import { AnimatedMapOverlay, AnimatedFeaturesKonvaImage } from './components/AnimatedMapOverlay';
@@ -50,7 +48,6 @@ import { EffectContextMenu, ContextMenuData } from './components/EffectContextMe
 import { DndRuleInspectionModal } from './components/DndRuleInspectionModal';
 import { canTokenHaveHalo } from './effects/db/tokenFxMap';
 import { DndRuleEntry, lookupDndRuleDetails } from './data/dndRulesCompendium';
-import { CriticalHitsReferenceModal } from './components/CriticalHitsReferenceModal';
 import {
   VttEffectInstance,
   Jb2aAssetDefinition,
@@ -67,17 +64,23 @@ import {
 } from './effects';
 import { JB2A_REGISTRY, findJb2aAsset } from './effects/db/jb2aRegistry';
 import { getAuraVideoUrl } from './effects/db/tokenFxMap';
-import { CampaignBuilderModal } from './components/CampaignBuilderModal';
-import { PlayerArenaMode } from './components/PlayerArenaMode';
-import { SaveToCampaignModal } from './components/SaveToCampaignModal';
-import { LoadCampaignModal } from './components/LoadCampaignModal';
 import { MainCampaignBar } from './components/MainCampaignBar';
-import { DndChatbotModal } from './components/DndChatbotModal';
-import { MonsterCompendiumModal } from './components/MonsterCompendiumModal';
-import { CharacterCompendiumModal } from './components/CharacterCompendiumModal';
-import { AlliesCompendiumModal } from './components/AlliesCompendiumModal';
 import { DashboardHomeHub } from './components/DashboardHomeHub';
-import { DdbSyncModal } from './components/DdbSyncModal';
+
+const MapGenerator = React.lazy(() => import('./components/MapGenerator'));
+const SettingsModal = React.lazy(() => import('./components/SettingsModal').then(m => ({ default: m.SettingsModal })));
+const CriticalHitsReferenceModal = React.lazy(() => import('./components/CriticalHitsReferenceModal').then(m => ({ default: m.CriticalHitsReferenceModal })));
+const CampaignBuilderModal = React.lazy(() => import('./components/CampaignBuilderModal').then(m => ({ default: m.CampaignBuilderModal })));
+const PlayerArenaMode = React.lazy(() => import('./components/PlayerArenaMode').then(m => ({ default: m.PlayerArenaMode })));
+const SaveToCampaignModal = React.lazy(() => import('./components/SaveToCampaignModal').then(m => ({ default: m.SaveToCampaignModal })));
+const LoadCampaignModal = React.lazy(() => import('./components/LoadCampaignModal').then(m => ({ default: m.LoadCampaignModal })));
+const DndChatbotModal = React.lazy(() => import('./components/DndChatbotModal').then(m => ({ default: m.DndChatbotModal })));
+const MonsterCompendiumModal = React.lazy(() => import('./components/MonsterCompendiumModal').then(m => ({ default: m.MonsterCompendiumModal })));
+const CharacterCompendiumModal = React.lazy(() => import('./components/CharacterCompendiumModal').then(m => ({ default: m.CharacterCompendiumModal })));
+const AlliesCompendiumModal = React.lazy(() => import('./components/AlliesCompendiumModal').then(m => ({ default: m.AlliesCompendiumModal })));
+const DdbSyncModal = React.lazy(() => import('./components/DdbSyncModal').then(m => ({ default: m.DdbSyncModal })));
+const BugReportModal = React.lazy(() => import('./components/BugReportModal').then(m => ({ default: m.BugReportModal })));
+const BugReportManagerModal = React.lazy(() => import('./components/BugReportManagerModal').then(m => ({ default: m.BugReportManagerModal })));
 import {
   isUniversalVttFile,
   parseUniversalVtt,
@@ -182,8 +185,6 @@ import {
   AudioMixerJukeboxModal,
   MapAudioSourcesLayer
 } from './components/AudioMixerJukebox';
-import { BugReportModal } from './components/BugReportModal';
-import { BugReportManagerModal } from './components/BugReportManagerModal';
 import { DEMO_GV_CAMPAIGN, DEMO_GV_SCENE, DEMO_GV_CHAPTER, DEMO_GV_ROOM_ZONES, DEMO_GV_TOKENS } from './data/demoCampaignGv';
 import ReactMarkdown from 'react-markdown';
 import { snapPointToGrid, findNearestWall, segmentsIntersect } from './lib/visionEngine';
@@ -10133,71 +10134,79 @@ export default function App() {
 
 
       {showCinematicMapGenerator && (
-        <MapGenerator 
-          onClose={() => setShowCinematicMapGenerator(false)} 
-          onOpenApiKeyModal={() => setShowApiKeyModal(true)}
-          onApply={(url, briefing, genFeatures, genWeather, genSizePreset, walls, canvasSize) => {
-            setImageFile(url);
-            setMapType('image');
-            setReveals([]);
-            setPolygonReveals([]);
-            setTokens([]);
-            setGridOffsetX(0);
-            setGridOffsetY(0);
-            if (walls && walls.length > 0) {
-              setWalls(walls);
-            } else {
-              setWalls([]);
-            }
-            if (briefing?.readAloud) {
-              setAIVoiceScript(briefing.readAloud);
-            }
-            if (genFeatures && genFeatures.length > 0) {
-              setBoardAnimatedFeatures(genFeatures);
-              setBoardAnimatedEnabled(true);
-            }
-            if (genWeather && genWeather !== 'none') {
-              setBoardWeatherEffect(genWeather);
-            }
-            if (canvasSize && canvasSize.cellPx > 0) {
-              setGridSize(canvasSize.cellPx);
-              setGridVisible(true);
-            } else if (genSizePreset && genSizePreset !== 'custom') {
-              const preset = MAP_SIZE_PRESETS[genSizePreset];
-              const newGrid = Math.round(1920 / preset.width);
-              setGridSize(newGrid);
-              setGridVisible(true);
-            }
-            setShowCinematicMapGenerator(false);
-            if (walls && walls.length > 0) {
-              const numDoors = walls.filter(w => w.wallType === 'door').length;
-              const numWalls = walls.length - numDoors;
-              toast.success(`Overhead 1" grid battlemap applied with ${numWalls} walls and ${numDoors} doors!`);
-            } else {
-              toast.success("Battlemap and animated FX applied to the board!");
-            }
-          }}
-        />
+        <React.Suspense fallback={null}>
+          <MapGenerator 
+            onClose={() => setShowCinematicMapGenerator(false)} 
+            onOpenApiKeyModal={() => setShowApiKeyModal(true)}
+            onApply={(url, briefing, genFeatures, genWeather, genSizePreset, walls, canvasSize) => {
+              setImageFile(url);
+              setMapType('image');
+              setReveals([]);
+              setPolygonReveals([]);
+              setTokens([]);
+              setGridOffsetX(0);
+              setGridOffsetY(0);
+              if (walls && walls.length > 0) {
+                setWalls(walls);
+              } else {
+                setWalls([]);
+              }
+              if (briefing?.readAloud) {
+                setAIVoiceScript(briefing.readAloud);
+              }
+              if (genFeatures && genFeatures.length > 0) {
+                setBoardAnimatedFeatures(genFeatures);
+                setBoardAnimatedEnabled(true);
+              }
+              if (genWeather && genWeather !== 'none') {
+                setBoardWeatherEffect(genWeather);
+              }
+              if (canvasSize && canvasSize.cellPx > 0) {
+                setGridSize(canvasSize.cellPx);
+                setGridVisible(true);
+              } else if (genSizePreset && genSizePreset !== 'custom') {
+                const preset = MAP_SIZE_PRESETS[genSizePreset];
+                const newGrid = Math.round(1920 / preset.width);
+                setGridSize(newGrid);
+                setGridVisible(true);
+              }
+              setShowCinematicMapGenerator(false);
+              if (walls && walls.length > 0) {
+                const numDoors = walls.filter(w => w.wallType === 'door').length;
+                const numWalls = walls.length - numDoors;
+                toast.success(`Overhead 1" grid battlemap applied with ${numWalls} walls and ${numDoors} doors!`);
+              } else {
+                toast.success("Battlemap and animated FX applied to the board!");
+              }
+            }}
+          />
+        </React.Suspense>
       )}
 
       {/* Gemini API Key Modal */}
-      <ApiKeyModal
-        isOpen={showApiKeyModal}
-        onClose={() => setShowApiKeyModal(false)}
-        onKeySaved={() => setHasApiKey(true)}
-      />
+      {showApiKeyModal && (
+        <ApiKeyModal
+          isOpen={showApiKeyModal}
+          onClose={() => setShowApiKeyModal(false)}
+          onKeySaved={() => setHasApiKey(true)}
+        />
+      )}
 
       {/* Settings & Secrets Vault Modal */}
-      <SettingsModal
-        isOpen={showSettingsModal}
-        onClose={() => {
-          setShowSettingsModal(false);
-          checkApiKeyStatus().then(status => {
-            setHasApiKey(status.hasKey);
-          });
-        }}
-        initialTab={settingsInitialTab}
-      />
+      {showSettingsModal && (
+        <React.Suspense fallback={null}>
+          <SettingsModal
+            isOpen={showSettingsModal}
+            onClose={() => {
+              setShowSettingsModal(false);
+              checkApiKeyStatus().then(status => {
+                setHasApiKey(status.hasKey);
+              });
+            }}
+            initialTab={settingsInitialTab}
+          />
+        </React.Suspense>
+      )}
 
       {showCombatTracker && (
         <CombatTracker 
@@ -11601,75 +11610,87 @@ export default function App() {
       )}
 
       {/* Campaign Builder & Scene Management Modal (Includes Battle Arena Manager Menu) */}
-      <CampaignBuilderModal
-        isOpen={showCampaignBuilder}
-        onClose={() => setShowCampaignBuilder(false)}
-        currentTokens={tokens}
-        currentMapUrl={imageFile || ''}
-        currentGridSize={gridSize}
-        currentGridOpacity={gridOpacity}
-        currentIsFogVisible={isFogVisible}
-        currentWalls={walls}
-        currentVisionConfig={visionConfig}
-        currentRoomAnnotations={roomAnnotations}
-        onLoadScene={handleLoadSceneFromCampaign}
-        activeSceneInfo={activeSceneInfo}
-        savedMaps={uploadedMaps}
-        currentActiveDmNotes={activeDmNotes}
-        initialTab={campaignBuilderInitialTab}
-        onLaunchArenaPreview={() => {
-          setShowCampaignBuilder(false);
-          setShowDmArenaPreview(true);
-        }}
-      />
+      {showCampaignBuilder && (
+        <React.Suspense fallback={null}>
+          <CampaignBuilderModal
+            isOpen={showCampaignBuilder}
+            onClose={() => setShowCampaignBuilder(false)}
+            currentTokens={tokens}
+            currentMapUrl={imageFile || ''}
+            currentGridSize={gridSize}
+            currentGridOpacity={gridOpacity}
+            currentIsFogVisible={isFogVisible}
+            currentWalls={walls}
+            currentVisionConfig={visionConfig}
+            currentRoomAnnotations={roomAnnotations}
+            onLoadScene={handleLoadSceneFromCampaign}
+            activeSceneInfo={activeSceneInfo}
+            savedMaps={uploadedMaps}
+            currentActiveDmNotes={activeDmNotes}
+            initialTab={campaignBuilderInitialTab}
+            onLaunchArenaPreview={() => {
+              setShowCampaignBuilder(false);
+              setShowDmArenaPreview(true);
+            }}
+          />
+        </React.Suspense>
+      )}
 
       {/* DM Stand-Alone Battle Arena Preview & Test Mode */}
-      <PlayerArenaMode
-        isOpen={showDmArenaPreview}
-        onExitArena={() => setShowDmArenaPreview(false)}
-        compendiumCharacters={compendiumCharacters}
-        socketRef={socketRef}
-        hasLiveDmMap={Boolean(imageFile)}
-        onTrigger3dDice={(rollEvent) => {
-          if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
-            (window as any).__mistwalkerRoll3d(rollEvent);
-          }
-          if (socketRef.current?.connected) {
-            socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', rollEvent);
-          }
-        }}
-      />
+      {showDmArenaPreview && (
+        <React.Suspense fallback={null}>
+          <PlayerArenaMode
+            isOpen={showDmArenaPreview}
+            onExitArena={() => setShowDmArenaPreview(false)}
+            compendiumCharacters={compendiumCharacters}
+            socketRef={socketRef}
+            hasLiveDmMap={Boolean(imageFile)}
+            onTrigger3dDice={(rollEvent) => {
+              if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+                (window as any).__mistwalkerRoll3d(rollEvent);
+              }
+              if (socketRef.current?.connected) {
+                socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', rollEvent);
+              }
+            }}
+          />
+        </React.Suspense>
+      )}
 
       {/* Save to Campaign Modal */}
-      <SaveToCampaignModal
-        isOpen={showSaveToCampaignModal}
-        onClose={() => setShowSaveToCampaignModal(false)}
-        campaigns={campaignsList}
-        currentMapUrl={imageFile || ''}
-        currentMapWidth={getMapDimensions().width}
-        currentMapHeight={getMapDimensions().height}
-        currentMapType={mapType}
-        currentMapRotation={mapRotation}
-        currentTokens={tokens}
-        currentGridSize={gridSize}
-        currentGridOpacity={gridOpacity}
-        currentGridVisible={gridVisible}
-        currentGridOffsetX={gridOffsetX}
-        currentGridOffsetY={gridOffsetY}
-        currentIsFogVisible={isFogVisible}
-        currentReveals={reveals}
-        currentPolygonReveals={polygonReveals}
-        currentFogResetKey={fogResetKey}
-        currentWalls={walls}
-        currentVisionConfig={visionConfig}
-        currentRoomAnnotations={roomAnnotations}
-        currentBoardAnimatedFeatures={boardAnimatedFeatures}
-        currentBoardAnimatedEnabled={boardAnimatedEnabled}
-        currentBoardWeatherEffect={boardWeatherEffect}
-        activeSceneInfo={activeSceneInfo}
-        activeDmNotes={activeDmNotes}
-        onSceneSaved={handleSceneSaved}
-      />
+      {showSaveToCampaignModal && (
+        <React.Suspense fallback={null}>
+          <SaveToCampaignModal
+            isOpen={showSaveToCampaignModal}
+            onClose={() => setShowSaveToCampaignModal(false)}
+            campaigns={campaignsList}
+            currentMapUrl={imageFile || ''}
+            currentMapWidth={getMapDimensions().width}
+            currentMapHeight={getMapDimensions().height}
+            currentMapType={mapType}
+            currentMapRotation={mapRotation}
+            currentTokens={tokens}
+            currentGridSize={gridSize}
+            currentGridOpacity={gridOpacity}
+            currentGridVisible={gridVisible}
+            currentGridOffsetX={gridOffsetX}
+            currentGridOffsetY={gridOffsetY}
+            currentIsFogVisible={isFogVisible}
+            currentReveals={reveals}
+            currentPolygonReveals={polygonReveals}
+            currentFogResetKey={fogResetKey}
+            currentWalls={walls}
+            currentVisionConfig={visionConfig}
+            currentRoomAnnotations={roomAnnotations}
+            currentBoardAnimatedFeatures={boardAnimatedFeatures}
+            currentBoardAnimatedEnabled={boardAnimatedEnabled}
+            currentBoardWeatherEffect={boardWeatherEffect}
+            activeSceneInfo={activeSceneInfo}
+            activeDmNotes={activeDmNotes}
+            onSceneSaved={handleSceneSaved}
+          />
+        </React.Suspense>
+      )}
 
       {/* Zone & Room Hotspot Editor Modal (Zone Labeling & Data Capture) */}
       {editingZone && (() => {
@@ -11919,133 +11940,165 @@ export default function App() {
       />
 
       {/* Load Campaign Modal */}
-      <LoadCampaignModal
-        isOpen={showLoadCampaignModal}
-        onClose={() => setShowLoadCampaignModal(false)}
-        campaigns={campaignsList}
-        onLoadScene={handleLoadSceneFromCampaign}
-        onOpenCampaignManager={() => setShowCampaignBuilder(true)}
-        activeSceneInfo={activeSceneInfo}
-        onDeleteScene={async (sceneId, campaignId, chapterId) => {
-          const campaign = campaignsList.find(c => c.campaignId === campaignId);
-          if (!campaign) return;
-          const updatedChapters = campaign.chapters.map(chap => {
-            if (chap.chapterId !== chapterId) return chap;
-            return {
-              ...chap,
-              scenes: chap.scenes.filter(s => s.sceneId !== sceneId),
-              updatedAt: Date.now()
-            };
-          });
-          await saveCampaignDoc({
-            ...campaign,
-            chapters: updatedChapters,
-            updatedAt: Date.now()
-          });
-          if (activeSceneInfo?.sceneId === sceneId) {
-            setActiveSceneInfo(null);
-          }
-          toast.success('Scene deleted successfully');
-        }}
-      />
+      {showLoadCampaignModal && (
+        <React.Suspense fallback={null}>
+          <LoadCampaignModal
+            isOpen={showLoadCampaignModal}
+            onClose={() => setShowLoadCampaignModal(false)}
+            campaigns={campaignsList}
+            onLoadScene={handleLoadSceneFromCampaign}
+            onOpenCampaignManager={() => setShowCampaignBuilder(true)}
+            activeSceneInfo={activeSceneInfo}
+            onDeleteScene={async (sceneId, campaignId, chapterId) => {
+              const campaign = campaignsList.find(c => c.campaignId === campaignId);
+              if (!campaign) return;
+              const updatedChapters = campaign.chapters.map(chap => {
+                if (chap.chapterId !== chapterId) return chap;
+                return {
+                  ...chap,
+                  scenes: chap.scenes.filter(s => s.sceneId !== sceneId),
+                  updatedAt: Date.now()
+                };
+              });
+              await saveCampaignDoc({
+                ...campaign,
+                chapters: updatedChapters,
+                updatedAt: Date.now()
+              });
+              if (activeSceneInfo?.sceneId === sceneId) {
+                setActiveSceneInfo(null);
+              }
+              toast.success('Scene deleted successfully');
+            }}
+          />
+        </React.Suspense>
+      )}
 
       {/* Monster Compendium Modal */}
-      <MonsterCompendiumModal
-        isOpen={showMonsterCompendium}
-        onClose={() => {
-          setShowMonsterCompendium(false);
-          setCompendiumInitialSearch('');
-        }}
-        onSpawnTokenOnMap={handleSpawnMonsterToken}
-        initialSearchQuery={compendiumInitialSearch}
-      />
+      {showMonsterCompendium && (
+        <React.Suspense fallback={null}>
+          <MonsterCompendiumModal
+            isOpen={showMonsterCompendium}
+            onClose={() => {
+              setShowMonsterCompendium(false);
+              setCompendiumInitialSearch('');
+            }}
+            onSpawnTokenOnMap={handleSpawnMonsterToken}
+            initialSearchQuery={compendiumInitialSearch}
+          />
+        </React.Suspense>
+      )}
 
       {/* Character Compendium Modal */}
-      <CharacterCompendiumModal
-        isOpen={showCharacterCompendium}
-        onClose={() => {
-          setShowCharacterCompendium(false);
-          setCharacterCompendiumInitialSearch('');
-        }}
-        onSpawnTokenOnMap={handleSpawnCharacterToken}
-        initialSearchQuery={characterCompendiumInitialSearch}
-      />
+      {showCharacterCompendium && (
+        <React.Suspense fallback={null}>
+          <CharacterCompendiumModal
+            isOpen={showCharacterCompendium}
+            onClose={() => {
+              setShowCharacterCompendium(false);
+              setCharacterCompendiumInitialSearch('');
+            }}
+            onSpawnTokenOnMap={handleSpawnCharacterToken}
+            initialSearchQuery={characterCompendiumInitialSearch}
+          />
+        </React.Suspense>
+      )}
 
       {/* Allies & Summons Compendium Modal */}
-      <AlliesCompendiumModal
-        isOpen={showAlliesCompendium}
-        onClose={() => {
-          setShowAlliesCompendium(false);
-          setAlliesCompendiumInitialSearch('');
-        }}
-        onSpawnTokenOnMap={handleSpawnAllyToken}
-        initialSearchQuery={alliesCompendiumInitialSearch}
-      />
+      {showAlliesCompendium && (
+        <React.Suspense fallback={null}>
+          <AlliesCompendiumModal
+            isOpen={showAlliesCompendium}
+            onClose={() => {
+              setShowAlliesCompendium(false);
+              setAlliesCompendiumInitialSearch('');
+            }}
+            onSpawnTokenOnMap={handleSpawnAllyToken}
+            initialSearchQuery={alliesCompendiumInitialSearch}
+          />
+        </React.Suspense>
+      )}
 
       {/* D&D Beyond Campaign & Live HP Modal */}
-      <DdbSyncModal
-        isOpen={showDdbModal}
-        onClose={() => setShowDdbModal(false)}
-        initialTab="campaign"
-        onCharacterImportedToCompendium={(newChar) => {
-          setCompendiumCharacters(prev => {
-            const idx = prev.findIndex(c => c.id === newChar.id || isDdbMatch(c.name, c.id, (c as any).ddbCharacterId, (newChar as any).ddbCharacterId, newChar.name));
-            if (idx >= 0) {
-              const next = [...prev];
-              next[idx] = newChar;
-              return next;
-            }
-            return [...prev, newChar];
-          });
-        }}
-      />
+      {showDdbModal && (
+        <React.Suspense fallback={null}>
+          <DdbSyncModal
+            isOpen={showDdbModal}
+            onClose={() => setShowDdbModal(false)}
+            initialTab="campaign"
+            onCharacterImportedToCompendium={(newChar) => {
+              setCompendiumCharacters(prev => {
+                const idx = prev.findIndex(c => c.id === newChar.id || isDdbMatch(c.name, c.id, (c as any).ddbCharacterId, (newChar as any).ddbCharacterId, newChar.name));
+                if (idx >= 0) {
+                  const next = [...prev];
+                  next[idx] = newChar;
+                  return next;
+                }
+                return [...prev, newChar];
+              });
+            }}
+          />
+        </React.Suspense>
+      )}
 
       {/* D&D AI Chatbot Modal */}
-      <DndChatbotModal
-        isOpen={showDndChatbot}
-        onClose={() => setShowDndChatbot(false)}
-        currentMapName={activeSceneInfo?.sceneTitle || (imageFile ? 'Tactical Battlemap' : 'Blank Battlemap')}
-        activeCampaignTitle={campaignsList.find(c => c.campaignId === activeSceneInfo?.campaignId)?.campaignTitle}
-        activeChapterTitle={
-          campaignsList
-            .find(c => c.campaignId === activeSceneInfo?.campaignId)
-            ?.chapters?.find(ch => ch.chapterId === activeSceneInfo?.chapterId)?.chapterTitle
-        }
-        activeDmNotes={activeDmNotes}
-        campaigns={campaignsList}
-        combatantsCount={combatTrackerCombatants.length}
-        activeRound={combatTrackerRound}
-        chapterDigest={
-          campaignsList
-            .find(c => c.campaignId === activeSceneInfo?.campaignId)
-            ?.chapters?.find(ch => ch.chapterId === activeSceneInfo?.chapterId)?.pdfDigest || null
-        }
-      />
+      {showDndChatbot && (
+        <React.Suspense fallback={null}>
+          <DndChatbotModal
+            isOpen={showDndChatbot}
+            onClose={() => setShowDndChatbot(false)}
+            currentMapName={activeSceneInfo?.sceneTitle || (imageFile ? 'Tactical Battlemap' : 'Blank Battlemap')}
+            activeCampaignTitle={campaignsList.find(c => c.campaignId === activeSceneInfo?.campaignId)?.campaignTitle}
+            activeChapterTitle={
+              campaignsList
+                .find(c => c.campaignId === activeSceneInfo?.campaignId)
+                ?.chapters?.find(ch => ch.chapterId === activeSceneInfo?.chapterId)?.chapterTitle
+            }
+            activeDmNotes={activeDmNotes}
+            campaigns={campaignsList}
+            combatantsCount={combatTrackerCombatants.length}
+            activeRound={combatTrackerRound}
+            chapterDigest={
+              campaignsList
+                .find(c => c.campaignId === activeSceneInfo?.campaignId)
+                ?.chapters?.find(ch => ch.chapterId === activeSceneInfo?.chapterId)?.pdfDigest || null
+            }
+          />
+        </React.Suspense>
+      )}
 
       {/* Bug Report Submission Modal */}
-      <BugReportModal
-        isOpen={isBugReportModalOpen}
-        onClose={() => setIsBugReportModalOpen(false)}
-        onOpenManager={() => setIsBugManagerModalOpen(true)}
-        environmentInfo={{
-          activeSceneTitle: activeSceneInfo?.sceneTitle,
-          activeCampaignTitle: campaignsList.find(c => c.campaignId === activeSceneInfo?.campaignId)?.campaignTitle,
-          mapDimensions: imageFile ? `${getMapDimensions().width}x${getMapDimensions().height}` : undefined,
-          tokenCount: tokens.length,
-          wallCount: walls.length,
-          zoneCount: roomAnnotations.length,
-          screenResolution: `${window.innerWidth}x${window.innerHeight}`,
-          userAgent: navigator.userAgent,
-          timestamp: Date.now()
-        }}
-      />
+      {isBugReportModalOpen && (
+        <React.Suspense fallback={null}>
+          <BugReportModal
+            isOpen={isBugReportModalOpen}
+            onClose={() => setIsBugReportModalOpen(false)}
+            onOpenManager={() => setIsBugManagerModalOpen(true)}
+            environmentInfo={{
+              activeSceneTitle: activeSceneInfo?.sceneTitle,
+              activeCampaignTitle: campaignsList.find(c => c.campaignId === activeSceneInfo?.campaignId)?.campaignTitle,
+              mapDimensions: imageFile ? `${getMapDimensions().width}x${getMapDimensions().height}` : undefined,
+              tokenCount: tokens.length,
+              wallCount: walls.length,
+              zoneCount: roomAnnotations.length,
+              screenResolution: `${window.innerWidth}x${window.innerHeight}`,
+              userAgent: navigator.userAgent,
+              timestamp: Date.now()
+            }}
+          />
+        </React.Suspense>
+      )}
 
       {/* Bug Reports & DM Developer Notes Manager */}
-      <BugReportManagerModal
-        isOpen={isBugManagerModalOpen}
-        onClose={() => setIsBugManagerModalOpen(false)}
-        onOpenReportModal={() => setIsBugReportModalOpen(true)}
-      />
+      {isBugManagerModalOpen && (
+        <React.Suspense fallback={null}>
+          <BugReportManagerModal
+            isOpen={isBugManagerModalOpen}
+            onClose={() => setIsBugManagerModalOpen(false)}
+            onOpenReportModal={() => setIsBugReportModalOpen(true)}
+          />
+        </React.Suspense>
+      )}
 
       {/* Quota Exceeded Modal */}
       {isQuotaExceeded && (
@@ -12085,18 +12138,22 @@ export default function App() {
       )}
 
       {/* Critical Hits Revisited Table Modal (Damage Types, Injuries, Insanity) */}
-      <CriticalHitsReferenceModal
-        isOpen={showCriticalHitsModal}
-        onClose={() => setShowCriticalHitsModal(false)}
-        onRoll3dDice={(diceEvent) => {
-          if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
-            (window as any).__mistwalkerRoll3d(diceEvent);
-          }
-          if (socketRef.current?.connected) {
-            socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', diceEvent);
-          }
-        }}
-      />
+      {showCriticalHitsModal && (
+        <React.Suspense fallback={null}>
+          <CriticalHitsReferenceModal
+            isOpen={showCriticalHitsModal}
+            onClose={() => setShowCriticalHitsModal(false)}
+            onRoll3dDice={(diceEvent) => {
+              if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+                (window as any).__mistwalkerRoll3d(diceEvent);
+              }
+              if (socketRef.current?.connected) {
+                socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', diceEvent);
+              }
+            }}
+          />
+        </React.Suspense>
+      )}
 
       {/* Stand-Alone Player Handouts, Visual Props & Shared Journal System */}
       <HandoutsJournalModal

@@ -104,6 +104,7 @@ export const AlliesCompendiumModal: React.FC<AlliesCompendiumModalProps> = ({
 
   // Subscribe to real-time Firestore updates for allies
   useEffect(() => {
+    if (!isOpen) return;
     const defaultAllyMap = new Map(DEFAULT_ALLIES.map(a => [a.allyId, a]));
     const unsubscribe = subscribeToAllies((firestoreAllies) => {
       if (firestoreAllies && firestoreAllies.length > 0) {
@@ -134,7 +135,7 @@ export const AlliesCompendiumModal: React.FC<AlliesCompendiumModalProps> = ({
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [isOpen]);
 
   // Search D&D Beyond Live / Local for monster tokens
   const searchDdbTokens = async (query: string, typeFilter: string = 'all') => {

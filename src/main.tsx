@@ -66,12 +66,28 @@ function Root() {
   const [appRevealed, setAppRevealed] = useState<boolean>(!initialIntro);
   const [currentMode, setCurrentMode] = useState<'dm' | 'player'>(() => isPlayerView ? 'player' : 'dm');
 
-  // Warm up both app bundles while the intro plays so the reveal is instant
+  // Warm up both app bundles during idle time while the intro plays so the reveal is instant without competing with IntroScreen's first frame
   useEffect(() => {
-    if (initialIntro) {
+    if (!initialIntro) return;
+    let timerId: number | null = null;
+    let idleId: number | null = null;
+    const warmUp = () => {
       import('./App.tsx').catch(() => undefined);
       import('./components/PlayerView.tsx').catch(() => undefined);
+    };
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      idleId = (window as any).requestIdleCallback(warmUp, { timeout: 1200 });
+    } else {
+      timerId = window.setTimeout(warmUp, 600);
     }
+    return () => {
+      if (idleId !== null && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+        (window as any).cancelIdleCallback(idleId);
+      }
+      if (timerId !== null) {
+        clearTimeout(timerId);
+      }
+    };
   }, [initialIntro]);
 
   return (
@@ -101,7 +117,9 @@ function Root() {
               : undefined
           }
         >
-          {currentMode === 'player' ? <PlayerView /> : <App />}
+          <Suspense fallback={<div className="h-screen w-screen bg-[#050508]" />}>
+            {currentMode === 'player' ? <PlayerView /> : <App />}
+          </Suspense>
         </div>
       )}
       {introMounted && (

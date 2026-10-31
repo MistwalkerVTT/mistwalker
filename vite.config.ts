@@ -33,6 +33,18 @@ export default defineConfig(({mode}) => {
               if (id.includes('konva') || id.includes('react-konva') || id.includes('use-image')) {
                 return 'vendor-konva';
               }
+              if (id.includes('three') || id.includes('cannon-es')) {
+                return 'vendor-three-dice';
+              }
+              if (
+                id.includes('yuka') ||
+                id.includes('xstate') ||
+                id.includes('rot-js') ||
+                id.includes('pathfinding') ||
+                id.includes('mistreevous')
+              ) {
+                return 'vendor-arena-ai';
+              }
               if (id.includes('firebase')) {
                 return 'vendor-firebase';
               }
