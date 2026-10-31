@@ -137,7 +137,7 @@ export function getAuraVideoUrl(name?: string, color?: string): string | null {
     return '/jb2a/Community/JackKerouac/magic_circle_CIRCLE_01.webm';
   }
   if (n.includes('crusader') || n.includes('mantle')) {
-    return '/jb2a/Library/Generic/Template/Circle/TemplateRunesCircle_01_Regular_Orange_800x800.webm';
+    return '/jb2a/Community/JackKerouac/lathander_symbol_CIRCLE_01.webm';
   }
 
   // 5. Frost & Cold

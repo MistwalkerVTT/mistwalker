@@ -1,7 +1,7 @@
 // src/effects/bubbles/bubbleCatalog.ts
-// Catalog of lasting debuff spells and preset monster status bubbles
+// Catalog of lasting debuff spells and preset monster status badges
 
-import { TokenStatusBubble, BubbleStyle } from '../types/bubble';
+import { TokenStatusBubble, TokenStatusBadge, BubbleStyle } from '../types/bubble';
 
 export interface DebuffSpellConfig {
   spellKey: string;
@@ -23,7 +23,6 @@ export const LASTING_DEBUFF_SPELLS: DebuffSpellConfig[] = [
     subLabel: '+1d6',
     icon: '🎯',
     color: '#22c55e',
-    videoUrl: '/jb2a/Library/1st_Level/Hunters_Mark/HuntersMark_01_Regular_Green_Loop_200x200.webm',
     description: 'Target is marked as quarry: caster deals an extra 1d6 damage on hit and has advantage to track it.',
     style: 'orb'
   },
@@ -34,7 +33,6 @@ export const LASTING_DEBUFF_SPELLS: DebuffSpellConfig[] = [
     subLabel: 'HEX',
     icon: '💀',
     color: '#a855f7',
-    videoUrl: '/jb2a/Library/Generic/Template/Circle/TemplateSkullCircle_01_Regular_Purple_800x800.webm',
     description: 'Cursed target takes an extra 1d6 necrotic damage on hit and has disadvantage on chosen ability checks.',
     style: 'orb'
   },
@@ -45,7 +43,6 @@ export const LASTING_DEBUFF_SPELLS: DebuffSpellConfig[] = [
     subLabel: 'ADV',
     icon: '✨',
     color: '#c084fc',
-    videoUrl: '/jb2a/Library/Generic/Butterflies/ButterfliesComplete01_01_Regular_BluePurple_600x600.webm',
     description: 'Target is outlined in glowing light: attackers have advantage, and target cannot benefit from invisibility.',
     style: 'glow'
   },
@@ -56,7 +53,6 @@ export const LASTING_DEBUFF_SPELLS: DebuffSpellConfig[] = [
     subLabel: 'HOLD',
     icon: '⛓️',
     color: '#fbbf24',
-    videoUrl: '/jb2a/Community/JAA/chain1.webm',
     description: 'Target is paralyzed: incapacitated, auto-fails STR/DEX saves, attacks within 5ft are automatic critical hits.',
     style: 'shield'
   },
@@ -127,7 +123,6 @@ export const LASTING_DEBUFF_SPELLS: DebuffSpellConfig[] = [
     subLabel: 'FEAR',
     icon: '😱',
     color: '#6366f1',
-    videoUrl: '/jb2a/Library/Generic/Template/Circle/TemplateFearCircle_01_Dark_Purple_800x800.webm',
     description: 'Disadvantage on ability checks and attack rolls while the source of fear is within line of sight.',
     style: 'danger'
   },
@@ -169,18 +164,17 @@ export function findLastingDebuffConfig(assetIdOrName: string | undefined): Debu
 }
 
 /**
- * Creates a TokenStatusBubble from a debuff spell config
+ * Creates a TokenStatusBadge from a debuff spell config
  */
 export function createDebuffBubbleFromConfig(cfg: DebuffSpellConfig, casterName?: string): TokenStatusBubble {
   return {
-    id: `bubble_${cfg.spellKey}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    id: `badge_${cfg.spellKey}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
     label: cfg.name,
     subLabel: cfg.subLabel,
     icon: cfg.icon,
     color: cfg.color,
     bgColor: '#090d16',
     borderColor: cfg.color,
-    videoUrl: cfg.videoUrl,
     pulse: true,
     style: cfg.style,
     sourceSpellId: cfg.spellKey,
@@ -190,8 +184,10 @@ export function createDebuffBubbleFromConfig(cfg: DebuffSpellConfig, casterName?
   };
 }
 
+export const createDebuffBadgeFromConfig = createDebuffBubbleFromConfig;
+
 /**
- * Preset status bubbles available for the DM right-click menu
+ * Preset status badges available for the DM right-click menu
  */
 export const PRESET_DM_BUBBLES: Omit<TokenStatusBubble, 'id'>[] = [
   {
@@ -199,7 +195,6 @@ export const PRESET_DM_BUBBLES: Omit<TokenStatusBubble, 'id'>[] = [
     subLabel: '+1d6',
     icon: '🎯',
     color: '#22c55e',
-    videoUrl: '/jb2a/Library/1st_Level/Hunters_Mark/HuntersMark_01_Regular_Green_Loop_200x200.webm',
     style: 'orb',
     description: "Marked quarry: +1d6 damage on hit."
   },
@@ -208,7 +203,6 @@ export const PRESET_DM_BUBBLES: Omit<TokenStatusBubble, 'id'>[] = [
     subLabel: 'HEX',
     icon: '💀',
     color: '#a855f7',
-    videoUrl: '/jb2a/Library/Generic/Template/Circle/TemplateSkullCircle_01_Regular_Purple_800x800.webm',
     style: 'orb',
     description: 'Hexed: +1d6 necrotic damage on hit and disadvantage on ability checks.'
   },
@@ -217,7 +211,6 @@ export const PRESET_DM_BUBBLES: Omit<TokenStatusBubble, 'id'>[] = [
     subLabel: 'ADV',
     icon: '✨',
     color: '#c084fc',
-    videoUrl: '/jb2a/Library/Generic/Butterflies/ButterfliesComplete01_01_Regular_BluePurple_600x600.webm',
     style: 'glow',
     description: 'Outlined in light: attackers have advantage.'
   },
@@ -226,7 +219,6 @@ export const PRESET_DM_BUBBLES: Omit<TokenStatusBubble, 'id'>[] = [
     subLabel: 'HOLD',
     icon: '⛓️',
     color: '#fbbf24',
-    videoUrl: '/jb2a/Community/JAA/chain1.webm',
     style: 'shield',
     description: 'Paralyzed: incapacitated, attacks within 5ft auto-crit.'
   },
@@ -269,7 +261,7 @@ export const PRESET_DM_BUBBLES: Omit<TokenStatusBubble, 'id'>[] = [
     icon: '👑',
     color: '#eab308',
     pulse: true,
-    style: 'ac-badge',
+    style: 'badge',
     description: 'Legendary or elite encounter boss.'
   },
   {
@@ -329,3 +321,5 @@ export const PRESET_DM_BUBBLES: Omit<TokenStatusBubble, 'id'>[] = [
     description: 'Unconscious under a magical sleep spell.'
   }
 ];
+
+export const PRESET_DM_BADGES = PRESET_DM_BUBBLES;

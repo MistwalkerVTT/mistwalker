@@ -1991,7 +1991,93 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "soundKey": "wall_of_fire",
     "tags": ["incendiary cloud", "burning fog", "fire cloud", "smoke and embers"]
   },
+    {
+    "id": "crusaders_mantle",
+    "name": "Crusader's Mantle",
+    "label": "Crusader's Mantle (30ft Radiant Holy Aura)",
+    "level": 3,
+    "school": "evocation",
+    "paradigm": "aura",
+    "shape": "aura",
+    "defaultSizeFt": 30,
+    "color": "#f59e0b",
+    "webm": "/jb2a/Community/JackKerouac/lathander_symbol_CIRCLE_01.webm",
+    "thumb": "/jb2a/Community/JackKerouac/lathander_symbol_CIRCLE_01.webm",
+    "isPersistent": true,
+    "blendMode": "screen",
+    "soundKey": "divine_smite",
+    "tags": ["crusaders mantle", "crusader's mantle", "mantle", "holy radiance"]
+  },
   {
+    "id": "aura_of_protection",
+    "name": "Aura of Protection",
+    "label": "Aura of Protection (10ft Paladin Ward)",
+    "level": 6,
+    "school": "abjuration",
+    "paradigm": "aura",
+    "shape": "aura",
+    "defaultSizeFt": 10,
+    "color": "#eab308",
+    "webm": "/jb2a/Community/JackKerouac/lathander_symbol_CIRCLE_01.webm",
+    "thumb": "/jb2a/Community/JackKerouac/lathander_symbol_CIRCLE_01.webm",
+    "isPersistent": true,
+    "blendMode": "screen",
+    "soundKey": "divine_chime",
+    "tags": ["aura of protection", "paladin aura", "protection aura"]
+  },
+  {
+    "id": "aura_of_courage",
+    "name": "Aura of Courage",
+    "label": "Aura of Courage (10ft Fearless Paladin Ward)",
+    "level": 10,
+    "school": "abjuration",
+    "paradigm": "aura",
+    "shape": "aura",
+    "defaultSizeFt": 10,
+    "color": "#fbbf24",
+    "webm": "/jb2a/Community/JackKerouac/magic_circle_CIRCLE_01.webm",
+    "thumb": "/jb2a/Community/JackKerouac/magic_circle_CIRCLE_01.webm",
+    "isPersistent": true,
+    "blendMode": "screen",
+    "soundKey": "divine_chime",
+    "tags": ["aura of courage", "courage aura", "fearless ward"]
+  },
+  {
+    "id": "antilife_shell",
+    "name": "Antilife Shell",
+    "label": "Antilife Shell (10ft Living Creature Barrier)",
+    "level": 5,
+    "school": "abjuration",
+    "paradigm": "aura",
+    "shape": "aura",
+    "defaultSizeFt": 10,
+    "color": "#38bdf8",
+    "webm": "/jb2a/Library/5th_Level/Antilife_Shell/AntilifeShell_01_Blue_Circle_400x400.webm",
+    "thumb": "/jb2a/Library/5th_Level/Antilife_Shell/Antilifeshell_01_Blue_Circle_Thumb.webp",
+    "loopWebm": "/jb2a/Library/5th_Level/Antilife_Shell/AntilifeShell_01_Blue_Circle_400x400.webm",
+    "isPersistent": true,
+    "blendMode": "screen",
+    "soundKey": "shield_barrier",
+    "tags": ["antilife shell", "antilife", "anti life", "barrier"]
+  },
+  {
+    "id": "twilight_sanctuary",
+    "name": "Twilight Sanctuary",
+    "label": "Twilight Sanctuary / Faerie Glow (30ft Twilight Sphere)",
+    "level": 2,
+    "school": "evocation",
+    "paradigm": "aura",
+    "shape": "aura",
+    "defaultSizeFt": 30,
+    "color": "#a855f7",
+    "webm": "/jb2a/Library/Generic/Creature/FairiesLoop01_01_Regular_BluePurple_600x600.webm",
+    "thumb": "/jb2a/Library/Generic/Creature/FairiesLoop01_01_Regular_BluePurple_600x600.webm",
+    "isPersistent": true,
+    "blendMode": "screen",
+    "soundKey": "divine_chime",
+    "tags": ["twilight sanctuary", "twilight", "faerie glow", "fey spirits"]
+  },
+{
     "id": "aura_of_vitality",
     "name": "Aura of Vitality",
     "label": "Aura of Vitality (30ft Luminous Healing Radiance)",
@@ -2301,7 +2387,12 @@ export const findJb2aAsset = (idOrName: string): Jb2aAssetDefinition | undefined
   if (n.includes('tiny hut')) return byId('tiny_hut');
   if (n.includes('thorn whip')) return byId('thorn_whip');
   if (n.includes('armor of agathys') || n.includes('agathys')) return byId('armor_of_agathys');
-  if (n.includes('holy aura') || n.includes('channel divinity') || n.includes('divine word') || n.includes("crusader's mantle")) return byId('holy_aura');
+  if (n.includes('crusader') || n.includes('mantle')) return byId('crusaders_mantle');
+  if (n.includes('aura of protection')) return byId('aura_of_protection');
+  if (n.includes('aura of courage')) return byId('aura_of_courage');
+  if (n.includes('antilife') || n.includes('anti-life')) return byId('antilife_shell');
+  if (n.includes('twilight sanctuary') || n.includes('twilight')) return byId('twilight_sanctuary');
+  if (n.includes('holy aura') || n.includes('channel divinity') || n.includes('divine word')) return byId('holy_aura');
   if (n === 'fly' || n.includes('flight') || n.includes('haste')) return byId('fly');
   if (n.includes('blight') || n.includes('bestow curse') || n.includes('finger of death') || n.includes('power word kill')) return byId('blight');
   if (n.includes('warding bond') || n.includes('death ward') || n.includes('enlarge/reduce') || n.includes('enlarge reduce') || n.includes('protection from')) return byId('warding_bond');

@@ -1323,6 +1323,9 @@ export default function App() {
   const [campaignMode, setCampaignMode] = useState<CampaignMode>('run');
   const [walls, setWalls] = useState<WallSegment[]>([]);
   const [selectedWallId, setSelectedWallId] = useState<string | null>(null);
+  const handleSelectWall = useCallback((id: string | null) => {
+    setSelectedWallId(id);
+  }, []);
   const [wallDrawStart, setWallDrawStart] = useState<{ x: number; y: number } | null>(null);
   const [wallEraseDragStart, setWallEraseDragStart] = useState<{ x: number; y: number } | null>(null);
   const [wallEraseDragCurrent, setWallEraseDragCurrent] = useState<{ x: number; y: number } | null>(null);
@@ -1369,9 +1372,16 @@ export default function App() {
     position: { x: number; y: number };
   } | null>(null);
   const [stageScale, setStageScale] = useState<number>(1);
+  const stageScaleRef = useRef<number>(1);
+  stageScaleRef.current = stageScale;
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
   const [stagePos, setStagePos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const stagePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  stagePosRef.current = stagePos;
+  const stageDragRafIdRef = useRef<number | null>(null);
+  const wheelRafIdRef = useRef<number | null>(null);
+  const pendingWheelStateRef = useRef<{ scale: number; pos: { x: number; y: number } } | null>(null);
   const [gridVisible, setGridVisible] = useState<boolean>(true);
   const [gridOpacity, setGridOpacity] = useState<number>(0.3);
   const [gridSize, setGridSize] = useState<number>(50);
@@ -1874,7 +1884,7 @@ export default function App() {
   const [customBubbleSubLabel, setCustomBubbleSubLabel] = useState('');
   const [customBubbleIcon, setCustomBubbleIcon] = useState('🎯');
   const [customBubbleColor, setCustomBubbleColor] = useState('#38bdf8');
-  const [customBubbleStyle, setCustomBubbleStyle] = useState<'classic' | 'ac-badge' | 'orb' | 'shield' | 'danger'>('ac-badge');
+  const [customBubbleStyle, setCustomBubbleStyle] = useState<'classic' | 'badge' | 'orb' | 'shield' | 'danger'>('badge');
   const [customAuraRadiusInput, setCustomAuraRadiusInput] = useState<number>(10);
   const [customAuraColorInput, setCustomAuraColorInput] = useState<string>('rgba(234, 179, 8, 0.4)');
   const [customAuraOpacityInput, setCustomAuraOpacityInput] = useState<number>(0.35);
@@ -2505,6 +2515,8 @@ export default function App() {
       height: isRotated ? baseWidth : baseHeight
     };
   }, [mapType, image, dimensions, videoSize, mapRotation, activeSceneInfo, walls]);
+
+  const mapDimensions = useMemo(() => getMapDimensions(), [getMapDimensions]);
 
   // Zoom out / fit entire map cleanly into DM Viewport
   const fitWholeMapToScreen = useCallback((overrideW?: number, overrideH?: number) => {
@@ -4499,8 +4511,8 @@ export default function App() {
     const isCasterSelfAura = Boolean(
       activeEquippedAsset.targetType === 'aura' ||
       activeEquippedAsset.targetType === 'self' ||
-      ['spirit_guardians', 'aura_of_vitality', 'aura_of_life', 'aura_of_purity', 'crusaders_mantle', 'holy_aura', 'circle_of_power', 'detect_magic', 'shield', 'armor_of_agathys', 'fire_shield', 'shadow_of_moil', 'ashardalons_stride', 'twilight_sanctuary'].includes(activeEquippedAsset.id) ||
-      ['spirit guardians', 'aura of vitality', 'aura of life', 'aura of purity', 'crusader\'s mantle', 'holy aura', 'circle of power', 'detect magic', 'armor of agathys', 'fire shield', 'shadow of moil', 'ashardalon\'s stride', 'twilight sanctuary'].some(k => lowerAssetName.includes(k))
+      ['spirit_guardians', 'aura_of_vitality', 'aura_of_life', 'aura_of_purity', 'crusaders_mantle', 'aura_of_protection', 'aura_of_courage', 'antilife_shell', 'holy_aura', 'circle_of_power', 'detect_magic', 'shield', 'armor_of_agathys', 'fire_shield', 'shadow_of_moil', 'ashardalons_stride', 'twilight_sanctuary'].includes(activeEquippedAsset.id) ||
+      ['spirit guardians', 'aura of vitality', 'aura of life', 'aura of purity', 'crusader\'s mantle', 'aura of protection', 'aura of courage', 'antilife shell', 'antilife', 'holy aura', 'circle of power', 'detect magic', 'armor of agathys', 'fire shield', 'shadow of moil', 'ashardalon\'s stride', 'twilight sanctuary'].some(k => lowerAssetName.includes(k))
     );
 
     const isAuraOrBuff = Boolean(
@@ -4601,13 +4613,13 @@ export default function App() {
       } : undefined
     };
 
-    // After the main spell animation (2.8s), move lasting debuff spells (Hunter's Mark, Hex, etc.) into a small bubble above the enemy's head
+    // After the main spell animation (2.8s), move lasting debuff spells (Hunter's Mark, Hex, etc.) into a status badge above the enemy's head
     if (lastingDebuff && targetCreatureToken) {
       const targetTokenId = targetCreatureToken.id;
       const targetTokenName = targetCreatureToken.name;
       const effectToRemoveId = newEffect.id;
       setTimeout(() => {
-        // Remove the main full-size blast animation now that it transitioned into the bubble
+        // Remove the main full-size blast animation now that it transitioned into the badge
         setEffects(prev => prev.filter(e => e.id !== effectToRemoveId));
         if (socketRef.current?.connected) {
           socketRef.current.emit('EFFECT_REMOVE', { id: effectToRemoveId });
@@ -4625,7 +4637,7 @@ export default function App() {
           if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) socketRef.current.emit('SYNC_TOKENS', next);
           return next;
         });
-        toast.success(`✨ ${lastingDebuff.name} moved into bubble above ${targetTokenName}'s head!`, {
+        toast.success(`✨ ${lastingDebuff.name} badge added above ${targetTokenName}'s head!`, {
           description: lastingDebuff.description
         });
       }, 2800);
@@ -7507,9 +7519,11 @@ export default function App() {
     
     const scaleBy = 1.1;
     const stage = stageRef.current;
+    if (!stage) return;
     const oldScale = stage.scaleX();
 
     const pointer = stage.getPointerPosition();
+    if (!pointer) return;
 
     const mousePointTo = {
       x: (pointer.x - stage.x()) / oldScale,
@@ -7517,22 +7531,46 @@ export default function App() {
     };
 
     const newScale = e.evt.deltaY < 0 ? oldScale * scaleBy : oldScale / scaleBy;
+    const clampedScale = Math.max(0.05, Math.min(newScale, 15));
     const newPos = {
-      x: pointer.x - mousePointTo.x * newScale,
-      y: pointer.y - mousePointTo.y * newScale,
+      x: pointer.x - mousePointTo.x * clampedScale,
+      y: pointer.y - mousePointTo.y * clampedScale,
     };
+
+    stagePosRef.current = newPos;
+    stageScaleRef.current = clampedScale;
+
+    // Direct GPU canvas transform for instant, fluid response
+    stage.scale({ x: clampedScale, y: clampedScale });
+    stage.position(newPos);
+    stage.batchDraw();
 
     const fx = document.getElementById('main-animated-fx-overlay');
     if (fx) {
-      const { width: mapW, height: mapH } = getMapDimensions();
+      const { width: mapW, height: mapH } = mapDimensions;
       fx.style.left = `${newPos.x}px`;
       fx.style.top = `${newPos.y}px`;
-      fx.style.width = `${mapW * newScale}px`;
-      fx.style.height = `${mapH * newScale}px`;
+      fx.style.width = `${mapW * clampedScale}px`;
+      fx.style.height = `${mapH * clampedScale}px`;
     }
 
-    setStageScale(newScale);
-    setStagePos(newPos);
+    const fxWorld = document.getElementById('mistwalker-dom-effects-overlay-world');
+    if (fxWorld) {
+      fxWorld.style.transform = `translate3d(${newPos.x}px, ${newPos.y}px, 0) scale(${clampedScale})`;
+    }
+
+    pendingWheelStateRef.current = { scale: clampedScale, pos: newPos };
+    if (!wheelRafIdRef.current) {
+      wheelRafIdRef.current = requestAnimationFrame(() => {
+        wheelRafIdRef.current = null;
+        if (pendingWheelStateRef.current) {
+          const { scale, pos } = pendingWheelStateRef.current;
+          pendingWheelStateRef.current = null;
+          setStageScale(scale);
+          setStagePos(pos);
+        }
+      });
+    }
   };
 
 
@@ -8530,22 +8568,38 @@ export default function App() {
                 if (e.target === stageRef.current && !isDraggingTokenRef.current) {
                   const newX = e.target.x();
                   const newY = e.target.y();
+                  stagePosRef.current = { x: newX, y: newY };
+                  if (stageDragRafIdRef.current) cancelAnimationFrame(stageDragRafIdRef.current);
+                  stageDragRafIdRef.current = requestAnimationFrame(() => {
+                    const fx = document.getElementById('main-animated-fx-overlay');
+                    if (fx) {
+                      fx.style.left = `${newX}px`;
+                      fx.style.top = `${newY}px`;
+                    }
+                    const fxWorld = document.getElementById('mistwalker-dom-effects-overlay-world');
+                    if (fxWorld) {
+                      fxWorld.style.transform = `translate3d(${newX}px, ${newY}px, 0) scale(${stageScaleRef.current})`;
+                    }
+                  });
+                }
+              }}
+              onDragEnd={(e) => {
+                if (e.target === stageRef.current && !isDraggingTokenRef.current) {
+                  if (stageDragRafIdRef.current) {
+                    cancelAnimationFrame(stageDragRafIdRef.current);
+                    stageDragRafIdRef.current = null;
+                  }
+                  const newX = e.target.x();
+                  const newY = e.target.y();
+                  stagePosRef.current = { x: newX, y: newY };
                   const fx = document.getElementById('main-animated-fx-overlay');
                   if (fx) {
                     fx.style.left = `${newX}px`;
                     fx.style.top = `${newY}px`;
                   }
-                  setStagePos({ x: newX, y: newY });
-                }
-              }}
-              onDragEnd={(e) => {
-                if (e.target === stageRef.current && !isDraggingTokenRef.current) {
-                  const newX = e.target.x();
-                  const newY = e.target.y();
-                  const fx = document.getElementById('main-animated-fx-overlay');
-                  if (fx) {
-                    fx.style.left = `${newX}px`;
-                    fx.style.top = `${newY}px`;
+                  const fxWorld = document.getElementById('mistwalker-dom-effects-overlay-world');
+                  if (fxWorld) {
+                    fxWorld.style.transform = `translate3d(${newX}px, ${newY}px, 0) scale(${stageScaleRef.current})`;
                   }
                   setStagePos({ x: newX, y: newY });
                 }
@@ -8762,7 +8816,7 @@ export default function App() {
               )}
               
               <DynamicLightingLayer
-                mapDimensions={getMapDimensions()}
+                mapDimensions={mapDimensions}
                 gridSize={gridSize}
                 stageScale={stageScale}
                 walls={walls}
@@ -8775,7 +8829,7 @@ export default function App() {
                 campaignMode={campaignMode}
                 tool={tool}
                 selectedWallId={selectedWallId}
-                onSelectWall={(id) => setSelectedWallId(id)}
+                onSelectWall={handleSelectWall}
                 onToggleDoor={handleToggleDoor}
                 onDeleteWall={handleDeleteWall}
                 onUpdateWall={handleUpdateWall}
@@ -8926,7 +8980,7 @@ export default function App() {
               <Layer>
                 <RoomHotspotLayer
                   annotations={roomAnnotations}
-                  mapDimensions={getMapDimensions()}
+                  mapDimensions={mapDimensions}
                   stageScale={stageScale}
                   campaignMode={campaignMode}
                   isPlayerView={false}
@@ -9401,7 +9455,7 @@ export default function App() {
                     placingTemplate={boardPlacingTemplate}
                     showPlacementControls={showBoardAnimatedControls}
                     walls={walls}
-                    mapDimensions={getMapDimensions()}
+                    mapDimensions={mapDimensions}
                     renderCanvas={false}
                     isShiftPressed={isShiftPressed}
                     onDrawingStateChange={setBoardPolygonDrawingState}
@@ -9413,10 +9467,15 @@ export default function App() {
                         const nextY = curPos.y + dy;
                         stage.position({ x: nextX, y: nextY });
                         stage.batchDraw();
+                        stagePosRef.current = { x: nextX, y: nextY };
                         const fx = document.getElementById('main-animated-fx-overlay');
                         if (fx) {
                           fx.style.left = `${nextX}px`;
                           fx.style.top = `${nextY}px`;
+                        }
+                        const fxWorld = document.getElementById('mistwalker-dom-effects-overlay-world');
+                        if (fxWorld) {
+                          fxWorld.style.transform = `translate3d(${nextX}px, ${nextY}px, 0) scale(${stageScaleRef.current})`;
                         }
                         setStagePos({ x: nextX, y: nextY });
                       }
@@ -9426,31 +9485,54 @@ export default function App() {
                       const scaleBy = 1.08;
                       const stage = stageRef.current;
                       if (!stage) return;
-                      const oldScale = stageScale;
+                      const oldScale = stage.scaleX();
                       const stageBox = stage.container().getBoundingClientRect();
                       const pointerX = e.clientX - stageBox.left;
                       const pointerY = e.clientY - stageBox.top;
 
                       const mousePointTo = {
-                        x: (pointerX - stagePos.x) / oldScale,
-                        y: (pointerY - stagePos.y) / oldScale,
+                        x: (pointerX - stage.x()) / oldScale,
+                        y: (pointerY - stage.y()) / oldScale,
                       };
 
                       const newScale = e.deltaY < 0 ? oldScale * scaleBy : oldScale / scaleBy;
+                      const clampedScale = Math.max(0.05, Math.min(newScale, 15));
                       const newPos = {
-                        x: pointerX - mousePointTo.x * newScale,
-                        y: pointerY - mousePointTo.y * newScale,
+                        x: pointerX - mousePointTo.x * clampedScale,
+                        y: pointerY - mousePointTo.y * clampedScale,
                       };
+                      stagePosRef.current = newPos;
+                      stageScaleRef.current = clampedScale;
+
+                      stage.scale({ x: clampedScale, y: clampedScale });
+                      stage.position(newPos);
+                      stage.batchDraw();
+
                       const fx = document.getElementById('main-animated-fx-overlay');
                       if (fx) {
-                        const { width: mapW, height: mapH } = getMapDimensions();
+                        const { width: mapW, height: mapH } = mapDimensions;
                         fx.style.left = `${newPos.x}px`;
                         fx.style.top = `${newPos.y}px`;
-                        fx.style.width = `${mapW * newScale}px`;
-                        fx.style.height = `${mapH * newScale}px`;
+                        fx.style.width = `${mapW * clampedScale}px`;
+                        fx.style.height = `${mapH * clampedScale}px`;
                       }
-                      setStageScale(newScale);
-                      setStagePos(newPos);
+                      const fxWorld = document.getElementById('mistwalker-dom-effects-overlay-world');
+                      if (fxWorld) {
+                        fxWorld.style.transform = `translate3d(${newPos.x}px, ${newPos.y}px, 0) scale(${clampedScale})`;
+                      }
+
+                      pendingWheelStateRef.current = { scale: clampedScale, pos: newPos };
+                      if (!wheelRafIdRef.current) {
+                        wheelRafIdRef.current = requestAnimationFrame(() => {
+                          wheelRafIdRef.current = null;
+                          if (pendingWheelStateRef.current) {
+                            const { scale, pos } = pendingWheelStateRef.current;
+                            pendingWheelStateRef.current = null;
+                            setStageScale(scale);
+                            setStagePos(pos);
+                          }
+                        });
+                      }
                     }}
                     onAddFeature={(newFeat) => {
                       setBoardAnimatedFeatures(prev => [...prev, newFeat]);
@@ -10591,7 +10673,7 @@ export default function App() {
                 }`}
               >
                 <CircleDot className="w-2.5 h-2.5 text-emerald-400" />
-                <span>Bubbles</span>
+                <span>Badges</span>
                 {(currentToken?.bubbles?.length || 0) > 0 && (
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
                 )}
@@ -11158,11 +11240,11 @@ export default function App() {
 
             {tokenMenuTab === 'bubbles' && (
               <div className="space-y-3">
-                {/* Active Monster Bubbles Header / List */}
+                {/* Active Monster Badges Header / List */}
                 <div className="flex justify-between items-center px-1">
                   <span className="text-[9px] font-mono text-zinc-400 uppercase font-bold tracking-tighter flex items-center gap-1">
                     <CircleDot className="w-2.5 h-2.5 text-emerald-400" />
-                    Active Status Bubbles
+                    Active Status Badges
                   </span>
                   <span className="text-[9px] font-mono text-emerald-400 font-bold">
                     {(currentToken?.bubbles || []).length} Active
@@ -11177,7 +11259,7 @@ export default function App() {
                         className="bg-zinc-900/90 border border-zinc-800 rounded-lg p-1.5 flex items-center justify-between group hover:border-zinc-700 transition-all"
                       >
                         <div className="flex items-center gap-2 overflow-hidden">
-                          {/* Miniature Bubble Preview */}
+                          {/* Miniature Badge Preview */}
                           <div
                             className="w-5 h-5 rounded-full flex flex-col items-center justify-center shrink-0 border shadow-xs"
                             style={{
@@ -11208,10 +11290,10 @@ export default function App() {
                           onClick={() => {
                             const next = (currentToken?.bubbles || []).filter(item => item.id !== b.id);
                             handleUpdateDmToken({ bubbles: next });
-                            toast.info(`Removed ${b.label} bubble`);
+                            toast.info(`Removed ${b.label} badge`);
                           }}
                           className="p-1 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors cursor-pointer shrink-0"
-                          title="Remove bubble"
+                          title="Remove badge"
                         >
                           <Trash2 className="w-3 h-3" />
                         </button>
@@ -11221,26 +11303,25 @@ export default function App() {
                       type="button"
                       onClick={() => {
                         handleUpdateDmToken({ bubbles: [] });
-                        toast.info('Cleared all status bubbles');
+                        toast.info('Cleared all status badges');
                       }}
                       className="w-full text-center py-1 text-[9px] font-mono text-red-400 hover:text-red-300 cursor-pointer"
                     >
-                      Clear All Bubbles
+                      Clear All Badges
                     </button>
                   </div>
                 ) : (
                   <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-2 text-center text-[10px] text-zinc-400 font-mono">
-                    No active bubbles. Choose a 1-click preset or build a custom bubble below.
+                    No active badges. Choose a 1-click preset or build a custom badge below.
                   </div>
                 )}
 
-                {/* Section: 1-Click Preset Badges (AC Style & Debuffs) */}
+                {/* Section: 1-Click Preset Badges */}
                 <div>
                   <div className="flex justify-between items-center px-1 mb-1.5">
                     <span className="text-[9px] font-mono text-zinc-400 uppercase font-bold tracking-tighter">
                       1-Click Preset Badges
                     </span>
-                    <span className="text-[9px] font-mono text-emerald-400 font-bold">AC-Style</span>
                   </div>
                   <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto sidebar-scrollbar pr-1">
                     {PRESET_DM_BUBBLES.map((preset) => {
@@ -11256,12 +11337,12 @@ export default function App() {
                             } else {
                               const newBubble: TokenStatusBubble = {
                                 ...preset,
-                                id: `bubble_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`
+                                id: `badge_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`
                               };
                               handleUpdateDmToken({
                                 bubbles: [...(currentToken?.bubbles || []).filter(b => b.label !== preset.label), newBubble]
                               });
-                              toast.success(`Added ${preset.label} bubble above ${currentToken?.name || 'monster'}!`);
+                              toast.success(`Added ${preset.label} badge above ${currentToken?.name || 'monster'}!`);
                             }
                           }}
                           className={`text-left p-1.5 rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 ${
@@ -11270,7 +11351,7 @@ export default function App() {
                               : 'bg-zinc-900/90 hover:bg-zinc-850 border-zinc-800 text-zinc-300 hover:text-white'
                           }`}
                         >
-                          {/* Miniature Bubble Avatar */}
+                          {/* Miniature Badge Avatar */}
                           <div
                             className="w-5 h-5 rounded-full flex flex-col items-center justify-center shrink-0 border"
                             style={{
@@ -11292,11 +11373,11 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Section: Custom Bubble Creator */}
+                {/* Section: Custom Badge Creator */}
                 <div className="border-t border-zinc-800/80 pt-2.5 space-y-2">
                   <div className="flex justify-between items-center px-1">
                     <span className="text-[9px] font-mono text-zinc-400 uppercase font-bold tracking-tighter">
-                      Custom Bubble Creator
+                      Custom Badge Creator
                     </span>
                     {/* Live Badge Preview */}
                     <div className="flex items-center gap-1 bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-700">
@@ -11323,7 +11404,7 @@ export default function App() {
                     <div className="col-span-2">
                       <input
                         type="text"
-                        placeholder="Bubble Label (e.g. Phase 2)"
+                        placeholder="Badge Label (e.g. Phase 2)"
                         value={customBubbleLabel}
                         onChange={(e) => setCustomBubbleLabel(e.target.value)}
                         className="w-full bg-zinc-900 border border-zinc-700 rounded px-1.5 py-1 text-[10px] text-zinc-200 font-mono focus:outline-none focus:border-emerald-400"
@@ -11332,12 +11413,12 @@ export default function App() {
                     <div>
                       <input
                         type="text"
-                        placeholder="AC/Tag"
+                        placeholder="Tag/Val"
                         maxLength={4}
                         value={customBubbleSubLabel}
                         onChange={(e) => setCustomBubbleSubLabel(e.target.value.toUpperCase())}
                         className="w-full bg-zinc-900 border border-zinc-700 rounded px-1.5 py-1 text-[10px] text-center text-zinc-200 font-mono uppercase font-bold focus:outline-none focus:border-emerald-400"
-                        title="Top small text (similar to 'AC', up to 4 chars)"
+                        title="Top small text (up to 4 chars)"
                       />
                     </div>
                   </div>
@@ -11390,13 +11471,13 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Add Custom Bubble Button */}
+                  {/* Add Custom Badge Button */}
                   <button
                     type="button"
                     onClick={() => {
                       const lbl = customBubbleLabel.trim() || 'Status Marker';
                       const newBubble: TokenStatusBubble = {
-                        id: `bubble_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                        id: `badge_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
                         label: lbl,
                         subLabel: customBubbleSubLabel.trim() || undefined,
                         icon: customBubbleIcon || '🎯',
@@ -11409,12 +11490,12 @@ export default function App() {
                       });
                       setCustomBubbleLabel('');
                       setCustomBubbleSubLabel('');
-                      toast.success(`Added "${lbl}" bubble above ${currentToken?.name || 'monster'}!`);
+                      toast.success(`Added "${lbl}" badge above ${currentToken?.name || 'monster'}!`);
                     }}
                     className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold font-mono shadow-md transition-all cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    <span>Add Custom Bubble</span>
+                    <span>Add Custom Badge</span>
                   </button>
                 </div>
               </div>

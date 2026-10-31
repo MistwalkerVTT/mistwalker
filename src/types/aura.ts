@@ -32,8 +32,8 @@ export const AURA_PRESETS: AuraPreset[] = [
     id: 'aura_of_life',
     name: 'Aura of Life',
     radius: 30,
-    color: 'rgba(34, 197, 94, 0.4)',
-    opacity: 0.9,
+    color: 'rgba(34, 197, 94, 0.28)',
+    opacity: 0.38,
     description: 'Necrotic resistance & regain 1 HP at 0 (30 ft)',
     videoUrl: '/jb2a/Community/JAA/auraOfLife.webm'
   },
@@ -41,8 +41,8 @@ export const AURA_PRESETS: AuraPreset[] = [
     id: 'aura_of_vitality',
     name: 'Aura of Vitality',
     radius: 30,
-    color: 'rgba(16, 185, 129, 0.4)',
-    opacity: 0.9,
+    color: 'rgba(16, 185, 129, 0.28)',
+    opacity: 0.38,
     description: 'Heal 2d6 as bonus action each turn (30 ft)',
     videoUrl: '/jb2a/Community/JAA/AuraofVitality.webm'
   },
@@ -50,8 +50,8 @@ export const AURA_PRESETS: AuraPreset[] = [
     id: 'paladin_prot',
     name: 'Aura of Protection',
     radius: 10,
-    color: 'rgba(234, 179, 8, 0.45)',
-    opacity: 0.9,
+    color: 'rgba(234, 179, 8, 0.32)',
+    opacity: 0.38,
     description: '+Cha to all saving throws (10 ft)',
     videoUrl: '/jb2a/Community/JackKerouac/lathander_symbol_CIRCLE_01.webm'
   },
@@ -59,8 +59,8 @@ export const AURA_PRESETS: AuraPreset[] = [
     id: 'aura_of_courage',
     name: 'Aura of Courage',
     radius: 10,
-    color: 'rgba(251, 191, 36, 0.4)',
-    opacity: 0.9,
+    color: 'rgba(251, 191, 36, 0.32)',
+    opacity: 0.38,
     description: 'Immunity to frightened condition (10 ft)',
     videoUrl: '/jb2a/Community/JackKerouac/magic_circle_CIRCLE_01.webm'
   },
@@ -68,10 +68,10 @@ export const AURA_PRESETS: AuraPreset[] = [
     id: 'crusaders_mantle',
     name: "Crusader's Mantle",
     radius: 30,
-    color: 'rgba(245, 158, 11, 0.4)',
-    opacity: 0.9,
+    color: 'rgba(245, 158, 11, 0.35)',
+    opacity: 0.45,
     description: '+1d4 radiant damage on weapon attacks (30 ft)',
-    videoUrl: '/jb2a/Library/Generic/Template/Circle/TemplateRunesCircle_01_Regular_Orange_800x800.webm'
+    videoUrl: '/jb2a/Community/JackKerouac/lathander_symbol_CIRCLE_01.webm'
   },
   {
     id: 'bless_aura',
@@ -95,8 +95,8 @@ export const AURA_PRESETS: AuraPreset[] = [
     id: 'antilife_shell',
     name: 'Antilife Shell',
     radius: 10,
-    color: 'rgba(56, 189, 248, 0.45)',
-    opacity: 0.9,
+    color: 'rgba(56, 189, 248, 0.6)',
+    opacity: 0.75,
     description: 'Barrier hedges out living creatures (10 ft)',
     videoUrl: '/jb2a/Library/5th_Level/Antilife_Shell/AntilifeShell_01_Blue_Circle_400x400.webm'
   },
@@ -122,8 +122,8 @@ export const AURA_PRESETS: AuraPreset[] = [
     id: 'ice_shield',
     name: 'Armor of Agathys / Ice Barrier',
     radius: 5,
-    color: 'rgba(147, 197, 253, 0.5)',
-    opacity: 0.9,
+    color: 'rgba(147, 197, 253, 0.65)',
+    opacity: 0.75,
     description: 'Rotating glacial ice shields warding caster (5 ft)',
     videoUrl: '/jb2a/Community/JackKerouac/ice_shield_rotating_SQUARE_01.webm'
   },
@@ -149,8 +149,8 @@ export const AURA_PRESETS: AuraPreset[] = [
     id: 'twilight_sanctuary',
     name: 'Twilight Sanctuary / Faerie Glow',
     radius: 30,
-    color: 'rgba(147, 51, 234, 0.4)',
-    opacity: 0.9,
+    color: 'rgba(147, 51, 234, 0.35)',
+    opacity: 0.5,
     description: 'Swirling luminescent twilight fey spirits (30 ft)',
     videoUrl: '/jb2a/Library/Generic/Creature/FairiesLoop01_01_Regular_BluePurple_600x600.webm'
   },

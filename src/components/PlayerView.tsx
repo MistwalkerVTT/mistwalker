@@ -148,6 +148,9 @@ import {
 } from './AudioMixerJukebox';
 import { PlayerArenaMode } from './PlayerArenaMode';
 
+const STATIC_MOUSE_POS = { x: 0, y: 0 };
+const noopSelectWall = () => {};
+
 interface Token {
   id: string;
   name: string;
@@ -1735,7 +1738,14 @@ export default function PlayerView() {
 
   // Stage Pan & Zoom
   const [stageScale, setStageScale] = useState<number>(() => initialBackup?.stageScale || 1);
+  const stageScaleRef = useRef<number>(initialBackup?.stageScale || 1);
+  stageScaleRef.current = stageScale;
   const [stagePos, setStagePos] = useState<{ x: number; y: number }>(() => initialBackup?.stagePos || { x: 0, y: 0 });
+  const stagePosRef = useRef<{ x: number; y: number }>(initialBackup?.stagePos || { x: 0, y: 0 });
+  stagePosRef.current = stagePos;
+  const stageDragRafIdRef = useRef<number | null>(null);
+  const wheelRafIdRef = useRef<number | null>(null);
+  const pendingWheelStateRef = useRef<{ scale: number; pos: { x: number; y: number } } | null>(null);
 
   // Connection & Active Scene
   const [isConnected, setIsConnected] = useState(false);
@@ -3801,6 +3811,11 @@ export default function PlayerView() {
   const targetMapW = isRotated ? baseMapH : baseMapW;
   const targetMapH = isRotated ? baseMapW : baseMapH;
 
+  const mapDimensions = useMemo(() => ({
+    width: targetMapW,
+    height: targetMapH
+  }), [targetMapW, targetMapH]);
+
   // Calibrate 1"x1" physical grid scale for a 32-inch 16:9 TV
   const applyTvScale = useCallback((targetGridSize?: number, targetTokens?: any[]) => {
     if (activeDraggingTokenIdRef.current) return;
@@ -4169,8 +4184,8 @@ export default function PlayerView() {
       activeEquippedAsset.targetType === 'aura' ||
       activeEquippedAsset.targetType === 'self' ||
       activeTargetingAction?.rangeFt === 0 ||
-      ['spirit_guardians', 'aura_of_vitality', 'aura_of_life', 'aura_of_purity', 'crusaders_mantle', 'holy_aura', 'circle_of_power', 'detect_magic', 'shield', 'armor_of_agathys', 'fire_shield', 'shadow_of_moil', 'ashardalons_stride', 'twilight_sanctuary', 'healing_incense'].includes(activeEquippedAsset.id) ||
-      ['spirit guardians', 'aura of vitality', 'aura of life', 'aura of purity', 'crusader\'s mantle', 'holy aura', 'circle of power', 'detect magic', 'armor of agathys', 'fire shield', 'shadow of moil', 'ashardalon\'s stride', 'twilight sanctuary', 'healing incense', 'devotee\'s censer', 'devotees censer'].some(k => lowerAssetName.includes(k))
+      ['spirit_guardians', 'aura_of_vitality', 'aura_of_life', 'aura_of_purity', 'crusaders_mantle', 'aura_of_protection', 'aura_of_courage', 'antilife_shell', 'holy_aura', 'circle_of_power', 'detect_magic', 'shield', 'armor_of_agathys', 'fire_shield', 'shadow_of_moil', 'ashardalons_stride', 'twilight_sanctuary', 'healing_incense'].includes(activeEquippedAsset.id) ||
+      ['spirit guardians', 'aura of vitality', 'aura of life', 'aura of purity', 'crusader\'s mantle', 'aura of protection', 'aura of courage', 'antilife shell', 'antilife', 'holy aura', 'circle of power', 'detect magic', 'armor of agathys', 'fire shield', 'shadow of moil', 'ashardalon\'s stride', 'twilight sanctuary', 'healing incense', 'devotee\'s censer', 'devotees censer'].some(k => lowerAssetName.includes(k))
     );
 
     const isAuraOrBuff = Boolean(
@@ -4287,7 +4302,7 @@ export default function PlayerView() {
       const targetTokenName = targetCreatureToken.name;
       const effectToRemoveId = newEffect.id;
       setTimeout(() => {
-        // Remove the main full-size blast animation now that it transitioned into the bubble
+        // Remove the main full-size blast animation now that it transitioned into the badge
         setEffects(prev => prev.filter(e => e.id !== effectToRemoveId));
         if (socketRef.current?.connected) {
           socketRef.current.emit('EFFECT_REMOVE', { id: effectToRemoveId });
@@ -4307,7 +4322,7 @@ export default function PlayerView() {
           }
           return next;
         });
-        toast.success(`✨ ${lastingDebuff.name} moved into bubble above ${targetTokenName}!`, {
+        toast.success(`✨ ${lastingDebuff.name} badge added above ${targetTokenName}!`, {
           description: lastingDebuff.description
         });
       }, 2800);
@@ -4481,7 +4496,7 @@ export default function PlayerView() {
             }
             return next;
           });
-          toast.success(`✨ ${lastingDebuff.name} moved into bubble above ${targetTokenName}!`, {
+          toast.success(`✨ ${lastingDebuff.name} badge added above ${targetTokenName}!`, {
             description: lastingDebuff.description
           });
         }, 2800);
@@ -5582,8 +5597,8 @@ export default function PlayerView() {
         asset.targetType === 'aura' ||
         asset.targetType === 'self' ||
         action.rangeFt === 0 ||
-        ['spirit_guardians', 'aura_of_vitality', 'aura_of_life', 'aura_of_purity', 'crusaders_mantle', 'holy_aura', 'circle_of_power', 'detect_magic', 'shield', 'armor_of_agathys', 'fire_shield', 'shadow_of_moil', 'ashardalons_stride', 'twilight_sanctuary', 'healing_incense'].includes(asset.id) ||
-        ['spirit guardians', 'aura of vitality', 'aura of life', 'aura of purity', 'crusader\'s mantle', 'holy aura', 'circle of power', 'detect magic', 'armor of agathys', 'fire shield', 'shadow of moil', 'ashardalon\'s stride', 'twilight sanctuary', 'healing incense', 'devotee\'s censer', 'devotees censer'].some(k => lowerActName.includes(k))
+        ['spirit_guardians', 'aura_of_vitality', 'aura_of_life', 'aura_of_purity', 'crusaders_mantle', 'aura_of_protection', 'aura_of_courage', 'antilife_shell', 'holy_aura', 'circle_of_power', 'detect_magic', 'shield', 'armor_of_agathys', 'fire_shield', 'shadow_of_moil', 'ashardalons_stride', 'twilight_sanctuary', 'healing_incense'].includes(asset.id) ||
+        ['spirit guardians', 'aura of vitality', 'aura of life', 'aura of purity', 'crusader\'s mantle', 'aura of protection', 'aura of courage', 'antilife shell', 'antilife', 'holy aura', 'circle of power', 'detect magic', 'armor of agathys', 'fire shield', 'shadow of moil', 'ashardalon\'s stride', 'twilight sanctuary', 'healing incense', 'devotee\'s censer', 'devotees censer'].some(k => lowerActName.includes(k))
       );
 
       const isAuraOrBuff = Boolean(
@@ -7658,12 +7673,32 @@ export default function PlayerView() {
         onTouchEnd={handleStageTouchEnd}
         onDragMove={(e) => {
           if (e.target === e.target.getStage() && !activeDraggingTokenIdRef.current) {
-            setStagePos({ x: e.target.x(), y: e.target.y() });
+            const newX = e.target.x();
+            const newY = e.target.y();
+            stagePosRef.current = { x: newX, y: newY };
+            if (stageDragRafIdRef.current) cancelAnimationFrame(stageDragRafIdRef.current);
+            stageDragRafIdRef.current = requestAnimationFrame(() => {
+              const fxWorld = document.getElementById('mistwalker-dom-effects-overlay-world');
+              if (fxWorld) {
+                fxWorld.style.transform = `translate3d(${newX}px, ${newY}px, 0) scale(${stageScaleRef.current})`;
+              }
+            });
           }
         }}
         onDragEnd={(e) => {
           if (e.target === e.target.getStage() && !activeDraggingTokenIdRef.current) {
-            setStagePos({ x: e.target.x(), y: e.target.y() });
+            if (stageDragRafIdRef.current) {
+              cancelAnimationFrame(stageDragRafIdRef.current);
+              stageDragRafIdRef.current = null;
+            }
+            const newX = e.target.x();
+            const newY = e.target.y();
+            stagePosRef.current = { x: newX, y: newY };
+            const fxWorld = document.getElementById('mistwalker-dom-effects-overlay-world');
+            if (fxWorld) {
+              fxWorld.style.transform = `translate3d(${newX}px, ${newY}px, 0) scale(${stageScaleRef.current})`;
+            }
+            setStagePos({ x: newX, y: newY });
           }
         }}
         onWheel={(e) => {
@@ -7682,12 +7717,35 @@ export default function PlayerView() {
 
           const newScale = e.evt.deltaY < 0 ? oldScale * scaleBy : oldScale / scaleBy;
           const clampedScale = Math.max(0.1, Math.min(newScale, 5));
-
-          setStageScale(clampedScale);
-          setStagePos({
+          const newPos = {
             x: pointer.x - mousePointTo.x * clampedScale,
             y: pointer.y - mousePointTo.y * clampedScale,
-          });
+          };
+
+          stagePosRef.current = newPos;
+          stageScaleRef.current = clampedScale;
+
+          stage.scale({ x: clampedScale, y: clampedScale });
+          stage.position(newPos);
+          stage.batchDraw();
+
+          const fxWorld = document.getElementById('mistwalker-dom-effects-overlay-world');
+          if (fxWorld) {
+            fxWorld.style.transform = `translate3d(${newPos.x}px, ${newPos.y}px, 0) scale(${clampedScale})`;
+          }
+
+          pendingWheelStateRef.current = { scale: clampedScale, pos: newPos };
+          if (!wheelRafIdRef.current) {
+            wheelRafIdRef.current = requestAnimationFrame(() => {
+              wheelRafIdRef.current = null;
+              if (pendingWheelStateRef.current) {
+                const { scale, pos } = pendingWheelStateRef.current;
+                pendingWheelStateRef.current = null;
+                setStageScale(scale);
+                setStagePos(pos);
+              }
+            });
+          }
         }}
       >
         {/* Layer 1: Background Map Image or Video */}
