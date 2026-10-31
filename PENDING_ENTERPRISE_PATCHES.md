@@ -246,6 +246,16 @@
   - Verify the mute button is immediately visible in the top-right corner.
   - Click "Muted" or press `M`, select "Dungeon Master" or "Adventurer", and verify no audio/voice plays and the screen transitions smoothly into the app.
 
+### [2026-10-31] Campaign Builder scene header reorganization + thumbnail fallback
+- **Commit**: `7d525a0`
+- **Files Changed**:
+  - `src/components/CampaignBuilderModal.tsx`
+- **Summary**:
+  - Scene header split into thumbnail + title/stat chips, primary actions (Load Live, DM1-3, Save) and a secondary tools row.
+  - Scene preview/thumbnail falls back to the saved thumbnail (then a placeholder) when the full map image fails to load.
+- **Impact / Testing Notes**:
+  - Verify header wraps cleanly in narrow modals; whole-file line endings changed in this commit.
+
 ---
 
 ### Template for Incoming Entries:
