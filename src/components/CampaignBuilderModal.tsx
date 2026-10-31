@@ -2519,96 +2519,125 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
             {selectedScene ? (
               <div className="space-y-6">
                 {/* Scene Header & Primary Actions */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-zinc-800">
-                  <div>
-                    <div className="flex items-center gap-2 text-xs font-mono text-zinc-500 mb-1">
-                      <span>{selectedCampaign?.campaignTitle}</span>
-                      <span>/</span>
-                      <span>{selectedChapter?.chapterTitle}</span>
-                    </div>
-                    {isEditingScene ? (
-                      <input
-                        type="text"
-                        value={editedTitle}
-                        onChange={(e) => setEditedTitle(e.target.value)}
-                        className="text-lg font-bold font-mono bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-1 text-white w-full max-w-md focus:outline-none focus:border-amber-500"
-                      />
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <h1 className="text-xl font-bold font-mono text-white tracking-tight">
-                          {selectedScene.sceneTitle}
-                        </h1>
-                        <button
-                          onClick={() => setIsEditingScene(true)}
-                          className="p-1 text-zinc-500 hover:text-zinc-200"
-                          title="Edit Title"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
+                <div className="flex flex-col gap-3 pb-4 border-b border-zinc-800">
+                  {/* Row 1: thumbnail + title/stats (left) and primary actions (right) */}
+                  <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+                    <div className="flex items-start gap-3.5 min-w-0 flex-1">
+                      {/* Scene thumbnail */}
+                      <div className="relative w-28 aspect-video shrink-0 rounded-xl overflow-hidden border border-zinc-700 bg-zinc-950 flex items-center justify-center">
+                        <ImageIcon className="w-5 h-5 text-zinc-700 absolute" />
+                        {(selectedScene.mapThumbnailUrl || currentMapUrl) && !isVideoAsset(selectedScene.mapThumbnailUrl || currentMapUrl || '') && (
+                          <img
+                            src={selectedScene.mapThumbnailUrl || currentMapUrl}
+                            alt={selectedScene.sceneTitle}
+                            className="relative w-full h-full object-cover"
+                            referrerPolicy="no-referrer"
+                            onError={(e) => {
+                              const img = e.currentTarget;
+                              const alt = currentMapUrl;
+                              if (alt && !img.dataset.triedAlt && img.getAttribute('src') !== alt) {
+                                img.dataset.triedAlt = '1';
+                                img.src = alt;
+                              } else {
+                                img.style.display = 'none';
+                              }
+                            }}
+                          />
+                        )}
                       </div>
-                    )}
-                    <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono text-zinc-400 mt-1">
-                      <span className="text-blue-300 font-medium">{editedSceneTokens.length} tokens</span>
-                      {selectedScene.walls && selectedScene.walls.length > 0 && (
-                        <>
-                          <span>•</span>
-                          <span className="text-emerald-400 font-medium">{selectedScene.walls.length} walls/doors</span>
-                        </>
-                      )}
-                      {selectedScene.roomAnnotations && selectedScene.roomAnnotations.length > 0 && (
-                        <>
-                          <span>•</span>
-                          <span className="text-amber-400 font-semibold flex items-center gap-1">
-                            <MapPin className="w-3 h-3 text-amber-400" />
-                            {selectedScene.roomAnnotations.length} polygon rooms
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-x-1.5 text-[11px] font-mono text-zinc-500 mb-0.5">
+                          <span className="truncate max-w-[220px]">{selectedCampaign?.campaignTitle}</span>
+                          <span>›</span>
+                          <span className="truncate max-w-[220px]">{selectedChapter?.chapterTitle}</span>
+                        </div>
+                        {isEditingScene ? (
+                          <input
+                            type="text"
+                            value={editedTitle}
+                            onChange={(e) => setEditedTitle(e.target.value)}
+                            className="text-lg font-bold font-mono bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-1 text-white w-full max-w-md focus:outline-none focus:border-amber-500"
+                          />
+                        ) : (
+                          <div className="flex items-center gap-2 min-w-0">
+                            <h1 className="text-xl font-bold font-mono text-white tracking-tight truncate" title={selectedScene.sceneTitle}>
+                              {selectedScene.sceneTitle}
+                            </h1>
+                            <button
+                              onClick={() => setIsEditingScene(true)}
+                              className="p-1 text-zinc-500 hover:text-zinc-200 shrink-0"
+                              title="Edit Title"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1.5 text-[11px] font-mono">
+                          <span className="px-2 py-0.5 rounded-md bg-blue-500/10 border border-blue-500/25 text-blue-300 font-medium">
+                            {editedSceneTokens.length} tokens
                           </span>
-                        </>
-                      )}
+                          {selectedScene.walls && selectedScene.walls.length > 0 && (
+                            <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 font-medium">
+                              {selectedScene.walls.length} walls/doors
+                            </span>
+                          )}
+                          {selectedScene.roomAnnotations && selectedScene.roomAnnotations.length > 0 && (
+                            <span className="px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/25 text-amber-400 font-semibold flex items-center gap-1">
+                              <MapPin className="w-3 h-3" />
+                              {selectedScene.roomAnnotations.length} rooms
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Primary actions */}
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
+                      <div className="flex items-center gap-1">
+                        <button
+                          id="btn-launch-scene-vtt"
+                          onClick={() => handleLaunchScene(selectedScene)}
+                          className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow-lg shadow-emerald-950/50 active:scale-95"
+                          title="Load this scene map and tokens onto the live VTT canvas and broadcast to all connected player views"
+                        >
+                          <Play className="w-3.5 h-3.5 fill-white" />
+                          Load Live
+                        </button>
+                        {(['DM1', 'DM2', 'DM3'] as const).map(dmSlot => (
+                          <button
+                            key={dmSlot}
+                            type="button"
+                            onClick={() => handleLaunchScene(selectedScene, dmSlot)}
+                            className="px-2.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 font-bold font-mono text-xs transition-all"
+                            title={`Load Scene into ${dmSlot} View`}
+                          >
+                            {dmSlot}
+                          </button>
+                        ))}
+                      </div>
+
+                      <button
+                        id="btn-save-scene-tokens"
+                        onClick={() => handleSaveSceneChanges(false)}
+                        disabled={isSaving}
+                        className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-zinc-950 font-bold text-xs flex items-center gap-1.5 transition-all shadow-lg shadow-amber-950/40 active:scale-95"
+                        title="Save battlemap, placed tokens, and DM notes to Firestore"
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                        Save ({editedSceneTokens.length})
+                      </button>
                     </div>
                   </div>
 
-                  {/* Top Action Buttons */}
-                  <div className="flex flex-wrap items-center gap-2 shrink-0">
-                    <div className="flex items-center gap-1">
-                      <button
-                        id="btn-launch-scene-vtt"
-                        onClick={() => handleLaunchScene(selectedScene)}
-                        className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow-lg shadow-emerald-950/50 active:scale-95"
-                        title="Load this scene map and tokens onto the live VTT canvas and broadcast to all connected player views"
-                      >
-                        <Play className="w-3.5 h-3.5 fill-white" />
-                        Load Live
-                      </button>
-                      {(['DM1', 'DM2', 'DM3'] as const).map(dmSlot => (
-                        <button
-                          key={dmSlot}
-                          type="button"
-                          onClick={() => handleLaunchScene(selectedScene, dmSlot)}
-                          className="px-2.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 font-bold font-mono text-xs transition-all"
-                          title={`Load Scene into ${dmSlot} View`}
-                        >
-                          {dmSlot}
-                        </button>
-                      ))}
-                    </div>
-
-                    <button
-                      id="btn-save-scene-tokens"
-                      onClick={() => handleSaveSceneChanges(false)}
-                      disabled={isSaving}
-                      className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-zinc-950 font-bold text-xs flex items-center gap-1.5 transition-all shadow-lg shadow-amber-950/40 active:scale-95"
-                      title="Save battlemap, placed tokens, and DM notes to Firestore"
-                    >
-                      <Save className="w-3.5 h-3.5" />
-                      Save Scene & Tokens ({editedSceneTokens.length})
-                    </button>
-
+                  {/* Row 2: secondary scene tools */}
+                  <div className="flex flex-wrap items-center gap-1.5">
                     {currentTokens.length > 0 && (
                       <button
                         id="btn-save-scene-canvas-changes"
                         onClick={() => handleSaveSceneChanges(true)}
                         disabled={isSaving}
-                        className="px-3 py-2 rounded-xl bg-blue-600/30 hover:bg-blue-600/50 border border-blue-500/40 disabled:opacity-50 text-blue-200 text-xs font-medium flex items-center gap-1.5 transition-all"
+                        className="px-2.5 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/40 border border-blue-500/40 disabled:opacity-50 text-blue-200 text-[11px] font-medium flex items-center gap-1.5 transition-all"
                         title="Import tokens currently placed on the live VTT canvas into this scene"
                       >
                         <ArrowRight className="w-3.5 h-3.5" />
@@ -2624,20 +2653,33 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
                         setNewSceneTitle('');
                         setShowAddSceneModal(true);
                       }}
-                      className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-xs font-medium flex items-center gap-1.5 transition-all active:scale-95"
+                      className="px-2.5 py-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-[11px] font-medium flex items-center gap-1.5 transition-all active:scale-95"
                       title={`Add another scene directly underneath "${selectedScene.sceneTitle}"`}
                     >
                       <Plus className="w-3.5 h-3.5 text-emerald-400" />
-                      Add Scene Underneath
+                      Add Scene
                     </button>
+
+                    <button
+                      id="btn-duplicate-scene-inspector"
+                      type="button"
+                      onClick={() => handleDuplicateScene(selectedScene, selectedChapter?.chapterId, selectedCampaign?.campaignId)}
+                      className="px-2.5 py-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-blue-300 border border-zinc-700 text-[11px] font-medium flex items-center gap-1.5 transition-all active:scale-95"
+                      title={`Duplicate "${selectedScene.sceneTitle}" with all battlemap, tokens, rooms, and walls intact`}
+                    >
+                      <Copy className="w-3.5 h-3.5 text-blue-400" />
+                      Duplicate
+                    </button>
+
+                    <div className="w-px h-5 bg-zinc-800 mx-0.5" />
 
                     <label
                       id="btn-import-scene-bundle"
-                      className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-amber-300 border border-amber-500/30 text-xs font-medium flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                      className="px-2.5 py-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-amber-300 border border-zinc-700 text-[11px] font-medium flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
                       title="Import a .json scene bundle into this chapter"
                     >
                       <Upload className="w-3.5 h-3.5 text-amber-400" />
-                      Import Bundle
+                      Import
                       <input
                         type="file"
                         accept=".json"
@@ -2650,33 +2692,22 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
                       id="btn-export-scene-bundle"
                       type="button"
                       onClick={() => handleExportScene(selectedScene)}
-                      className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-emerald-300 border border-emerald-500/30 text-xs font-medium flex items-center gap-1.5 transition-all active:scale-95"
+                      className="px-2.5 py-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-emerald-300 border border-zinc-700 text-[11px] font-medium flex items-center gap-1.5 transition-all active:scale-95"
                       title={`Export complete scene bundle for "${selectedScene.sceneTitle}" (map, walls, rooms, grid, fog)`}
                     >
                       <Download className="w-3.5 h-3.5 text-emerald-400" />
-                      Export Bundle
-                    </button>
-
-                    <button
-                      id="btn-duplicate-scene-inspector"
-                      type="button"
-                      onClick={() => handleDuplicateScene(selectedScene, selectedChapter?.chapterId, selectedCampaign?.campaignId)}
-                      className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-blue-300 border border-blue-500/30 text-xs font-medium flex items-center gap-1.5 transition-all active:scale-95"
-                      title={`Duplicate "${selectedScene.sceneTitle}" with all battlemap, tokens, rooms, and walls intact`}
-                    >
-                      <Copy className="w-3.5 h-3.5 text-blue-400" />
-                      Duplicate Scene
+                      Export
                     </button>
 
                     <button
                       id="btn-delete-scene-inspector"
                       type="button"
                       onClick={() => promptDeleteScene(selectedScene.sceneId, selectedScene.sceneTitle, selectedCampaign?.campaignId, selectedChapter?.chapterId)}
-                      className="px-3 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 hover:border-red-500/50 text-red-300 hover:text-red-200 text-xs font-bold font-mono flex items-center gap-1.5 transition-all shadow-sm active:scale-95"
+                      className="ml-auto px-2.5 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 hover:border-red-500/50 text-red-300 hover:text-red-200 text-[11px] font-bold font-mono flex items-center gap-1.5 transition-all active:scale-95"
                       title="Delete this scene from the chapter"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
-                      Delete Scene
+                      Delete
                     </button>
                   </div>
                 </div>
@@ -2752,11 +2783,22 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
                           </div>
                         ) : (
                           <div className="relative w-full h-full">
+                            <ImageIcon className="absolute inset-0 m-auto w-6 h-6 text-zinc-700" />
                             <img
                               src={editedMapUrl}
                               alt={selectedScene.sceneTitle}
-                              className="w-full h-full object-cover"
+                              className="relative w-full h-full object-cover"
                               referrerPolicy="no-referrer"
+                              onError={(e) => {
+                                const img = e.currentTarget;
+                                const thumb = selectedScene.mapThumbnailUrl;
+                                if (thumb && !img.dataset.triedThumb && img.getAttribute('src') !== thumb) {
+                                  img.dataset.triedThumb = '1';
+                                  img.src = thumb;
+                                } else {
+                                  img.style.display = 'none';
+                                }
+                              }}
                             />
                             <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center transition-opacity text-emerald-300 text-[11px] font-mono font-bold gap-1">
                               <CloudUpload className="w-5 h-5 text-emerald-400" />
