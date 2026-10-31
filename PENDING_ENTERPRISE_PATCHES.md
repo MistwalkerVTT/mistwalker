@@ -322,6 +322,28 @@
 
 ---
 
+### [2026-10-31] feat(auras): refine aura sizing, boundary circles, and accelerate animation playback
+- **Commit**: `9f1ce4f`
+- **Files Changed**:
+  - `src/effects/render/DomEffectOverlay.tsx`
+  - `src/types/aura.ts`
+  - `src/effects/db/tokenFxMap.ts`
+  - `src/effects/db/jb2aRegistry.ts`
+- **Summary**:
+  - Re-tuned opacities for subtle auras (Aura of Life: 0.35, Aura of Vitality: 0.35, Aura of Protection: 0.35, Aura of Courage: 0.35, Crusader's Mantle: 0.45, Twilight Sanctuary: 0.45).
+  - Increased barrier opacity for Antilife Shell (0.8) and Armor of Agathys (0.8).
+  - Reworked Crusader's Mantle mapping to high-definition JackKerouac Lathander Symbol sunburst.
+  - Added clean circular boundary outlines (`border: 2px solid`, subtle glowing box-shadow) enclosing circular auras and matching spell theme colors.
+  - Corrected aura sizing formulas in `DomEffectOverlay` so 30ft auras accurately adhere to `tokenRadius + (30 / 5) * gridSize`.
+  - Accelerated animation playback rate to `1.35x` (`applySnappyPlayback`) and optimized CSS drop-shadow filters from heavy 16px/12px to lightweight 4px.
+- **Impact / Testing Notes**:
+  - Cast or equip Aura of Life, Aura of Vitality, Twilight Sanctuary, Crusader's Mantle, and Antilife Shell.
+  - Verify crisp circular perimeter outline in theme color with animation neatly contained inside.
+  - Verify Aura of Life and Vitality are subtle and non-blinding.
+  - Verify snappy animation playback speed with zero lag.
+
+---
+
 ### Template for Incoming Entries:
 ```markdown
 ### [YYYY-MM-DD] <Title / Commit Short Summary>
