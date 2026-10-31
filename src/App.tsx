@@ -1125,7 +1125,10 @@ export default function App() {
     return () => unsub();
   }, []);
   const [mapType, setMapType] = useState<'image' | 'video'>('image');
-  const [image, imageStatus] = useImage(mapType === 'image' ? (imageFile || '') : '');
+  const [imgWithCors, statusWithCors] = useImage(mapType === 'image' ? (imageFile || '') : '', 'anonymous');
+  const [imgNoCors, statusNoCors] = useImage(statusWithCors === 'failed' && mapType === 'image' ? (imageFile || '') : '');
+  const image = statusWithCors === 'loaded' ? imgWithCors : (statusNoCors === 'loaded' ? imgNoCors : (imgWithCors || imgNoCors));
+  const imageStatus = statusWithCors === 'loaded' ? 'loaded' : (statusNoCors === 'loaded' ? 'loaded' : (statusWithCors === 'failed' && statusNoCors === 'failed' ? 'failed' : 'loading'));
   const broadcastState = useCallback((_force?: boolean) => {
     if (socketRef.current?.connected && imageFile && (activeMapIdRef.current === liveMapIdRef.current)) {
       socketRef.current.emit('SYNC_IMAGE', imageFile);
@@ -2118,11 +2121,18 @@ export default function App() {
       }
       if (activeSceneInfo?.sceneId === DEMO_GV_SCENE.sceneId || activeSceneInfo?.sceneTitle?.toLowerCase().includes('main level')) {
         const fallbackUrl = '/uploads/file-1792161909096-684999544.jpg';
-        if (imageFile !== fallbackUrl) {
+        if (imageFile !== fallbackUrl)
+        {
           console.log('[VTT] Auto-recovering Guildhouse Main Level map with static file:', fallbackUrl);
           setImageFile(fallbackUrl);
           return;
         }
+      }
+      // General thumbnail fallback if full-res asset fails to load
+      if (activeSceneInfo?.mapThumbnailUrl && imageFile !== activeSceneInfo.mapThumbnailUrl) {
+        console.log('[VTT] Falling back to scene thumbnail data URL for map:', activeSceneInfo.sceneTitle);
+        setImageFile(activeSceneInfo.mapThumbnailUrl);
+        return;
       }
       toast.error('Failed to load map image asset. Please re-link or upload the file.', {
         id: 'map-load-error'
@@ -2439,7 +2449,10 @@ export default function App() {
 
   const stageRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+  const [dimensions, setDimensions] = useState({
+    width: typeof window !== 'undefined' ? window.innerWidth : 1920,
+    height: typeof window !== 'undefined' ? window.innerHeight : 1080,
+  });
 
   const getMapDimensions = useCallback(() => {
     let baseWidth = mapType === 'image' ? (image ? image.width : dimensions.width) : (videoSize.width || dimensions.width);
@@ -2520,7 +2533,7 @@ export default function App() {
   // Auto-fit whenever a new map or scene loads in DM view
   const lastFittedAssetRef = useRef<string | null>(null);
   useEffect(() => {
-    const currentAssetKey = activeSceneInfo?.sceneId || imageFile || (image ? `${image.src}_${image.width}x${image.height}` : null);
+    const currentAssetKey = (image ? `${image.src}_${image.width}x${image.height}` : null) || (videoSize.width > 0 ? `${imageFile}_${videoSize.width}x${videoSize.height}` : null);
     if (currentAssetKey && currentAssetKey !== lastFittedAssetRef.current && (image || videoSize.width > 0)) {
       lastFittedAssetRef.current = currentAssetKey;
       fitWholeMapToScreen(image?.width || videoSize.width, image?.height || videoSize.height);
@@ -3759,24 +3772,22 @@ export default function App() {
     setRoomAnnotations([]);
     setCurrentZonePolygonPoints([]);
 
-    // 1. Update Map with robust resolver (full-resolution ONLY)
+    // 1. Update Map with robust resolver (full-resolution asset with seamless thumbnail fallback)
     let fullResUrl = '';
-    if (scene.mapUrl) {
+    const targetSlot = (targetView || activeMapIdRef.current) as 'DM1' | 'DM2' | 'DM3';
+    if (scene.mapUrl || scene.mapThumbnailUrl || scene.sceneTitle) {
       try {
         const resolvedMapUrl = await resolveMapSource(scene, uploadedMaps);
-        // Ensure we ONLY use full-resolution asset, never a low-resolution thumbnail fallback
-        fullResUrl = (resolvedMapUrl && resolvedMapUrl !== scene.mapThumbnailUrl)
-          ? resolvedMapUrl
-          : scene.mapUrl;
+        fullResUrl = resolvedMapUrl || scene.mapUrl || scene.mapThumbnailUrl || '';
 
-        // Extra safeguard: if fullResUrl is thumbnail or local reference, search uploadedMaps for full resolution asset
-        if (!fullResUrl || fullResUrl === scene.mapThumbnailUrl || fullResUrl.startsWith('local:')) {
+        // Extra safeguard: if fullResUrl is empty or local reference, search uploadedMaps for full resolution asset
+        if (!fullResUrl || fullResUrl.startsWith('local:')) {
           const matched = uploadedMaps.find(a => 
             (a.assetId && (a.assetId === scene.sceneId || (scene.mapUrl && scene.mapUrl.includes(a.assetId)))) ||
             (a.url && scene.mapUrl && a.url === scene.mapUrl) ||
             (a.name && scene.sceneTitle && a.name.toLowerCase().trim() === scene.sceneTitle.toLowerCase().trim())
           );
-          if (matched && matched.url && matched.url !== scene.mapThumbnailUrl && !matched.url.startsWith('local:')) {
+          if (matched && matched.url && !matched.url.startsWith('local:')) {
             fullResUrl = matched.url;
           }
         }
@@ -3796,21 +3807,23 @@ export default function App() {
               });
             }
           }
+        } else {
+          console.warn('[CampaignBuilder] Could not resolve map URL for scene:', scene.sceneTitle);
         }
       } catch (err) {
         console.warn('[CampaignBuilder] Error resolving scene map URL:', err);
-        if (scene.mapUrl) {
-          fullResUrl = scene.mapUrl;
-          const isVideo = isVideoAsset(scene.mapUrl);
+        fullResUrl = scene.mapUrl || scene.mapThumbnailUrl || '';
+        if (fullResUrl) {
+          const isVideo = isVideoAsset(fullResUrl);
           setMapType(isVideo ? 'video' : 'image');
-          setImageFile(scene.mapUrl);
+          setImageFile(fullResUrl);
         } else {
           toast.error('Failed to load scene map image.');
         }
       }
     } else {
-      console.warn('[CampaignBuilder] Scene is missing mapUrl, skipping image load');
-      toast.error('Scene does not have a full-resolution map image asset.');
+      console.warn('[CampaignBuilder] Scene is missing mapUrl and thumbnail, skipping image load');
+      toast.error('Scene does not have a map image asset.');
     }
 
     // 2. Load Tokens
@@ -3898,8 +3911,8 @@ export default function App() {
     if (annotationSource && Array.isArray(annotationSource) && annotationSource.length > 0) {
       const mapped = normalizeRoomAnnotations(annotationSource, scene.sceneId, campaignId);
       setRoomAnnotations(mapped);
-      if (mapsDataRef.current[activeMapId]) {
-        mapsDataRef.current[activeMapId].roomAnnotations = mapped;
+      if (mapsDataRef.current[targetSlot]) {
+        mapsDataRef.current[targetSlot].roomAnnotations = mapped;
       }
     } else if (campaignId !== '__arena__') {
       // Fallback if scene.roomAnnotations is empty or missing (e.g. legacy scenes stored in mapZones)
@@ -3908,16 +3921,16 @@ export default function App() {
           if (zones && zones.length > 0) {
             const mapped = normalizeRoomAnnotations(zones, scene.sceneId, campaignId);
             setRoomAnnotations(mapped);
-            if (mapsDataRef.current[activeMapId]) {
-              mapsDataRef.current[activeMapId].roomAnnotations = mapped;
-            }
+            if (mapsDataRef.current[targetSlot]) {
+        mapsDataRef.current[targetSlot].roomAnnotations = mapped;
+      }
             // Auto-persist back onto the scene document so future loads find them directly on the scene
             saveSceneToCampaign(campaignId, chapterId, { ...scene, roomAnnotations: mapped }).catch(console.warn);
           } else {
             setRoomAnnotations([]);
-            if (mapsDataRef.current[activeMapId]) {
-              mapsDataRef.current[activeMapId].roomAnnotations = [];
-            }
+            if (mapsDataRef.current[targetSlot]) {
+        mapsDataRef.current[targetSlot].roomAnnotations = [];
+      }
           }
         })
         .catch(() => {
@@ -3925,8 +3938,8 @@ export default function App() {
         });
     } else {
       setRoomAnnotations([]);
-      if (mapsDataRef.current[activeMapId]) {
-        mapsDataRef.current[activeMapId].roomAnnotations = [];
+      if (mapsDataRef.current[targetSlot]) {
+        mapsDataRef.current[targetSlot].roomAnnotations = [];
       }
     }
     setSelectedRoomAnnotation(null);
@@ -3946,10 +3959,10 @@ export default function App() {
     setBoardAnimatedEnabled(loadedFeaturesEnabled);
     setBoardWeatherEffect(loadedWeather);
 
-    if (mapsDataRef.current[activeMapId]) {
-      mapsDataRef.current[activeMapId].boardAnimatedFeatures = loadedFeatures;
-      mapsDataRef.current[activeMapId].boardAnimatedEnabled = loadedFeaturesEnabled;
-      mapsDataRef.current[activeMapId].boardWeatherEffect = loadedWeather;
+    if (mapsDataRef.current[targetSlot]) {
+      mapsDataRef.current[targetSlot].boardAnimatedFeatures = loadedFeatures;
+      mapsDataRef.current[targetSlot].boardAnimatedEnabled = loadedFeaturesEnabled;
+      mapsDataRef.current[targetSlot].boardWeatherEffect = loadedWeather;
     }
 
     // 6. Update tracking & notes with authoritative full-res URL
@@ -3968,15 +3981,24 @@ export default function App() {
     // Automatically fit the entire map inside the DM view
     fitWholeMapToScreen(scene.mapWidth, scene.mapHeight);
 
+    // Pre-calculate fit scale and pos so switching slots immediately renders properly
+    const vpWidth = Math.max(200, (dimensions.width || containerRef.current?.offsetWidth || window.innerWidth) - 64);
+    const vpHeight = Math.max(200, dimensions.height || containerRef.current?.offsetHeight || window.innerHeight);
+    const isRot = loadedRotation % 180 !== 0;
+    const rawW = scene.mapWidth ? (isRot ? scene.mapHeight || 1080 : scene.mapWidth) : 1920;
+    const rawH = scene.mapHeight ? (isRot ? scene.mapWidth || 1920 : scene.mapHeight) : 1080;
+    const fitScale = Math.min(Math.max(100, vpWidth - 96) / rawW, Math.max(100, vpHeight - 96) / rawH, 1.0);
+    const posX = (vpWidth - rawW * fitScale) / 2;
+    const posY = (vpHeight - rawH * fitScale) / 2;
+
     // Cache complete scene state in mapsDataRef for this slot
-    const targetSlot = (targetView || activeMapIdRef.current) as 'DM1' | 'DM2' | 'DM3';
     mapsDataRef.current[targetSlot] = {
       imageFile: authoritativeMapUrl,
       mapType: (isVideoAsset(authoritativeMapUrl) || isVideoAsset(scene.mapUrl)) ? 'video' : 'image',
       videoSize: { width: scene.mapWidth || 0, height: scene.mapHeight || 0 },
       mapRotation: loadedRotation,
-      stageScale: 1,
-      stagePos: { x: 0, y: 0 },
+      stageScale: fitScale,
+      stagePos: { x: posX, y: posY },
       reveals: loadedReveals,
       polygonReveals: loadedPolygonReveals,
       isFogVisible: scene.isFogVisible ?? true,
@@ -8469,8 +8491,8 @@ export default function App() {
               onChange={handleRelinkMapImage}
             />
             <Stage
-              width={dimensions.width - 64} // Subtract sidebar width (64px)
-              height={dimensions.height}
+              width={Math.max(100, (dimensions.width || (typeof window !== 'undefined' ? window.innerWidth : 1920)) - 64)}
+              height={Math.max(100, dimensions.height || (typeof window !== 'undefined' ? window.innerHeight : 1080))}
               ref={stageRef}
               scaleX={stageScale}
               scaleY={stageScale}

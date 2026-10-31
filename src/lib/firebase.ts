@@ -1156,7 +1156,7 @@ export async function createCampaignWithScene(
 /**
  * Test whether an image or video URL can actually be decoded and loaded
  */
-export function testMediaAccessible(url: string, timeoutMs = 6000): Promise<boolean> {
+export function testMediaAccessible(url: string, timeoutMs = 1500): Promise<boolean> {
   return new Promise((resolve) => {
     if (!url) return resolve(false);
     if (url.startsWith('data:')) return resolve(true);
@@ -1347,8 +1347,8 @@ export async function resolveMapSource(
   }
 
   // 1. FIRST: Check if scene.mapUrl is already an accessible server or HTTP URL (works across all computers!)
-  if (scene.mapUrl && (scene.mapUrl.startsWith('/') || scene.mapUrl.startsWith('http')) && !scene.mapUrl.startsWith('blob:') && scene.mapUrl !== scene.mapThumbnailUrl) {
-    const isAccessible = await testMediaAccessible(scene.mapUrl);
+  if (scene.mapUrl && (scene.mapUrl.startsWith('/') || scene.mapUrl.startsWith('http')) && !scene.mapUrl.startsWith('blob:')) {
+    const isAccessible = await testMediaAccessible(scene.mapUrl, 1200);
     if (isAccessible) {
       return scene.mapUrl;
     }
@@ -1367,7 +1367,7 @@ export async function resolveMapSource(
       ))
     );
     if (matched && matched.url && (matched.url.startsWith('/') || matched.url.startsWith('http')) && !matched.url.startsWith('blob:')) {
-      const isAccessible = await testMediaAccessible(matched.url);
+      const isAccessible = await testMediaAccessible(matched.url, 1200);
       if (isAccessible) {
         return matched.url;
       }
@@ -1441,12 +1441,12 @@ export async function resolveMapSource(
   }
 
   // 5. If HTTP/server URL or data URL
-  if (scene.mapUrl && (scene.mapUrl.startsWith('/') || scene.mapUrl.startsWith('http') || scene.mapUrl.startsWith('data:')) && !scene.mapUrl.startsWith('blob:') && scene.mapUrl !== scene.mapThumbnailUrl) {
+  if (scene.mapUrl && (scene.mapUrl.startsWith('/') || scene.mapUrl.startsWith('http') || scene.mapUrl.startsWith('data:')) && !scene.mapUrl.startsWith('blob:')) {
     return scene.mapUrl;
   }
 
   // 6. If blob URL is active in the current window, auto-upload it to server so remote Player Views can load it
-  if (scene.mapUrl && scene.mapUrl.startsWith('blob:') && scene.mapUrl !== scene.mapThumbnailUrl) {
+  if (scene.mapUrl && scene.mapUrl.startsWith('blob:')) {
     const isBlobActive = await testMediaAccessible(scene.mapUrl);
     if (isBlobActive) {
       return await uploadBlobUrlToServer(scene.mapUrl, scene.sceneTitle || scene.sceneId);
