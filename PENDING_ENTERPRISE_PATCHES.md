@@ -258,6 +258,26 @@
 
 ---
 
+---
+
+### [2026-10-31] fix(scenes): resolve scene map loading failures with resilient dual useImage, fast asset resolver, and thumbnail fallback
+- **Commit**: `9d74acc`
+- **Files Changed**:
+  - `src/App.tsx`
+  - `src/lib/firebase.ts`
+- **Summary**:
+  - Replaced the blocking 6000ms probe in `testMediaAccessible` with a fast 1500ms probe, preventing UI freezes when loading scenes.
+  - Removed restrictive `scene.mapUrl !== scene.mapThumbnailUrl` checks across `resolveMapSource` and `handleLoadSceneFromCampaign` that rejected maps when `mapUrl` matched or was backed by `mapThumbnailUrl`.
+  - Implemented dual-strategy `useImage` in DM View (`App.tsx`) with anonymous CORS probe and no-CORS fallback matching `PlayerView.tsx`, preventing cross-origin failures from blanking the canvas.
+  - Added automatic fallback to `activeSceneInfo.mapThumbnailUrl` in the image load failure handler so battlemaps never display as empty blank surfaces.
+  - Enabled scene loading even when `scene.mapUrl` is empty by falling back to `resolveMapSource` / `mapThumbnailUrl` rather than aborting with an error toast.
+  - Synchronized slot mutations (`roomAnnotations`, `boardAnimatedFeatures`, and pre-calculated `fitScale`/`fitPos`) on `targetSlot` (`DM1`/`DM2`/`DM3`) instead of the asynchronous `activeMapId`.
+  - Corrected `lastFittedAssetRef` auto-fitting to track actual loaded image/video asset dimensions rather than pre-firing on stale images.
+  - Initialized viewport `dimensions` safely with window dimensions to prevent negative Stage widths.
+- **Impact / Testing Notes**:
+  - Load scenes across `DashboardHomeHub` ("Resume Primary Scene"), `LoadCampaignModal` ("Load Live" and slot buttons), and `CampaignBuilderModal` ("Launch Scene to VTT").
+  - Verify full-resolution local static uploads (`/uploads/...`), external HTTP images, and thumbnail fallbacks all render smoothly without blank screens or false error toasts.
+
 ### Template for Incoming Entries:
 ```markdown
 ### [YYYY-MM-DD] <Title / Commit Short Summary>
