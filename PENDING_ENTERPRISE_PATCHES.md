@@ -364,6 +364,27 @@
 
 ---
 
+### [2026-10-31] perf(bundle): lazy-load modals and arena mode, split vendor chunks, and defer 3D dice WebGL initialization to idle time
+- **Commit**: `5493b6e`
+- **Files Changed**:
+  - `vite.config.ts`
+  - `src/main.tsx`
+  - `src/components/DiceTableOverlay.tsx`
+  - `src/components/AlliesCompendiumModal.tsx`
+  - `src/App.tsx`
+  - `src/components/PlayerView.tsx`
+- **Summary**:
+  - Converted 15 heavy modals and standalone subsystems (`CampaignBuilderModal`, `PlayerArenaMode`, `MonsterCompendiumModal`, `CharacterCompendiumModal`, `AlliesCompendiumModal`, `DdbSyncModal`, `MapGenerator`, `DndChatbotModal`, `SettingsModal`, `SaveToCampaignModal`, `LoadCampaignModal`, `BugReportModal`, `BugReportManagerModal`, `CriticalHitsReferenceModal`, `WildShapeModal`, `PlayerStationModal`, `PlayerCharacterSelectModal`, `PlayerDdbPrivacyModal`) to `React.lazy` chunks and conditionally rendered them only when open (`isOpen`), eliminating background hook execution and duplicate Firestore/image loads while closed.
+  - Reduced `App.js` bundle size by 41.5% (1,445 kB -> 846 kB) and the shared core chunk by 41% (2,569 kB -> 1,517 kB), and isolated `vendor-three-dice` and `vendor-arena-ai` in `vite.config.ts`.
+  - Deferred `ThreeDiceEngine` WebGL shadow-map, polyhedral Cannon.js hull, and 2048x2048 texture atlas generation to `requestIdleCallback` (with immediate on-demand initialization if a roll fires early), and guarded `setTheme` with value comparison so atlases aren't regenerated unnecessarily.
+  - Wrapped the revealed app view in its own inner `<Suspense>` in `src/main.tsx` and scheduled bundle warmup via `requestIdleCallback` so `IntroScreen` never unmounts or stutters on frame 0.
+- **Impact / Testing Notes**:
+  - Verify fast initial page load and smooth `IntroScreen` launch.
+  - Open Campaign Manager, Battle Arena, Monster/Character/Allies Compendiums, D&D Beyond Sync, and Settings modals to confirm instant lazy mounting.
+  - Roll 3D dice and verify smooth physics roll and theme colors.
+
+---
+
 ### Template for Incoming Entries:
 ```markdown
 ### [YYYY-MM-DD] <Title / Commit Short Summary>
