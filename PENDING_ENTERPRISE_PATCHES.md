@@ -385,6 +385,23 @@
 
 ---
 
+### [2026-10-31] fix(diagnostics): resolve strict TypeScript errors and latent ReferenceErrors in Arena scene import & custom save
+- **Commit**: `0304572`
+- **Files Changed**:
+  - `src/components/ArenaManagerPanel.tsx`
+  - `src/components/PlayerArenaMode.tsx`
+  - `src/components/DiceTableOverlay.tsx`
+  - `src/main.tsx`
+- **Summary**:
+  - Fixed a latent runtime `ReferenceError: gridSize is not defined` in `ArenaManagerPanel.tsx` when importing a campaign scene into the Arena (`handleImportSceneIntoArena`) by accepting `sceneGridSize?: number` and passing `scene.gridSize`.
+  - Fixed a latent runtime `ReferenceError: goldHeroes is not defined` and missing required `avatarUrl` property on `SceneToken` in `PlayerArenaMode.tsx` (`handleSaveCustomArena`) when saving a custom Arena configuration from the lobby before match start.
+  - Fixed TypeScript `TS18048` (`'window' is possibly 'undefined'`) narrowing in `requestIdleCallback` fallback branches in `DiceTableOverlay.tsx` and `main.tsx`, bringing `npm run lint` (`tsc --noEmit`) to 0 errors across the entire project.
+- **Impact / Testing Notes**:
+  - Run `npm run lint` (`tsc --noEmit`) and verify 0 errors.
+  - Import a campaign scene into the Arena in `ArenaManagerPanel` and save a custom Arena setup from the lobby in `PlayerArenaMode`.
+
+---
+
 ### Template for Incoming Entries:
 ```markdown
 ### [YYYY-MM-DD] <Title / Commit Short Summary>
