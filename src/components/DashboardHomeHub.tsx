@@ -206,38 +206,38 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
   };
 
   return (
-    <div className="absolute inset-y-0 right-0 left-16 xl:inset-0 z-10 flex flex-col items-center p-3 sm:p-6 md:p-8 pointer-events-auto overflow-y-auto overflow-x-hidden">
+    <div className="flex-1 h-full min-w-0 z-10 flex flex-col items-center p-2.5 sm:p-6 md:p-8 pointer-events-auto overflow-y-auto overflow-x-hidden relative">
       {/* Subtle background ambient overlay */}
-      <div className="w-full max-w-6xl flex flex-col items-center my-auto animate-in fade-in zoom-in-95 duration-300">
+      <div className="w-full max-w-6xl flex flex-col items-stretch sm:items-center my-0 sm:my-auto animate-in fade-in zoom-in-95 duration-300 min-w-0">
         
         {/* TOP BRAND HEADER */}
-        <div className="flex flex-col items-center text-center mb-6 relative">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-12 h-12 rounded-2xl bg-zinc-900/90 border border-amber-500/40 flex items-center justify-center shadow-lg shadow-amber-500/10">
+        <div className="flex flex-col items-center text-center mb-4 sm:mb-6 relative w-full px-1">
+          <div className="flex items-center gap-2.5 sm:gap-3 mb-2">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-zinc-900/90 border border-amber-500/40 flex items-center justify-center shadow-lg shadow-amber-500/10 shrink-0">
               <img
                 src="https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/blob-c3567a0.png/:/rs=w:1440,h:1440"
                 alt="MistWalker"
-                className="w-8 h-8 object-contain filter drop-shadow-[0_0_10px_rgba(245,158,11,0.5)]"
+                className="w-7 h-7 sm:w-8 sm:h-8 object-contain filter drop-shadow-[0_0_10px_rgba(245,158,11,0.5)]"
                 referrerPolicy="no-referrer"
               />
             </div>
-            <div className="text-left">
-              <div className="flex items-center gap-2">
-                <h1 className="text-2xl sm:text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-amber-500 font-mono tracking-tight leading-none">
+            <div className="text-left min-w-0">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <h1 className="text-xl sm:text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-amber-500 font-mono tracking-tight leading-none truncate">
                   MistWalker VTT
                 </h1>
-                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-mono font-bold uppercase tracking-wider border border-amber-500/30">
+                <span className="px-1.5 sm:px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[9px] sm:text-[10px] font-mono font-bold uppercase tracking-wider border border-amber-500/30 shrink-0">
                   v4.0
                 </span>
               </div>
-              <p className="text-xs text-zinc-400 font-sans mt-0.5">
+              <p className="text-[11px] sm:text-xs text-zinc-400 font-sans mt-0.5 truncate">
                 Tactical Battlemap Command Deck • Fog of War • Dynamic FOV & Lighting
               </p>
             </div>
           </div>
 
           {/* D&D Beyond Sync Status Pill */}
-          <div className="flex items-center gap-2 mt-1">
+          <div className="flex flex-wrap items-center justify-center gap-2 mt-1">
             <button
               onClick={onOpenDdbSync}
               className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-700/80 hover:border-amber-500/40 text-zinc-300 hover:text-amber-300 text-[11px] font-mono transition-all cursor-pointer shadow-sm"
@@ -299,19 +299,19 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
         )}
 
         {/* 3-COLUMN TACTICAL DASHBOARD */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 w-full items-stretch">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5 w-full items-stretch min-w-0">
           
           {/* COLUMN 1: RESUME ADVENTURE */}
-          <div className="bg-zinc-950/80 backdrop-blur-xl border border-zinc-800/90 hover:border-amber-500/40 rounded-3xl p-5 shadow-2xl flex flex-col justify-between relative overflow-hidden group transition-all">
+          <div className="bg-zinc-950/80 backdrop-blur-xl border border-zinc-800/90 hover:border-amber-500/40 rounded-3xl p-3.5 sm:p-5 shadow-2xl flex flex-col justify-between relative overflow-hidden group transition-all min-w-0">
             <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-emerald-500/40 via-emerald-400 to-transparent" />
             
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center justify-between gap-1 mb-3">
+                <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5 shrink-0">
                   <Play className="w-3.5 h-3.5" />
                   Resume Adventure
                 </span>
-                <span className="text-[10px] font-mono text-emerald-400/80 bg-emerald-950/50 px-2 py-0.5 rounded-full border border-emerald-500/30 flex items-center gap-1">
+                <span className="text-[10px] font-mono text-emerald-400/80 bg-emerald-950/50 px-2 py-0.5 rounded-full border border-emerald-500/30 flex items-center gap-1 shrink-0">
                   <Clock className="w-2.5 h-2.5" />
                   {resolvedResumeData.sourceLabel}
                 </span>
@@ -332,7 +332,7 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
                   </div>
                 )}
                 <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/20 to-transparent" />
-                <div className="absolute bottom-2.5 left-3 right-3 text-left">
+                <div className="absolute bottom-2.5 left-2.5 right-2.5 sm:left-3 sm:right-3 text-left min-w-0">
                   <h3 className="text-sm font-bold text-amber-200 truncate font-mono drop-shadow">
                     {displaySceneTitle}
                   </h3>
@@ -343,26 +343,26 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
               </div>
 
               {/* Scene Stats Pills */}
-              <div className="flex items-center gap-2 mb-4 text-[11px] font-mono text-zinc-400">
-                <span className="px-2.5 py-1 rounded-lg bg-zinc-900/90 border border-zinc-800 text-zinc-300">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-4 text-[11px] font-mono text-zinc-400">
+                <span className="px-2 sm:px-2.5 py-1 rounded-lg bg-zinc-900/90 border border-zinc-800 text-zinc-300 shrink-0">
                   Tokens: <strong className="text-emerald-400">{tokenCount}</strong>
                 </span>
-                <span className="px-2.5 py-1 rounded-lg bg-zinc-900/90 border border-zinc-800 text-zinc-300">
+                <span className="px-2 sm:px-2.5 py-1 rounded-lg bg-zinc-900/90 border border-zinc-800 text-zinc-300 shrink-0">
                   Walls: <strong className="text-amber-400">{wallCount}</strong>
                 </span>
               </div>
             </div>
 
-            <div className="space-y-2 pt-2 border-t border-zinc-850/80">
+            <div className="space-y-2 pt-2 border-t border-zinc-850/80 min-w-0">
               {hasActiveMapSession && onResumeActiveMap && (
                 <button
                   type="button"
                   id="btn-return-to-active-map"
                   onClick={onResumeActiveMap}
-                  className="w-full py-2.5 px-4 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white font-bold rounded-xl transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-amber-950/60 font-mono text-xs flex items-center justify-center gap-2 cursor-pointer border border-amber-300/40"
+                  className="w-full py-2.5 px-3 sm:px-4 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white font-bold rounded-xl transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-amber-950/60 font-mono text-xs flex items-center justify-center gap-2 cursor-pointer border border-amber-300/40 truncate"
                 >
-                  <Play className="w-4 h-4 fill-white text-white" />
-                  <span>Resume Open Map ({activeMapSlotName || 'Slot'})</span>
+                  <Play className="w-4 h-4 fill-white text-white shrink-0" />
+                  <span className="truncate">Resume Open Map ({activeMapSlotName || 'Slot'})</span>
                 </button>
               )}
 
@@ -370,9 +370,9 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
                 type="button"
                 id="btn-resume-adventure-primary"
                 onClick={handleResumePrimaryScene}
-                className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-emerald-950/60 font-mono text-xs flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full py-3 px-3 sm:px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-emerald-950/60 font-mono text-xs flex items-center justify-center gap-2 cursor-pointer truncate"
               >
-                <Play className="w-4 h-4 fill-white text-white" />
+                <Play className="w-4 h-4 fill-white text-white shrink-0" />
                 <span>Continue Session</span>
               </button>
 
@@ -380,25 +380,25 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
                 type="button"
                 id="btn-load-another-campaign"
                 onClick={onOpenLoadModal}
-                className="w-full py-2.5 px-4 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-white font-medium rounded-xl transition-all font-mono text-xs flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full py-2.5 px-3 sm:px-4 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-white font-medium rounded-xl transition-all font-mono text-xs flex items-center justify-center gap-2 cursor-pointer truncate"
               >
-                <FolderOpen className="w-3.5 h-3.5 text-zinc-400" />
+                <FolderOpen className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
                 <span>Select Another Scene...</span>
               </button>
             </div>
           </div>
 
           {/* COLUMN 2: DEPLOY BATTLEMAP */}
-          <div className="bg-zinc-950/80 backdrop-blur-xl border border-zinc-800/90 hover:border-amber-500/40 rounded-3xl p-5 shadow-2xl flex flex-col justify-between relative overflow-hidden group transition-all">
+          <div className="bg-zinc-950/80 backdrop-blur-xl border border-zinc-800/90 hover:border-amber-500/40 rounded-3xl p-3.5 sm:p-5 shadow-2xl flex flex-col justify-between relative overflow-hidden group transition-all min-w-0">
             <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-amber-500/40 via-amber-400 to-transparent" />
             
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center justify-between gap-1 mb-3">
+                <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5 shrink-0">
                   <Upload className="w-3.5 h-3.5" />
                   Deploy Battlemap
                 </span>
-                <span className="text-[10px] font-mono text-zinc-500">
+                <span className="text-[10px] font-mono text-zinc-500 shrink-0">
                   Image, Video or UVTT
                 </span>
               </div>
@@ -410,13 +410,13 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
                   setIsDragOverDropzone(true);
                 }}
                 onDragLeave={() => setIsDragOverDropzone(false)}
-                className={`w-full h-44 rounded-2xl border-2 border-dashed transition-all flex flex-col items-center justify-center p-4 cursor-pointer relative overflow-hidden ${
+                className={`w-full h-44 rounded-2xl border-2 border-dashed transition-all flex flex-col items-center justify-center p-3 sm:p-4 cursor-pointer relative overflow-hidden ${
                   isDragOverDropzone
                     ? 'border-amber-400 bg-amber-500/10 shadow-lg shadow-amber-500/20'
                     : 'border-zinc-800 hover:border-amber-500/50 bg-zinc-900/60 hover:bg-zinc-900/90'
                 }`}
               >
-                <div className="w-12 h-12 rounded-2xl bg-zinc-850 border border-zinc-750 flex items-center justify-center text-amber-400 mb-2.5 shadow-md group-hover:scale-105 transition-transform">
+                <div className="w-12 h-12 rounded-2xl bg-zinc-850 border border-zinc-750 flex items-center justify-center text-amber-400 mb-2.5 shadow-md group-hover:scale-105 transition-transform shrink-0">
                   <Upload className="w-6 h-6" />
                 </div>
                 <span className="text-xs font-mono font-bold text-zinc-200 text-center mb-0.5">
@@ -435,10 +435,10 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
             </div>
 
             {/* Quick Upload Buttons */}
-            <div className="grid grid-cols-2 gap-2 mt-4 pt-2 border-t border-zinc-850/80">
-              <label className="py-2.5 px-3 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold rounded-xl transition-all font-mono text-[11px] flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-amber-500/20 active:scale-95 text-center">
-                <Upload className="w-3.5 h-3.5" />
-                <span>Upload Map</span>
+            <div className="grid grid-cols-2 gap-2 mt-4 pt-2 border-t border-zinc-850/80 min-w-0">
+              <label className="py-2.5 px-2 sm:px-3 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold rounded-xl transition-all font-mono text-[10.5px] sm:text-[11px] flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer shadow-md shadow-amber-500/20 active:scale-95 text-center min-w-0 truncate">
+                <Upload className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">Upload Map</span>
                 <input
                   type="file"
                   className="hidden"
@@ -447,9 +447,9 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
                 />
               </label>
 
-              <label className="py-2.5 px-3 bg-purple-600/90 hover:bg-purple-500 text-white font-bold rounded-xl transition-all font-mono text-[11px] flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-purple-950/50 active:scale-95 text-center">
-                <Sparkles className="w-3.5 h-3.5 text-purple-200" />
-                <span>Import UVTT</span>
+              <label className="py-2.5 px-2 sm:px-3 bg-purple-600/90 hover:bg-purple-500 text-white font-bold rounded-xl transition-all font-mono text-[10.5px] sm:text-[11px] flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer shadow-md shadow-purple-950/50 active:scale-95 text-center min-w-0 truncate">
+                <Sparkles className="w-3.5 h-3.5 text-purple-200 shrink-0" />
+                <span className="truncate">Import UVTT</span>
                 <input
                   type="file"
                   className="hidden"
@@ -461,37 +461,37 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
           </div>
 
           {/* COLUMN 3: COMPENDIUM & VAULT */}
-          <div className="bg-zinc-950/80 backdrop-blur-xl border border-zinc-800/90 hover:border-amber-500/40 rounded-3xl p-5 shadow-2xl flex flex-col justify-between relative overflow-hidden group transition-all">
+          <div className="bg-zinc-950/80 backdrop-blur-xl border border-zinc-800/90 hover:border-amber-500/40 rounded-3xl p-3.5 sm:p-5 shadow-2xl flex flex-col justify-between relative overflow-hidden group transition-all min-w-0">
             <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-blue-500/40 via-blue-400 to-transparent" />
             
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-blue-400 flex items-center gap-1.5">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center justify-between gap-1 mb-3">
+                <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-blue-400 flex items-center gap-1.5 shrink-0">
                   <Shield className="w-3.5 h-3.5" />
                   Compendium & Vault
                 </span>
-                <span className="text-[10px] font-mono text-zinc-500">
+                <span className="text-[10px] font-mono text-zinc-500 shrink-0">
                   D&D 5e Database
                 </span>
               </div>
 
               {/* 4 Interactive Quick Launch Tiles */}
-              <div className="grid grid-cols-2 gap-2.5 mb-2">
+              <div className="grid grid-cols-2 gap-2 sm:gap-2.5 mb-2 min-w-0">
                 {/* Monster Compendium */}
                 <button
                   type="button"
                   id="btn-home-monster-compendium"
                   onClick={onOpenMonsterCompendium}
-                  className="p-3 rounded-2xl bg-zinc-900/90 hover:bg-zinc-850 border border-zinc-800 hover:border-rose-500/50 transition-all text-left group/btn flex flex-col justify-between h-24 cursor-pointer"
+                  className="p-2 sm:p-3 rounded-2xl bg-zinc-900/90 hover:bg-zinc-850 border border-zinc-800 hover:border-rose-500/50 transition-all text-left group/btn flex flex-col justify-between h-20 sm:h-24 cursor-pointer min-w-0"
                 >
-                  <div className="p-1.5 rounded-lg bg-rose-500/20 text-rose-400 w-fit border border-rose-500/30">
-                    <Shield className="w-4 h-4" />
+                  <div className="p-1 sm:p-1.5 rounded-lg bg-rose-500/20 text-rose-400 w-fit border border-rose-500/30 shrink-0">
+                    <Shield className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   </div>
-                  <div>
-                    <span className="block text-xs font-mono font-bold text-zinc-200 group-hover/btn:text-rose-300">
+                  <div className="min-w-0 w-full">
+                    <span className="block text-xs font-mono font-bold text-zinc-200 group-hover/btn:text-rose-300 truncate">
                       Bestiary
                     </span>
-                    <span className="block text-[10px] text-zinc-500 font-sans">
+                    <span className="block text-[9.5px] sm:text-[10px] text-zinc-500 font-sans truncate">
                       Monsters & Statblocks
                     </span>
                   </div>
@@ -502,16 +502,16 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
                   type="button"
                   id="btn-home-hero-compendium"
                   onClick={onOpenCharacterCompendium}
-                  className="p-3 rounded-2xl bg-zinc-900/90 hover:bg-zinc-850 border border-zinc-800 hover:border-blue-500/50 transition-all text-left group/btn flex flex-col justify-between h-24 cursor-pointer"
+                  className="p-2 sm:p-3 rounded-2xl bg-zinc-900/90 hover:bg-zinc-850 border border-zinc-800 hover:border-blue-500/50 transition-all text-left group/btn flex flex-col justify-between h-20 sm:h-24 cursor-pointer min-w-0"
                 >
-                  <div className="p-1.5 rounded-lg bg-blue-500/20 text-blue-400 w-fit border border-blue-500/30">
-                    <Users className="w-4 h-4" />
+                  <div className="p-1 sm:p-1.5 rounded-lg bg-blue-500/20 text-blue-400 w-fit border border-blue-500/30 shrink-0">
+                    <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   </div>
-                  <div>
-                    <span className="block text-xs font-mono font-bold text-zinc-200 group-hover/btn:text-blue-300">
+                  <div className="min-w-0 w-full">
+                    <span className="block text-xs font-mono font-bold text-zinc-200 group-hover/btn:text-blue-300 truncate">
                       Heroes & Allies
                     </span>
-                    <span className="block text-[10px] text-zinc-500 font-sans">
+                    <span className="block text-[9.5px] sm:text-[10px] text-zinc-500 font-sans truncate">
                       Party & NPC Sheets
                     </span>
                   </div>
@@ -522,16 +522,16 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
                   type="button"
                   id="btn-home-campaign-builder"
                   onClick={onOpenCampaignManager}
-                  className="p-3 rounded-2xl bg-zinc-900/90 hover:bg-zinc-850 border border-zinc-800 hover:border-amber-500/50 transition-all text-left group/btn flex flex-col justify-between h-24 cursor-pointer"
+                  className="p-2 sm:p-3 rounded-2xl bg-zinc-900/90 hover:bg-zinc-850 border border-zinc-800 hover:border-amber-500/50 transition-all text-left group/btn flex flex-col justify-between h-20 sm:h-24 cursor-pointer min-w-0"
                 >
-                  <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400 w-fit border border-amber-500/30">
-                    <Sliders className="w-4 h-4" />
+                  <div className="p-1 sm:p-1.5 rounded-lg bg-amber-500/20 text-amber-400 w-fit border border-amber-500/30 shrink-0">
+                    <Sliders className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   </div>
-                  <div>
-                    <span className="block text-xs font-mono font-bold text-zinc-200 group-hover/btn:text-amber-300">
+                  <div className="min-w-0 w-full">
+                    <span className="block text-xs font-mono font-bold text-zinc-200 group-hover/btn:text-amber-300 truncate">
                       Campaigns
                     </span>
-                    <span className="block text-[10px] text-zinc-500 font-sans">
+                    <span className="block text-[9.5px] sm:text-[10px] text-zinc-500 font-sans truncate">
                       Story & Scenes
                     </span>
                   </div>
@@ -542,16 +542,16 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
                   type="button"
                   id="btn-home-ddb-sync"
                   onClick={onOpenDdbSync}
-                  className="p-3 rounded-2xl bg-zinc-900/90 hover:bg-zinc-850 border border-zinc-800 hover:border-emerald-500/50 transition-all text-left group/btn flex flex-col justify-between h-24 cursor-pointer"
+                  className="p-2 sm:p-3 rounded-2xl bg-zinc-900/90 hover:bg-zinc-850 border border-zinc-800 hover:border-emerald-500/50 transition-all text-left group/btn flex flex-col justify-between h-20 sm:h-24 cursor-pointer min-w-0"
                 >
-                  <div className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 w-fit border border-emerald-500/30">
-                    <Radio className="w-4 h-4" />
+                  <div className="p-1 sm:p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 w-fit border border-emerald-500/30 shrink-0">
+                    <Radio className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   </div>
-                  <div>
-                    <span className="block text-xs font-mono font-bold text-zinc-200 group-hover/btn:text-emerald-300">
+                  <div className="min-w-0 w-full">
+                    <span className="block text-xs font-mono font-bold text-zinc-200 group-hover/btn:text-emerald-300 truncate">
                       D&D Beyond
                     </span>
-                    <span className="block text-[10px] text-zinc-500 font-sans">
+                    <span className="block text-[9.5px] sm:text-[10px] text-zinc-500 font-sans truncate">
                       Live Sync & Dice
                     </span>
                   </div>
@@ -564,22 +564,22 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
                   type="button"
                   id="btn-home-handouts-journal"
                   onClick={onOpenHandoutsJournal}
-                  className="w-full mt-1 p-3 rounded-2xl bg-gradient-to-r from-amber-950/60 via-zinc-900/90 to-amber-950/40 hover:from-amber-900/50 hover:to-amber-900/30 border border-amber-500/40 hover:border-amber-400 transition-all text-left group/handout flex items-center justify-between cursor-pointer shadow-lg shadow-amber-950/20"
+                  className="w-full mt-1 p-2.5 sm:p-3 rounded-2xl bg-gradient-to-r from-amber-950/60 via-zinc-900/90 to-amber-950/40 hover:from-amber-900/50 hover:to-amber-900/30 border border-amber-500/40 hover:border-amber-400 transition-all text-left group/handout flex items-center justify-between cursor-pointer shadow-lg shadow-amber-950/20 min-w-0"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/40 group-hover/handout:scale-105 transition-transform">
+                  <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                    <div className="p-1.5 sm:p-2 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/40 group-hover/handout:scale-105 transition-transform shrink-0">
                       <Scroll className="w-4 h-4" />
                     </div>
-                    <div>
-                      <span className="block text-xs font-mono font-bold text-amber-200 group-hover/handout:text-amber-100">
+                    <div className="min-w-0">
+                      <span className="block text-xs font-mono font-bold text-amber-200 group-hover/handout:text-amber-100 truncate">
                         Handouts, Props & Shared Journal
                       </span>
-                      <span className="block text-[10px] text-zinc-400 font-sans">
+                      <span className="block text-[9.5px] sm:text-[10px] text-zinc-400 font-sans truncate">
                         Share letters, maps, riddles, quests & party notes
                       </span>
                     </div>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-amber-400 group-hover/handout:translate-x-0.5 transition-transform" />
+                  <ChevronRight className="w-4 h-4 text-amber-400 group-hover/handout:translate-x-0.5 transition-transform shrink-0" />
                 </button>
               )}
 
@@ -589,22 +589,22 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
                   type="button"
                   id="btn-home-audio-mixer"
                   onClick={onOpenAudioMixer}
-                  className="w-full mt-2 p-3 rounded-2xl bg-gradient-to-r from-emerald-950/60 via-zinc-900/90 to-emerald-950/40 hover:from-emerald-900/50 hover:to-emerald-900/30 border border-emerald-500/40 hover:border-emerald-400 transition-all text-left group/audio flex items-center justify-between cursor-pointer shadow-lg shadow-emerald-950/20"
+                  className="w-full mt-2 p-2.5 sm:p-3 rounded-2xl bg-gradient-to-r from-emerald-950/60 via-zinc-900/90 to-emerald-950/40 hover:from-emerald-900/50 hover:to-emerald-900/30 border border-emerald-500/40 hover:border-emerald-400 transition-all text-left group/audio flex items-center justify-between cursor-pointer shadow-lg shadow-emerald-950/20 min-w-0"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 group-hover/audio:scale-105 transition-transform">
+                  <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                    <div className="p-1.5 sm:p-2 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 group-hover/audio:scale-105 transition-transform shrink-0">
                       <Music className="w-4 h-4" />
                     </div>
-                    <div>
-                      <span className="block text-xs font-mono font-bold text-emerald-200 group-hover/audio:text-emerald-100">
+                    <div className="min-w-0">
+                      <span className="block text-xs font-mono font-bold text-emerald-200 group-hover/audio:text-emerald-100 truncate">
                         Soundboard & Ambient Audio Mixer
                       </span>
-                      <span className="block text-[10px] text-zinc-400 font-sans">
+                      <span className="block text-[9.5px] sm:text-[10px] text-zinc-400 font-sans truncate">
                         Layered loops, 1-click SFX pads & spatial map audio
                       </span>
                     </div>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-emerald-400 group-hover/audio:translate-x-0.5 transition-transform" />
+                  <ChevronRight className="w-4 h-4 text-emerald-400 group-hover/audio:translate-x-0.5 transition-transform shrink-0" />
                 </button>
               )}
 
@@ -614,22 +614,22 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
                   type="button"
                   id="btn-home-arena-manager"
                   onClick={onOpenArenaManager}
-                  className="w-full mt-2 p-3 rounded-2xl bg-gradient-to-r from-amber-950/60 via-zinc-900/90 to-orange-950/40 hover:from-amber-900/50 hover:to-orange-900/30 border border-amber-500/40 hover:border-amber-400 transition-all text-left group/arena flex items-center justify-between cursor-pointer shadow-lg shadow-amber-950/20"
+                  className="w-full mt-2 p-2.5 sm:p-3 rounded-2xl bg-gradient-to-r from-amber-950/60 via-zinc-900/90 to-orange-950/40 hover:from-amber-900/50 hover:to-orange-900/30 border border-amber-500/40 hover:border-amber-400 transition-all text-left group/arena flex items-center justify-between cursor-pointer shadow-lg shadow-amber-950/20 min-w-0"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/40 group-hover/arena:scale-105 transition-transform">
+                  <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                    <div className="p-1.5 sm:p-2 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/40 group-hover/arena:scale-105 transition-transform shrink-0">
                       <Swords className="w-4 h-4" />
                     </div>
-                    <div>
-                      <span className="block text-xs font-mono font-bold text-amber-200 group-hover/arena:text-amber-100">
+                    <div className="min-w-0">
+                      <span className="block text-xs font-mono font-bold text-amber-200 group-hover/arena:text-amber-100 truncate">
                         Battle Arena Manager
                       </span>
-                      <span className="block text-[10px] text-zinc-400 font-sans">
+                      <span className="block text-[9.5px] sm:text-[10px] text-zinc-400 font-sans truncate">
                         Customize Arena maps, draw walls, change monsters & tweak rules
                       </span>
                     </div>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-amber-400 group-hover/arena:translate-x-0.5 transition-transform" />
+                  <ChevronRight className="w-4 h-4 text-amber-400 group-hover/arena:translate-x-0.5 transition-transform shrink-0" />
                 </button>
               )}
             </div>

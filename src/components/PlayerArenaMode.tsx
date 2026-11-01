@@ -217,6 +217,7 @@ interface PlayerArenaModeProps {
   socketRef: React.MutableRefObject<any>;
   hasLiveDmMap?: boolean;
   onTrigger3dDice?: (rollEvent: any) => void;
+  initialCampaignId?: string;
 }
 
 const DEFAULT_ARENA_GRID_SIZE = 60;
@@ -1344,7 +1345,8 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
   claimedCharacterName,
   socketRef,
   hasLiveDmMap,
-  onTrigger3dDice
+  onTrigger3dDice,
+  initialCampaignId
 }) => {
   // DM Battle Arena Configuration (Real-time synced via Firestore / Socket.IO / LocalStorage)
   const [arenaConfig, setArenaConfig] = useState<ArenaConfig>(() => loadArenaConfig());
@@ -1416,8 +1418,15 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
     return groupCharactersByCampaign(heroPool);
   }, [heroPool]);
 
-  const [goldCampaignFilter, setGoldCampaignFilter] = useState<string>('ALL');
-  const [crimsonCampaignFilter, setCrimsonCampaignFilter] = useState<string>('ALL');
+  const [goldCampaignFilter, setGoldCampaignFilter] = useState<string>(() => initialCampaignId || 'ALL');
+  const [crimsonCampaignFilter, setCrimsonCampaignFilter] = useState<string>(() => initialCampaignId || 'ALL');
+
+  useEffect(() => {
+    if (initialCampaignId) {
+      setGoldCampaignFilter(initialCampaignId);
+      setCrimsonCampaignFilter(initialCampaignId);
+    }
+  }, [initialCampaignId]);
 
   const monsterPool = useMemo<Monster[]>(() => {
     const disabledSet = new Set(arenaConfig.disabledMonsterIds || []);

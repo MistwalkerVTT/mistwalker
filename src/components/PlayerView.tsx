@@ -154,6 +154,7 @@ const PlayerCharacterSelectModal = React.lazy(() => import('./PlayerCharacterSel
 const PlayerDdbPrivacyModal = React.lazy(() => import('./PlayerDdbPrivacyModal').then(m => ({ default: m.PlayerDdbPrivacyModal })));
 const WildShapeModal = React.lazy(() => import('./WildShapeModal').then(m => ({ default: m.WildShapeModal })));
 const PlayerArenaMode = React.lazy(() => import('./PlayerArenaMode').then(m => ({ default: m.PlayerArenaMode })));
+const PlayerCampaignSelectModal = React.lazy(() => import('./PlayerCampaignSelectModal').then(m => ({ default: m.PlayerCampaignSelectModal })));
 
 const STATIC_MOUSE_POS = { x: 0, y: 0 };
 const noopSelectWall = () => {};
@@ -1868,6 +1869,22 @@ export default function PlayerView() {
     return !sessionStorage.getItem('mistwalker_player_station_mode');
   });
 
+  // Player Campaign Selection & Quick Refresh State
+  const [showCampaignSelectModal, setShowCampaignSelectModal] = useState<boolean>(false);
+  const [pendingCampaignTargetMode, setPendingCampaignTargetMode] = useState<'remote_player' | 'tv_table' | 'arena'>('remote_player');
+  const [activeCampaignId, setActiveCampaignId] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('mistwalker_player_campaign_id') || '6738033';
+    }
+    return '6738033';
+  });
+  const [activeCampaignTitle, setActiveCampaignTitle] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('mistwalker_player_campaign_title') || 'Keys from the Golden Vault';
+    }
+    return 'Keys from the Golden Vault';
+  });
+
   // D&D Beyond Tactical Character HUD State
   const [hudCharacterData, setHudCharacterData] = useState<HudCharacterData | null>(null);
   const [activeTargetingAction, setActiveTargetingAction] = useState<HudActionItem | null>(null);
@@ -1921,10 +1938,10 @@ export default function PlayerView() {
 
   // If remote player mode is active and no character is claimed yet, prompt character selection
   useEffect(() => {
-    if (stationMode === 'remote_player' && !claimedTokenId && !showStationModal) {
+    if (stationMode === 'remote_player' && !claimedTokenId && !showStationModal && !showCampaignSelectModal) {
       setShowCharacterSelectModal(true);
     }
-  }, [stationMode, claimedTokenId, showStationModal]);
+  }, [stationMode, claimedTokenId, showStationModal, showCampaignSelectModal]);
 
   // Automatically reconcile claimedTokenId when tokens change (e.g. across scene transitions where token IDs differ)
   useEffect(() => {
@@ -4701,6 +4718,63 @@ export default function PlayerView() {
     setShowCharacterSelectModal(false);
   }, [tokens]);
 
+  const handleConfirmCampaignSelection = useCallback((selected: {
+    campaignId: string;
+    campaignTitle: string;
+    characters: Character[];
+    selectedCharacter?: Character;
+  }) => {
+    setActiveCampaignId(selected.campaignId);
+    setActiveCampaignTitle(selected.campaignTitle);
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('mistwalker_player_campaign_id', selected.campaignId);
+      sessionStorage.setItem('mistwalker_player_campaign_title', selected.campaignTitle);
+    }
+
+    if (selected.characters && selected.characters.length > 0) {
+      setCompendiumCharacters(selected.characters);
+    }
+
+    setShowCampaignSelectModal(false);
+
+    if (pendingCampaignTargetMode === 'remote_player') {
+      setStationMode('remote_player');
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('mistwalker_player_station_mode', 'remote_player');
+      }
+      if (selected.selectedCharacter) {
+        handleSelectCharacterChoice({
+          id: selected.selectedCharacter.id,
+          name: selected.selectedCharacter.name,
+          race: selected.selectedCharacter.race || 'Hero',
+          classLevel: selected.selectedCharacter.classLevel || 'Level 1',
+          avatarUrl: selected.selectedCharacter.avatarUrl || '',
+          currentHp: selected.selectedCharacter.hp || 25,
+          maxHp: selected.selectedCharacter.maxHp || 25,
+          ac: selected.selectedCharacter.ac || 14,
+          speed: String(selected.selectedCharacter.speed || '30 ft.'),
+          ddbCharacterId: (selected.selectedCharacter as any).ddbCharacterId ? String((selected.selectedCharacter as any).ddbCharacterId) : undefined,
+          ddbCampaignId: selected.campaignId,
+          ddbCampaignTitle: selected.campaignTitle,
+          playerName: selected.selectedCharacter.playerName || 'Player',
+          isOnMap: false,
+          isClaimed: true
+        });
+      } else {
+        setShowCharacterSelectModal(true);
+      }
+    } else if (pendingCampaignTargetMode === 'arena') {
+      setShowArenaMode(true);
+      toast.success(`Battle Arena ready with ${selected.campaignTitle} heroes!`);
+    } else if (pendingCampaignTargetMode === 'tv_table') {
+      setStationMode('tv_table');
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('mistwalker_player_station_mode', 'tv_table');
+      }
+      toast.success(`Digital TV Table active with ${selected.campaignTitle} party.`);
+    }
+  }, [pendingCampaignTargetMode, handleSelectCharacterChoice]);
+
   const handleSelectHudAction = useCallback((action: HudActionItem) => {
     if (activeTargetingAction?.id === action.id) {
       const prevSlot = activeTargetingAction.castAtLevel ?? activeTargetingAction.level ?? 0;
@@ -7025,31 +7099,59 @@ export default function PlayerView() {
                       {activeSceneInfo.sceneTitle}
                     </span>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowStationModal(true);
-                      if (isMobile) setIsMobileSidebarOpen(false);
-                    }}
-                    className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-700/80 hover:border-amber-500/50 text-[9px] font-mono text-zinc-300 hover:text-amber-300 transition-colors cursor-pointer w-fit"
-                    title="Switch Station Mode (Digital TV Table / Remote Player)"
-                  >
-                    <Tv className="w-2.5 h-2.5 text-amber-400" />
-                    <span>{stationMode === 'tv_table' ? 'TV Table' : 'Remote Player'}</span>
-                  </button>
+                  <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowStationModal(true);
+                        if (isMobile) setIsMobileSidebarOpen(false);
+                      }}
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-700/80 hover:border-amber-500/50 text-[9px] font-mono text-zinc-300 hover:text-amber-300 transition-colors cursor-pointer w-fit"
+                      title="Switch Station Mode (Digital TV Table / Remote Player)"
+                    >
+                      <Tv className="w-2.5 h-2.5 text-amber-400" />
+                      <span>{stationMode === 'tv_table' ? 'TV Table' : 'Remote Player'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPendingCampaignTargetMode(stationMode || 'remote_player');
+                        setShowCampaignSelectModal(true);
+                        if (isMobile) setIsMobileSidebarOpen(false);
+                      }}
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-700/80 hover:border-amber-500/50 text-[9px] font-mono text-amber-300 hover:text-amber-200 transition-colors cursor-pointer w-fit"
+                      title="Switch or re-sync active campaign"
+                    >
+                      <Folder className="w-2.5 h-2.5 text-amber-400" />
+                      <span className="truncate max-w-[85px]">{activeCampaignTitle}</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             ) : (
               <div className="flex flex-col items-center gap-1 mx-auto" title={isConnected ? `Live Session: ${activeSceneInfo?.sceneTitle || 'Online'}` : 'Connecting...'}>
                 <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-emerald-500 animate-pulse ring-2 ring-emerald-500/20' : 'bg-amber-500'}`} />
-                <button
-                  type="button"
-                  onClick={() => setShowStationModal(true)}
-                  className="mt-1 p-1 rounded bg-zinc-900 border border-zinc-700/80 hover:border-amber-500/50 text-zinc-400 hover:text-amber-400 transition-colors cursor-pointer"
-                  title={`Station Mode: ${stationMode === 'tv_table' ? 'Digital TV Table' : 'Remote Player'}`}
-                >
-                  <Tv className="w-3 h-3 text-amber-400" />
-                </button>
+                <div className="flex flex-col items-center gap-1 mt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowStationModal(true)}
+                    className="p-1 rounded bg-zinc-900 border border-zinc-700/80 hover:border-amber-500/50 text-zinc-400 hover:text-amber-400 transition-colors cursor-pointer"
+                    title={`Station Mode: ${stationMode === 'tv_table' ? 'Digital TV Table' : 'Remote Player'}`}
+                  >
+                    <Tv className="w-3 h-3 text-amber-400" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPendingCampaignTargetMode(stationMode || 'remote_player');
+                      setShowCampaignSelectModal(true);
+                    }}
+                    className="p-1 rounded bg-zinc-900 border border-zinc-700/80 hover:border-amber-500/50 text-amber-400 hover:text-amber-300 transition-colors cursor-pointer"
+                    title={`Campaign: ${activeCampaignTitle}`}
+                  >
+                    <Folder className="w-3 h-3 text-amber-400" />
+                  </button>
+                </div>
               </div>
             )}
 
@@ -9344,12 +9446,37 @@ export default function PlayerView() {
         <React.Suspense fallback={null}>
           <PlayerStationModal
             isOpen={showStationModal}
-            onSelectStation={handleSelectStationMode}
+            onSelectStation={(mode) => {
+              setShowStationModal(false);
+              setPendingCampaignTargetMode(mode);
+              setShowCampaignSelectModal(true);
+            }}
             onEnterArena={() => {
               setShowStationModal(false);
-              setShowArenaMode(true);
+              setPendingCampaignTargetMode('arena');
+              setShowCampaignSelectModal(true);
             }}
             characterName={claimedToken?.name}
+          />
+        </React.Suspense>
+      )}
+
+      {/* ========================================================= */}
+      {/* Player Campaign Select Modal (Choose Campaign & Refresh)   */}
+      {/* ========================================================= */}
+      {showCampaignSelectModal && (
+        <React.Suspense fallback={null}>
+          <PlayerCampaignSelectModal
+            isOpen={showCampaignSelectModal}
+            targetMode={pendingCampaignTargetMode}
+            onClose={() => setShowCampaignSelectModal(false)}
+            onBackToModes={() => {
+              setShowCampaignSelectModal(false);
+              setShowStationModal(true);
+            }}
+            currentCampaignId={activeCampaignId}
+            compendiumCharacters={compendiumCharacters}
+            onConfirmCampaign={handleConfirmCampaignSelection}
           />
         </React.Suspense>
       )}
@@ -9365,6 +9492,7 @@ export default function PlayerView() {
             tokens={tokens}
             compendiumCharacters={compendiumCharacters}
             claimedTokenId={claimedTokenId}
+            initialCampaignId={activeCampaignId}
             onSelectCharacter={handleSelectCharacterChoice}
             onReleaseCharacter={handleReleaseToken}
             onPromptPrivacy={(details) => {
@@ -9504,6 +9632,7 @@ export default function PlayerView() {
             claimedCharacterName={claimedToken?.name}
             socketRef={socketRef}
             hasLiveDmMap={Boolean(imageFile || image)}
+            initialCampaignId={activeCampaignId}
             onTrigger3dDice={(rollEvent) => {
               if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
                 (window as any).__mistwalkerRoll3d({

@@ -53,6 +53,7 @@ export interface PlayerCharacterSelectModalProps {
   tokens: any[];
   compendiumCharacters: Character[];
   claimedTokenId: string | null;
+  initialCampaignId?: string;
   onSelectCharacter: (choice: PlayerCharacterChoiceItem) => void;
   onReleaseCharacter?: () => void;
   onPromptPrivacy: (details: {
@@ -69,15 +70,22 @@ export const PlayerCharacterSelectModal: React.FC<PlayerCharacterSelectModalProp
   tokens = [],
   compendiumCharacters = [],
   claimedTokenId,
+  initialCampaignId,
   onSelectCharacter,
   onReleaseCharacter,
   onPromptPrivacy
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCampaignFilter, setSelectedCampaignFilter] = useState<string>('ALL');
+  const [selectedCampaignFilter, setSelectedCampaignFilter] = useState<string>(() => initialCampaignId || 'ALL');
   const [expandedCampaigns, setExpandedCampaigns] = useState<Record<string, boolean>>({});
   const [checkingCharId, setCheckingCharId] = useState<string | null>(null);
   const [privacyByDdbId, setPrivacyByDdbId] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (initialCampaignId) {
+      setSelectedCampaignFilter(initialCampaignId);
+    }
+  }, [initialCampaignId]);
 
   // Build the list of selectable player characters, filtering out all monsters and deduplicating via isDdbMatch
   const characterChoices = useMemo<PlayerCharacterChoiceItem[]>(() => {

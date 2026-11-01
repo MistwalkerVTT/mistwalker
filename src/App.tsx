@@ -6217,12 +6217,23 @@ export default function App() {
     }
     soundCatalog.play('magic_shatter');
     if (target?.assetKey === 'spiritual_weapon' && target.attachedTokenId) {
-      handleDeleteToken(target.attachedTokenId);
+      setTokens(prev => {
+        const next = prev.filter(t => t.id !== target.attachedTokenId);
+        tokensRef.current = next;
+        const curSlot = activeMapIdRef.current;
+        if (mapsDataRef.current[curSlot]) {
+          mapsDataRef.current[curSlot].tokens = next;
+        }
+        if (socketRef.current?.connected && (curSlot === liveMapIdRef.current)) {
+          socketRef.current.emit('SYNC_TOKENS', next);
+        }
+        return next;
+      });
     }
     toast.success(`Dispelled ${target?.name || 'spell animation'}!`, {
       description: 'The visual effect has been removed without clearing other spells.'
     });
-  }, [effects, handleDeleteToken]);
+  }, [effects]);
 
   const handleClearTokenAura = useCallback((tokenId: string, auraName?: string) => {
     const targetTok = tokensRef.current.find(t => t.id === tokenId);
