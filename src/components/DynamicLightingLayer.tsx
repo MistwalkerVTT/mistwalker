@@ -675,7 +675,7 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
   );
 
   const wallsInteractiveLayer = (
-    <Layer id="walls-interactive-layer" listening={campaignMode === 'creator' && tool !== 'pan'}>
+    <Layer id="walls-interactive-layer" listening={campaignMode === 'creator'}>
       {walls.map((wall) => {
         const isSelected = wall.id === selectedWallId && campaignMode === 'creator';
         const isDoor = wall.wallType === 'door';

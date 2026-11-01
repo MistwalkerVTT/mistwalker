@@ -1392,7 +1392,7 @@ export default function App() {
   const [selectedToken, setSelectedToken] = useState<any>(null);
   const [brushSize, setBrushSize] = useState(50);
   const [isFogVisible, setIsFogVisible] = useState<boolean>(true);
-  const [tool, setToolState] = useState<string>('select');
+  const [tool, setToolState] = useState<string>('pan');
 
   // MistWalker 4.0 Effects Engine State
   const [effects, setEffects] = useState<VttEffectInstance[]>([]);
@@ -4800,7 +4800,7 @@ export default function App() {
     setAimOrigin(null);
     setAimCurrent(null);
     setActiveEquippedAsset(null);
-    setTool('select');
+    setTool('pan');
   }, [activeEquippedAsset, activeDmMonsterAction, selectedTokenIds, tokens, executeMonsterRoll]);
 
   const handleEquipAsset = useCallback((asset: Jb2aAssetDefinition) => {
@@ -4834,7 +4834,7 @@ export default function App() {
       setActiveEquippedAsset(null);
       setAimOrigin(null);
       setAimCurrent(null);
-      setTool('select');
+      setTool('pan');
       return;
     }
 
@@ -5560,7 +5560,7 @@ export default function App() {
     setActiveEquippedAsset(null);
     setAimOrigin(null);
     setAimCurrent(null);
-    setTool('select');
+    setTool('pan');
   }, [activeDmMonsterAction, activeEquippedAsset, selectedTokenIds, tokens, gridSize, activeMapId]);
 
   const handleDmTargetSelf = useCallback(() => {
@@ -7174,8 +7174,7 @@ export default function App() {
     }
 
     // Left-click hold map ping (Hold left-click for ~0.38s without dragging to ping; Alt+Hold pulls players' camera)
-    // Only arm ping when using the select tool so dragging with pan never triggers unintended ping state updates
-    if (e.evt?.button === 0 && !isTokenClick && !hoveredZoneId && !isRoomDrawerOpen && tool === 'select') {
+    if (e.evt?.button === 0 && !isTokenClick && !hoveredZoneId && !isRoomDrawerOpen && (tool === 'select' || tool === 'pan')) {
       startHoldPing(
         point.x,
         point.y,
@@ -7191,7 +7190,7 @@ export default function App() {
         setActiveEquippedAsset(null);
         setAimOrigin(null);
         setAimCurrent(null);
-        setTool('select');
+        setTool('pan');
         toast.info('Spell aiming cancelled');
         return;
       }
@@ -7467,7 +7466,7 @@ export default function App() {
   };
 
   const handleMouseMove = (e: any) => {
-    if (tool === 'pan' || isSpacePressed || isShiftPanActive) return;
+    if (isSpacePressed || isShiftPanActive) return;
     const stage = e.target.getStage();
     if (stage?.isDragging?.()) return;
     if ((!image && !videoElement) && tool !== 'draw' && tool !== 'erase') return;
@@ -10331,8 +10330,8 @@ export default function App() {
                 )}
               </Layer>
 
-              {/* Tokens Layer (hit testing skipped while in pan tool to maximize drag FPS) */}
-              <Layer listening={tool !== 'pan'}>
+              {/* Tokens Layer */}
+              <Layer>
                 {tokens.map((token) => (
                   <TokenImage
                     key={token.id}
@@ -10964,7 +10963,7 @@ export default function App() {
                     setActiveEquippedAsset(null);
                     setAimOrigin(null);
                     setAimCurrent(null);
-                    setTool('select');
+                    setTool('pan');
                   }}
                   className="px-2.5 py-1 rounded-lg bg-rose-950/80 border border-rose-500/50 hover:bg-rose-900 text-rose-200 hover:text-white transition-colors cursor-pointer text-[11px] font-bold flex items-center gap-1 shrink-0"
                 >
@@ -11012,7 +11011,7 @@ export default function App() {
                         setActiveEquippedAsset(null);
                         setAimOrigin(null);
                         setAimCurrent(null);
-                        setTool('select');
+                        setTool('pan');
                       }}
                       onDeselectToken={() => {
                         setSelectedTokenIds([]);
