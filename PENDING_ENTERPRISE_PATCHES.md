@@ -14,6 +14,29 @@
 
 ## Pending Changes Queue for Future Enterprise Patch
 
+### [2026-11-01] feat(dm): expand DM monster HUD with tactical targeting, aiming banner, interactive rolls and traits
+- **Commit**: `ff8309d`
+- **Files Changed**:
+  - `src/App.tsx`
+  - `src/components/DmMonsterDock.tsx`
+  - `src/services/monsterHudService.ts`
+- **Summary**:
+  - Expanded DM mode monster dock (`DmMonsterDock`) to parity with the player hero HUD:
+    - Added pinned Aiming Banner while an action is active with action name, [Hit +X], [DC Save], [Dmg formula], Range, [Target Self], and [Cancel Aiming].
+    - Prevented unwanted auto-collapse when aiming so all dock controls, vital bars, and stats remain fully accessible.
+    - Added Action Category glyphs (Swords, Zap, Sparkles, Shield, Crown) and separate buttons on action cards: [Hit], [Dmg], [Aim], [Roll], and [DC Save].
+    - Fixed damage button behavior to roll damage directly rather than re-triggering aim mode.
+    - Added rule & spell inspection support on action cards and traits via right-click context menu and `(i)` info icon (`DndRuleInspectionModal`).
+    - Made Traits & Defenses interactive: added rollable healing/damage buttons for traits (e.g. Regeneration, Stench), recharge toggles/rolls, and clickable senses/resistances/immunities.
+    - Implemented full tactical token targeting in DM mode: clicking any token on the battlemap (`TokenImage`) while aiming an attack or action strikes that creature directly.
+    - Integrated combat resolution for targeted tokens: grid distance calculation & range advisories, JB2A visual projectile/burst/line animations and sound effects, attack rolls vs target AC with critical hit/miss detection, saving throw checks, live HP deduction from targeted token (with temp HP priority), synchronization across clients via `SYNC_TOKENS`, rich combat toasts, and 3D physics dice broadcast.
+- **Impact / Testing Notes**:
+  - Select a monster token as DM, click [Aim] on any attack or saving throw action, and click another token on the battlemap. Verify animation fires, dice roll, combat log posts, and target HP updates in real-time.
+  - Verify [Hit] and [Dmg] buttons roll their respective formulas directly with 3D physics dice.
+  - Verify traits tab features clickable roll/heal buttons and inspect buttons.
+
+---
+
 ### [2026-11-01] perf(vtt): optimize map dragging with fog offscreen canvas and set DM default tool to select
 - **Commit**: `c4fefb7`
 - **Files Changed**:
