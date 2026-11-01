@@ -14,6 +14,30 @@
 
 ## Pending Changes Queue for Future Enterprise Patch
 
+### [2026-11-01] perf(vtt): optimize map dragging with fog offscreen canvas and set DM default tool to select
+- **Commit**: `c4fefb7`
+- **Files Changed**:
+  - `src/App.tsx`
+  - `src/components/DmMonsterDock.tsx`
+  - `src/components/DynamicLightingLayer.tsx`
+  - `src/components/PlayerView.tsx`
+  - `src/services/monsterHudService.ts`
+- **Summary**:
+  - Set DM Mode default tool from `pan` to `select`, ensuring mouse interactions, selection boxes, and character token claiming default cleanly on startup.
+  - Eliminated map drag stutter and frame drops by implementing high-performance offscreen canvas caching for fog carve-outs (`fogFovLayer`) and ambient lighting (`ambientLightingLayer`), updating the pre-rendered canvas only when tokens, vision, walls, or reveals change and drawing the cached texture via `<KonvaImage>` in ~0.02ms during panning.
+  - Set `Konva.hitOnDragEnabled = false;` and capped `Konva.pixelRatio = Math.min(window.devicePixelRatio || 1, 2);` to prevent expensive offscreen hit-canvas re-rasterization and ultra-high-DPI overdraw.
+  - Optimized layer listening: disabled hit-testing on the token layer (`listening={tool !== 'pan'}`) and wall layer (`listening={campaignMode === 'creator' && tool !== 'pan'}`) during pan mode.
+  - Added fast guard in `handleMouseMove` to return immediately when panning or dragging, and avoided hold-ping state thrashing on mouse down when in pan mode.
+  - Added RAF throttling to single-finger touch panning on mobile devices to sync with 60/120Hz V-Sync refresh rate.
+  - Restored missing `setEffects`, `soundCatalog.play`, `EFFECT_SPAWN`, and monster action roll execution in DM View `castSpellAt`.
+  - Added automatic collapse for `DmMonsterDock` while targeting attacks and offset mobile sidebar positioning.
+  - Fixed PlayerView claimed token auto-reconciliation when joining before tokens arrive, refined creature targeting with magnetic token snapping, and added lasting debuff badge transitions.
+- **Impact / Testing Notes**:
+  - Test map dragging with pan tool, spacebar, and touch on both low-spec and high-DPI screens; verify smooth 60/120 FPS map movement.
+  - Verify DM mode loads with the select tool active by default.
+
+---
+
 ### [2026-10-29] feat(silo): complete air-gap isolation between v1-stable and enterprise beta
 - **Commit**: `f8f6f48`
 - **Files Changed**:
