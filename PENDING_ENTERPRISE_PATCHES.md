@@ -14,6 +14,29 @@
 
 ## Pending Changes Queue for Future Enterprise Patch
 
+### [2026-11-01] feat(vtt): unify DM mouse and touch interaction to match fluid Player View mechanics
+- **Commit**: `40712b0`
+- **Files Changed**:
+  - `src/App.tsx`
+  - `src/components/LeftSidebar.tsx`
+  - `src/effects/db/jb2aRegistry.ts`
+  - `src/effects/db/tokenFxMap.ts`
+  - `src/effects/render/DomEffectOverlay.tsx`
+  - `src/types/aura.ts`
+- **Summary**:
+  - Brought complete parity with Player View's fluid mouse and touch interaction model to the DM interface:
+    - **Native Draggable Stage**: Made Konva Stage natively draggable during navigation (`!isCanvasDrawingTool && !isDraggingToken`) so dragging empty canvas immediately pans the map with hardware-accelerated smoothness on desktop and mobile without requiring tool mode switches or spacebar.
+    - **Clean Deselection & Dismissal**: Clicking on empty canvas cleanly deselects tokens and dismisses menus without lag; Shift+drag activates marquee multi-selection.
+    - **Solid Token Interaction**: Added `onMouseUp` event handling with propagation stop to `TokenImage` and enforced minimum 48px touch hit-target radius so tokens never miss clicks or drops.
+    - **Mobile Touch Streamlining**: Replaced artificial JS single-finger panning loop with Konva's native stage drag; removed artificial 450ms touch suppression delay for instant tap response.
+    - **Cursor Styling Parity**: Matched Player View cursor states (`cursor-default` canvas, `cursor-grab` hovering tokens, `cursor-grabbing` dragging tokens, `cursor-crosshair` aiming).
+- **Impact / Testing Notes**:
+  - On both desktop and mobile, click and drag empty canvas to pan the map with zero lag.
+  - Click on any token to select and view HUD; click empty canvas to cleanly deselect.
+  - Drag tokens to move; pinch with two fingers to zoom smoothly.
+
+---
+
 ### [2026-11-01] feat(dm-hud): add auto-roll toggle and direct attack card targeting with manual/3d dice prompt
 - **Commit**: `3df4862`
 - **Files Changed**:
