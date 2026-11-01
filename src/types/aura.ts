@@ -35,7 +35,7 @@ export const AURA_PRESETS: AuraPreset[] = [
     color: 'rgba(34, 197, 94, 0.28)',
     opacity: 0.38,
     description: 'Necrotic resistance & regain 1 HP at 0 (30 ft)',
-    videoUrl: '/jb2a/Community/JAA/auraOfLife.webm'
+    videoUrl: '/jb2a/Library/Generic/Template/Circle/Aura/AuraThemedOrbitLoopNature01_01_Regular_Green_700x700.webm'
   },
   {
     id: 'aura_of_vitality',
@@ -44,7 +44,7 @@ export const AURA_PRESETS: AuraPreset[] = [
     color: 'rgba(16, 185, 129, 0.28)',
     opacity: 0.38,
     description: 'Heal 2d6 as bonus action each turn (30 ft)',
-    videoUrl: '/jb2a/Community/JAA/AuraofVitality.webm'
+    videoUrl: '/jb2a/Library/Generic/Healing/HealingAbility_02_Regular_GreenOrange_Loop_600x600.webm'
   },
   {
     id: 'paladin_prot',

@@ -590,6 +590,11 @@ const TokenImage = React.memo(({
           e.cancelBubble = true;
         }
       }}
+      onMouseUp={(e) => {
+        if (!isSpacePressed && e.evt?.button !== 2) {
+          e.cancelBubble = true;
+        }
+      }}
       onTouchStart={(e) => {
         const touches = e.evt?.touches;
         if (touches && touches.length >= 2) {
@@ -717,7 +722,7 @@ const TokenImage = React.memo(({
         isTokenDraggingRef.current = true;
         e.cancelBubble = true;
         const stage = e.target.getStage();
-        if (stage) stage.container().style.cursor = 'move';
+        if (stage) stage.container().style.cursor = 'grabbing';
         if (onDragStart) {
           onDragStart(e);
         }
@@ -725,7 +730,7 @@ const TokenImage = React.memo(({
       onDragMove={(e) => {
         e.cancelBubble = true;
         const stage = e.target.getStage();
-        if (stage) stage.container().style.cursor = 'move';
+        if (stage) stage.container().style.cursor = 'grabbing';
         if (onDragMove) {
           onDragMove(e);
         }
@@ -736,7 +741,7 @@ const TokenImage = React.memo(({
         e.cancelBubble = true;
         const stage = e.target.getStage();
         if (stage) {
-          stage.container().style.cursor = (isSpacePressed || tool === 'pan') ? 'grab' : tool === 'select' ? 'default' : 'crosshair';
+          stage.container().style.cursor = 'grab';
         }
         if (onDragEnd) {
           onDragEnd(e);
@@ -745,7 +750,7 @@ const TokenImage = React.memo(({
       onMouseEnter={(e) => {
         setIsHovered(true);
         const stage = e.target.getStage();
-        if (stage) stage.container().style.cursor = 'move';
+        if (stage && !isTokenDraggingRef.current) stage.container().style.cursor = 'grab';
         if (onMouseEnter) {
           onMouseEnter(e);
         }
@@ -753,8 +758,8 @@ const TokenImage = React.memo(({
       onMouseLeave={(e) => {
         setIsHovered(false);
         const stage = e.target.getStage();
-        if (stage) {
-          stage.container().style.cursor = (isSpacePressed || tool === 'pan') ? 'grab' : tool === 'select' ? 'default' : 'crosshair';
+        if (stage && !isTokenDraggingRef.current) {
+          stage.container().style.cursor = tool === 'spell_aim' ? 'crosshair' : 'default';
         }
         if (onMouseLeave) {
           onMouseLeave(e);
@@ -770,7 +775,7 @@ const TokenImage = React.memo(({
       <Circle
         x={radius}
         y={radius}
-        radius={radius + 3}
+        radius={Math.max(radius + 4, 24)}
         fill="rgba(0,0,0,0.001)"
         perfectDrawEnabled={false}
       />
@@ -1395,6 +1400,24 @@ export default function App() {
   const [brushSize, setBrushSize] = useState(50);
   const [isFogVisible, setIsFogVisible] = useState<boolean>(true);
   const [tool, setToolState] = useState<string>('pan');
+
+  // Canvas drawing tools that require disabling stage pan drag
+  const isCanvasDrawingTool = Boolean(
+    tool === 'wall' ||
+    tool === 'erase_wall' ||
+    tool === 'split_wall' ||
+    tool === 'draw' ||
+    tool === 'erase' ||
+    tool === 'reveal' ||
+    tool === 'polygon_reveal' ||
+    tool === 'hotspot' ||
+    tool === 'zone' ||
+    tool === 'polygon_zone' ||
+    tool === 'measure' ||
+    tool === 'ai-describe' ||
+    tool === 'token' ||
+    tool === 'spell_aim'
+  );
 
   // MistWalker 4.0 Effects Engine State
   const [effects, setEffects] = useState<VttEffectInstance[]>([]);
@@ -7340,9 +7363,6 @@ export default function App() {
   };
 
   const handleStageMouseDown = (e: any) => {
-    if (!e.evt?.isTouchSynthetic && Date.now() - lastDmTouchTimeRef.current < 450) {
-      return;
-    }
     setActiveMenu(null);
     if (isSpacePressed || isShiftPanActive) {
       if (stageRef.current) {
@@ -7615,32 +7635,36 @@ export default function App() {
       }
     }
 
-    if (tool === 'select') {
-      // In Creator Mode, check if clicking directly on a wall or door to select or toggle
-      if (campaignMode === 'creator') {
-        const nearest = findNearestWall(point.x, point.y, walls, 16 / stageScale);
-        if (nearest) {
-          setSelectedWallId(nearest.wall.id);
-          if (nearest.wall.wallType === 'door' || nearest.wall.wallType === 'secret_door') {
-            handleToggleDoor(nearest.wall.id);
-          } else {
-            toast.info(`Selected ${nearest.wall.wallType} wall`);
-          }
-          return;
+    // In Creator Mode, check if clicking directly on a wall or door to select or toggle
+    if (campaignMode === 'creator') {
+      const nearest = findNearestWall(point.x, point.y, walls, 16 / stageScale);
+      if (nearest) {
+        setSelectedWallId(nearest.wall.id);
+        if (nearest.wall.wallType === 'door' || nearest.wall.wallType === 'secret_door') {
+          handleToggleDoor(nearest.wall.id);
+        } else {
+          toast.info(`Selected ${nearest.wall.wallType} wall`);
         }
-        setSelectedWallId(null);
+        return;
       }
+      setSelectedWallId(null);
+    }
 
-      if (!e.evt.shiftKey) {
+    if (!isCanvasDrawingTool) {
+      if (e.evt?.shiftKey) {
+        // Shift+Drag creates marquee selection box
+        setSelectionBox({
+          startX: point.x,
+          startY: point.y,
+          currentX: point.x,
+          currentY: point.y,
+          active: true,
+        });
+      } else {
+        // Normal click on empty ground deselects tokens and dismisses menus (Player View parity)
         setSelectedTokenIds([]);
+        setActiveTokenMenu(null);
       }
-      setSelectionBox({
-        startX: point.x,
-        startY: point.y,
-        currentX: point.x,
-        currentY: point.y,
-        active: true,
-      });
       return;
     }
 
@@ -8114,18 +8138,10 @@ export default function App() {
       clickedNode = clickedNode.getParent?.();
     }
 
-    // On touchscreens, 1-finger drag on empty map in 'select' or 'pan' mode smoothly pans the map (instead of drawing a mouse marquee box)
-    if (!isInteractiveNode && (tool === 'select' || tool === 'pan')) {
+    // In normal navigation mode, Konva's native stage drag handles 1-finger panning directly (Player View parity).
+    // We only arm hold-ping if holding without moving.
+    if (!isInteractiveNode && !isCanvasDrawingTool) {
       setActiveMenu(null);
-      dmTouchStateRef.current.isSingleFingerPanning = true;
-      dmTouchStateRef.current.singlePanStartClient = {
-        x: touches[0].clientX,
-        y: touches[0].clientY
-      };
-      dmTouchStateRef.current.singlePanStartStage = {
-        x: stagePosRef.current?.x ?? stage.x(),
-        y: stagePosRef.current?.y ?? stage.y()
-      };
       if (!hoveredZoneId && !isRoomDrawerOpen) {
         const worldPt = getDmTouchWorldPoint(stage, touches[0].clientX, touches[0].clientY);
         startHoldPing(
@@ -8175,60 +8191,29 @@ export default function App() {
       return;
     }
 
-    if (dmTouchStateRef.current.isSingleFingerPanning) {
-      const stage = stageRef.current;
-      if (!stage) return;
-      const dx = touches[0].clientX - dmTouchStateRef.current.singlePanStartClient.x;
-      const dy = touches[0].clientY - dmTouchStateRef.current.singlePanStartClient.y;
-      if (Math.hypot(dx, dy) > 6) {
-        cancelHoldPing();
-      }
-      const newPos = {
-        x: dmTouchStateRef.current.singlePanStartStage.x + dx,
-        y: dmTouchStateRef.current.singlePanStartStage.y + dy
-      };
-      stagePosRef.current = newPos;
-
-      if (!stageDragRafIdRef.current) {
-        stageDragRafIdRef.current = requestAnimationFrame(() => {
-          stageDragRafIdRef.current = null;
-          const curStage = stageRef.current;
-          if (curStage) {
-            curStage.position(stagePosRef.current);
-            curStage.batchDraw();
-          }
-          const fx = document.getElementById('main-animated-fx-overlay');
-          if (fx) {
-            fx.style.left = `${stagePosRef.current.x}px`;
-            fx.style.top = `${stagePosRef.current.y}px`;
-          }
-          const fxWorld = document.getElementById('mistwalker-dom-effects-overlay-world');
-          if (fxWorld) {
-            fxWorld.style.transform = `translate3d(${stagePosRef.current.x}px, ${stagePosRef.current.y}px, 0) scale(${stageScaleRef.current})`;
-          }
-        });
-      }
+    // In normal navigation mode, cancel hold ping if moving finger (Konva natively moves stage)
+    if (!isCanvasDrawingTool) {
+      cancelHoldPing();
       return;
     }
 
-    if (tool !== 'pan') {
-      const syntheticEvt = {
-        ...e,
-        evt: {
-          ...(e.evt || {}),
-          isTouchSynthetic: true,
-          button: 0,
-          buttons: 1,
-          clientX: touches[0].clientX,
-          clientY: touches[0].clientY
-        }
-      };
-      handleMouseMove(syntheticEvt);
-    }
+    const syntheticEvt = {
+      ...e,
+      evt: {
+        ...(e.evt || {}),
+        isTouchSynthetic: true,
+        button: 0,
+        buttons: 1,
+        clientX: touches[0].clientX,
+        clientY: touches[0].clientY
+      }
+    };
+    handleMouseMove(syntheticEvt);
   };
 
   const handleStageTouchEnd = (e: any) => {
     lastDmTouchTimeRef.current = Date.now();
+    cancelHoldPing();
     if (dmTouchStateRef.current.wasPinching) {
       dmSpellTouchRef.current.active = false;
       return;
@@ -8261,14 +8246,7 @@ export default function App() {
       }
       return;
     }
-    if (dmTouchStateRef.current.isSingleFingerPanning && (!e.evt?.touches || e.evt.touches.length === 0)) {
-      dmTouchStateRef.current.isSingleFingerPanning = false;
-      cancelHoldPing();
-      setStagePos({ ...stagePosRef.current });
-      return;
-    }
     if (!e.evt?.touches || e.evt.touches.length === 0) {
-      cancelHoldPing();
       handleMouseUp(e);
     }
   };
@@ -8822,8 +8800,7 @@ export default function App() {
           spacePanActiveRef.current = false;
           setIsSpacePressed(false);
           if (stageRef.current) {
-            stageRef.current.container().style.cursor =
-              tool === 'pan' ? 'grab' : tool === 'select' ? 'default' : 'crosshair';
+            stageRef.current.container().style.cursor = tool === 'spell_aim' ? 'crosshair' : 'default';
           }
         }
       } else if (e.key === 'Shift') {
@@ -8831,8 +8808,7 @@ export default function App() {
           shiftPanActiveRef.current = false;
           setIsShiftPressed(false);
           if (stageRef.current) {
-            stageRef.current.container().style.cursor =
-              tool === 'pan' ? 'grab' : tool === 'select' ? 'default' : 'crosshair';
+            stageRef.current.container().style.cursor = tool === 'spell_aim' ? 'crosshair' : 'default';
           }
         }
       }
@@ -8848,8 +8824,7 @@ export default function App() {
         setIsShiftPressed(false);
       }
       if (stageRef.current) {
-        stageRef.current.container().style.cursor =
-          tool === 'pan' ? 'grab' : tool === 'select' ? 'default' : 'crosshair';
+        stageRef.current.container().style.cursor = tool === 'spell_aim' ? 'crosshair' : 'default';
       }
     };
 
@@ -8869,12 +8844,12 @@ export default function App() {
     if (stageRef.current) {
       const container = stageRef.current.container();
       if (container) {
-        if (isSpacePressed || isShiftPanActive || tool === 'pan') {
+        if (isSpacePressed || isShiftPanActive) {
           container.style.cursor = 'grab';
-        } else if (tool === 'select') {
-          container.style.cursor = 'default';
-        } else {
+        } else if (tool === 'spell_aim') {
           container.style.cursor = 'crosshair';
+        } else {
+          container.style.cursor = 'default';
         }
       }
     }
@@ -9854,7 +9829,7 @@ export default function App() {
           />
         ) : (
           <div
-            className={`flex-1 h-full relative touch-none ${isSpacePressed || isShiftPanActive || tool === 'pan' ? 'cursor-grab active:cursor-grabbing' : tool === 'select' ? 'cursor-default' : 'cursor-crosshair'}`}
+            className={`flex-1 h-full relative touch-none ${tool === 'spell_aim' ? 'cursor-crosshair' : 'cursor-default'}`}
             onDragOver={(e) => {
               e.preventDefault();
               e.dataTransfer.dropEffect = 'copy';
@@ -9956,7 +9931,8 @@ export default function App() {
                   });
                 }
               }}
-              draggable={(tool === 'pan' || isSpacePressed || isShiftPanActive) && !isDraggingToken && !hoveredZoneId && !isRoomDrawerOpen}
+              draggable={!isCanvasDrawingTool && !isDraggingToken && !hoveredZoneId && !isRoomDrawerOpen}
+              className={tool === 'spell_aim' ? 'cursor-crosshair' : 'cursor-default'}
               onDragStart={(e) => {
                 if (e.target === stageRef.current && !isDraggingTokenRef.current) {
                   setActiveTokenMenu(null);
@@ -10578,7 +10554,7 @@ export default function App() {
                         const sy = stageRef.current.y();
                         setStagePos(prev => (prev.x === sx && prev.y === sy) ? prev : { x: sx, y: sy });
                       }
-                      if (tool === 'select' || tool === 'pan' || isAutoSwitchedFromPanRef.current) {
+                      if (tool !== 'spell_aim') {
                         if (e.evt?.shiftKey) {
                           setSelectedTokenIds(prev => 
                             prev.includes(token.id) ? prev.filter(id => id !== token.id) : [...prev, token.id]
@@ -10589,7 +10565,7 @@ export default function App() {
                       }
                     }}
                     onDblClick={() => {
-                      if (tool === 'select' || tool === 'pan' || isAutoSwitchedFromPanRef.current) {
+                      if (tool !== 'spell_aim') {
                         setSelectedTokenIds([token.id]);
                         handleStartRenameToken(token.id, token.name);
                       }

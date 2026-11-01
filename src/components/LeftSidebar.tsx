@@ -775,7 +775,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
               ? 'bg-amber-500/25 text-amber-300 border border-amber-500/60 shadow-[0_0_14px_rgba(245,158,11,0.4)]'
               : 'text-zinc-400 hover:text-amber-300 hover:bg-zinc-850 hover:border hover:border-zinc-700/60'
           }`}
-          title={tool === 'select' ? "Select Tool Active (Click to switch to Pan)" : "Select & Move Objects (Click and drag tokens & items placed on board)"}
+          title={tool === 'select' ? "Select Tool Active (Drag empty canvas to pan, click tokens to inspect, Shift+drag to marquee select)" : "Select & Move Objects (Click tokens to inspect, drag empty canvas to pan)"}
         >
           <MousePointer className="w-5.5 h-5.5" />
           {selectedTokenIds && selectedTokenIds.length > 0 && (
@@ -794,7 +794,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
               ? 'bg-zinc-800 text-zinc-100 border border-zinc-600 shadow-md'
               : 'text-zinc-400 hover:text-white hover:bg-zinc-850 hover:border hover:border-zinc-700/60'
           }`}
-          title={tool === 'pan' ? "Pan Tool Active (Click to switch to Select)" : "Pan / Move Map (Click to activate)"}
+          title={tool === 'pan' ? "Pan Tool Active (Drag to pan map, click tokens to inspect)" : "Pan / Move Map (Click to activate)"}
         >
           <Move className="w-5.5 h-5.5" />
         </button>

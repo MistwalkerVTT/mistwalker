@@ -139,32 +139,51 @@ const applySnappyPlayback = (el: HTMLVideoElement | null) => {
 
 function getAuraVisualMeta(nameOrKey?: string, defaultColor?: string) {
   const n = (nameOrKey || '').toLowerCase();
+
+  // Spells that explicitly do NOT have an external boundary circle
+  if (
+    n.includes('spirit') ||
+    n.includes('guardian') ||
+    n.includes('darkness') ||
+    n.includes('wall of fire') ||
+    n.includes('shield of faith') ||
+    n.includes('fog cloud') ||
+    n.includes('fog')
+  ) {
+    return { isCircleAura: false, borderColor: '', glowColor: '', opacity: 1.0 };
+  }
+
+  // Aura of Protection -> White boundary circle
+  if (n.includes('protection') || n.includes('paladin')) {
+    return { isCircleAura: true, borderColor: '#ffffff', glowColor: 'rgba(255, 255, 255, 0.4)', opacity: 0.35 };
+  }
+  // Aura of Courage -> Red boundary circle
+  if (n.includes('courage')) {
+    return { isCircleAura: true, borderColor: '#ef4444', glowColor: 'rgba(239, 68, 68, 0.4)', opacity: 0.35 };
+  }
+  // Antilife Shell -> Blue boundary circle
+  if (n.includes('antilife') || n.includes('anti-life')) {
+    return { isCircleAura: true, borderColor: '#3b82f6', glowColor: 'rgba(59, 130, 246, 0.5)', opacity: 0.8 };
+  }
+  // Aura of Life -> subtle healing/preservation green
   if (n.includes('life')) {
     return { isCircleAura: true, borderColor: 'rgba(34, 197, 94, 0.85)', glowColor: 'rgba(34, 197, 94, 0.35)', opacity: 0.35 };
   }
+  // Aura of Vitality -> emerald/spring green
   if (n.includes('vitality')) {
     return { isCircleAura: true, borderColor: 'rgba(16, 185, 129, 0.85)', glowColor: 'rgba(16, 185, 129, 0.35)', opacity: 0.35 };
   }
+  // Twilight Sanctuary
   if (n.includes('twilight') || n.includes('faerie')) {
     return { isCircleAura: true, borderColor: 'rgba(168, 85, 247, 0.85)', glowColor: 'rgba(168, 85, 247, 0.35)', opacity: 0.45 };
   }
+  // Crusader's Mantle
   if (n.includes('crusader') || n.includes('mantle')) {
     return { isCircleAura: true, borderColor: 'rgba(245, 158, 11, 0.9)', glowColor: 'rgba(245, 158, 11, 0.4)', opacity: 0.45 };
   }
-  if (n.includes('antilife') || n.includes('anti-life')) {
-    return { isCircleAura: true, borderColor: 'rgba(56, 189, 248, 0.95)', glowColor: 'rgba(56, 189, 248, 0.5)', opacity: 0.8 };
-  }
-  if (n.includes('protection') || n.includes('paladin')) {
-    return { isCircleAura: true, borderColor: 'rgba(234, 179, 8, 0.85)', glowColor: 'rgba(234, 179, 8, 0.35)', opacity: 0.35 };
-  }
-  if (n.includes('courage')) {
-    return { isCircleAura: true, borderColor: 'rgba(251, 191, 36, 0.85)', glowColor: 'rgba(251, 191, 36, 0.35)', opacity: 0.35 };
-  }
+  // Armor of Agathys / Ice Barrier
   if (n.includes('agathys') || n.includes('ice barrier') || n.includes('frost')) {
     return { isCircleAura: true, borderColor: 'rgba(147, 197, 253, 0.9)', glowColor: 'rgba(147, 197, 253, 0.45)', opacity: 0.8 };
-  }
-  if (n.includes('spirit') || n.includes('guardian')) {
-    return { isCircleAura: true, borderColor: 'rgba(59, 130, 246, 0.85)', glowColor: 'rgba(59, 130, 246, 0.35)', opacity: 0.85 };
   }
   if (defaultColor) {
     return { isCircleAura: true, borderColor: defaultColor, glowColor: defaultColor, opacity: 0.5 };

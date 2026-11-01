@@ -118,10 +118,10 @@ export function getAuraVideoUrl(name?: string, color?: string): string | null {
 
   // 2. Aura of Life / Vitality
   if (n.includes('life')) {
-    return '/jb2a/Community/JAA/auraOfLife.webm';
+    return '/jb2a/Library/Generic/Template/Circle/Aura/AuraThemedOrbitLoopNature01_01_Regular_Green_700x700.webm';
   }
   if (n.includes('vitality') || n.includes('healing')) {
-    return '/jb2a/Community/JAA/AuraofVitality.webm';
+    return '/jb2a/Library/Generic/Healing/HealingAbility_02_Regular_GreenOrange_Loop_600x600.webm';
   }
 
   // 3. Antilife Shell
