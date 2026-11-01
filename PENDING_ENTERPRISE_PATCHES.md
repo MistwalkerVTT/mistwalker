@@ -559,6 +559,23 @@
 
 ---
 
+### [2026-11-01] fix(heroes): restore Noctua in player selection and eliminate character ID collision with Brannoc
+- **Commit**: `651193c`
+- **Files Changed**:
+  - `src/data/defaultCharacters.ts`
+  - `src/App.tsx`
+  - `src/hooks/useHazardZoneTrigger.ts`
+- **Summary**:
+  - Removed erroneous `ddbCharacterId: 147334187` from `char_brannoc` in `src/data/defaultCharacters.ts`, which was previously colliding with and causing `isDdbMatch` to drop Noctua Shadowclaw (`147334187`) as a duplicate during Player Character Select modal list building.
+  - Added explicit `ddbCampaignId: '6738033'`, `ddbCampaignTitle: 'Keys from the Golden Vault'`, and `playerName: 'Player'` to `char_noctua` for immediate primary campaign grouping and auto-expansion in Player View.
+  - Added a safety check in `isDdbMatch` to prevent two completely distinct, conflicting character names from being merged by ID alone.
+  - Verified compilation and availability of all campaign characters.
+- **Impact / Testing Notes**:
+  - Open Player View -> "Choose Your Adventurer" or click the character switch button.
+  - Verify "Noctua Shadowclaw" (Owlin Ranger 5 / Rogue 2, HP 58, AC 17) is immediately visible under the "Keys from the Golden Vault" active campaign section, can be searched, and can be claimed to unlock the D&D Beyond HUD.
+
+---
+
 ### Template for Incoming Entries:
 ```markdown
 ### [YYYY-MM-DD] <Title / Commit Short Summary>
