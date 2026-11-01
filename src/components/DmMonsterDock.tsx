@@ -436,9 +436,9 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
               onClick={() => onToggleAutoRollDice(!isAutoRollDiceEnabled)}
               role="switch"
               aria-checked={isAutoRollDiceEnabled}
-              className={`flex items-center gap-2 px-2.5 py-1 rounded-xl border text-[11px] font-mono font-bold transition-all cursor-pointer active:scale-95 shadow-sm ${
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-[11px] font-mono font-bold transition-all cursor-pointer active:scale-95 shadow-sm ${
                 isAutoRollDiceEnabled
-                  ? 'bg-amber-950/70 hover:bg-amber-900/80 text-amber-300 border-amber-500/50 shadow-amber-950/50'
+                  ? 'bg-amber-950/80 hover:bg-amber-900 text-amber-300 border-amber-500/60 shadow-amber-950/50'
                   : 'bg-zinc-900/90 hover:bg-zinc-850 text-zinc-400 hover:text-zinc-200 border-zinc-800'
               }`}
               title={
@@ -455,7 +455,7 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
               >
                 <div className="w-2.5 h-2.5 rounded-full bg-white shadow-xs" />
               </div>
-              <span className="hidden sm:inline">
+              <span className="text-[10px] md:text-[11px] whitespace-nowrap">
                 Auto Roll: {isAutoRollDiceEnabled ? 'ON' : 'OFF'}
               </span>
             </button>

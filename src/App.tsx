@@ -1435,6 +1435,7 @@ export default function App() {
   const [pendingDmCombatRoll, setPendingDmCombatRoll] = useState<PendingCombatRoll | null>(null);
   const [aimOrigin, setAimOrigin] = useState<{ x: number; y: number } | null>(null);
   const [aimCurrent, setAimCurrent] = useState<{ x: number; y: number } | null>(null);
+  const handleDmTargetTokenRef = useRef<((targetToken: Token, overrideAction?: MonsterActionItem) => void) | null>(null);
 
   const [isSpacePressed, setIsSpacePressed] = useState<boolean>(false);
   const spacePanActiveRef = useRef<boolean>(false);
@@ -4717,6 +4718,57 @@ export default function App() {
     toast.success(`${token.name}: ${action.name}!`, { description: desc });
   }, [activeMapId]);
 
+  const findTargetTokenFromPoint = useCallback((
+    point: { x: number; y: number },
+    targetNode?: any,
+    stage?: any,
+    excludeTokenId?: string
+  ): Token | null => {
+    // 1. Direct hit on Konva node
+    let curr = targetNode;
+    while (curr && curr !== stage) {
+      if (curr.name && curr.name() === 'token') {
+        const tokenId = curr.id && curr.id();
+        const found = tokens.find(t => t.id === tokenId);
+        if (found && (!excludeTokenId || found.id !== excludeTokenId)) {
+          return found;
+        }
+      }
+      curr = curr.parent;
+    }
+
+    // 2. Proximity snap (within token radius + margin)
+    let nearestToken: Token | null = null;
+    let nearestDist = Infinity;
+    const margin = Math.max(26, 36 / (stageScale || 1));
+    for (const t of tokens) {
+      if (excludeTokenId && t.id === excludeTokenId) continue;
+      const tRad = ((t.size || 1) * gridSize) / 2;
+      const tCenter = { x: t.x + tRad, y: t.y + tRad };
+      const dist = Math.hypot(point.x - tCenter.x, point.y - tCenter.y);
+      if (dist <= tRad + margin && dist < nearestDist) {
+        nearestDist = dist;
+        nearestToken = t;
+      }
+    }
+    if (nearestToken) return nearestToken;
+
+    // 3. Fallback: if clicking on the caster itself (e.g. self-buff/target self)
+    if (excludeTokenId) {
+      const caster = tokens.find(t => t.id === excludeTokenId);
+      if (caster) {
+        const cRad = ((caster.size || 1) * gridSize) / 2;
+        const cCenter = { x: caster.x + cRad, y: caster.y + cRad };
+        const dist = Math.hypot(point.x - cCenter.x, point.y - cCenter.y);
+        if (dist <= cRad + margin) {
+          return caster;
+        }
+      }
+    }
+
+    return null;
+  }, [tokens, gridSize, stageScale]);
+
   const castSpellAt = useCallback((origin: { x: number; y: number }, target: { x: number; y: number }) => {
     if (!activeEquippedAsset) return;
 
@@ -4840,6 +4892,24 @@ export default function App() {
 
     if (activeDmMonsterAction) {
       const singleSelected = selectedTokenIds.length === 1 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
+      const targetCreatureToken = findTargetTokenFromPoint(target, undefined, undefined, singleSelected?.id);
+      if (targetCreatureToken) {
+        if (handleDmTargetTokenRef.current) {
+          handleDmTargetTokenRef.current(targetCreatureToken, activeDmMonsterAction);
+          return;
+        }
+      }
+      const isCreatureTargeted = Boolean(
+        activeDmMonsterAction.hitBonus !== undefined ||
+        activeDmMonsterAction.category === 'attacks' ||
+        activeDmMonsterAction.type === 'attack' ||
+        activeDmMonsterAction.isHeal ||
+        (activeDmMonsterAction.rangeFt !== undefined && activeDmMonsterAction.rangeFt <= 5)
+      );
+      if (isCreatureTargeted) {
+        toast.info(`Click on a creature token to target ${activeDmMonsterAction.name}.`);
+        return;
+      }
       if (singleSelected) {
         executeMonsterRoll(singleSelected, activeDmMonsterAction);
       }
@@ -4882,7 +4952,7 @@ export default function App() {
     setAimCurrent(null);
     setActiveEquippedAsset(null);
     setTool('pan');
-  }, [activeEquippedAsset, activeDmMonsterAction, selectedTokenIds, tokens, executeMonsterRoll]);
+  }, [activeEquippedAsset, activeDmMonsterAction, selectedTokenIds, tokens, executeMonsterRoll, findTargetTokenFromPoint]);
 
   const handleEquipAsset = useCallback((asset: Jb2aAssetDefinition) => {
     setActiveEquippedAsset(asset);
@@ -5384,6 +5454,13 @@ export default function App() {
     const singleToken = selectedTokenIds.length === 1 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
     if (!singleToken || !action) return;
 
+    // 0. Resolve target token real AC and HP
+    const charStats = resolveTokenCharacterStats(targetToken, compendiumCharacters);
+    const defTargetMonster = DEFAULT_MONSTERS.find(m => m.name.toLowerCase() === (targetToken.name || '').toLowerCase());
+    const targetAc = charStats.ac ?? targetToken.ac ?? defTargetMonster?.ac ?? 10;
+    const targetMaxHp = charStats.maxHp ?? targetToken.maxHp ?? defTargetMonster?.hp ?? 10;
+    const targetCurrentHp = targetToken.currentHp !== undefined ? targetToken.currentHp : (targetToken.hp !== undefined ? targetToken.hp : targetMaxHp);
+
     // 1. Calculate distance on battlemap grid
     const cRadius = ((singleToken.size || 1) * gridSize) / 2;
     const tRadius = ((targetToken.size || 1) * gridSize) / 2;
@@ -5410,6 +5487,9 @@ export default function App() {
         else if (action.damageType === 'radiant') matchedAsset = findJb2aAsset('sacred_flame');
         else if (action.damageType === 'force') matchedAsset = findJb2aAsset('magic_missile');
         else if (action.type === 'attack' || action.category === 'attacks') matchedAsset = findJb2aAsset('attack_slash');
+      }
+      if (!matchedAsset) {
+        matchedAsset = findJb2aAsset('attack_slash') || JB2A_REGISTRY.find(a => a.id === 'attack_slash');
       }
     }
 
@@ -5442,7 +5522,7 @@ export default function App() {
         attachedTokenId: isSelfTarget ? singleToken.id : undefined,
         castTime: Date.now(),
         durationMs: isTrajectory ? 2500 : 4000,
-        soundKey: matchedAsset.soundKey,
+        soundKey: matchedAsset.soundKey || 'sword-hit',
         color: matchedAsset.color,
         trajectory: isTrajectory ? {
           startX: casterCenter.x,
@@ -5452,13 +5532,17 @@ export default function App() {
           speedPxSec: 1400,
           burstOnImpact: true,
           burstVideoUrl: matchedAsset.burstWebm || matchedAsset.webm,
-          burstSoundKey: matchedAsset.soundKey
+          burstSoundKey: matchedAsset.soundKey || 'sword-hit'
         } : undefined,
         ownerId: singleToken.id,
         casterName: singleToken.name
       };
       setEffects(prev => [...prev, newEffect]);
-      if (matchedAsset.soundKey) soundCatalog.play(matchedAsset.soundKey);
+      if (matchedAsset.soundKey) {
+        soundCatalog.play(matchedAsset.soundKey);
+      } else {
+        soundCatalog.play('sword-hit');
+      }
       if (socketRef.current?.connected) {
         socketRef.current.emit('EFFECT_SPAWN', newEffect);
       }
@@ -5474,7 +5558,6 @@ export default function App() {
       const rawHit = typeof action.hitBonus === 'number'
         ? action.hitBonus
         : (parseInt(String(action.hitBonus || '+0').replace('+', ''), 10) || 0);
-      const targetAc = targetToken.ac ?? 10;
       const atkFormula = action.damageFormula || (action.isHeal ? '1d8 + 3' : '1d8');
 
       setPendingDmCombatRoll({
@@ -5488,8 +5571,8 @@ export default function App() {
           name: targetToken.name,
           avatarUrl: targetToken.url || targetToken.avatarUrl,
           ac: targetAc,
-          currentHp: targetToken.currentHp ?? targetToken.hp,
-          maxHp: targetToken.maxHp
+          currentHp: targetCurrentHp,
+          maxHp: targetMaxHp
         },
         action: action as any,
         phase: isAttackAction ? 'to_hit' : 'damage',
@@ -5501,7 +5584,7 @@ export default function App() {
         isAttack: isAttackAction
       });
 
-      // Clear targeting
+      // Clear targeting but keep token selected
       setActiveDmMonsterAction(null);
       setActiveEquippedAsset(null);
       setAimOrigin(null);
@@ -5516,7 +5599,6 @@ export default function App() {
     let isFumble = false;
     let attackTotal = 0;
     let d20Result = 0;
-    const targetAc = targetToken.ac ?? 10;
 
     // A. Attack roll if hitBonus is present
     if (action.hitBonus !== undefined) {
@@ -5564,7 +5646,7 @@ export default function App() {
       setTokens(prev => {
         const next = prev.map(t => {
           if (t.id !== targetToken.id) return t;
-          const currentMax = t.maxHp || 10;
+          const currentMax = t.maxHp || targetMaxHp;
           const current = t.currentHp !== undefined ? t.currentHp : (t.hp !== undefined ? t.hp : currentMax);
           let nextHp = current;
           let nextTemp = t.tempHp || 0;
@@ -5591,14 +5673,15 @@ export default function App() {
 
         if (mapsDataRef.current[activeMapId]) mapsDataRef.current[activeMapId].tokens = next;
         if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) {
-          socketRef.current.emit('SYNC_TOKENS', next);
+          const syncedTokens = prepareTokensForSync(next, compendiumMonsters, combatTrackerCombatants);
+          socketRef.current.emit('SYNC_TOKENS', syncedTokens);
         }
         return next;
       });
 
       setCombatTrackerCombatants(prev => prev.map(c => {
         if (c.id === targetToken.id || (c as any).tokenId === targetToken.id || (c.name && targetToken.name && c.name.toLowerCase() === targetToken.name.toLowerCase())) {
-          const currentMax = c.maxHp || 10;
+          const currentMax = c.maxHp || targetMaxHp;
           const current = c.currentHp !== undefined ? c.currentHp : currentMax;
           const nextHp = Math.max(0, Math.min(currentMax, current + deltaHp));
           return { ...c, currentHp: nextHp };
@@ -5662,7 +5745,8 @@ export default function App() {
       });
       if (mapsDataRef.current[activeMapId]) mapsDataRef.current[activeMapId].tokens = next;
       if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) {
-        socketRef.current.emit('SYNC_TOKENS', next);
+        const syncedTokens = prepareTokensForSync(next, compendiumMonsters, combatTrackerCombatants);
+        socketRef.current.emit('SYNC_TOKENS', syncedTokens);
       }
       return next;
     });
@@ -5696,13 +5780,17 @@ export default function App() {
       });
     }
 
-    // Clear targeting
+    // Clear targeting but keep token selected
     setActiveDmMonsterAction(null);
     setActiveEquippedAsset(null);
     setAimOrigin(null);
     setAimCurrent(null);
     setTool('pan');
-  }, [activeDmMonsterAction, activeEquippedAsset, selectedTokenIds, tokens, gridSize, activeMapId, isDmAutoRollEnabled]);
+  }, [activeDmMonsterAction, activeEquippedAsset, selectedTokenIds, tokens, gridSize, activeMapId, isDmAutoRollEnabled, compendiumCharacters, compendiumMonsters, combatTrackerCombatants, prepareTokensForSync]);
+
+  useEffect(() => {
+    handleDmTargetTokenRef.current = handleDmTargetToken;
+  }, [handleDmTargetToken]);
 
   const handleDmTargetSelf = useCallback(() => {
     const singleToken = selectedTokenIds.length === 1 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
@@ -5763,7 +5851,7 @@ export default function App() {
       setTokens(prev => {
         const next = prev.map(t => {
           if (t.id !== targetToken.id) return t;
-          const currentMax = t.maxHp || 10;
+          const currentMax = t.maxHp || target.maxHp || 10;
           const current = t.currentHp !== undefined ? t.currentHp : (t.hp !== undefined ? t.hp : currentMax);
           let nextHp = current;
           let nextTemp = t.tempHp || 0;
@@ -5790,14 +5878,15 @@ export default function App() {
 
         if (mapsDataRef.current[activeMapId]) mapsDataRef.current[activeMapId].tokens = next;
         if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) {
-          socketRef.current.emit('SYNC_TOKENS', next);
+          const syncedTokens = prepareTokensForSync(next, compendiumMonsters, combatTrackerCombatants);
+          socketRef.current.emit('SYNC_TOKENS', syncedTokens);
         }
         return next;
       });
 
       setCombatTrackerCombatants(prev => prev.map(c => {
         if (c.id === targetToken.id || (c as any).tokenId === targetToken.id || (c.name && targetToken.name && c.name.toLowerCase() === targetToken.name.toLowerCase())) {
-          const currentMax = c.maxHp || 10;
+          const currentMax = c.maxHp || target.maxHp || 10;
           const current = c.currentHp !== undefined ? c.currentHp : currentMax;
           const nextHp = Math.max(0, Math.min(currentMax, current + deltaHp));
           return { ...c, currentHp: nextHp };
@@ -5806,6 +5895,17 @@ export default function App() {
       }));
     }
 
+    if (result.diceEvent) {
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', result.diceEvent);
+      }
+      if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+        (window as any).__mistwalkerRoll3d(result.diceEvent);
+      }
+    }
+
+    soundCatalog.play(isHeal ? 'magic_heal' : 'sword-hit');
+
     toast.success(
       isHeal
         ? `💚 Restored +${result.damageTotal} HP to ${target.name}!`
@@ -5813,7 +5913,7 @@ export default function App() {
     );
 
     setPendingDmCombatRoll(null);
-  }, [pendingDmCombatRoll, tokens, activeMapId]);
+  }, [pendingDmCombatRoll, tokens, activeMapId, compendiumMonsters, combatTrackerCombatants, prepareTokensForSync]);
 
   const handleEnableDmAutoRollAndContinue = useCallback(() => {
     if (!pendingDmCombatRoll) return;
@@ -7512,6 +7612,31 @@ export default function App() {
     // MistWalker 4.0 Spell & Projectile Aiming (Check before isInteractive so clicking tokens to aim works)
     if (tool === 'spell_aim' && activeEquippedAsset) {
       const originPoint = snapDmPointToTokenCenter(point, e.target, stage);
+      const singleSelectedToken = selectedTokenIds.length === 1 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
+
+      // When DM is aiming a monster action, route targeting reliably:
+      if (activeDmMonsterAction) {
+        const targetToken = findTargetTokenFromPoint(originPoint, e.target, stage, singleSelectedToken?.id);
+        if (targetToken) {
+          if (handleDmTargetTokenRef.current) {
+            handleDmTargetTokenRef.current(targetToken, activeDmMonsterAction);
+          }
+          return;
+        }
+
+        const isCreatureTargeted = Boolean(
+          activeDmMonsterAction.hitBonus !== undefined ||
+          activeDmMonsterAction.category === 'attacks' ||
+          activeDmMonsterAction.type === 'attack' ||
+          activeDmMonsterAction.isHeal ||
+          (activeDmMonsterAction.rangeFt !== undefined && activeDmMonsterAction.rangeFt <= 5)
+        );
+
+        if (isCreatureTargeted) {
+          toast.info(`Click on a creature token to target ${activeDmMonsterAction.name} (or click Target Self in the dock).`);
+          return;
+        }
+      }
 
       // Point AoE spells (Fireball, Fog Cloud, Web, Darkness, etc.) drop immediately on click!
       if (activeEquippedAsset.paradigm === 'point' || activeEquippedAsset.shape === 'circle' || activeEquippedAsset.paradigm === 'aura') {
@@ -7897,6 +8022,16 @@ export default function App() {
 
       // Only trigger drag-cast if the user dragged significantly (> 25px)
       if (dist > 25) {
+        if (activeDmMonsterAction) {
+          const singleSelectedToken = selectedTokenIds.length === 1 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
+          const targetToken = findTargetTokenFromPoint(aimCurrent, e?.target, stageRef.current, singleSelectedToken?.id);
+          if (targetToken) {
+            if (handleDmTargetTokenRef.current) {
+              handleDmTargetTokenRef.current(targetToken, activeDmMonsterAction);
+            }
+            return;
+          }
+        }
         castSpellAt(aimOrigin, aimCurrent);
         return;
       }
@@ -8267,6 +8402,30 @@ export default function App() {
         : (aimState.lastPoint || aimState.startPoint);
       if (!rawEnd) return;
       const endPoint = stage ? snapDmPointToTokenCenter(rawEnd, e.target, stage) : rawEnd;
+
+      if (activeDmMonsterAction) {
+        const singleSelectedToken = selectedTokenIds.length === 1 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
+        const targetToken = findTargetTokenFromPoint(endPoint, e.target, stage, singleSelectedToken?.id);
+        if (targetToken) {
+          if (handleDmTargetTokenRef.current) {
+            handleDmTargetTokenRef.current(targetToken, activeDmMonsterAction);
+          }
+          return;
+        }
+
+        const isCreatureTargeted = Boolean(
+          activeDmMonsterAction.hitBonus !== undefined ||
+          activeDmMonsterAction.category === 'attacks' ||
+          activeDmMonsterAction.type === 'attack' ||
+          activeDmMonsterAction.isHeal ||
+          (activeDmMonsterAction.rangeFt !== undefined && activeDmMonsterAction.rangeFt <= 5)
+        );
+
+        if (isCreatureTargeted) {
+          toast.info(`Click on a creature token to target ${activeDmMonsterAction.name} (or click Target Self in the dock).`);
+          return;
+        }
+      }
 
       if (activeEquippedAsset.paradigm === 'point' || activeEquippedAsset.shape === 'circle' || activeEquippedAsset.paradigm === 'aura') {
         castSpellAt(endPoint, endPoint);
@@ -10583,11 +10742,18 @@ export default function App() {
                     isSpacePressed={isSpacePressed}
                     combatants={combatTrackerCombatants}
                     characters={compendiumCharacters}
+                    isAimingAction={tool === 'spell_aim' || Boolean(activeDmMonsterAction)}
                     onTargetToken={handleDmTargetToken}
                     onMouseEnter={handleTokenHoverEnter}
                     onMouseLeave={handleTokenHoverLeave}
                     onClick={(e: any) => {
                       setActiveMenu(null);
+                      if (tool === 'spell_aim' || activeDmMonsterAction) {
+                        if (handleDmTargetTokenRef.current) {
+                          handleDmTargetTokenRef.current(token, activeDmMonsterAction || undefined);
+                        }
+                        return;
+                      }
                       if (stageRef.current) {
                         const sx = stageRef.current.x();
                         const sy = stageRef.current.y();
