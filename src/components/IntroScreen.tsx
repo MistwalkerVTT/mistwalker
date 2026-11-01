@@ -88,7 +88,7 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onSelectDm, onSelectPl
   const mutedRef = useRef(muted);
   mutedRef.current = muted;
 
-  // Cinematic sequence timing + preload high-res JB2A magical portal transition videos
+  // Cinematic sequence timing + deferred portal transition video warmup (after core JS bundles finish loading)
   useEffect(() => {
     const preloadUrls = [
       '/jb2a/Community/JAA/glyphOfWarding.webm',
@@ -99,14 +99,17 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onSelectDm, onSelectPl
       '/jb2a/Community/JAA/circleOfDeath.webm',
       '/jb2a/Community/JackKerouac/energy_quickburst_CIRCLE_01.webm'
     ];
-    const videos = preloadUrls.map((url) => {
-      const v = document.createElement('video');
-      v.preload = 'auto';
-      v.muted = true;
-      v.src = url;
-      v.load();
-      return v;
-    });
+    let videos: HTMLVideoElement[] = [];
+    const preloadTimer = setTimeout(() => {
+      if (mutedRef.current) return;
+      videos = preloadUrls.map((url) => {
+        const v = document.createElement('video');
+        v.preload = 'metadata';
+        v.muted = true;
+        v.src = url;
+        return v;
+      });
+    }, 2500);
 
     const timers = [
       setTimeout(() => setStage(1), 400),
@@ -115,6 +118,7 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onSelectDm, onSelectPl
       setTimeout(() => setStage(4), 3900)
     ];
     return () => {
+      clearTimeout(preloadTimer);
       timers.forEach(clearTimeout);
       videos.forEach((v) => {
         v.src = '';

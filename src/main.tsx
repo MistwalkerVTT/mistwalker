@@ -2,6 +2,7 @@ import { StrictMode, lazy, Suspense, useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
 import { CrashRecoveryBoundary } from './components/CrashRecoveryBoundary';
+import { IntroScreen } from './components/IntroScreen.tsx';
 
 const App = lazy(() => import('./App.tsx'));
 const PlayerView = lazy(() => import('./components/PlayerView.tsx'));
@@ -45,7 +46,6 @@ if (typeof window !== 'undefined' && window.CanvasRenderingContext2D) {
 const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
 const isPlayerView = searchParams ? (searchParams.get('view') === 'player' || searchParams.get('player') === 'true') : false;
 
-const IntroScreen = lazy(() => import('./components/IntroScreen.tsx'));
 const INTRO_SEEN_KEY = 'mistwalker_intro_seen_session';
 
 // The cinematic intro shows on a fresh DM-side load. Direct player links (?view=player) and

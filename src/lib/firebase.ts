@@ -159,7 +159,7 @@ export interface FirestoreErrorInfo {
   };
 }
 
-export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null): never {
+export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null): void {
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
@@ -183,11 +183,11 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
       setQuotaExceededState(true);
       console.error('Firestore Quota Exceeded. Database operations paused.', JSON.stringify(errInfo));
     }
+  } else if (path === 'allies' && errInfo.error.includes('Missing or insufficient permissions')) {
+    console.warn('[Firestore] Allies collection using local defaults until rules are synced.');
   } else {
     console.error('Firestore Error:', JSON.stringify(errInfo));
   }
-
-  throw new Error(JSON.stringify(errInfo));
 }
 
 import { WallSegment, VisionConfig, RoomAnnotation, ChapterPdfDigest, RevealPoint, TokenMonsterState, normalizeRoomAnnotation, normalizeRoomAnnotations } from '../types';
@@ -771,6 +771,7 @@ export async function getCampaignsList(): Promise<Campaign[]> {
     return list.sort((a, b) => b.createdAt - a.createdAt);
   } catch (error) {
     handleFirestoreError(error, OperationType.GET, path);
+    return [];
   }
 }
 
@@ -1942,8 +1943,8 @@ export function subscribeToAllies(
       callback(list);
     },
     (err) => {
-      console.warn('subscribeToAllies error:', err);
       if (onError) onError(err);
+      callback([]);
       handleFirestoreError(err, OperationType.GET, path);
     }
   );

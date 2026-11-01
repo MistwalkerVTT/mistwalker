@@ -2281,7 +2281,7 @@ export default function App() {
   const [inspectedRuleEntry, setInspectedRuleEntry] = useState<DndRuleEntry | null>(null);
 
   const startTokenMenuDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if ((e.target as HTMLElement).closest('button, input, select, textarea, a, [data-no-drag]')) return;
+    if (typeof (e.target as HTMLElement)?.closest === 'function' && (e.target as HTMLElement).closest('button, input, select, textarea, a, [data-no-drag]')) return;
     const menuEl = document.getElementById('token-context-menu-popup');
     if (!menuEl) return;
     const rect = menuEl.getBoundingClientRect();
@@ -5601,7 +5601,7 @@ export default function App() {
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (activeMenu && !(e.target as HTMLElement).closest('.relative.group')) {
+      if (activeMenu && typeof (e.target as HTMLElement)?.closest === 'function' && !(e.target as HTMLElement).closest('.relative.group')) {
         setActiveMenu(null);
       }
     };
@@ -7413,7 +7413,7 @@ export default function App() {
           target.tagName === 'TEXTAREA' ||
           target.tagName === 'SELECT' ||
           target.isContentEditable ||
-          target.closest('input, textarea, select, [contenteditable="true"]'))
+          (typeof target.closest === 'function' && target.closest('input, textarea, select, [contenteditable="true"]')))
       ) {
         return;
       }
@@ -7503,23 +7503,26 @@ export default function App() {
   }, [isSpacePressed, isShiftPanActive, tool]);
 
   const resetFog = () => {
+    const nextResetKey = fogResetKey + 1;
     setReveals([]);
     setPolygonReveals([]);
     setCurrentPolygonPoints([]);
     setIsFogVisible(true);
-    setFogResetKey(prev => prev + 1);
+    setFogResetKey(nextResetKey);
 
     if (mapsDataRef.current[activeMapId]) {
       mapsDataRef.current[activeMapId].reveals = [];
       mapsDataRef.current[activeMapId].polygonReveals = [];
       mapsDataRef.current[activeMapId].isFogVisible = true;
+      mapsDataRef.current[activeMapId].fogResetKey = nextResetKey;
     }
 
     if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) {
       socketRef.current.emit('SYNC_STATE', {
         reveals: [],
         polygonReveals: [],
-        isFogVisible: true
+        isFogVisible: true,
+        fogResetKey: nextResetKey
       });
     }
 

@@ -2,7 +2,6 @@ import "dotenv/config";
 import express from "express";
 import { createServer } from "http";
 import { Server } from "socket.io";
-import { createServer as createViteServer } from "vite";
 import path from "path";
 import fs from "fs";
 import multer from "multer";
@@ -602,6 +601,15 @@ async function startServer() {
           Array.isArray(state.polygonReveals) ||
           Array.isArray(state.effects) ||
           Array.isArray(state.boardAnimatedFeatures) ||
+          Array.isArray(state.roomAnnotations) ||
+          state.boardAnimatedEnabled !== undefined ||
+          state.boardWeatherEffect !== undefined ||
+          state.gridSize !== undefined ||
+          state.gridOpacity !== undefined ||
+          state.gridVisible !== undefined ||
+          state.gridOffsetX !== undefined ||
+          state.gridOffsetY !== undefined ||
+          state.mapRotation !== undefined ||
           state.isFogVisible !== undefined ||
           state.visionConfig !== undefined ||
           state.fogResetKey !== undefined);
@@ -957,6 +965,7 @@ async function startServer() {
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
