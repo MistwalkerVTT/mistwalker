@@ -6950,98 +6950,112 @@ export default function App() {
 
   // Multi-touch pinch-to-zoom and two-finger pan for DM mobile/tablet touchscreens
   const dmTouchStateRef = useRef<{
-    lastDist: number;
-    lastCenter: { x: number; y: number };
-    initialScale: number;
-  } | null>(null);
+    active: boolean;
+    wasPinching: boolean;
+    isSingleFingerPanning: boolean;
+    singlePanStartClient: { x: number; y: number };
+    singlePanStartStage: { x: number; y: number };
+    startDist: number;
+    startScale: number;
+    startWorldPoint: { x: number; y: number };
+  }>({
+    active: false,
+    wasPinching: false,
+    isSingleFingerPanning: false,
+    singlePanStartClient: { x: 0, y: 0 },
+    singlePanStartStage: { x: 0, y: 0 },
+    startDist: 0,
+    startScale: 1,
+    startWorldPoint: { x: 0, y: 0 }
+  });
 
-  const handleStageTouchStart = (e: any) => {
-    const touches = e.evt?.touches;
-    if (touches && touches.length === 2) {
+  // Native capture-phase multi-touch listener on Konva Stage container so Konva's 1-finger drag never fights 2-finger pinch
+  useEffect(() => {
+    const stage = stageRef.current;
+    const container = stage?.container?.() as HTMLElement | undefined;
+    if (!stage || !container) return;
+
+    const abortAnyActiveKonvaDrag = () => {
       cancelHoldPing();
-      const stage = e.target.getStage();
-      if (!stage) return;
-      if (stage.isDragging()) {
-        stage.stopDrag();
-        const sx = stage.x();
-        const sy = stage.y();
-        stagePosRef.current = { x: sx, y: sy };
-        setStagePos(prev => (prev.x === sx && prev.y === sy) ? prev : { x: sx, y: sy });
-      }
-      const t1 = touches[0];
-      const t2 = touches[1];
-      const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
-      const center = {
-        x: (t1.clientX + t2.clientX) / 2,
-        y: (t1.clientY + t2.clientY) / 2
-      };
-      dmTouchStateRef.current = {
-        lastDist: dist,
-        lastCenter: center,
-        initialScale: stage.scaleX()
-      };
-      return;
-    }
-
-    if (touches && touches.length === 1) {
-      // Forward 1-finger touch to handleStageMouseDown with synthetic button=0 so drawing/reveal/door tools work on touch
-      const syntheticEvt = {
-        ...e,
-        evt: {
-          ...(e.evt || {}),
-          button: 0,
-          buttons: 1,
-          clientX: touches[0].clientX,
-          clientY: touches[0].clientY,
-          shiftKey: false,
-          ctrlKey: false,
-          metaKey: false,
-          altKey: false
+      try {
+        const dd = (Konva as any)?.DD;
+        if (dd?._dragElements?.size > 0) {
+          dd._dragElements.forEach((elem: any) => elem?.node?.stopDrag?.());
+          dd._dragElements.clear?.();
         }
-      };
-      handleStageMouseDown(syntheticEvt);
-    }
-  };
-
-  const handleStageTouchMove = (e: any) => {
-    const touches = e.evt?.touches;
-    if (touches && touches.length === 2 && dmTouchStateRef.current) {
-      e.evt.preventDefault();
-      cancelHoldPing();
-      const stage = e.target.getStage();
-      if (!stage) return;
+      } catch {}
       if (stage.isDragging()) {
         stage.stopDrag();
-        const sx = stage.x();
-        const sy = stage.y();
-        stagePosRef.current = { x: sx, y: sy };
-        setStagePos(prev => (prev.x === sx && prev.y === sy) ? prev : { x: sx, y: sy });
       }
+      if (isDraggingTokenRef.current) {
+        isDraggingTokenRef.current = false;
+        setIsDraggingToken(false);
+        // Restore any token that just started moving on the first finger before the 2nd finger landed
+        const savedPositions = dragStartPositionsRef.current;
+        if (savedPositions && Object.keys(savedPositions).length > 0) {
+          setTokens(prev => prev.map(t => savedPositions[t.id] ? { ...t, x: savedPositions[t.id].x, y: savedPositions[t.id].y } : t));
+          dragStartPositionsRef.current = {};
+        }
+      }
+      setSelectionBox(null);
+    };
 
-      const t1 = touches[0];
-      const t2 = touches[1];
+    const lockPinchAnchor = (t1: Touch, t2: Touch) => {
+      const rect = container.getBoundingClientRect();
       const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
       const center = {
-        x: (t1.clientX + t2.clientX) / 2,
-        y: (t1.clientY + t2.clientY) / 2
+        x: (t1.clientX + t2.clientX) / 2 - rect.left,
+        y: (t1.clientY + t2.clientY) / 2 - rect.top
       };
-      const { lastDist, lastCenter } = dmTouchStateRef.current;
+      const curScale = stageScaleRef.current || stage.scaleX() || 1;
+      const curPos = {
+        x: stagePosRef.current?.x ?? stage.x(),
+        y: stagePosRef.current?.y ?? stage.y()
+      };
+      dmTouchStateRef.current.active = true;
+      dmTouchStateRef.current.wasPinching = true;
+      dmTouchStateRef.current.isSingleFingerPanning = false;
+      dmTouchStateRef.current.startDist = Math.max(10, dist);
+      dmTouchStateRef.current.startScale = curScale;
+      dmTouchStateRef.current.startWorldPoint = {
+        x: (center.x - curPos.x) / curScale,
+        y: (center.y - curPos.y) / curScale
+      };
+    };
 
-      if (lastDist > 5 && dist > 5) {
-        const scaleFactor = dist / lastDist;
-        const oldScale = stage.scaleX();
-        if (Number.isFinite(oldScale) && oldScale > 0) {
-          const newScale = Math.max(0.1, Math.min(oldScale * scaleFactor, 5));
-          const stageCurrentPos = { x: stage.x(), y: stage.y() };
-          const pointTo = {
-            x: (center.x - stageCurrentPos.x) / oldScale,
-            y: (center.y - stageCurrentPos.y) / oldScale
-          };
-          const dx = center.x - lastCenter.x;
-          const dy = center.y - lastCenter.y;
+    const onTouchStartCapture = (e: TouchEvent) => {
+      if (e.touches.length >= 2) {
+        e.preventDefault();
+        e.stopPropagation();
+        abortAnyActiveKonvaDrag();
+        lockPinchAnchor(e.touches[0], e.touches[1]);
+      }
+    };
+
+    const onTouchMoveCapture = (e: TouchEvent) => {
+      if (e.touches.length >= 2) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!dmTouchStateRef.current.active) {
+          abortAnyActiveKonvaDrag();
+          lockPinchAnchor(e.touches[0], e.touches[1]);
+        }
+
+        const rect = container.getBoundingClientRect();
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+        const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+        const center = {
+          x: (t1.clientX + t2.clientX) / 2 - rect.left,
+          y: (t1.clientY + t2.clientY) / 2 - rect.top
+        };
+
+        const { startDist, startScale, startWorldPoint } = dmTouchStateRef.current;
+        if (startDist > 5 && dist > 5) {
+          const newScale = Math.max(0.1, Math.min(startScale * (dist / startDist), 5));
           const newPos = {
-            x: center.x - pointTo.x * newScale + dx,
-            y: center.y - pointTo.y * newScale + dy
+            x: center.x - startWorldPoint.x * newScale,
+            y: center.y - startWorldPoint.y * newScale
           };
 
           if (Number.isFinite(newScale) && Number.isFinite(newPos.x) && Number.isFinite(newPos.y)) {
@@ -7061,29 +7075,147 @@ export default function App() {
             if (fxWorld) {
               fxWorld.style.transform = `translate3d(${newPos.x}px, ${newPos.y}px, 0) scale(${newScale})`;
             }
-
-            pendingWheelStateRef.current = { scale: newScale, pos: newPos };
-            if (!wheelRafIdRef.current) {
-              wheelRafIdRef.current = requestAnimationFrame(() => {
-                wheelRafIdRef.current = null;
-                if (pendingWheelStateRef.current) {
-                  const { scale, pos } = pendingWheelStateRef.current;
-                  pendingWheelStateRef.current = null;
-                  setStageScale(scale);
-                  setStagePos(pos);
-                }
-              });
-            }
           }
-
-          dmTouchStateRef.current.lastDist = dist;
-          dmTouchStateRef.current.lastCenter = center;
         }
+        return;
+      }
+
+      // Swallow trailing 1-finger move while lifting fingers after a 2-finger pinch so the map never jumps
+      if (dmTouchStateRef.current.wasPinching) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+
+    const onTouchEndCapture = (e: TouchEvent) => {
+      if (dmTouchStateRef.current.wasPinching) {
+        e.preventDefault();
+        e.stopPropagation();
+        dmTouchStateRef.current.active = false;
+        if (e.touches.length === 0) {
+          dmTouchStateRef.current.wasPinching = false;
+          setStageScale(stageScaleRef.current);
+          setStagePos({ ...stagePosRef.current });
+        }
+      }
+    };
+
+    container.addEventListener('touchstart', onTouchStartCapture, { capture: true, passive: false });
+    container.addEventListener('touchmove', onTouchMoveCapture, { capture: true, passive: false });
+    container.addEventListener('touchend', onTouchEndCapture, { capture: true, passive: false });
+    container.addEventListener('touchcancel', onTouchEndCapture, { capture: true, passive: false });
+
+    return () => {
+      container.removeEventListener('touchstart', onTouchStartCapture, { capture: true } as any);
+      container.removeEventListener('touchmove', onTouchMoveCapture, { capture: true } as any);
+      container.removeEventListener('touchend', onTouchEndCapture, { capture: true } as any);
+      container.removeEventListener('touchcancel', onTouchEndCapture, { capture: true } as any);
+    };
+  }, [Boolean(imageFile)]);
+
+  const handleStageTouchStart = (e: any) => {
+    const touches = e.evt?.touches;
+    if (!touches || touches.length !== 1 || dmTouchStateRef.current.wasPinching) return;
+
+    const stage = e.target.getStage();
+    if (!stage) return;
+
+    // Check if touch landed on a token or hotspot
+    let clickedNode = e.target;
+    let isInteractiveNode = false;
+    while (clickedNode && clickedNode !== stage) {
+      const nodeName = typeof clickedNode.name === 'function' ? clickedNode.name() : '';
+      const nodeId = typeof clickedNode.id === 'function' ? clickedNode.id() : '';
+      if (
+        nodeName === 'token' ||
+        nodeName === 'room-hotspot' ||
+        nodeId === 'room-hotspots-group' ||
+        nodeId.startsWith('hotspot-') ||
+        nodeId.startsWith('label-')
+      ) {
+        isInteractiveNode = true;
+        break;
+      }
+      clickedNode = clickedNode.getParent?.();
+    }
+
+    // On touchscreens, 1-finger drag on empty map in 'select' or 'pan' mode smoothly pans the map (instead of drawing a mouse marquee box)
+    if (!isInteractiveNode && (tool === 'select' || tool === 'pan')) {
+      setActiveMenu(null);
+      dmTouchStateRef.current.isSingleFingerPanning = true;
+      dmTouchStateRef.current.singlePanStartClient = {
+        x: touches[0].clientX,
+        y: touches[0].clientY
+      };
+      dmTouchStateRef.current.singlePanStartStage = {
+        x: stagePosRef.current?.x ?? stage.x(),
+        y: stagePosRef.current?.y ?? stage.y()
+      };
+      const pointer = stage.getPointerPosition();
+      if (pointer && !hoveredZoneId && !isRoomDrawerOpen) {
+        const scale = stageScaleRef.current || stage.scaleX() || 1;
+        startHoldPing(
+          (pointer.x - stagePosRef.current.x) / scale,
+          (pointer.y - stagePosRef.current.y) / scale,
+          touches[0].clientX,
+          touches[0].clientY,
+          false
+        );
       }
       return;
     }
 
-    if (touches && touches.length === 1 && tool !== 'pan') {
+    // Forward 1-finger touch to handleStageMouseDown for active drawing/reveal/door/spell tools
+    const syntheticEvt = {
+      ...e,
+      evt: {
+        ...(e.evt || {}),
+        button: 0,
+        buttons: 1,
+        clientX: touches[0].clientX,
+        clientY: touches[0].clientY,
+        shiftKey: false,
+        ctrlKey: false,
+        metaKey: false,
+        altKey: false
+      }
+    };
+    handleStageMouseDown(syntheticEvt);
+  };
+
+  const handleStageTouchMove = (e: any) => {
+    const touches = e.evt?.touches;
+    if (!touches || touches.length !== 1 || dmTouchStateRef.current.wasPinching) return;
+
+    if (dmTouchStateRef.current.isSingleFingerPanning) {
+      const stage = stageRef.current;
+      if (!stage) return;
+      const dx = touches[0].clientX - dmTouchStateRef.current.singlePanStartClient.x;
+      const dy = touches[0].clientY - dmTouchStateRef.current.singlePanStartClient.y;
+      if (Math.hypot(dx, dy) > 6) {
+        cancelHoldPing();
+      }
+      const newPos = {
+        x: dmTouchStateRef.current.singlePanStartStage.x + dx,
+        y: dmTouchStateRef.current.singlePanStartStage.y + dy
+      };
+      stagePosRef.current = newPos;
+      stage.position(newPos);
+      stage.batchDraw();
+
+      const fx = document.getElementById('main-animated-fx-overlay');
+      if (fx) {
+        fx.style.left = `${newPos.x}px`;
+        fx.style.top = `${newPos.y}px`;
+      }
+      const fxWorld = document.getElementById('mistwalker-dom-effects-overlay-world');
+      if (fxWorld) {
+        fxWorld.style.transform = `translate3d(${newPos.x}px, ${newPos.y}px, 0) scale(${stageScaleRef.current})`;
+      }
+      return;
+    }
+
+    if (tool !== 'pan') {
       const syntheticEvt = {
         ...e,
         evt: {
@@ -7099,8 +7231,12 @@ export default function App() {
   };
 
   const handleStageTouchEnd = (e: any) => {
-    if (!e.evt?.touches || e.evt.touches.length < 2) {
-      dmTouchStateRef.current = null;
+    if (dmTouchStateRef.current.wasPinching) return;
+    if (dmTouchStateRef.current.isSingleFingerPanning && (!e.evt?.touches || e.evt.touches.length === 0)) {
+      dmTouchStateRef.current.isSingleFingerPanning = false;
+      cancelHoldPing();
+      setStagePos({ ...stagePosRef.current });
+      return;
     }
     if (!e.evt?.touches || e.evt.touches.length === 0) {
       cancelHoldPing();
@@ -8689,7 +8825,7 @@ export default function App() {
           />
         ) : (
           <div
-            className={`flex-1 h-full relative ${isSpacePressed || isShiftPanActive || tool === 'pan' ? 'cursor-grab active:cursor-grabbing' : tool === 'select' ? 'cursor-default' : 'cursor-crosshair'}`}
+            className={`flex-1 h-full relative touch-none ${isSpacePressed || isShiftPanActive || tool === 'pan' ? 'cursor-grab active:cursor-grabbing' : tool === 'select' ? 'cursor-default' : 'cursor-crosshair'}`}
             onDragOver={(e) => {
               e.preventDefault();
               e.dataTransfer.dropEffect = 'copy';

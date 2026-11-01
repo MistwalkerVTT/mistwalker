@@ -6155,98 +6155,104 @@ export default function PlayerView() {
 
   // Multi-touch pinch-to-zoom and two-finger pan for mobile touchscreens
   const touchStateRef = useRef<{
-    lastDist: number;
-    lastCenter: { x: number; y: number };
-    initialScale: number;
-  } | null>(null);
+    active: boolean;
+    wasPinching: boolean;
+    startDist: number;
+    startScale: number;
+    startWorldPoint: { x: number; y: number };
+  }>({
+    active: false,
+    wasPinching: false,
+    startDist: 0,
+    startScale: 1,
+    startWorldPoint: { x: 0, y: 0 }
+  });
 
-  const handleStageTouchStart = useCallback((e: any) => {
-    const touches = e.evt?.touches;
-    if (touches && touches.length === 2) {
-      const stage = e.target.getStage();
-      if (!stage) return;
-      if (stage.isDragging()) {
-        stage.stopDrag();
-        const sx = stage.x();
-        const sy = stage.y();
-        stagePosRef.current = { x: sx, y: sy };
-        setStagePos(prev => (prev.x === sx && prev.y === sy) ? prev : { x: sx, y: sy });
-      }
-      const t1 = touches[0];
-      const t2 = touches[1];
-      const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
-      const center = {
-        x: (t1.clientX + t2.clientX) / 2,
-        y: (t1.clientY + t2.clientY) / 2
-      };
-      touchStateRef.current = {
-        lastDist: dist,
-        lastCenter: center,
-        initialScale: stage.scaleX()
-      };
-      return;
-    }
+  // Native capture-phase multi-touch listener on Konva Stage container so Konva's 1-finger drag never fights 2-finger pinch
+  useEffect(() => {
+    const stage = stageRef.current;
+    const container = stage?.container?.() as HTMLElement | undefined;
+    if (!stage || !container) return;
 
-    if (touches && touches.length === 1) {
-      if (activeEquippedAsset) {
-        handleStageMouseDown(e);
-      } else {
-        const stage = e.target.getStage();
-        const point = stage ? getStageRelativePointerPosition(stage) : null;
-        if (point) {
-          startHoldPing(
-            point.x,
-            point.y,
-            touches[0].clientX,
-            touches[0].clientY,
-            false
-          );
+    const abortAnyActiveKonvaDrag = () => {
+      cancelHoldPing();
+      try {
+        const dd = (Konva as any)?.DD;
+        if (dd?._dragElements?.size > 0) {
+          dd._dragElements.forEach((elem: any) => elem?.node?.stopDrag?.());
+          dd._dragElements.clear?.();
         }
-      }
-    }
-  }, [activeEquippedAsset, startHoldPing]);
-
-  const handleStageTouchMove = useCallback((e: any) => {
-    const touches = e.evt?.touches;
-    if (touches && touches.length === 2 && touchStateRef.current) {
-      e.evt.preventDefault();
-      const stage = e.target.getStage();
-      if (!stage) return;
+      } catch {}
       if (stage.isDragging()) {
         stage.stopDrag();
-        const sx = stage.x();
-        const sy = stage.y();
-        stagePosRef.current = { x: sx, y: sy };
-        setStagePos(prev => (prev.x === sx && prev.y === sy) ? prev : { x: sx, y: sy });
       }
+      if (activeDraggingTokenIdRef.current) {
+        activeDraggingTokenIdRef.current = null;
+        setIsDraggingToken(false);
+        setTokenDragState(prev => {
+          if (prev) {
+            setTokens(toks => toks.map(t => t.id === prev.tokenId ? { ...t, x: prev.originX, y: prev.originY } : t));
+          }
+          return null;
+        });
+      }
+    };
 
-      const t1 = touches[0];
-      const t2 = touches[1];
+    const lockPinchAnchor = (t1: Touch, t2: Touch) => {
+      const rect = container.getBoundingClientRect();
       const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
       const center = {
-        x: (t1.clientX + t2.clientX) / 2,
-        y: (t1.clientY + t2.clientY) / 2
+        x: (t1.clientX + t2.clientX) / 2 - rect.left,
+        y: (t1.clientY + t2.clientY) / 2 - rect.top
       };
-      const { lastDist, lastCenter } = touchStateRef.current;
+      const curScale = stageScaleRef.current || stage.scaleX() || 1;
+      const curPos = {
+        x: stagePosRef.current?.x ?? stage.x(),
+        y: stagePosRef.current?.y ?? stage.y()
+      };
+      touchStateRef.current.active = true;
+      touchStateRef.current.wasPinching = true;
+      touchStateRef.current.startDist = Math.max(10, dist);
+      touchStateRef.current.startScale = curScale;
+      touchStateRef.current.startWorldPoint = {
+        x: (center.x - curPos.x) / curScale,
+        y: (center.y - curPos.y) / curScale
+      };
+    };
 
-      if (lastDist > 5 && dist > 5) {
-        const scaleFactor = dist / lastDist;
-        const oldScale = stage.scaleX();
-        if (Number.isFinite(oldScale) && oldScale > 0) {
-          const newScale = Math.max(0.12, Math.min(oldScale * scaleFactor, 4.5));
+    const onTouchStartCapture = (e: TouchEvent) => {
+      if (e.touches.length >= 2) {
+        e.preventDefault();
+        e.stopPropagation();
+        abortAnyActiveKonvaDrag();
+        lockPinchAnchor(e.touches[0], e.touches[1]);
+      }
+    };
 
-          const stageCurrentPos = { x: stage.x(), y: stage.y() };
-          const pointTo = {
-            x: (center.x - stageCurrentPos.x) / oldScale,
-            y: (center.y - stageCurrentPos.y) / oldScale
-          };
+    const onTouchMoveCapture = (e: TouchEvent) => {
+      if (e.touches.length >= 2) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!touchStateRef.current.active) {
+          abortAnyActiveKonvaDrag();
+          lockPinchAnchor(e.touches[0], e.touches[1]);
+        }
 
-          const dx = center.x - lastCenter.x;
-          const dy = center.y - lastCenter.y;
+        const rect = container.getBoundingClientRect();
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+        const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+        const center = {
+          x: (t1.clientX + t2.clientX) / 2 - rect.left,
+          y: (t1.clientY + t2.clientY) / 2 - rect.top
+        };
 
+        const { startDist, startScale, startWorldPoint } = touchStateRef.current;
+        if (startDist > 5 && dist > 5) {
+          const newScale = Math.max(0.12, Math.min(startScale * (dist / startDist), 4.5));
           const newPos = {
-            x: center.x - pointTo.x * newScale + dx,
-            y: center.y - pointTo.y * newScale + dy
+            x: center.x - startWorldPoint.x * newScale,
+            y: center.y - startWorldPoint.y * newScale
           };
 
           if (Number.isFinite(newScale) && Number.isFinite(newPos.x) && Number.isFinite(newPos.y)) {
@@ -6260,37 +6266,74 @@ export default function PlayerView() {
             if (fxWorld) {
               fxWorld.style.transform = `translate3d(${newPos.x}px, ${newPos.y}px, 0) scale(${newScale})`;
             }
-
-            pendingWheelStateRef.current = { scale: newScale, pos: newPos };
-            if (!wheelRafIdRef.current) {
-              wheelRafIdRef.current = requestAnimationFrame(() => {
-                wheelRafIdRef.current = null;
-                if (pendingWheelStateRef.current) {
-                  const { scale, pos } = pendingWheelStateRef.current;
-                  pendingWheelStateRef.current = null;
-                  setStageScale(scale);
-                  setStagePos(pos);
-                }
-              });
-            }
           }
+        }
+        return;
+      }
 
-          touchStateRef.current.lastDist = dist;
-          touchStateRef.current.lastCenter = center;
+      if (touchStateRef.current.wasPinching) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+
+    const onTouchEndCapture = (e: TouchEvent) => {
+      if (touchStateRef.current.wasPinching) {
+        e.preventDefault();
+        e.stopPropagation();
+        touchStateRef.current.active = false;
+        if (e.touches.length === 0) {
+          touchStateRef.current.wasPinching = false;
+          setStageScale(stageScaleRef.current);
+          setStagePos({ ...stagePosRef.current });
         }
       }
-      return;
-    }
+    };
 
-    if (activeEquippedAsset && touches && touches.length === 1) {
+    container.addEventListener('touchstart', onTouchStartCapture, { capture: true, passive: false });
+    container.addEventListener('touchmove', onTouchMoveCapture, { capture: true, passive: false });
+    container.addEventListener('touchend', onTouchEndCapture, { capture: true, passive: false });
+    container.addEventListener('touchcancel', onTouchEndCapture, { capture: true, passive: false });
+
+    return () => {
+      container.removeEventListener('touchstart', onTouchStartCapture, { capture: true } as any);
+      container.removeEventListener('touchmove', onTouchMoveCapture, { capture: true } as any);
+      container.removeEventListener('touchend', onTouchEndCapture, { capture: true } as any);
+      container.removeEventListener('touchcancel', onTouchEndCapture, { capture: true } as any);
+    };
+  }, []);
+
+  const handleStageTouchStart = useCallback((e: any) => {
+    const touches = e.evt?.touches;
+    if (!touches || touches.length !== 1 || touchStateRef.current.wasPinching) return;
+
+    if (activeEquippedAsset) {
+      handleStageMouseDown(e);
+    } else {
+      const stage = e.target.getStage();
+      const point = stage ? getStageRelativePointerPosition(stage) : null;
+      if (point) {
+        startHoldPing(
+          point.x,
+          point.y,
+          touches[0].clientX,
+          touches[0].clientY,
+          false
+        );
+      }
+    }
+  }, [activeEquippedAsset, startHoldPing]);
+
+  const handleStageTouchMove = useCallback((e: any) => {
+    const touches = e.evt?.touches;
+    if (!touches || touches.length !== 1 || touchStateRef.current.wasPinching) return;
+    if (activeEquippedAsset) {
       handleStageMouseMove(e);
     }
   }, [activeEquippedAsset]);
 
   const handleStageTouchEnd = useCallback((e: any) => {
-    if (!e.evt?.touches || e.evt.touches.length < 2) {
-      touchStateRef.current = null;
-    }
+    if (touchStateRef.current.wasPinching) return;
     if (activeEquippedAsset && (!e.evt?.touches || e.evt.touches.length === 0)) {
       handleStageMouseUp();
     }
