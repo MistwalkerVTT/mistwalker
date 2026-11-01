@@ -14,6 +14,24 @@
 
 ## Pending Changes Queue for Future Enterprise Patch
 
+### [2026-11-01] feat(effects): allow DM to dispel any player effect and synchronize bidirectional cancellation
+- **Commit**: `2502858`
+- **Files Changed**:
+  - `src/App.tsx`
+  - `src/components/PlayerHeroDock.tsx`
+  - `src/effects/render/DomEffectOverlay.tsx`
+- **Summary**:
+  - **Universal DM Dispel Authority**: Added `isDM` mode to `DomEffectOverlay` so that the DM always sees on-map clickable dispel badges (`X`) for all effects placed by players on the battlemap or tokens (including one-shot blasts, concentration spells, and token-equipped auras).
+  - **DM Token Aura Clearing**: Passed `onClearTokenAura` and `onRemoveTokenBubble` to `DomEffectOverlay` in `App.tsx` with full state updates and WebSocket broadcasts, allowing the DM to dismiss player token auras with one click.
+  - **Player Hero Dock Dispel**: Added quick "Dispel Active Spell" buttons to the action inspection card and modal in `PlayerHeroDock`, allowing players to dismiss their active spells or auras directly from their HUD sheet.
+  - **Bidirectional WebSocket Sync**: Ensured any effect cancellation via `handleDispelEffect` or token aura removal broadcasts `EFFECT_REMOVE` / `SYNC_TOKENS` across all connected clients immediately, cancelling on both DM and player views simultaneously. Added `effects` state hydration to `SYNC_STATE` in `App.tsx`.
+- **Impact / Testing Notes**:
+  - Have a player place a persistent effect, token aura, or lasting spell. Verify the DM immediately sees the dispel pin on the battlemap.
+  - Verify clicking dispel as DM removes the effect on both DM and player screens instantly.
+  - Verify when a player cancels their own effect (via on-map pin or PlayerHeroDock), it immediately disappears from DM mode.
+
+---
+
 ### [2026-11-01] feat(auras): replace aura of life/vitality animations and update boundary circle styling
 - **Commit**: `40712b0`
 - **Files Changed**:
