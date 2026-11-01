@@ -58,6 +58,8 @@ interface DmMonsterDockProps {
   isFlying?: boolean;
   onUpdateFlight?: (updates: { elevation?: number; isFlying?: boolean }) => void;
   onInspectRule?: (ruleName: string, kind?: string) => void;
+  isAutoRollDiceEnabled?: boolean;
+  onToggleAutoRollDice?: (enabled: boolean) => void;
 }
 
 export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
@@ -88,7 +90,9 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
   elevation = 0,
   isFlying = false,
   onUpdateFlight,
-  onInspectRule
+  onInspectRule,
+  isAutoRollDiceEnabled = true,
+  onToggleAutoRollDice
 }) => {
   const [activeCategory, setActiveCategory] = useState<DmMonsterActionCategory>('attacks');
   const [selectedSpellLevel, setSelectedSpellLevel] = useState<number | 'all'>('all');
@@ -423,6 +427,38 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                 +5
               </button>
             </div>
+          )}
+
+          {/* Auto Roll Dice Toggle */}
+          {onToggleAutoRollDice && (
+            <button
+              type="button"
+              onClick={() => onToggleAutoRollDice(!isAutoRollDiceEnabled)}
+              role="switch"
+              aria-checked={isAutoRollDiceEnabled}
+              className={`flex items-center gap-2 px-2.5 py-1 rounded-xl border text-[11px] font-mono font-bold transition-all cursor-pointer active:scale-95 shadow-sm ${
+                isAutoRollDiceEnabled
+                  ? 'bg-amber-950/70 hover:bg-amber-900/80 text-amber-300 border-amber-500/50 shadow-amber-950/50'
+                  : 'bg-zinc-900/90 hover:bg-zinc-850 text-zinc-400 hover:text-zinc-200 border-zinc-800'
+              }`}
+              title={
+                isAutoRollDiceEnabled
+                  ? 'Automatic Dice Rolling is ON - attacks and targeting roll 3D dice and calculate damage automatically (Click to turn OFF for manual roll prompts)'
+                  : 'Automatic Dice Rolling is OFF - attacks play visual animations and prompt for dice rolls (Click to turn ON)'
+              }
+            >
+              <Dices className={`w-3.5 h-3.5 ${isAutoRollDiceEnabled ? 'text-amber-400' : 'text-zinc-500'}`} />
+              <div
+                className={`w-6 h-3.5 rounded-full p-0.5 transition-colors flex items-center ${
+                  isAutoRollDiceEnabled ? 'bg-amber-500 justify-end' : 'bg-zinc-700 justify-start'
+                }`}
+              >
+                <div className="w-2.5 h-2.5 rounded-full bg-white shadow-xs" />
+              </div>
+              <span className="hidden sm:inline">
+                Auto Roll: {isAutoRollDiceEnabled ? 'ON' : 'OFF'}
+              </span>
+            </button>
           )}
         </div>
 
@@ -799,13 +835,14 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                 return (
                   <div
                     key={action.id || idx}
+                    onClick={() => onSelectAction(action)}
                     onMouseEnter={() => setHoveredAction(action)}
                     onMouseLeave={() => setHoveredAction(null)}
                     onContextMenu={(e) => {
                       e.preventDefault();
                       if (onInspectRule) onInspectRule(action.name, action.type || 'action');
                     }}
-                    className={`group p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between gap-2 ${
+                    className={`group p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between gap-2 cursor-pointer ${
                       isTargetingThis
                         ? 'border-amber-400 bg-red-950/40 shadow-[0_0_15px_rgba(245,158,11,0.4)] ring-1 ring-amber-400'
                         : 'border-zinc-800/90 hover:border-red-500/50 bg-zinc-900/80 hover:bg-zinc-900'
@@ -845,7 +882,7 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                         </div>
 
                         <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 mt-0.5 truncate">
-                          <span>{action.reachRange || (action.rangeFt ? `${action.rangeFt} ft.` : 'Self')}</span>
+                          <span>{action.reachRange || (action.rangeFt ? (action.rangeFt === 0 ? 'Self' : `${action.rangeFt} ft.`) : (action.category === 'attacks' ? '5 ft.' : 'Action'))}</span>
                           {action.damageType && (
                             <>
                               <span>•</span>
@@ -963,7 +1000,10 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                       {/* Aim / Place on Map */}
                       <button
                         type="button"
-                        onClick={() => onSelectAction(action)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelectAction(action);
+                        }}
                         className={`flex-1 py-1 px-2 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
                           isTargetingThis
                             ? 'bg-amber-500 text-zinc-950 shadow-[0_0_10px_rgba(245,158,11,0.5)] font-extrabold'
@@ -979,7 +1019,10 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                       {(action.hitBonus !== undefined || action.damageFormula !== undefined || action.saveDc !== undefined) && (
                         <button
                           type="button"
-                          onClick={() => onQuickRollAction(action)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onQuickRollAction(action);
+                          }}
                           className="py-1 px-2.5 rounded-lg bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-700/60 text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer active:scale-95"
                           title="Quick Roll Attack, Save DC, & Damage with 3D Physics Dice"
                         >

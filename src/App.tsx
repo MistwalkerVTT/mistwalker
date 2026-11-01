@@ -52,6 +52,7 @@ import { DdbDiceRollEvent } from './types/dice';
 import { evaluateDiceFormula } from './types/hud';
 import { EffectContextMenu, ContextMenuData } from './components/EffectContextMenu';
 import { DndRuleInspectionModal } from './components/DndRuleInspectionModal';
+import { CombatDicePromptModal, PendingCombatRoll, RollAdvantageMode } from './components/CombatDicePromptModal';
 import { canTokenHaveHalo } from './effects/db/tokenFxMap';
 import { DndRuleEntry, lookupDndRuleDetails } from './data/dndRulesCompendium';
 import {
@@ -1398,6 +1399,11 @@ export default function App() {
   const [effects, setEffects] = useState<VttEffectInstance[]>([]);
   const [activeEquippedAsset, setActiveEquippedAsset] = useState<Jb2aAssetDefinition | null>(null);
   const [activeDmMonsterAction, setActiveDmMonsterAction] = useState<MonsterActionItem | null>(null);
+  const [isDmAutoRollEnabled, setIsDmAutoRollEnabled] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    return localStorage.getItem('mistwalker_dm_autoroll') !== 'false';
+  });
+  const [pendingDmCombatRoll, setPendingDmCombatRoll] = useState<PendingCombatRoll | null>(null);
   const [aimOrigin, setAimOrigin] = useState<{ x: number; y: number } | null>(null);
   const [aimCurrent, setAimCurrent] = useState<{ x: number; y: number } | null>(null);
 
@@ -4828,6 +4834,14 @@ export default function App() {
     });
   }, [setTool, selectedTokenIds, tokens, gridSize]);
 
+  const handleToggleDmAutoRoll = useCallback((enabled: boolean) => {
+    setIsDmAutoRollEnabled(enabled);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('mistwalker_dm_autoroll', String(enabled));
+    }
+    toast.info(enabled ? '🎲 Auto Roll enabled for DM monster actions' : '🎲 Auto Roll disabled - manual roll prompts enabled');
+  }, []);
+
   const handleSelectDmMonsterAction = useCallback((action: MonsterActionItem) => {
     if (activeDmMonsterAction?.id === action.id) {
       setActiveDmMonsterAction(null);
@@ -4858,7 +4872,17 @@ export default function App() {
       else if (action.type === 'attack' || action.category === 'attacks') matchedAsset = findJb2aAsset('attack_slash');
     }
 
-    if (action.isSelfAction) {
+    // Only non-damaging pure self actions trigger immediately without targeting
+    const isPureSelfBuff = Boolean(
+      action.isSelfAction &&
+      !action.damageFormula &&
+      !action.saveDc &&
+      action.hitBonus === undefined &&
+      action.category !== 'attacks' &&
+      action.type !== 'attack'
+    );
+
+    if (isPureSelfBuff) {
       const tokenRadius = ((singleToken.size || 1) * gridSize) / 2;
       const center = { x: singleToken.x + tokenRadius, y: singleToken.y + tokenRadius };
 
@@ -4895,13 +4919,9 @@ export default function App() {
         }
       }
 
-      if (action.damageFormula) {
-        executeMonsterRoll(singleToken, action);
-      } else {
-        toast.success(`${singleToken.name} activated ${action.name}!`, {
-          description: action.description
-        });
-      }
+      toast.success(`${singleToken.name} activated ${action.name}!`, {
+        description: action.description
+      });
 
       setActiveDmMonsterAction(null);
       return;
@@ -4922,6 +4942,7 @@ export default function App() {
         shape: (action.rangeFt || 5) > 5 ? 'ray' : 'circle',
         defaultSizeFt: action.rangeFt || 5,
         webm: '/jb2a/Library/Cantrip/Fire_Bolt/FireBolt_01_Regular_Orange_30ft_1600x400.webm',
+        projectileWebm: '/jb2a/Library/Cantrip/Fire_Bolt/FireBolt_01_Regular_Orange_30ft_1600x400.webm',
         thumb: '/jb2a/Library/Cantrip/Fire_Bolt/FireBolt_01_Regular_Orange_Thumb.webp',
         isPersistent: false,
         blendMode: 'screen',
@@ -5369,6 +5390,51 @@ export default function App() {
     }
 
     // 3. Combat Resolution (To-Hit, Save, Damage, HP Mutation)
+    if (!isDmAutoRollEnabled) {
+      const isAttackAction = Boolean(
+        action.hitBonus !== undefined ||
+        action.category === 'attacks' ||
+        action.type === 'attack'
+      );
+      const rawHit = typeof action.hitBonus === 'number'
+        ? action.hitBonus
+        : (parseInt(String(action.hitBonus || '+0').replace('+', ''), 10) || 0);
+      const targetAc = targetToken.ac ?? 10;
+      const atkFormula = action.damageFormula || (action.isHeal ? '1d8 + 3' : '1d8');
+
+      setPendingDmCombatRoll({
+        actor: {
+          id: singleToken.id,
+          name: singleToken.name,
+          avatarUrl: singleToken.url || singleToken.avatarUrl
+        },
+        target: {
+          id: targetToken.id,
+          name: targetToken.name,
+          avatarUrl: targetToken.url || targetToken.avatarUrl,
+          ac: targetAc,
+          currentHp: targetToken.currentHp ?? targetToken.hp,
+          maxHp: targetToken.maxHp
+        },
+        action: action as any,
+        phase: isAttackAction ? 'to_hit' : 'damage',
+        hitBonus: rawHit,
+        damageFormula: atkFormula,
+        isHeal: Boolean(action.isHeal),
+        saveDc: action.saveDc ? Number(action.saveDc) : undefined,
+        saveAbility: action.saveAbility,
+        isAttack: isAttackAction
+      });
+
+      // Clear targeting
+      setActiveDmMonsterAction(null);
+      setActiveEquippedAsset(null);
+      setAimOrigin(null);
+      setAimCurrent(null);
+      setTool('pan');
+      return;
+    }
+
     const diceResults: Array<{ sides: number; result: number; type: string }> = [];
     let isHit = true;
     let isCrit = false;
@@ -5561,7 +5627,7 @@ export default function App() {
     setAimOrigin(null);
     setAimCurrent(null);
     setTool('pan');
-  }, [activeDmMonsterAction, activeEquippedAsset, selectedTokenIds, tokens, gridSize, activeMapId]);
+  }, [activeDmMonsterAction, activeEquippedAsset, selectedTokenIds, tokens, gridSize, activeMapId, isDmAutoRollEnabled]);
 
   const handleDmTargetSelf = useCallback(() => {
     const singleToken = selectedTokenIds.length === 1 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
@@ -5569,6 +5635,121 @@ export default function App() {
       handleDmTargetToken(singleToken, activeDmMonsterAction);
     }
   }, [selectedTokenIds, tokens, activeDmMonsterAction, handleDmTargetToken]);
+
+  const handleResolveDmHit = useCallback((result: {
+    d20: number;
+    total: number;
+    isCrit: boolean;
+    isFumble: boolean;
+    hits: boolean;
+    advantageMode: RollAdvantageMode;
+  }) => {
+    if (!pendingDmCombatRoll) return;
+    const { actor, target, action } = pendingDmCombatRoll;
+
+    if (!result.hits) {
+      toast.error(
+        result.isFumble
+          ? `${actor.name}'s ${action.name} MISSED ${target.name} (Natural 1 Fumble)!`
+          : `${actor.name}'s ${action.name} missed ${target.name} (Rolled ${result.total} vs AC ${target.ac || 10}).`
+      );
+      setPendingDmCombatRoll(null);
+      return;
+    }
+
+    toast.success(
+      result.isCrit
+        ? `💥 ${actor.name} CRITICAL HIT on ${target.name}! (Nat 20) — Roll damage!`
+        : `🎯 ${actor.name} hits ${target.name}! (Rolled ${result.total} vs AC ${target.ac || 10}) — Roll damage!`
+    );
+
+    setPendingDmCombatRoll(prev => prev ? {
+      ...prev,
+      phase: 'damage',
+      d20Roll: result.d20,
+      toHitTotal: result.total,
+      isCrit: result.isCrit,
+      isFumble: result.isFumble
+    } : null);
+  }, [pendingDmCombatRoll]);
+
+  const handleResolveDmDamage = useCallback((result: {
+    damageTotal: number;
+    breakdown: string;
+    isCrit: boolean;
+    diceEvent?: DdbDiceRollEvent;
+  }) => {
+    if (!pendingDmCombatRoll) return;
+    const { actor, target, action, isHeal } = pendingDmCombatRoll;
+    const targetToken = tokens.find(t => t.id === target.id);
+    const deltaHp = isHeal ? result.damageTotal : -result.damageTotal;
+
+    if (targetToken && deltaHp !== 0) {
+      setTokens(prev => {
+        const next = prev.map(t => {
+          if (t.id !== targetToken.id) return t;
+          const currentMax = t.maxHp || 10;
+          const current = t.currentHp !== undefined ? t.currentHp : (t.hp !== undefined ? t.hp : currentMax);
+          let nextHp = current;
+          let nextTemp = t.tempHp || 0;
+
+          if (deltaHp < 0) {
+            const dmg = Math.abs(deltaHp);
+            if (nextTemp > 0) {
+              if (nextTemp >= dmg) {
+                nextTemp -= dmg;
+              } else {
+                const rem = dmg - nextTemp;
+                nextTemp = 0;
+                nextHp = Math.max(0, nextHp - rem);
+              }
+            } else {
+              nextHp = Math.max(0, nextHp - dmg);
+            }
+          } else if (deltaHp > 0) {
+            nextHp = Math.min(currentMax, nextHp + deltaHp);
+          }
+
+          return { ...t, currentHp: nextHp, hp: nextHp, tempHp: nextTemp };
+        });
+
+        if (mapsDataRef.current[activeMapId]) mapsDataRef.current[activeMapId].tokens = next;
+        if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) {
+          socketRef.current.emit('SYNC_TOKENS', next);
+        }
+        return next;
+      });
+
+      setCombatTrackerCombatants(prev => prev.map(c => {
+        if (c.id === targetToken.id || (c as any).tokenId === targetToken.id || (c.name && targetToken.name && c.name.toLowerCase() === targetToken.name.toLowerCase())) {
+          const currentMax = c.maxHp || 10;
+          const current = c.currentHp !== undefined ? c.currentHp : currentMax;
+          const nextHp = Math.max(0, Math.min(currentMax, current + deltaHp));
+          return { ...c, currentHp: nextHp };
+        }
+        return c;
+      }));
+    }
+
+    toast.success(
+      isHeal
+        ? `💚 Restored +${result.damageTotal} HP to ${target.name}!`
+        : `⚔️ ${actor.name} dealt ${result.damageTotal} damage to ${target.name} with ${action.name}!`
+    );
+
+    setPendingDmCombatRoll(null);
+  }, [pendingDmCombatRoll, tokens, activeMapId]);
+
+  const handleEnableDmAutoRollAndContinue = useCallback(() => {
+    if (!pendingDmCombatRoll) return;
+    const { action, target } = pendingDmCombatRoll;
+    handleToggleDmAutoRoll(true);
+    setPendingDmCombatRoll(null);
+    const targetToken = tokens.find(t => t.id === target.id);
+    if (targetToken) {
+      handleDmTargetToken(targetToken, action as any);
+    }
+  }, [pendingDmCombatRoll, handleToggleDmAutoRoll, tokens, handleDmTargetToken]);
 
   const handleRollDmMonsterRecharge = useCallback((action: MonsterActionItem) => {
     const singleToken = selectedTokenIds.length === 1 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
@@ -11035,6 +11216,8 @@ export default function App() {
                         const rule = lookupDndRuleDetails(ruleName, (kind as any) || 'action');
                         if (rule) setInspectedRuleEntry(rule);
                       }}
+                      isAutoRollDiceEnabled={isDmAutoRollEnabled}
+                      onToggleAutoRollDice={handleToggleDmAutoRoll}
                     />
                   );
                 }
@@ -13338,6 +13521,25 @@ export default function App() {
           onClose={() => setInspectedRuleEntry(null)}
           socket={socketRef.current}
           characterName="Dungeon Master"
+        />
+      )}
+
+      {/* DM Combat Dice Prompt Modal when Auto Roll is OFF */}
+      {pendingDmCombatRoll && (
+        <CombatDicePromptModal
+          pendingRoll={pendingDmCombatRoll}
+          onClose={() => setPendingDmCombatRoll(null)}
+          onResolveHit={handleResolveDmHit}
+          onResolveDamage={handleResolveDmDamage}
+          onEnableAutoRollAndContinue={handleEnableDmAutoRollAndContinue}
+          onTrigger3dDice={(diceEvent) => {
+            if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+              (window as any).__mistwalkerRoll3d(diceEvent);
+            }
+            if (socketRef.current?.connected) {
+              socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', diceEvent);
+            }
+          }}
         />
       )}
 

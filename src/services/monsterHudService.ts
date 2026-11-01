@@ -274,14 +274,31 @@ export function parseMonsterAction(
   }
 
   // Reach & Range
-  const reachRange = 'reachRange' in raw ? raw.reachRange : undefined;
-  const rangeFt = extractRangeInFeet(reachRange, desc);
+  let reachRange = 'reachRange' in raw ? raw.reachRange : undefined;
+  let rangeFt = extractRangeInFeet(reachRange, desc);
+
+  if (!rangeFt && !reachRange) {
+    if (category === 'attacks' || hitBonus !== undefined) {
+      if (/melee/i.test(desc) || /reach/i.test(desc)) {
+        rangeFt = 5;
+        reachRange = 'reach 5 ft.';
+      } else if (/ranged/i.test(desc)) {
+        rangeFt = 60;
+        reachRange = 'range 60 ft.';
+      } else {
+        rangeFt = 5;
+        reachRange = 'reach 5 ft.';
+      }
+    }
+  }
 
   // Self Action Check - only true self actions that don't affect an area/other creatures
   const lowerName = name.toLowerCase();
   const lowerDesc = desc.toLowerCase();
   const isAoe = /cone|line|cube|sphere|radius|emanation|each creature|all creatures/i.test(desc);
+  const isOffensive = (hitBonus !== undefined) || (saveDc !== undefined) || (category === 'attacks') || (damageFormula !== undefined && !isHeal);
   const isSelfAction =
+    !isOffensive &&
     !isAoe && (
       lowerName.includes('teleport') ||
       lowerName.includes('dash') ||
