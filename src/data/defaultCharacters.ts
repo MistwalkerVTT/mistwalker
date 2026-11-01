@@ -267,7 +267,6 @@ export const DEFAULT_CHARACTERS: Character[] = [
   },
   {
     id: 'char_brannoc',
-    ddbCharacterId: 147334187,
     name: 'Brannoc',
     race: 'Dwarf',
     classLevel: 'Paladin 5',
@@ -413,6 +412,9 @@ export const DEFAULT_CHARACTERS: Character[] = [
     id: 'char_noctua',
     ddbCharacterId: 147334187,
     name: 'Noctua Shadowclaw',
+    ddbCampaignId: '6738033',
+    ddbCampaignTitle: 'Keys from the Golden Vault',
+    playerName: 'Player',
     race: 'Owlin',
     classLevel: 'Ranger 5 / Rogue 2',
     background: 'Sage',
@@ -1102,26 +1104,38 @@ export function isDdbMatch(
   const tDdbId = targetDdbId ? String(targetDdbId).replace(/^char_ddb_/, '').trim() : '';
   const tId = targetId ? String(targetId).trim() : '';
 
-  if (dId && tDdbId && dId === tDdbId) return true;
-  if (dId && tId && (tId === dId || tId === `char_ddb_${dId}` || `char_ddb_${tId}` === dId)) return true;
-
   const nA = (targetName || '').toLowerCase().trim();
   const nB = (ddbName || '').toLowerCase().trim();
+
+  // If both names are provided and clearly conflict (e.g. "Brannoc" vs "Noctua Shadowclaw"),
+  // they MUST NOT match even if there is an ID collision.
+  const firstA = nA ? nA.split(/[\s"'(]/)[0].replace(/['’]/g, '') : '';
+  const firstB = nB ? nB.split(/[\s"'(]/)[0].replace(/['’]/g, '') : '';
+  const isAggiePair = (nA.includes('aggie') || nA.includes('aggapanthus')) && (nB.includes('aggie') || nB.includes('aggapanthus'));
+  const isNameConflict = Boolean(
+    nA && nB &&
+    nA !== nB &&
+    !nA.includes(nB) && !nB.includes(nA) &&
+    (!firstA || !firstB || firstA !== firstB) &&
+    !isAggiePair
+  );
+
+  if (!isNameConflict) {
+    if (dId && tDdbId && dId === tDdbId) return true;
+    if (dId && tId && (tId === dId || tId === `char_ddb_${dId}` || `char_ddb_${tId}` === dId)) return true;
+  }
+
   if (nA && nB) {
     if (nA === nB) return true;
     if (nA.includes(nB) || nB.includes(nA)) return true;
 
-    const isAggieA = nA.includes('aggie') || nA.includes('aggapanthus');
-    const isAggieB = nB.includes('aggie') || nB.includes('aggapanthus');
-    if (isAggieA && isAggieB) return true;
+    if (isAggiePair) return true;
 
     // Normalize apostrophes, quotes, and punctuation (e.g. "G'aiah" vs "Gaiah" vs "G’aiah")
     const cleanA = nA.replace(/['’"`&#x27;]/g, '');
     const cleanB = nB.replace(/['’"`&#x27;]/g, '');
     if (cleanA && cleanB && (cleanA === cleanB || cleanA.includes(cleanB) || cleanB.includes(cleanA))) return true;
 
-    const firstA = nA.split(/[\s"'(]/)[0].replace(/['’]/g, '');
-    const firstB = nB.split(/[\s"'(]/)[0].replace(/['’]/g, '');
     if (firstA && firstB && firstA.length >= 3 && firstA === firstB) return true;
   }
   return false;

@@ -104,6 +104,7 @@ import { repairMonsterToken } from './data/srdMonstersCatalog';
 import { DEFAULT_CHARACTERS, getCharacterTokenUrl, getCharacterTokenDisplayName, resolveTokenCharacterStats, isDdbMatch } from './data/defaultCharacters';
 import { resolveCharacterCampaign } from './data/ddbCampaignRegistry';
 import { DEFAULT_ALLIES } from './data/defaultAllies';
+import { useHazardZoneTrigger } from './hooks/useHazardZoneTrigger';
 import { Monster, getSizeMultiplier } from './types/monster';
 import { Character } from './types/character';
 import { Ally } from './types/ally';
@@ -2826,6 +2827,34 @@ export default function App() {
     });
   }, []);
 
+  const handleUpdateToken = useCallback((tokenId: string, updates: Partial<Token>) => {
+    setTokens(prev => {
+      const next = prev.map(t => (t.id === tokenId ? { ...t, ...updates } : t));
+      tokensRef.current = next;
+      const curSlot = activeMapIdRef.current;
+      if (mapsDataRef.current[curSlot]) {
+        mapsDataRef.current[curSlot].tokens = next;
+      }
+      if (socketRef.current?.connected && (curSlot === liveMapIdRef.current)) {
+        socketRef.current.emit('UPDATE_TOKEN', { id: tokenId, updates });
+        const syncedTokens = prepareTokensForSync(next, compendiumMonsters, combatTrackerCombatants);
+        socketRef.current.emit('SYNC_TOKENS', syncedTokens);
+      }
+      return next;
+    });
+  }, [compendiumMonsters, combatTrackerCombatants, prepareTokensForSync]);
+
+  const { evaluateTokenMove } = useHazardZoneTrigger({
+    annotations: roomAnnotations,
+    mapWidth: mapDimensions.width,
+    mapHeight: mapDimensions.height,
+    gridSize,
+    onUpdateToken: handleUpdateToken,
+  });
+
+  const evaluateTokenMoveRef = useRef(evaluateTokenMove);
+  evaluateTokenMoveRef.current = evaluateTokenMove;
+
   // Automatically repair any monster tokens on the board that have fallback Guard icons or wrong sizes
   useEffect(() => {
     setTokens(prev => {
@@ -3068,7 +3097,14 @@ export default function App() {
         }
         if (activeMapIdRef.current === liveSlot) {
           isRemoteTokenUpdateRef.current = true;
-          setTokens(prev => prev.map(t => t.id === data.id ? { ...t, x: data.x, y: data.y } : t));
+          setTokens(prev => {
+            const next = prev.map(t => t.id === data.id ? { ...t, x: data.x, y: data.y } : t);
+            const moved = next.find(t => t.id === data.id);
+            if (moved) {
+              evaluateTokenMoveRef.current(moved, data.x, data.y);
+            }
+            return next;
+          });
         }
       }
     });
@@ -3086,7 +3122,14 @@ export default function App() {
         }
         if (activeMapIdRef.current === liveSlot) {
           isRemoteTokenUpdateRef.current = true;
-          setTokens(prev => prev.map(t => t.id === id ? { ...t, x: data.x, y: data.y } : t));
+          setTokens(prev => {
+            const next = prev.map(t => t.id === id ? { ...t, x: data.x, y: data.y } : t);
+            const moved = next.find(t => t.id === id);
+            if (moved) {
+              evaluateTokenMoveRef.current(moved, data.x, data.y);
+            }
+            return next;
+          });
         }
       }
     });
@@ -10654,25 +10697,16 @@ export default function App() {
                       tokensRef.current = nextTokens;
                       setTokens(nextTokens);
 
-                      // Check Unsafe Environmental Hazards on Campaign Battlemap
+                      // Automated Environmental Hazard Resolver
                       try {
-                        const { width: mapW, height: mapH } = getMapDimensions();
-                        const currentAnnos = roomAnnotationsRef.current || [];
-                        const activeHazards = currentAnnos.filter((a: any) => a.type === 'hazard' || a.isHazard);
-                        for (const hz of activeHazards) {
-                          if (isPointInHazard(snappedX + gridSize / 2, snappedY + gridSize / 2, hz as any, mapW, mapH)) {
-                            const isFlying = Boolean(token.isFlying || (token.elevation && token.elevation > 0));
-                            const bypass = canCreatureBypassHazard({ isFlying, elevation: token.elevation }, hz as any);
-                            if (!bypass) {
-                              if (hz.hazardType === 'lava') {
-                                toast.error(`🔥 ${token.name || 'Token'} stepped into ${hz.label || 'Lava Pit'}! (10d10 fire damage)`);
-                              } else if (hz.hazardType === 'chasm_fall') {
-                                toast.error(`🕳️ ${token.name || 'Token'} fell into ${hz.label || 'Chasm'}! (Fall damage & Prone)`);
-                              } else {
-                                toast.warning(`⚠️ ${token.name || 'Token'} entered ${hz.label || 'Hazard Zone'}!`);
-                              }
-                            }
-                          }
+                        if (curSelected.length > 1 && curSelected.includes(token.id)) {
+                          curSelected.forEach(id => {
+                            const tok = nextTokens.find(t => t.id === id);
+                            if (tok) evaluateTokenMove(tok, tok.x, tok.y);
+                          });
+                        } else {
+                          const movedToken = nextTokens.find(t => t.id === token.id) || { ...token, x: snappedX, y: snappedY };
+                          evaluateTokenMove(movedToken, snappedX, snappedY);
                         }
                       } catch (hazardErr) {
                         console.warn('[Hazard Movement Check] error:', hazardErr);
