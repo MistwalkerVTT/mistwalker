@@ -14,6 +14,29 @@
 
 ## Pending Changes Queue for Future Enterprise Patch
 
+### [2026-11-01] fix(dm-hud): route monster attacks to target tokens with animations, hp deduction, and dice resolution
+- **Commit**: `a46f83b`
+- **Files Changed**:
+  - `src/App.tsx`
+  - `src/components/DmMonsterDock.tsx`
+- **Summary**:
+  - **Eliminated Stage MouseDown & Selection Hijack**: Fixed critical bug where clicking a player token while aiming a monster attack was intercepted by `handleStageMouseDown` (which fired an untargeted ground roll via `castSpellAt` and reset `tool` to `'pan'`), causing subsequent `TokenImage.onClick` to deselect the monster and select the player token.
+  - **Proximity Snap & Magnetic Targeting**: Implemented `findTargetTokenFromPoint` in `App.tsx` matching `PlayerView.tsx`. Clicks or taps on or within proximity radius of any player/creature token route directly to `handleDmTargetToken`. Clicking open ground during a single-target attack provides an advisory toast without canceling aiming or wasting attacks into the dirt.
+  - **Player Sheet AC & HP Resolution**: Resolved player token stats using `resolveTokenCharacterStats(targetToken, compendiumCharacters)` so monster attacks compare against the player's true Armor Class and Max HP rather than fallback defaults.
+  - **Full Dual-Mode Combat Resolution**:
+    - **Auto Roll ON**: Automatically executes d20 to-hit vs target AC (critical hit on 20, fumble on 1), calculates damage (doubling dice on criticals), triggers 3D physics dice (`__mistwalkerRoll3d` and `SYNC_LOCAL_DICE_ROLL`), deducts HP from player token (factoring in temporary HP), updates tracker, and emits `SYNC_TOKENS` with `prepareTokensForSync`.
+    - **Auto Roll OFF**: Plays visual animation and sound effect immediately, then prompts DM via `CombatDicePromptModal` to roll or input to-hit and damage manually.
+  - **Persistent Monster Selection**: Retains monster token selection after targeting/attacks so DMs can seamlessly perform Multiattack without re-selecting the creature.
+  - **Auto Roll UI Toggle**: Polished the "Auto Roll: ON / OFF" switch button in `DmMonsterDock` vital bar for high-visibility across all screen sizes.
+- **Impact / Testing Notes**:
+  - Select a monster token as DM, click an attack card or "Aim" button on the DM Monster HUD, and click a player token on the map.
+  - Verify the attack animation and sound effect play at the player's token.
+  - Verify with Auto Roll ON that d20 rolls against player's AC, 3D dice roll on screen, player token HP decreases, and player client updates live.
+  - Verify with Auto Roll OFF that the visual animation plays and the manual/3D dice prompt modal opens.
+  - Verify the monster token remains selected after resolving an attack.
+
+---
+
 ### [2026-11-01] feat(effects): allow DM to dispel any player effect and synchronize bidirectional cancellation
 - **Commit**: `2502858`
 - **Files Changed**:
