@@ -14,6 +14,23 @@
 
 ## Pending Changes Queue for Future Enterprise Patch
 
+### [2026-11-01] fix(vtt): restore original unified pointer and pan interaction in DM view
+- **Commit**: `647b02f`
+- **Files Changed**:
+  - `src/App.tsx`
+  - `src/components/DynamicLightingLayer.tsx`
+- **Summary**:
+  - Restored original unified pointer & pan workflow as default DM interaction mode:
+    - Default tool state set to `'pan'` where hovering and dragging tokens directly interacts with tokens, while dragging empty canvas pans the battlemap.
+    - Removed `listening={tool !== 'pan'}` from `<Layer>` in `App.tsx` and `DynamicLightingLayer.tsx` so tokens and creator walls remain interactive and draggable under pan tool.
+    - Restored stage mouse move handling and left-click hold map ping in pan tool.
+    - Updated targeting cancel and action completion handlers to return to `'pan'` tool.
+- **Impact / Testing Notes**:
+  - In default DM view, clicking or dragging tokens moves/selects them normally, while clicking and dragging empty map pans the battlemap smoothly.
+  - Wall interactions in creator mode remain active.
+
+---
+
 ### [2026-11-01] feat(dm): make all DM monster HUD buttons fully interactive with checks, saves, initiative, and multi-damage rolls
 - **Commit**: `f393c1a`
 - **Files Changed**:
