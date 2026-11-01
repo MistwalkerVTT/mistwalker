@@ -14,6 +14,37 @@
 
 ## Pending Changes Queue for Future Enterprise Patch
 
+### [2026-11-01] feat(player): add campaign selection and live DDB player verification after station mode choice
+- **Commit**: `a710aea` (with follow-up `cd93662`)
+- **Files Changed**:
+  - `src/components/PlayerCampaignSelectModal.tsx`
+  - `src/components/PlayerCharacterSelectModal.tsx`
+  - `src/components/PlayerArenaMode.tsx`
+  - `src/components/PlayerView.tsx`
+  - `src/data/defaultCharacters.ts`
+- **Summary**:
+  - **Campaign Selection Gate After Station Choice**: When a player accesses Player Mode and selects from the station choices (Link to DM / Remote Player, TV Table, or Arena Mode), they are immediately presented with `PlayerCampaignSelectModal` to choose their campaign first before entering the mode.
+  - **Live Campaign Player Roster & Instant D&D Beyond Refresh**:
+    - Queries `POST /api/ddb/campaigns/select` to activate the campaign on the server and fetch live characters from D&D Beyond.
+    - Displays confirmed party roster with character avatars, character names, player name tags, race, class, level, Max HP, and AC to visually verify and confirm the team.
+    - Provides a "Quick Refresh" button to re-sync live stats from D&D Beyond in one click, plus a robust fallback to verified compendium characters if offline.
+    - Seamlessly persists chosen campaign in `sessionStorage` (`mistwalker_active_campaign_id`, `mistwalker_active_campaign_title`).
+  - **Mode Handoff & Campaign Filtering**:
+    - **Remote Player Mode**: Passes the selected campaign to `PlayerCharacterSelectModal` (`initialCampaignId`) so characters are pre-filtered to the chosen campaign, or allows 1-click launch directly from the campaign player card.
+    - **Arena Mode**: Pre-populates Gold and Crimson combatant filters with the selected campaign (`initialCampaignId`).
+    - **TV Table Mode**: Initializes digital TV table with the campaign roster active.
+  - **Always-Accessible Campaign Switcher**: Added an interactive Campaign button pill (`<Folder />`) in the Player View sidebar header (both collapsed and expanded view) next to the Station Mode switcher so players can switch or re-verify campaigns at any time without resetting their session.
+  - **Character Collision Guard & Noctua Restoration**: Fixed duplicate character ID assignment between Brannoc and Noctua Shadowclaw in `defaultCharacters.ts`, and hardened `isDdbMatch` against duplicate collisions between distinct characters sharing IDs.
+- **Impact / Testing Notes**:
+  - Open `/player` or reset station mode.
+  - Click any mode (Link to DM, TV Table, Arena).
+  - Observe `PlayerCampaignSelectModal` appears showing available campaigns (Keys from the Golden Vault, An Unspeakable Power, etc.).
+  - Selecting a campaign auto-pulls and confirms all characters with full stats and avatars.
+  - Click "Confirm & Continue" or click any character card to enter gameplay.
+  - Verify campaign badge appears in sidebar header and can be clicked to re-verify roster.
+
+---
+
 ### [2026-11-01] fix(dm-hud): route monster attacks to target tokens with animations, hp deduction, and dice resolution
 - **Commit**: `a46f83b`
 - **Files Changed**:
