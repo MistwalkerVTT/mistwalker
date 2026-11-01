@@ -123,21 +123,30 @@ const COMMON_SPELLS_CATALOG: Record<string, SpellProfile> = {
 };
 
 /**
- * Extracts numeric range in feet from strings like "reach 5 ft.", "range 60/240 ft.", "120 ft."
+ * Extracts numeric range in feet from strings like "reach 5 ft.", "range 60/240 ft.", "60-foot cone", "120 ft."
  */
 export function extractRangeInFeet(reachRange?: string, description?: string): number | undefined {
   const text = `${reachRange || ''} ${description || ''}`.toLowerCase();
   
-  const rangeMatch = text.match(/range\s*(\d+)(?:\/\d+)?\s*ft/i);
+  const rangeMatch = text.match(/range\s*(\d+)(?:\/\d+)?\s*(?:ft|feet)/i);
   if (rangeMatch) return parseInt(rangeMatch[1], 10);
 
-  const reachMatch = text.match(/reach\s*(\d+)\s*ft/i);
+  const reachMatch = text.match(/reach\s*(\d+)\s*(?:ft|feet)/i);
   if (reachMatch) return parseInt(reachMatch[1], 10);
 
-  const generalFtMatch = text.match(/(\d+)\s*ft(?:\.|\s|$)/i);
+  // Area of effect cones, lines, spheres, cubes, radii (e.g. "60-foot cone", "30-foot line", "20-foot-radius sphere")
+  const aoeMatch = text.match(/(\d+)\s*(?:-|–|\s*)foot\s*(?:cone|line|cube|sphere|radius|emanation|blast|burst|range)/i);
+  if (aoeMatch) return parseInt(aoeMatch[1], 10);
+
+  // "within 60 feet of it", "within 30 feet"
+  const withinMatch = text.match(/within\s*(\d+)\s*(?:ft|feet)/i);
+  if (withinMatch) return parseInt(withinMatch[1], 10);
+
+  const generalFtMatch = text.match(/(\d+)\s*(?:ft|feet)(?:\.|\s|$)/i);
   if (generalFtMatch) return parseInt(generalFtMatch[1], 10);
 
-  if (text.includes('self') || text.includes('touch')) return 5;
+  if (text.includes('touch')) return 5;
+  if (/\bself\b/.test(text) && !/cone|line|cube|sphere|radius|emanation|each creature|all creatures/i.test(text)) return 0;
 
   return undefined;
 }
@@ -195,6 +204,7 @@ export function parseMonsterAction(
   let damageType: string | undefined;
   let secondaryDamageFormula: string | undefined;
   let secondaryDamageType: string | undefined;
+  let isHeal = false;
 
   // Primary damage from raw.damage or regex
   if ('damage' in raw && raw.damage) {
@@ -210,12 +220,49 @@ export function parseMonsterAction(
     }
   }
 
-  // If still not found, parse Hit: from description
+  // If still not found, parse Hit: from description (standard 5e attack)
   if (!damageFormula) {
     const hitMatch = desc.match(/Hit:\s*(?:\d+\s*)?(?:\(([^)]+)\)|(\d+d\d+(?:\s*[+-]\s*\d+)?))\s*([a-z]+)?\s*damage/i);
     if (hitMatch) {
       damageFormula = (hitMatch[1] || hitMatch[2]).trim();
       damageType = hitMatch[3]?.toLowerCase();
+    }
+  }
+
+  // If still not found, check saving throw / breath weapon damage (e.g. "taking 18 (4d8) radiant damage", "takes 24 (7d6) fire damage", "deals 18 (4d8) radiant damage")
+  if (!damageFormula) {
+    const saveDmgMatch = desc.match(/(?:takes?|taking|deals?)\s*(?:\d+\s*)?(?:\(([^)]+)\)|(\d+d\d+(?:\s*[+-]\s*\d+)?))\s*([a-z]+)?\s*damage/i);
+    if (saveDmgMatch) {
+      damageFormula = (saveDmgMatch[1] || saveDmgMatch[2]).trim();
+      damageType = saveDmgMatch[3]?.toLowerCase();
+    }
+  }
+
+  // Parenthesized dice damage e.g. "22 (4d10) necrotic damage"
+  if (!damageFormula) {
+    const parenDmgMatch = desc.match(/(?:\d+\s*)?\(([^)]+)\)\s*(piercing|slashing|bludgeoning|fire|cold|lightning|necrotic|radiant|poison|acid|force|psychic|thunder)\s*damage/i);
+    if (parenDmgMatch) {
+      damageFormula = parenDmgMatch[1].trim();
+      damageType = parenDmgMatch[2]?.toLowerCase();
+    }
+  }
+
+  // Direct dice notation damage e.g. "3d6 cold damage"
+  if (!damageFormula) {
+    const directDmgMatch = desc.match(/(\d+d\d+(?:\s*[+-]\s*\d+)?)\s*(piercing|slashing|bludgeoning|fire|cold|lightning|necrotic|radiant|poison|acid|force|psychic|thunder)\s*damage/i);
+    if (directDmgMatch) {
+      damageFormula = directDmgMatch[1].trim();
+      damageType = directDmgMatch[2]?.toLowerCase();
+    }
+  }
+
+  // Healing (e.g. "regains 10 (2d6 + 3) hit points" or "regains 10 hit points")
+  if (!damageFormula) {
+    const healMatch = desc.match(/(?:regains?|regaining|heals?|restores?)\s*(?:\d+\s*)?(?:\(([^)]+)\)|(\d+d\d+(?:\s*[+-]\s*\d+)?|\d+))\s*hit\s*points?/i);
+    if (healMatch) {
+      damageFormula = (healMatch[1] || healMatch[2]).trim();
+      isHeal = true;
+      damageType = 'radiant';
     }
   }
 
@@ -230,23 +277,26 @@ export function parseMonsterAction(
   const reachRange = 'reachRange' in raw ? raw.reachRange : undefined;
   const rangeFt = extractRangeInFeet(reachRange, desc);
 
-  // Self Action Check
+  // Self Action Check - only true self actions that don't affect an area/other creatures
   const lowerName = name.toLowerCase();
   const lowerDesc = desc.toLowerCase();
+  const isAoe = /cone|line|cube|sphere|radius|emanation|each creature|all creatures/i.test(desc);
   const isSelfAction =
-    lowerName.includes('teleport') ||
-    lowerName.includes('dash') ||
-    lowerName.includes('dodge') ||
-    lowerName.includes('disengage') ||
-    lowerName.includes('hide') ||
-    lowerName.includes('shapechanger') ||
-    lowerName.includes('regeneration') ||
-    lowerName.includes('misty step') ||
-    lowerName.includes('shield') ||
-    lowerName.includes('mage armor') ||
-    rangeFt === 0 ||
-    lowerDesc.includes('targets itself') ||
-    lowerDesc.includes('on itself');
+    !isAoe && (
+      lowerName.includes('teleport') ||
+      lowerName.includes('dash') ||
+      lowerName.includes('dodge') ||
+      lowerName.includes('disengage') ||
+      lowerName.includes('hide') ||
+      lowerName.includes('shapechanger') ||
+      lowerName.includes('regeneration') ||
+      lowerName.includes('misty step') ||
+      lowerName.includes('shield') ||
+      lowerName.includes('mage armor') ||
+      rangeFt === 0 ||
+      lowerDesc.includes('targets itself') ||
+      lowerDesc.includes('on itself')
+    );
 
   // JB2A Visual Asset Matching
   const jb2aAsset = findJb2aAsset(name);
@@ -290,7 +340,8 @@ export function parseMonsterAction(
     isRecharged,
     legendaryCost,
     jb2aAssetId,
-    isSelfAction
+    isSelfAction,
+    isHeal
   };
 }
 

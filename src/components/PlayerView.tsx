@@ -2,8 +2,12 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import Konva from 'konva';
 import { Stage, Layer, Image as KonvaImage, Text, Group, Circle, Rect, Arc, Line } from 'react-konva';
 
-if (typeof window !== 'undefined' && (Konva as any)?.dragDistance !== undefined) {
-  (Konva as any).dragDistance = 10;
+Konva.hitOnDragEnabled = false;
+if (typeof window !== 'undefined') {
+  Konva.pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+  if ((Konva as any)?.dragDistance !== undefined) {
+    (Konva as any).dragDistance = 8;
+  }
 }
 import useImage from 'use-image';
 import 'gifler';
@@ -523,8 +527,20 @@ const PlayerToken = React.memo(({
   const groupRef = useRef<any>(null);
   const lastEmitTimeRef = useRef<number>(0);
   const isCurrentlyDraggingRef = useRef<boolean>(false);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressFiredRef = useRef<boolean>(false);
+  const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
+  const lastTokenTapTimeRef = useRef<number>(0);
+
+  const clearLongPress = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
 
   const handleDragStart = (e: any) => {
+    clearLongPress();
     e.cancelBubble = true;
     if (!canDrag || isMonster || isCondition) {
       e.target.stopDrag();
@@ -553,6 +569,7 @@ const PlayerToken = React.memo(({
   };
 
   const handleDragMove = (e: any) => {
+    clearLongPress();
     e.cancelBubble = true;
     if (!isCurrentlyDraggingRef.current) return;
     const rawX = e.target.x();
@@ -563,6 +580,7 @@ const PlayerToken = React.memo(({
   };
 
   const handleDragEnd = (e: any) => {
+    clearLongPress();
     e.cancelBubble = true;
     const wasDragging = isCurrentlyDraggingRef.current;
     isCurrentlyDraggingRef.current = false;
@@ -682,11 +700,12 @@ const PlayerToken = React.memo(({
   return (
     <Group
       ref={groupRef}
+      id={token.id}
       x={token.x}
       y={token.y}
       name="token"
       draggable={!isTargetingActive && !isCondition && canDrag}
-      dragDistance={10}
+      dragDistance={8}
       onMouseEnter={(e: any) => {
         if (canDrag && !isCurrentlyDraggingRef.current) {
           const container = e.target.getStage()?.container();
@@ -713,22 +732,89 @@ const PlayerToken = React.memo(({
         if (!isCondition) {
           // If 2 or more touches on screen, do not swallow - let Stage handle multi-touch pinch-to-zoom!
           if (e.evt?.touches && e.evt.touches.length >= 2) {
+            clearLongPress();
+            touchStartPosRef.current = null;
             if (groupRef.current?.isDragging()) groupRef.current.stopDrag();
             return;
           }
-          e.cancelBubble = true;
+          // Only stop propagation if this token is interactive (draggable, targetable, or claimable player hero)
+          if (canDrag || isTargetingActive || (!isMonster && !isCondition)) {
+            e.cancelBubble = true;
+          }
+          const touch = e.evt?.touches?.[0];
+          if (touch) {
+            longPressFiredRef.current = false;
+            touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
+            if (!isTargetingActive && !isMonster && !isCondition && onContextMenu) {
+              clearLongPress();
+              const clientX = touch.clientX;
+              const clientY = touch.clientY;
+              longPressTimerRef.current = setTimeout(() => {
+                longPressTimerRef.current = null;
+                if (!isCurrentlyDraggingRef.current && !groupRef.current?.isDragging?.()) {
+                  longPressFiredRef.current = true;
+                  onContextMenu(token.id, clientX, clientY);
+                }
+              }, 480);
+            }
+          }
+        }
+      }}
+      onTouchMove={(e: any) => {
+        if (e.evt?.touches && e.evt.touches.length >= 2) {
+          clearLongPress();
+          touchStartPosRef.current = null;
+          return;
+        }
+        const touch = e.evt?.touches?.[0];
+        if (touch && touchStartPosRef.current) {
+          const dist = Math.hypot(touch.clientX - touchStartPosRef.current.x, touch.clientY - touchStartPosRef.current.y);
+          if (dist > 12) {
+            clearLongPress();
+          }
         }
       }}
       onTouchEnd={(e: any) => {
+        clearLongPress();
         if (!isCondition) {
-          e.cancelBubble = true;
+          if (canDrag || isTargetingActive || (!isMonster && !isCondition)) {
+            e.cancelBubble = true;
+          }
+          const changedTouch = e.evt?.changedTouches?.[0];
+          const startPos = touchStartPosRef.current;
+          touchStartPosRef.current = null;
+          if (
+            changedTouch &&
+            startPos &&
+            !longPressFiredRef.current &&
+            !isCurrentlyDraggingRef.current &&
+            (!e.evt?.touches || e.evt.touches.length === 0)
+          ) {
+            const movedDist = Math.hypot(changedTouch.clientX - startPos.x, changedTouch.clientY - startPos.y);
+            if (movedDist < 16) {
+              const now = Date.now();
+              if (now - lastTokenTapTimeRef.current > 300) {
+                lastTokenTapTimeRef.current = now;
+                if (isTargetingActive) {
+                  if (onTargetToken) onTargetToken(token);
+                  return;
+                }
+                if (!isMonster && !isCondition && onClaimToken) {
+                  onClaimToken(token.id);
+                }
+              }
+            }
+          }
         }
       }}
       onDragStart={handleDragStart}
       onDragMove={handleDragMove}
       onDragEnd={handleDragEnd}
       onClick={(e: any) => {
-        if (!isCurrentlyDraggingRef.current) {
+        if (!isCurrentlyDraggingRef.current && !longPressFiredRef.current) {
+          const now = Date.now();
+          if (now - lastTokenTapTimeRef.current < 300) return;
+          lastTokenTapTimeRef.current = now;
           e.cancelBubble = true;
           if (isTargetingActive) {
             if (onTargetToken) {
@@ -742,7 +828,10 @@ const PlayerToken = React.memo(({
         }
       }}
       onTap={(e: any) => {
-        if (!isCurrentlyDraggingRef.current) {
+        if (!isCurrentlyDraggingRef.current && !longPressFiredRef.current) {
+          const now = Date.now();
+          if (now - lastTokenTapTimeRef.current < 300) return;
+          lastTokenTapTimeRef.current = now;
           e.cancelBubble = true;
           if (isTargetingActive) {
             if (onTargetToken) {
@@ -758,9 +847,6 @@ const PlayerToken = React.memo(({
       onContextMenu={(e: any) => {
         e.evt.preventDefault();
         e.cancelBubble = true;
-        if (false) {
-          // no-op
-        }
         if (!isMonster && !isCondition && onContextMenu) {
           onContextMenu(token.id, e.evt.clientX, e.evt.clientY);
         }
@@ -1842,13 +1928,15 @@ export default function PlayerView() {
 
   // Automatically reconcile claimedTokenId when tokens change (e.g. across scene transitions where token IDs differ)
   useEffect(() => {
-    if (tokens.length === 0 || !claimedTokenId) return;
-    const exactMatch = tokens.find(t => t.id === claimedTokenId);
-    if (exactMatch) {
-      if (typeof window !== 'undefined' && exactMatch.name) {
-        localStorage.setItem('mistwalker_player_claimed_name', exactMatch.name);
+    if (tokens.length === 0) return;
+    if (claimedTokenId) {
+      const exactMatch = tokens.find(t => t.id === claimedTokenId);
+      if (exactMatch) {
+        if (typeof window !== 'undefined' && exactMatch.name) {
+          localStorage.setItem('mistwalker_player_claimed_name', exactMatch.name);
+        }
+        return;
       }
-      return;
     }
 
     // Token ID not on current scene — try matching by character name
@@ -5584,11 +5672,30 @@ export default function PlayerView() {
       return;
     }
 
-    // 1. Calculate distance on battlemap grid
     const cRadius = ((caster.size || 1) * gridSize) / 2;
     const tRadius = ((targetToken.size || 1) * gridSize) / 2;
     const casterCenter = { x: caster.x + cRadius, y: caster.y + cRadius };
     const targetCenter = { x: targetToken.x + tRadius, y: targetToken.y + tRadius };
+
+    // If player selected a teleport spell or initial spiritual weapon and clicked/tapped on or near a token,
+    // delegate cleanly to castSpellAt towards that point instead of treating as creature damage
+    const isTeleportSpell = Boolean(
+      activeEquippedAsset?.targetType === 'teleport' ||
+      activeEquippedAsset?.id === 'misty_step' ||
+      activeEquippedAsset?.id === 'dimension_door' ||
+      action.name.toLowerCase().includes('misty step') ||
+      action.name.toLowerCase().includes('dimension door')
+    );
+    const isSpiritualWeaponCast = Boolean(
+      (activeEquippedAsset?.id === 'spiritual_weapon' || action.name.toLowerCase().includes('spiritual weapon')) &&
+      !(action as any).isSpiritualStrike
+    );
+    if (isTeleportSpell || isSpiritualWeaponCast) {
+      castSpellAt(casterCenter, targetCenter);
+      return;
+    }
+
+    // 1. Calculate distance on battlemap grid
     const distPx = Math.hypot(targetCenter.x - casterCenter.x, targetCenter.y - casterCenter.y);
     const distFt = Math.round((distPx / gridSize) * 5);
 
@@ -5700,6 +5807,37 @@ export default function PlayerView() {
       if (asset.soundKey) soundCatalog.play(asset.soundKey);
       if (socketRef.current?.connected) {
         socketRef.current.emit('EFFECT_SPAWN', newEffect);
+      }
+
+      const lastingDebuff = findLastingDebuffConfig(asset.id || action.name);
+      if (lastingDebuff && targetToken) {
+        const targetTokenId = targetToken.id;
+        const targetTokenName = targetToken.name;
+        const effectToRemoveId = newEffect.id;
+        setTimeout(() => {
+          setEffects(prev => prev.filter(e => e.id !== effectToRemoveId));
+          if (socketRef.current?.connected) {
+            socketRef.current.emit('EFFECT_REMOVE', { id: effectToRemoveId });
+          }
+
+          const bubble = createDebuffBubbleFromConfig(lastingDebuff, caster.name || 'Hero');
+          setTokens(prev => {
+            const next = prev.map(t => {
+              if (t.id !== targetTokenId) return t;
+              const existing = t.bubbles || [];
+              const filtered = existing.filter(b => b.sourceSpellId !== lastingDebuff.spellKey && b.label !== lastingDebuff.name);
+              return { ...t, bubbles: [...filtered, bubble] };
+            });
+            tokensRef.current = next;
+            if (socketRef.current?.connected) {
+              socketRef.current.emit('SYNC_TOKENS', next);
+            }
+            return next;
+          });
+          toast.success(`✨ ${lastingDebuff.name} badge added above ${targetTokenName}!`, {
+            description: lastingDebuff.description
+          });
+        }, 2800);
       }
     }
 
@@ -6065,17 +6203,55 @@ export default function PlayerView() {
 
     // If aiming a creature-targeted spell / action (heal, attack, or self-only), do not drop on empty ground!
     if (activeTargetingAction) {
-      const isCreatureTargeted = Boolean(
+      const lowerActName = activeTargetingAction.name.toLowerCase();
+      const isTeleportOrSummon = activeEquippedAsset?.targetType === 'teleport' ||
+        activeEquippedAsset?.id === 'spiritual_weapon' ||
+        activeEquippedAsset?.name.toLowerCase().includes('spiritual weapon') ||
+        lowerActName.includes('misty step') ||
+        lowerActName.includes('dimension door');
+
+      const isDirectionalOrAoe = activeEquippedAsset?.paradigm === 'point' ||
+        activeEquippedAsset?.paradigm === 'cone' ||
+        activeEquippedAsset?.paradigm === 'line' ||
+        activeEquippedAsset?.shape === 'circle' ||
+        activeEquippedAsset?.shape === 'cone' ||
+        activeEquippedAsset?.shape === 'line' ||
+        lowerActName.includes('burning hands') ||
+        lowerActName.includes('cone of cold') ||
+        lowerActName.includes('lightning bolt') ||
+        lowerActName.includes('fireball');
+
+      const isCreatureTargeted = !isTeleportOrSummon && !isDirectionalOrAoe && Boolean(
         activeTargetingAction.isHeal ||
         activeTargetingAction.hitBonus !== undefined ||
         activeTargetingAction.rangeFt === 0 ||
         activeEquippedAsset?.targetType === 'single' ||
         activeEquippedAsset?.targetType === 'self' ||
-        activeTargetingAction.name.toLowerCase().includes('cure wounds') ||
-        activeTargetingAction.name.toLowerCase().includes('healing word') ||
-        activeTargetingAction.name.toLowerCase().includes('shield')
+        lowerActName.includes('cure wounds') ||
+        lowerActName.includes('healing word') ||
+        lowerActName.includes('shield')
       );
+
       if (isCreatureTargeted) {
+        // Magnetic token snap for touchscreens / fat fingers:
+        // If clicking/tapping within 28px of any token center, target that token!
+        let nearestToken: Token | null = null;
+        let nearestDist = Infinity;
+        for (const t of tokens) {
+          const tRad = ((t.size || 1) * gridSize) / 2;
+          const tCenter = { x: t.x + tRad, y: t.y + tRad };
+          const dist = Math.hypot(point.x - tCenter.x, point.y - tCenter.y);
+          const maxThreshold = tRad + Math.max(22, 32 / (stageScaleRef.current || 1));
+          if (dist < maxThreshold && dist < nearestDist) {
+            nearestDist = dist;
+            nearestToken = t;
+          }
+        }
+        if (nearestToken) {
+          handleTargetToken(nearestToken);
+          return;
+        }
+
         toast.info(`Click on a token to target ${activeTargetingAction.name}${claimedToken ? ' (or click Target Self in the dock)' : ''}.`);
         return;
       }
@@ -7922,7 +8098,15 @@ export default function PlayerView() {
                 characters={compendiumCharacters}
                 combatants={combatState.combatants}
                 isClaimed={claimedTokenId === token.id}
-                canDrag={stationMode === 'tv_table' ? true : (claimedTokenId === token.id || (Boolean(claimedTokenId) && (token as any).spiritualWeapon?.ownerId === claimedTokenId))}
+                canDrag={
+                  stationMode === 'tv_table'
+                    ? true
+                    : (
+                        claimedTokenId === token.id ||
+                        (Boolean(claimedTokenId) && (token as any).spiritualWeapon?.ownerId === claimedTokenId) ||
+                        (!claimedTokenId && !isMonsterToken(token) && !token.isMonster && !token.isCondition && (token as any).category !== 'monster' && (token.category === 'character' || Boolean(token.isPlayer)))
+                      )
+                }
                 isTargetingActive={Boolean(activeTargetingAction)}
                 onTargetToken={handleTargetToken}
                 onMoveToken={handleMoveToken}

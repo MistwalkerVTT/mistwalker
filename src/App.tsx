@@ -33,6 +33,12 @@ import {
 } from 'lucide-react';
 import { Stage, Layer, Image as KonvaImage, Rect, Circle, Line, Text, Group, Wedge } from 'react-konva';
 import Konva from 'konva';
+
+// High-performance canvas and drag defaults
+Konva.hitOnDragEnabled = false;
+if (typeof window !== 'undefined') {
+  Konva.pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+}
 import useImage from 'use-image';
 import 'gifler';
 import { generateDescription, chatWithLore, generateTTS, chatWithAutoDM, checkActionRules, generateVoiceScript, checkApiKeyStatus } from './services/aiService';
@@ -539,7 +545,11 @@ const TokenImage = React.memo(({
   const cloudGroupRef = useRef<any>(null);
   const shockwaveRef = useRef<any>(null);
   const longPressTimerRef = useRef<any>(null);
+  const longPressFiredRef = useRef<boolean>(false);
+  const isTokenDraggingRef = useRef<boolean>(false);
+  const lastTokenTapTimeRef = useRef<number>(0);
   const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
+  const isAimingSpell = tool === 'spell_aim';
 
   const clearLongPress = () => {
     if (longPressTimerRef.current) {
@@ -566,11 +576,14 @@ const TokenImage = React.memo(({
 
   return (
     <Group
+      id={token.id}
       x={token.x}
       y={token.y}
       name="token"
-      draggable={!isSpacePressed}
+      draggable={!isSpacePressed && !isAimingSpell}
+      dragDistance={8}
       onMouseDown={(e) => {
+        if (isAimingSpell) return;
         if (!isSpacePressed && e.evt?.button !== 2) {
           e.cancelBubble = true;
         }
@@ -581,33 +594,42 @@ const TokenImage = React.memo(({
           clearLongPress();
           return;
         }
+        if (isAimingSpell) {
+          clearLongPress();
+          return;
+        }
         if (!isSpacePressed) {
           e.cancelBubble = true;
         }
-        if (touches && touches.length === 1 && onContextMenu) {
+        longPressFiredRef.current = false;
+        if (touches && touches.length === 1) {
           const tx = touches[0].clientX;
           const ty = touches[0].clientY;
           touchStartPosRef.current = { x: tx, y: ty };
-          if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
-          longPressTimerRef.current = setTimeout(() => {
-            longPressTimerRef.current = null;
-            try {
-              if (e.target && typeof e.target.stopDrag === 'function') {
-                e.target.stopDrag();
-              }
-            } catch {}
-            onContextMenu({
-              evt: {
-                preventDefault: () => {},
-                clientX: tx,
-                clientY: ty
-              },
-              cancelBubble: true
-            });
-          }, 480);
+          if (onContextMenu) {
+            if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+            longPressTimerRef.current = setTimeout(() => {
+              longPressTimerRef.current = null;
+              longPressFiredRef.current = true;
+              try {
+                if (e.target && typeof e.target.stopDrag === 'function') {
+                  e.target.stopDrag();
+                }
+              } catch {}
+              onContextMenu({
+                evt: {
+                  preventDefault: () => {},
+                  clientX: tx,
+                  clientY: ty
+                },
+                cancelBubble: true
+              });
+            }, 480);
+          }
         }
       }}
       onTouchMove={(e) => {
+        if (isAimingSpell) return;
         const touches = e.evt?.touches;
         if (!touches || touches.length !== 1 || !touchStartPosRef.current) {
           clearLongPress();
@@ -615,34 +637,64 @@ const TokenImage = React.memo(({
         }
         const dx = touches[0].clientX - touchStartPosRef.current.x;
         const dy = touches[0].clientY - touchStartPosRef.current.y;
-        if (Math.hypot(dx, dy) > 8) {
+        if (Math.hypot(dx, dy) > 10) {
           clearLongPress();
         }
       }}
-      onTouchEnd={() => {
+      onTouchEnd={(e) => {
+        if (isAimingSpell) {
+          clearLongPress();
+          return;
+        }
+        const startPos = touchStartPosRef.current;
+        const wasLongPress = longPressFiredRef.current;
         clearLongPress();
+        if (!isSpacePressed) {
+          e.cancelBubble = true;
+        }
+        if (!wasLongPress && !isTokenDraggingRef.current && startPos && onClick) {
+          const endTouch = e.evt?.changedTouches?.[0];
+          const movedDist = endTouch ? Math.hypot(endTouch.clientX - startPos.x, endTouch.clientY - startPos.y) : 0;
+          if (movedDist < 14) {
+            const now = Date.now();
+            if (now - lastTokenTapTimeRef.current > 250) {
+              lastTokenTapTimeRef.current = now;
+              onClick(e);
+            }
+          }
+        }
       }}
       onClick={(e) => {
-        if (isSpacePressed) return;
+        if (isSpacePressed || isAimingSpell) return;
         e.cancelBubble = true;
-        if (onClick) {
-          onClick(e);
+        const now = Date.now();
+        if (now - lastTokenTapTimeRef.current > 250) {
+          lastTokenTapTimeRef.current = now;
+          if (onClick) {
+            onClick(e);
+          }
         }
       }}
       onTap={(e) => {
-        if (isSpacePressed) return;
+        if (isSpacePressed || isAimingSpell) return;
         e.cancelBubble = true;
-        if (onClick) {
-          onClick(e);
+        const now = Date.now();
+        if (now - lastTokenTapTimeRef.current > 250) {
+          lastTokenTapTimeRef.current = now;
+          if (onClick) {
+            onClick(e);
+          }
         }
       }}
       onDblClick={(e) => {
+        if (isAimingSpell) return;
         e.cancelBubble = true;
         if (onDblClick) {
           onDblClick(e);
         }
       }}
       onDblTap={(e) => {
+        if (isAimingSpell) return;
         e.cancelBubble = true;
         if (onDblClick) {
           onDblClick(e);
@@ -650,6 +702,7 @@ const TokenImage = React.memo(({
       }}
       onDragStart={(e) => {
         clearLongPress();
+        isTokenDraggingRef.current = true;
         e.cancelBubble = true;
         const stage = e.target.getStage();
         if (stage) stage.container().style.cursor = 'move';
@@ -666,6 +719,8 @@ const TokenImage = React.memo(({
         }
       }}
       onDragEnd={(e) => {
+        isTokenDraggingRef.current = false;
+        lastTokenTapTimeRef.current = Date.now();
         e.cancelBubble = true;
         const stage = e.target.getStage();
         if (stage) {
@@ -1327,7 +1382,7 @@ export default function App() {
   const [selectedToken, setSelectedToken] = useState<any>(null);
   const [brushSize, setBrushSize] = useState(50);
   const [isFogVisible, setIsFogVisible] = useState<boolean>(true);
-  const [tool, setToolState] = useState<string>('pan');
+  const [tool, setToolState] = useState<string>('select');
 
   // MistWalker 4.0 Effects Engine State
   const [effects, setEffects] = useState<VttEffectInstance[]>([]);
@@ -4674,6 +4729,22 @@ export default function App() {
       } : undefined
     };
 
+    setEffects(prev => [...prev, newEffect]);
+    if (activeEquippedAsset.soundKey) soundCatalog.play(activeEquippedAsset.soundKey);
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('EFFECT_SPAWN', newEffect);
+    }
+
+    if (activeDmMonsterAction) {
+      const singleSelected = selectedTokenIds.length === 1 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
+      if (singleSelected) {
+        executeMonsterRoll(singleSelected, activeDmMonsterAction);
+      }
+      setActiveDmMonsterAction(null);
+    } else {
+      toast.success(`Cast ${activeEquippedAsset.name}!`);
+    }
+
     // After the main spell animation (2.8s), move lasting debuff spells (Hunter's Mark, Hex, etc.) into a status badge above the enemy's head
     if (lastingDebuff && targetCreatureToken) {
       const targetTokenId = targetCreatureToken.id;
@@ -4707,12 +4778,13 @@ export default function App() {
     setAimOrigin(null);
     setAimCurrent(null);
     setActiveEquippedAsset(null);
-    setTool('pan');
+    setTool('select');
   }, [activeEquippedAsset, activeDmMonsterAction, selectedTokenIds, tokens, executeMonsterRoll]);
 
   const handleEquipAsset = useCallback((asset: Jb2aAssetDefinition) => {
     setActiveEquippedAsset(asset);
     setTool('spell_aim');
+    setActiveMenu(null);
 
     if (selectedTokenIds.length > 0) {
       const selectedToken = tokens.find(t => t.id === selectedTokenIds[0]);
@@ -4740,7 +4812,7 @@ export default function App() {
       setActiveEquippedAsset(null);
       setAimOrigin(null);
       setAimCurrent(null);
-      setTool('pan');
+      setTool('select');
       return;
     }
 
@@ -6379,7 +6451,67 @@ export default function App() {
     }
   };
 
+  const lastDmTouchTimeRef = useRef<number>(0);
+  const dmSpellTouchRef = useRef<{
+    active: boolean;
+    hadOriginOnStart: boolean;
+    startPoint: { x: number; y: number } | null;
+    lastPoint: { x: number; y: number } | null;
+  }>({
+    active: false,
+    hadOriginOnStart: false,
+    startPoint: null,
+    lastPoint: null
+  });
+
+  const getDmTouchWorldPoint = (stage: any, clientX: number, clientY: number) => {
+    const container = stage?.container?.() as HTMLElement | undefined;
+    const rect = container ? container.getBoundingClientRect() : { left: 0, top: 0 };
+    const px = clientX - rect.left;
+    const py = clientY - rect.top;
+    const scale = stageScaleRef.current || stage.scaleX() || 1;
+    const sx = stagePosRef.current?.x ?? stage.x();
+    const sy = stagePosRef.current?.y ?? stage.y();
+    return {
+      x: (px - sx) / scale,
+      y: (py - sy) / scale
+    };
+  };
+
+  const snapDmPointToTokenCenter = (rawPoint: { x: number; y: number }, targetNode: any, stage: any) => {
+    let node = targetNode;
+    while (node && node !== stage) {
+      if (typeof node.name === 'function' && node.name() === 'token') {
+        const tokenId = node.id?.() || (node as any).attrs?.id;
+        const foundToken = tokens.find(t => t.id === tokenId);
+        if (foundToken) {
+          const tokenRadius = ((foundToken.size || 1) * gridSize) / 2;
+          return { x: foundToken.x + tokenRadius, y: foundToken.y + tokenRadius };
+        }
+        break;
+      }
+      node = node.getParent?.();
+    }
+    const scale = stageScaleRef.current || stage?.scaleX?.() || 1;
+    const snapPad = Math.max(15, 22 / scale);
+    const nearToken = tokens.find(t => {
+      if (t.isCondition) return false;
+      const tRad = ((t.size || 1) * gridSize) / 2;
+      const tcX = (t.x ?? 0) + tRad;
+      const tcY = (t.y ?? 0) + tRad;
+      return Math.hypot(rawPoint.x - tcX, rawPoint.y - tcY) <= tRad + snapPad;
+    });
+    if (nearToken) {
+      const tRad = ((nearToken.size || 1) * gridSize) / 2;
+      return { x: nearToken.x + tRad, y: nearToken.y + tRad };
+    }
+    return rawPoint;
+  };
+
   const handleStageMouseDown = (e: any) => {
+    if (!e.evt?.isTouchSynthetic && Date.now() - lastDmTouchTimeRef.current < 450) {
+      return;
+    }
     setActiveMenu(null);
     if (isSpacePressed || isShiftPanActive) {
       if (stageRef.current) {
@@ -6391,12 +6523,14 @@ export default function App() {
 
     const stage = e.target.getStage();
     const pointer = stage.getPointerPosition();
-    if (!pointer) return;
+    if (!pointer && e.evt?.clientX === undefined) return;
     const scale = stage.scaleX();
-    const point = {
-      x: (pointer.x - stage.x()) / scale,
-      y: (pointer.y - stage.y()) / scale
-    };
+    const point = e.evt?.isTouchSynthetic && e.evt?.clientX !== undefined
+      ? getDmTouchWorldPoint(stage, e.evt.clientX, e.evt.clientY)
+      : {
+          x: ((pointer?.x ?? 0) - stage.x()) / scale,
+          y: ((pointer?.y ?? 0) - stage.y()) / scale
+        };
 
     // Check if the click occurred on a room hotspot badge/label or token before starting hold-ping or stage drag
     let clickedNode = e.target;
@@ -6433,7 +6567,8 @@ export default function App() {
     }
 
     // Left-click hold map ping (Hold left-click for ~0.38s without dragging to ping; Alt+Hold pulls players' camera)
-    if (e.evt?.button === 0 && !isTokenClick && !hoveredZoneId && !isRoomDrawerOpen && (tool === 'select' || tool === 'pan')) {
+    // Only arm ping when using the select tool so dragging with pan never triggers unintended ping state updates
+    if (e.evt?.button === 0 && !isTokenClick && !hoveredZoneId && !isRoomDrawerOpen && tool === 'select') {
       startHoldPing(
         point.x,
         point.y,
@@ -6449,7 +6584,7 @@ export default function App() {
         setActiveEquippedAsset(null);
         setAimOrigin(null);
         setAimCurrent(null);
-        setTool('pan');
+        setTool('select');
         toast.info('Spell aiming cancelled');
         return;
       }
@@ -6487,20 +6622,7 @@ export default function App() {
 
     // MistWalker 4.0 Spell & Projectile Aiming (Check before isInteractive so clicking tokens to aim works)
     if (tool === 'spell_aim' && activeEquippedAsset) {
-      let originPoint = point;
-      let targetNode = e.target;
-      while (targetNode && targetNode !== stage) {
-        if (targetNode.name() === 'token') {
-          const tokenId = targetNode.id?.() || (targetNode as any).attrs?.id;
-          const foundToken = tokens.find(t => t.id === tokenId);
-          if (foundToken) {
-            const tokenRadius = ((foundToken.size || 1) * gridSize) / 2;
-            originPoint = { x: foundToken.x + tokenRadius, y: foundToken.y + tokenRadius };
-          }
-          break;
-        }
-        targetNode = targetNode.getParent();
-      }
+      const originPoint = snapDmPointToTokenCenter(point, e.target, stage);
 
       // Point AoE spells (Fireball, Fog Cloud, Web, Darkness, etc.) drop immediately on click!
       if (activeEquippedAsset.paradigm === 'point' || activeEquippedAsset.shape === 'circle' || activeEquippedAsset.paradigm === 'aura') {
@@ -6738,10 +6860,11 @@ export default function App() {
   };
 
   const handleMouseMove = (e: any) => {
-    if (isSpacePressed || isShiftPanActive) return;
+    if (tool === 'pan' || isSpacePressed || isShiftPanActive) return;
+    const stage = e.target.getStage();
+    if (stage?.isDragging?.()) return;
     if ((!image && !videoElement) && tool !== 'draw' && tool !== 'erase') return;
     
-    const stage = e.target.getStage();
     const pointer = stage.getPointerPosition();
     if (!pointer) return;
     const scale = stage.scaleX();
@@ -7114,11 +7237,33 @@ export default function App() {
   }, [Boolean(imageFile)]);
 
   const handleStageTouchStart = (e: any) => {
+    lastDmTouchTimeRef.current = Date.now();
     const touches = e.evt?.touches;
-    if (!touches || touches.length !== 1 || dmTouchStateRef.current.wasPinching) return;
+    if (!touches || touches.length !== 1 || dmTouchStateRef.current.wasPinching) {
+      dmSpellTouchRef.current.active = false;
+      return;
+    }
 
     const stage = e.target.getStage();
     if (!stage) return;
+
+    // Mobile Touch Spell Aiming: show live AimReticle on touchstart/touchmove and cast on touchend!
+    if (tool === 'spell_aim' && activeEquippedAsset) {
+      setActiveMenu(null);
+      const rawPoint = getDmTouchWorldPoint(stage, touches[0].clientX, touches[0].clientY);
+      const snappedPoint = snapDmPointToTokenCenter(rawPoint, e.target, stage);
+      dmSpellTouchRef.current = {
+        active: true,
+        hadOriginOnStart: Boolean(aimOrigin),
+        startPoint: snappedPoint,
+        lastPoint: snappedPoint
+      };
+      if (!aimOrigin) {
+        setAimOrigin(snappedPoint);
+      }
+      setAimCurrent(snappedPoint);
+      return;
+    }
 
     // Check if touch landed on a token or hotspot
     let clickedNode = e.target;
@@ -7151,12 +7296,11 @@ export default function App() {
         x: stagePosRef.current?.x ?? stage.x(),
         y: stagePosRef.current?.y ?? stage.y()
       };
-      const pointer = stage.getPointerPosition();
-      if (pointer && !hoveredZoneId && !isRoomDrawerOpen) {
-        const scale = stageScaleRef.current || stage.scaleX() || 1;
+      if (!hoveredZoneId && !isRoomDrawerOpen) {
+        const worldPt = getDmTouchWorldPoint(stage, touches[0].clientX, touches[0].clientY);
         startHoldPing(
-          (pointer.x - stagePosRef.current.x) / scale,
-          (pointer.y - stagePosRef.current.y) / scale,
+          worldPt.x,
+          worldPt.y,
           touches[0].clientX,
           touches[0].clientY,
           false
@@ -7165,11 +7309,12 @@ export default function App() {
       return;
     }
 
-    // Forward 1-finger touch to handleStageMouseDown for active drawing/reveal/door/spell tools
+    // Forward 1-finger touch to handleStageMouseDown for active drawing/reveal/door tools
     const syntheticEvt = {
       ...e,
       evt: {
         ...(e.evt || {}),
+        isTouchSynthetic: true,
         button: 0,
         buttons: 1,
         clientX: touches[0].clientX,
@@ -7184,8 +7329,21 @@ export default function App() {
   };
 
   const handleStageTouchMove = (e: any) => {
+    lastDmTouchTimeRef.current = Date.now();
     const touches = e.evt?.touches;
-    if (!touches || touches.length !== 1 || dmTouchStateRef.current.wasPinching) return;
+    if (!touches || touches.length !== 1 || dmTouchStateRef.current.wasPinching) {
+      dmSpellTouchRef.current.active = false;
+      return;
+    }
+
+    if (dmSpellTouchRef.current.active && tool === 'spell_aim' && activeEquippedAsset) {
+      const stage = stageRef.current || e.target?.getStage?.();
+      if (!stage) return;
+      const rawPoint = getDmTouchWorldPoint(stage, touches[0].clientX, touches[0].clientY);
+      dmSpellTouchRef.current.lastPoint = rawPoint;
+      setAimCurrent(rawPoint);
+      return;
+    }
 
     if (dmTouchStateRef.current.isSingleFingerPanning) {
       const stage = stageRef.current;
@@ -7200,17 +7358,25 @@ export default function App() {
         y: dmTouchStateRef.current.singlePanStartStage.y + dy
       };
       stagePosRef.current = newPos;
-      stage.position(newPos);
-      stage.batchDraw();
 
-      const fx = document.getElementById('main-animated-fx-overlay');
-      if (fx) {
-        fx.style.left = `${newPos.x}px`;
-        fx.style.top = `${newPos.y}px`;
-      }
-      const fxWorld = document.getElementById('mistwalker-dom-effects-overlay-world');
-      if (fxWorld) {
-        fxWorld.style.transform = `translate3d(${newPos.x}px, ${newPos.y}px, 0) scale(${stageScaleRef.current})`;
+      if (!stageDragRafIdRef.current) {
+        stageDragRafIdRef.current = requestAnimationFrame(() => {
+          stageDragRafIdRef.current = null;
+          const curStage = stageRef.current;
+          if (curStage) {
+            curStage.position(stagePosRef.current);
+            curStage.batchDraw();
+          }
+          const fx = document.getElementById('main-animated-fx-overlay');
+          if (fx) {
+            fx.style.left = `${stagePosRef.current.x}px`;
+            fx.style.top = `${stagePosRef.current.y}px`;
+          }
+          const fxWorld = document.getElementById('mistwalker-dom-effects-overlay-world');
+          if (fxWorld) {
+            fxWorld.style.transform = `translate3d(${stagePosRef.current.x}px, ${stagePosRef.current.y}px, 0) scale(${stageScaleRef.current})`;
+          }
+        });
       }
       return;
     }
@@ -7220,6 +7386,7 @@ export default function App() {
         ...e,
         evt: {
           ...(e.evt || {}),
+          isTouchSynthetic: true,
           button: 0,
           buttons: 1,
           clientX: touches[0].clientX,
@@ -7231,7 +7398,39 @@ export default function App() {
   };
 
   const handleStageTouchEnd = (e: any) => {
-    if (dmTouchStateRef.current.wasPinching) return;
+    lastDmTouchTimeRef.current = Date.now();
+    if (dmTouchStateRef.current.wasPinching) {
+      dmSpellTouchRef.current.active = false;
+      return;
+    }
+    if (dmSpellTouchRef.current.active && tool === 'spell_aim' && activeEquippedAsset && (!e.evt?.touches || e.evt.touches.length === 0)) {
+      const aimState = { ...dmSpellTouchRef.current };
+      dmSpellTouchRef.current.active = false;
+      const stage = stageRef.current || e.target?.getStage?.();
+      const endTouch = e.evt?.changedTouches?.[0];
+      const rawEnd = (stage && endTouch)
+        ? getDmTouchWorldPoint(stage, endTouch.clientX, endTouch.clientY)
+        : (aimState.lastPoint || aimState.startPoint);
+      if (!rawEnd) return;
+      const endPoint = stage ? snapDmPointToTokenCenter(rawEnd, e.target, stage) : rawEnd;
+
+      if (activeEquippedAsset.paradigm === 'point' || activeEquippedAsset.shape === 'circle' || activeEquippedAsset.paradigm === 'aura') {
+        castSpellAt(endPoint, endPoint);
+        return;
+      }
+
+      const origin = aimOrigin || aimState.startPoint;
+      if (origin && Math.hypot(endPoint.x - origin.x, endPoint.y - origin.y) > 20) {
+        castSpellAt(origin, endPoint);
+        return;
+      }
+
+      if (!aimState.hadOriginOnStart) {
+        setAimOrigin(endPoint);
+        setAimCurrent(endPoint);
+      }
+      return;
+    }
     if (dmTouchStateRef.current.isSingleFingerPanning && (!e.evt?.touches || e.evt.touches.length === 0)) {
       dmTouchStateRef.current.isSingleFingerPanning = false;
       cancelHoldPing();
@@ -9525,8 +9724,8 @@ export default function App() {
                 )}
               </Layer>
 
-              {/* Tokens Layer */}
-              <Layer>
+              {/* Tokens Layer (hit testing skipped while in pan tool to maximize drag FPS) */}
+              <Layer listening={tool !== 'pan'}>
                 {tokens.map((token) => (
                   <TokenImage
                     key={token.id}
@@ -10138,6 +10337,35 @@ export default function App() {
               );
             })()}
 
+            {/* Floating DM Spell & Monster Action Aiming Banner (with Touch Cancel Button) */}
+            {tool === 'spell_aim' && activeEquippedAsset && (
+              <div className="fixed top-4 left-20 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-[140] flex items-center justify-between sm:justify-center gap-3 px-4 py-2 rounded-xl bg-zinc-950/95 border border-amber-500/80 shadow-[0_8px_30px_rgba(0,0,0,0.85)] text-amber-200 font-mono text-xs pointer-events-auto animate-in fade-in duration-150">
+                <div className="flex items-center gap-2 truncate">
+                  <Sparkles className="w-4 h-4 text-amber-400 animate-pulse shrink-0" />
+                  <span className="truncate">
+                    Aiming <strong className="text-white">{activeEquippedAsset.name}</strong>
+                    <span className="hidden sm:inline text-zinc-400">
+                      {aimOrigin ? ' — Tap or drag target on battlemap' : ' — Tap caster or drag to target'}
+                    </span>
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveDmMonsterAction(null);
+                    setActiveEquippedAsset(null);
+                    setAimOrigin(null);
+                    setAimCurrent(null);
+                    setTool('select');
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-rose-950/80 border border-rose-500/50 hover:bg-rose-900 text-rose-200 hover:text-white transition-colors cursor-pointer text-[11px] font-bold flex items-center gap-1 shrink-0"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span>Cancel</span>
+                </button>
+              </div>
+            )}
+
             {/* Selected Objects Floating Toolbar */}
             {selectedTokenIds.length > 0 && (() => {
               const singleSelectedToken = selectedTokenIds.length === 1
@@ -10167,7 +10395,7 @@ export default function App() {
                         setActiveEquippedAsset(null);
                         setAimOrigin(null);
                         setAimCurrent(null);
-                        setTool('pan');
+                        setTool('select');
                       }}
                       onDeselectToken={() => {
                         setSelectedTokenIds([]);
