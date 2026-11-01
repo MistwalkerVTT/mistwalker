@@ -532,7 +532,7 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onSelectDm, onSelectPl
 
       {/* Title block */}
       <div
-        className="relative z-10 h-full w-full flex flex-col items-center justify-start pt-[9vh] px-4"
+        className="relative z-10 h-full w-full flex flex-col items-center justify-start pt-[9vh] max-sm:pt-6 max-sm:pb-8 max-sm:overflow-y-auto px-4"
         style={{
           animation: leaving ? 'mw-ui-warp 1.25s cubic-bezier(0.32, 0, 0.2, 1) forwards' : undefined
         }}
@@ -593,7 +593,7 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onSelectDm, onSelectPl
 
         {/* Mode selection */}
         <div
-          className="mt-[7vh] w-full max-w-4xl grid grid-cols-1 sm:grid-cols-2 gap-5 sm:gap-8"
+          className="mt-[7vh] max-sm:mt-4 w-full max-w-4xl grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-8"
           style={{ pointerEvents: stage >= 4 && !leaving ? 'auto' : 'none' }}
         >
           {([
@@ -650,7 +650,7 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onSelectDm, onSelectPl
             >
               <div className="mw-sweep absolute inset-y-0 w-1/3 pointer-events-none" style={{ background: `linear-gradient(90deg, transparent, rgba(${m.accent},0.22), transparent)`, transform: 'translateX(-120%) skewX(-20deg)' }} />
               <div className="absolute top-0 inset-x-0 h-[2px]" style={{ background: `linear-gradient(90deg, transparent, rgba(${m.accent},0.95), transparent)` }} />
-              <div className="p-6 sm:p-8 flex flex-col gap-3">
+              <div className="p-4 sm:p-8 flex flex-col gap-2 sm:gap-3">
                 <div className="flex items-center justify-between">
                   <span style={{ color: `rgb(${m.accent})` }} className="drop-shadow-[0_0_14px_currentColor]">{m.icon}</span>
                   <span className="text-[10px] tracking-[0.35em] font-mono text-zinc-500 border border-zinc-700 rounded px-1.5 py-0.5">

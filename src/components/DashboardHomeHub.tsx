@@ -206,7 +206,7 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
   };
 
   return (
-    <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-4 sm:p-6 md:p-8 pointer-events-auto overflow-y-auto">
+    <div className="absolute inset-y-0 right-0 left-16 xl:inset-0 z-10 flex flex-col items-center p-3 sm:p-6 md:p-8 pointer-events-auto overflow-y-auto overflow-x-hidden">
       {/* Subtle background ambient overlay */}
       <div className="w-full max-w-6xl flex flex-col items-center my-auto animate-in fade-in zoom-in-95 duration-300">
         
@@ -637,8 +637,8 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
         </div>
 
         {/* BOTTOM UTILITY FOOTER */}
-        <div className="flex items-center justify-between w-full mt-5 px-2 text-[11px] font-mono text-zinc-500">
-          <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 w-full mt-5 px-2 pb-4 md:pb-0 text-[11px] font-mono text-zinc-500">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-4">
             <span>MistWalker Command Deck</span>
             <span>•</span>
             <button

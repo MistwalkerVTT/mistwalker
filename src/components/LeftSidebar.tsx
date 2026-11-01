@@ -548,16 +548,32 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
       setPinnedPosition({ x: clampedX, y: clampedY });
     };
 
+    const handleTouchMove = (e: TouchEvent) => {
+      const touch = e.touches?.[0];
+      if (!touch) return;
+      const newX = touch.clientX - dragOffsetRef.current.x;
+      const newY = touch.clientY - dragOffsetRef.current.y;
+      const maxX = Math.max(10, window.innerWidth - 280);
+      const maxY = Math.max(10, window.innerHeight - 100);
+      const clampedX = Math.max(8, Math.min(maxX, newX));
+      const clampedY = Math.max(8, Math.min(maxY, newY));
+      setPinnedPosition({ x: clampedX, y: clampedY });
+    };
+
     const handleMouseUp = () => {
       setIsDraggingFlyout(false);
     };
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('touchmove', handleTouchMove, { passive: true });
+    window.addEventListener('touchend', handleMouseUp);
 
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleMouseUp);
     };
   }, [isDraggingFlyout]);
 
@@ -571,18 +587,23 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
     }
   }, [tool]);
 
-  const handleDragStart = (e: React.MouseEvent) => {
+  const handleDragStart = (e: React.MouseEvent | React.TouchEvent) => {
     if (!pinnedGroup) return;
-    if ((e.target as HTMLElement).closest('button, input, select, textarea, a, label, [role="button"]')) {
+    const targetEl = e.target as HTMLElement;
+    if (targetEl && typeof targetEl.closest === 'function' && targetEl.closest('button, input, select, textarea, a, label, [role="button"]')) {
       return;
     }
-    e.preventDefault();
+    const clientX = 'touches' in e ? e.touches[0]?.clientX ?? 0 : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0]?.clientY ?? 0 : e.clientY;
+    if (!('touches' in e)) {
+      e.preventDefault();
+    }
     setIsDraggingFlyout(true);
     const currentX = pinnedPosition?.x ?? 72;
     const currentY = pinnedPosition?.y ?? Math.max(12, Math.min(menuTop - 24, window.innerHeight - 560));
     dragOffsetRef.current = {
-      x: e.clientX - currentX,
-      y: e.clientY - currentY
+      x: clientX - currentX,
+      y: clientY - currentY
     };
   };
 
@@ -626,6 +647,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   }, [activeGroup, fetchDdbSyncStatus]);
 
   const handleMouseEnter = (groupId: GroupMenuId, e: React.MouseEvent) => {
+    if (typeof window !== 'undefined' && window.matchMedia?.('(hover: none)').matches) return;
     if (closeTimeoutRef.current) {
       clearTimeout(closeTimeoutRef.current);
       closeTimeoutRef.current = null;
@@ -636,6 +658,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   };
 
   const handleMouseLeave = () => {
+    if (typeof window !== 'undefined' && window.matchMedia?.('(hover: none)').matches) return;
     if (closeTimeoutRef.current) {
       clearTimeout(closeTimeoutRef.current);
     }
@@ -645,6 +668,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   };
 
   const handleFlyoutMouseEnter = () => {
+    if (typeof window !== 'undefined' && window.matchMedia?.('(hover: none)').matches) return;
     if (closeTimeoutRef.current) {
       clearTimeout(closeTimeoutRef.current);
       closeTimeoutRef.current = null;
@@ -652,6 +676,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   };
 
   const handleFlyoutMouseLeave = () => {
+    if (typeof window !== 'undefined' && window.matchMedia?.('(hover: none)').matches) return;
     if (closeTimeoutRef.current) {
       clearTimeout(closeTimeoutRef.current);
     }
@@ -715,7 +740,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   return (
     <div
       id="left-sidebar-container"
-      className="w-16 bg-zinc-950/98 backdrop-blur-xl border-r border-zinc-800/90 flex flex-col z-50 shadow-2xl h-full select-none shrink-0 relative text-zinc-300"
+      className="w-16 bg-zinc-950/98 backdrop-blur-xl border-r border-zinc-800/90 flex flex-col z-50 shadow-2xl h-full max-md:overflow-y-auto max-md:overflow-x-hidden select-none shrink-0 relative text-zinc-300"
+      style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
     >
       {/* Brand Icon */}
       <div className="flex flex-col items-center py-1.5 border-b border-zinc-800/80 shrink-0">
@@ -799,7 +825,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
       {/* Main Condensed Tool Categories (Scrollable for any screen height) */}
       <div
         id="sidebar-tools-scroll"
-        className="flex-1 w-full overflow-y-auto overflow-x-hidden flex flex-col items-center py-1.5 gap-0.5 px-1.5 sidebar-scrollbar"
+        className="md:flex-1 max-md:shrink-0 w-full md:overflow-y-auto overflow-x-hidden flex flex-col items-center py-1.5 gap-0.5 px-1.5 sidebar-scrollbar"
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
       >
         {/* 1. Campaign & Maps Group */}
@@ -1107,7 +1133,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
             pinnedGroup
               ? 'border-amber-500/50 shadow-[0_20px_60px_rgba(0,0,0,0.85),0_0_20px_rgba(245,158,11,0.15)] ring-1 ring-amber-500/20'
               : 'border-zinc-700/80 shadow-2xl'
-          } rounded-2xl z-[70] flex flex-col ${activeGroup === 'maps' ? 'min-w-[340px] max-w-[380px]' : 'min-w-[280px] max-w-[350px]'} max-h-[calc(100vh-24px)] overflow-y-auto sidebar-scrollbar animate-in fade-in slide-in-from-left-2 duration-150`}
+          } rounded-2xl z-[70] flex flex-col ${activeGroup === 'maps' ? 'sm:min-w-[340px] sm:max-w-[380px]' : 'sm:min-w-[280px] sm:max-w-[350px]'} max-sm:!left-[68px] max-sm:!right-2 max-sm:!top-2 max-sm:min-w-0 max-sm:max-w-[calc(100vw-76px)] max-h-[calc(100dvh-24px)] max-sm:max-h-[calc(100dvh-16px)] overflow-y-auto sidebar-scrollbar animate-in fade-in slide-in-from-left-2 duration-150`}
           style={{
             left: pinnedGroup && pinnedPosition ? `${pinnedPosition.x}px` : '68px',
             top: pinnedGroup && pinnedPosition
@@ -1119,13 +1145,14 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
         >
           {/* Transparent hover bridge touching sidebar (only when docked beside sidebar) */}
           {(!pinnedGroup || !pinnedPosition || pinnedPosition.x <= 74) && (
-            <div className="absolute -left-6 top-0 w-6 h-full pointer-events-auto" />
+            <div className="hidden sm:block absolute -left-6 top-0 w-6 h-full pointer-events-auto" />
           )}
 
           {/* Draggable Header Strip when Pinned */}
           {pinnedGroup && (
             <div
               onMouseDown={handleDragStart}
+              onTouchStart={handleDragStart}
               className="sticky top-0 z-30 flex items-center justify-between px-3 py-2 bg-gradient-to-r from-zinc-950 via-zinc-900 to-zinc-950 border-b border-amber-500/30 text-amber-300 select-none cursor-grab active:cursor-grabbing shadow-sm"
               title="Click and drag anywhere on this bar to move the menu around your screen"
             >

@@ -538,6 +538,16 @@ const TokenImage = React.memo(({
   const vortexRingRef = useRef<any>(null);
   const cloudGroupRef = useRef<any>(null);
   const shockwaveRef = useRef<any>(null);
+  const longPressTimerRef = useRef<any>(null);
+  const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
+
+  const clearLongPress = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    touchStartPosRef.current = null;
+  };
 
   useTokenFlightAnimation({
     elevation: elevationFt,
@@ -566,9 +576,51 @@ const TokenImage = React.memo(({
         }
       }}
       onTouchStart={(e) => {
+        const touches = e.evt?.touches;
+        if (touches && touches.length >= 2) {
+          clearLongPress();
+          return;
+        }
         if (!isSpacePressed) {
           e.cancelBubble = true;
         }
+        if (touches && touches.length === 1 && onContextMenu) {
+          const tx = touches[0].clientX;
+          const ty = touches[0].clientY;
+          touchStartPosRef.current = { x: tx, y: ty };
+          if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+          longPressTimerRef.current = setTimeout(() => {
+            longPressTimerRef.current = null;
+            try {
+              if (e.target && typeof e.target.stopDrag === 'function') {
+                e.target.stopDrag();
+              }
+            } catch {}
+            onContextMenu({
+              evt: {
+                preventDefault: () => {},
+                clientX: tx,
+                clientY: ty
+              },
+              cancelBubble: true
+            });
+          }, 480);
+        }
+      }}
+      onTouchMove={(e) => {
+        const touches = e.evt?.touches;
+        if (!touches || touches.length !== 1 || !touchStartPosRef.current) {
+          clearLongPress();
+          return;
+        }
+        const dx = touches[0].clientX - touchStartPosRef.current.x;
+        const dy = touches[0].clientY - touchStartPosRef.current.y;
+        if (Math.hypot(dx, dy) > 8) {
+          clearLongPress();
+        }
+      }}
+      onTouchEnd={() => {
+        clearLongPress();
       }}
       onClick={(e) => {
         if (isSpacePressed) return;
@@ -597,6 +649,7 @@ const TokenImage = React.memo(({
         }
       }}
       onDragStart={(e) => {
+        clearLongPress();
         e.cancelBubble = true;
         const stage = e.target.getStage();
         if (stage) stage.container().style.cursor = 'move';
@@ -6895,6 +6948,166 @@ export default function App() {
     }
   };
 
+  // Multi-touch pinch-to-zoom and two-finger pan for DM mobile/tablet touchscreens
+  const dmTouchStateRef = useRef<{
+    lastDist: number;
+    lastCenter: { x: number; y: number };
+    initialScale: number;
+  } | null>(null);
+
+  const handleStageTouchStart = (e: any) => {
+    const touches = e.evt?.touches;
+    if (touches && touches.length === 2) {
+      cancelHoldPing();
+      const stage = e.target.getStage();
+      if (!stage) return;
+      if (stage.isDragging()) {
+        stage.stopDrag();
+        const sx = stage.x();
+        const sy = stage.y();
+        stagePosRef.current = { x: sx, y: sy };
+        setStagePos(prev => (prev.x === sx && prev.y === sy) ? prev : { x: sx, y: sy });
+      }
+      const t1 = touches[0];
+      const t2 = touches[1];
+      const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+      const center = {
+        x: (t1.clientX + t2.clientX) / 2,
+        y: (t1.clientY + t2.clientY) / 2
+      };
+      dmTouchStateRef.current = {
+        lastDist: dist,
+        lastCenter: center,
+        initialScale: stage.scaleX()
+      };
+      return;
+    }
+
+    if (touches && touches.length === 1) {
+      // Forward 1-finger touch to handleStageMouseDown with synthetic button=0 so drawing/reveal/door tools work on touch
+      const syntheticEvt = {
+        ...e,
+        evt: {
+          ...(e.evt || {}),
+          button: 0,
+          buttons: 1,
+          clientX: touches[0].clientX,
+          clientY: touches[0].clientY,
+          shiftKey: false,
+          ctrlKey: false,
+          metaKey: false,
+          altKey: false
+        }
+      };
+      handleStageMouseDown(syntheticEvt);
+    }
+  };
+
+  const handleStageTouchMove = (e: any) => {
+    const touches = e.evt?.touches;
+    if (touches && touches.length === 2 && dmTouchStateRef.current) {
+      e.evt.preventDefault();
+      cancelHoldPing();
+      const stage = e.target.getStage();
+      if (!stage) return;
+      if (stage.isDragging()) {
+        stage.stopDrag();
+        const sx = stage.x();
+        const sy = stage.y();
+        stagePosRef.current = { x: sx, y: sy };
+        setStagePos(prev => (prev.x === sx && prev.y === sy) ? prev : { x: sx, y: sy });
+      }
+
+      const t1 = touches[0];
+      const t2 = touches[1];
+      const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+      const center = {
+        x: (t1.clientX + t2.clientX) / 2,
+        y: (t1.clientY + t2.clientY) / 2
+      };
+      const { lastDist, lastCenter } = dmTouchStateRef.current;
+
+      if (lastDist > 5 && dist > 5) {
+        const scaleFactor = dist / lastDist;
+        const oldScale = stage.scaleX();
+        if (Number.isFinite(oldScale) && oldScale > 0) {
+          const newScale = Math.max(0.1, Math.min(oldScale * scaleFactor, 5));
+          const stageCurrentPos = { x: stage.x(), y: stage.y() };
+          const pointTo = {
+            x: (center.x - stageCurrentPos.x) / oldScale,
+            y: (center.y - stageCurrentPos.y) / oldScale
+          };
+          const dx = center.x - lastCenter.x;
+          const dy = center.y - lastCenter.y;
+          const newPos = {
+            x: center.x - pointTo.x * newScale + dx,
+            y: center.y - pointTo.y * newScale + dy
+          };
+
+          if (Number.isFinite(newScale) && Number.isFinite(newPos.x) && Number.isFinite(newPos.y)) {
+            stageScaleRef.current = newScale;
+            stagePosRef.current = newPos;
+            stage.scale({ x: newScale, y: newScale });
+            stage.position(newPos);
+            stage.batchDraw();
+
+            const fx = document.getElementById('main-animated-fx-overlay');
+            if (fx) {
+              fx.style.left = `${newPos.x}px`;
+              fx.style.top = `${newPos.y}px`;
+              fx.style.transform = `scale(${newScale})`;
+            }
+            const fxWorld = document.getElementById('mistwalker-dom-effects-overlay-world');
+            if (fxWorld) {
+              fxWorld.style.transform = `translate3d(${newPos.x}px, ${newPos.y}px, 0) scale(${newScale})`;
+            }
+
+            pendingWheelStateRef.current = { scale: newScale, pos: newPos };
+            if (!wheelRafIdRef.current) {
+              wheelRafIdRef.current = requestAnimationFrame(() => {
+                wheelRafIdRef.current = null;
+                if (pendingWheelStateRef.current) {
+                  const { scale, pos } = pendingWheelStateRef.current;
+                  pendingWheelStateRef.current = null;
+                  setStageScale(scale);
+                  setStagePos(pos);
+                }
+              });
+            }
+          }
+
+          dmTouchStateRef.current.lastDist = dist;
+          dmTouchStateRef.current.lastCenter = center;
+        }
+      }
+      return;
+    }
+
+    if (touches && touches.length === 1 && tool !== 'pan') {
+      const syntheticEvt = {
+        ...e,
+        evt: {
+          ...(e.evt || {}),
+          button: 0,
+          buttons: 1,
+          clientX: touches[0].clientX,
+          clientY: touches[0].clientY
+        }
+      };
+      handleMouseMove(syntheticEvt);
+    }
+  };
+
+  const handleStageTouchEnd = (e: any) => {
+    if (!e.evt?.touches || e.evt.touches.length < 2) {
+      dmTouchStateRef.current = null;
+    }
+    if (!e.evt?.touches || e.evt.touches.length === 0) {
+      cancelHoldPing();
+      handleMouseUp(e);
+    }
+  };
+
   const handleNudgeSelected = (dx: number, dy: number) => {
     setTokens(prev => {
       const next = prev.map(t => {
@@ -8108,7 +8321,7 @@ export default function App() {
   return (
     <>
     <Toaster theme="dark" position="bottom-right" richColors />
-    <div className="flex flex-col h-screen bg-[#0d0d0e] text-zinc-100 font-sans overflow-hidden relative">
+    <div className="flex flex-col h-[100dvh] bg-[#0d0d0e] text-zinc-100 font-sans overflow-hidden relative">
       <div className="absolute inset-0 opacity-20 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at center, rgba(255,100,0,0.1) 0%, transparent 70%)' }}></div>
 
       {/* Main Content */}
@@ -8629,6 +8842,9 @@ export default function App() {
               onMouseDown={handleStageMouseDown}
               onMouseMove={handleMouseMove}
               onMouseUp={handleMouseUp}
+              onTouchStart={handleStageTouchStart}
+              onTouchMove={handleStageTouchMove}
+              onTouchEnd={handleStageTouchEnd}
               onDblClick={handleStageDblClick}
             >
               <Layer ref={dmVideoLayerRef} listening={false}>
@@ -9846,7 +10062,7 @@ export default function App() {
               return (
                 <div
                   id="selected-objects-floating-hud"
-                  className="absolute bottom-8 left-1/2 -translate-x-1/2 z-50 bg-zinc-950/95 backdrop-blur-md border border-amber-500/60 rounded-2xl px-4 py-2.5 flex items-center gap-3 shadow-[0_8px_32px_rgba(0,0,0,0.8)] text-xs font-mono animate-in fade-in slide-in-from-bottom-3 duration-200"
+                  className="absolute bottom-8 max-md:bottom-4 left-1/2 max-md:left-[calc(50%+32px)] -translate-x-1/2 z-50 bg-zinc-950/95 backdrop-blur-md border border-amber-500/60 rounded-2xl px-4 py-2.5 max-md:px-2.5 max-md:py-2 flex max-md:flex-wrap max-md:justify-center max-md:max-w-[calc(100vw-80px)] items-center gap-3 max-md:gap-1.5 shadow-[0_8px_32px_rgba(0,0,0,0.8)] text-xs font-mono animate-in fade-in slide-in-from-bottom-3 duration-200"
                 >
                   <div className="flex items-center gap-2 pr-3 border-r border-zinc-800">
                     <MousePointer className="w-4 h-4 text-amber-400 shrink-0" />
@@ -10090,37 +10306,37 @@ export default function App() {
             })()}
 
             {/* Zoom Controls Overlay */}
-            <div className="absolute bottom-8 right-8 flex flex-col gap-2 z-50 pointer-events-auto">
+            <div className="absolute bottom-8 right-8 max-md:bottom-4 max-md:right-3 flex flex-col gap-2 max-md:gap-1.5 z-50 pointer-events-auto">
               <button 
                 onClick={() => setMapRotation((prev) => (prev + 90) % 360)}
-                className="p-3 bg-zinc-900/80 backdrop-blur border border-zinc-700 rounded-full text-zinc-300 hover:text-white transition-all shadow-xl"
+                className="p-3 max-md:p-2 bg-zinc-900/80 backdrop-blur border border-zinc-700 rounded-full text-zinc-300 hover:text-white transition-all shadow-xl"
                 title="Rotate Map 90°"
               >
-                <RotateCcw className="w-6 h-6" />
+                <RotateCcw className="w-6 h-6 max-md:w-5 max-md:h-5" />
               </button>
               <button 
                 onClick={zoomIn}
-                className="p-3 bg-zinc-900/80 backdrop-blur border border-zinc-700 rounded-full text-zinc-300 hover:text-white transition-all shadow-xl"
+                className="p-3 max-md:p-2 bg-zinc-900/80 backdrop-blur border border-zinc-700 rounded-full text-zinc-300 hover:text-white transition-all shadow-xl"
               >
-                <ZoomIn className="w-6 h-6" />
+                <ZoomIn className="w-6 h-6 max-md:w-5 max-md:h-5" />
               </button>
               <button 
                 onClick={zoomOut}
-                className="p-3 bg-zinc-900/80 backdrop-blur border border-zinc-700 rounded-full text-zinc-300 hover:text-white transition-all shadow-xl"
+                className="p-3 max-md:p-2 bg-zinc-900/80 backdrop-blur border border-zinc-700 rounded-full text-zinc-300 hover:text-white transition-all shadow-xl"
               >
-                <ZoomOut className="w-6 h-6" />
+                <ZoomOut className="w-6 h-6 max-md:w-5 max-md:h-5" />
               </button>
               <button 
                 onClick={() => fitWholeMapToScreen()}
-                className="p-3 bg-zinc-900/80 backdrop-blur border border-zinc-700 rounded-full text-amber-400 hover:text-amber-200 hover:border-amber-500/50 transition-all shadow-xl"
+                className="p-3 max-md:p-2 bg-zinc-900/80 backdrop-blur border border-zinc-700 rounded-full text-amber-400 hover:text-amber-200 hover:border-amber-500/50 transition-all shadow-xl"
                 title="Fit Entire Map in DM View"
               >
-                <Scan className="w-6 h-6" />
+                <Scan className="w-6 h-6 max-md:w-5 max-md:h-5" />
               </button>
             </div>
 
             {/* Status Bar */}
-            <div className="absolute bottom-8 left-8 px-4 py-2 bg-zinc-900/80 backdrop-blur border border-zinc-700 rounded-lg text-[10px] font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-4">
+            <div className="hidden md:flex absolute bottom-8 left-8 px-4 py-2 bg-zinc-900/80 backdrop-blur border border-zinc-700 rounded-lg text-[10px] font-mono text-zinc-500 uppercase tracking-widest items-center gap-4">
               <div className="flex items-center gap-2">
                 <div className={`w-2 h-2 rounded-full ${tool === 'reveal' ? 'bg-emerald-500 animate-pulse' : 'bg-zinc-700'}`} />
                 <span>Tool: {tool}</span>
@@ -10625,7 +10841,8 @@ export default function App() {
 
         let calculatedMenuY = Math.max(16, Math.min(tokenScreenY, window.innerHeight - menuEstimatedHeight - 16));
 
-        const autoMenuX = Math.max(16, Math.min(calculatedMenuX, window.innerWidth - menuWidth - 16));
+        const minLeftBound = window.innerWidth < 768 ? 72 : 16;
+        const autoMenuX = Math.max(minLeftBound, Math.min(calculatedMenuX, window.innerWidth - menuWidth - 8));
         const autoMenuY = calculatedMenuY;
         const menuX = tokenMenuPos ? tokenMenuPos.x : autoMenuX;
         const menuY = tokenMenuPos ? tokenMenuPos.y : autoMenuY;
@@ -10647,7 +10864,7 @@ export default function App() {
           <div 
             id="token-context-menu-popup"
             onPointerDown={startTokenMenuDrag}
-            className={`fixed z-[300] bg-zinc-950/95 backdrop-blur-xl border rounded-xl shadow-2xl p-3.5 w-72 animate-in fade-in zoom-in-95 select-none cursor-move ${tokenMenuPinned ? 'border-amber-500/70' : 'border-zinc-700/80'}`}
+            className={`fixed z-[300] bg-zinc-950/95 backdrop-blur-xl border rounded-xl shadow-2xl p-3.5 w-72 max-w-[calc(100vw-80px)] max-h-[calc(100dvh-24px)] overflow-y-auto animate-in fade-in zoom-in-95 select-none cursor-move ${tokenMenuPinned ? 'border-amber-500/70' : 'border-zinc-700/80'}`}
             style={{ left: menuX, top: menuY }}
             onClick={(e) => e.stopPropagation()}
             onContextMenu={(e) => e.preventDefault()}
