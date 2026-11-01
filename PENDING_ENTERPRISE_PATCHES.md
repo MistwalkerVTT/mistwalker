@@ -14,6 +14,36 @@
 
 ## Pending Changes Queue for Future Enterprise Patch
 
+### [2026-11-01] feat(campaign): separate map blueprints from live game session checkpoints with dedicated scene instance service and 2-column detail UI
+- **Commit**: `4413c1b`
+- **Files Changed**:
+  - `src/types.ts`
+  - `src/lib/firebase.ts`
+  - `firestore.rules`
+  - `src/services/sceneInstanceService.ts`
+  - `src/components/CampaignBuilderModal.tsx`
+  - `src/App.tsx`
+  - `src/components/DmMonsterDock.tsx`
+  - `src/components/PlayerHeroDock.tsx`
+- **Summary**:
+  - **Strict Separation Between Blueprints and Session Saves**:
+    - Introduced the `ScenePlayInstance` data model representing point-in-time runtime table saves, distinct from pristine `Scene` templates.
+    - Encapsulated CRUD persistence in `src/services/sceneInstanceService.ts` with dual-domain isolation and localStorage offline fallback caching keyed by `mistwalker_play_instances_${sceneId}`.
+    - Added security rule for `/scenePlayInstances/{instanceId}` in `firestore.rules`.
+  - **Responsive Two-Column Detail View in Scene Manager**:
+    - **Left Column (Map Authoring Blueprint)**: Clear labeling on "Load Base Blueprint (Fresh Reset)", "Blueprint Save (Map Maker)", and "Pull Blueprint from Canvas". Protects original map templates, walls, room notes, and starting monster spawns.
+    - **Right Column (Live Game Instances / Play Saves)**: "🎮 Live Game Instances (Play Saves)" panel with a "Capture Current Table State Bar" (custom checkpoint name input + "+ Save Current Game Instance" snapshot button) and scrollable checkpoint list.
+    - Each checkpoint card displays timestamp, DM slot, token count, combat round, and fog reveals, with 1-click **Resume Game** (loads blueprint + overlays runtime tokens/walls/fog/combat and broadcasts via Socket.IO), **Overwrite** (↻), and **Delete** (🗑).
+    - Preserves pristine blueprints so checkpoint saves never overwrite base scene templates.
+- **Impact / Testing Notes**:
+  - Open Campaign Builder & Scene Manager (`Scenes & Chapters`).
+  - Select any scene (e.g., Three Moons Dungeon).
+  - Verify left column displays Map Authoring Blueprint (Creator Setup) with "Load Base Blueprint (Fresh Reset)" and "Blueprint Save (Map Maker)".
+  - Verify right column displays Live Game Instances with "+ Save Current Game Instance" and checkpoint history.
+  - Test saving a checkpoint, overwriting, and resuming mid-combat table states.
+
+---
+
 ### [2026-11-01] feat(player): add campaign selection and live DDB player verification after station mode choice
 - **Commit**: `a710aea` (with follow-up `cd93662`)
 - **Files Changed**:
