@@ -1080,6 +1080,33 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                     Uses: {detailAction.uses.available}/{detailAction.uses.total}{detailAction.uses.resetType ? ` • ${detailAction.uses.resetType}` : ''}
                   </span>
                 )}
+                {/* Dispel Active Effect Button if this spell or aura is currently active on the battlemap */}
+                {(() => {
+                  const matchingActiveEffect = activeEffects.find(eff =>
+                    eff.id === detailAction.id ||
+                    eff.spellId === detailAction.id ||
+                    eff.name.trim().toLowerCase() === detailAction.name.trim().toLowerCase() ||
+                    eff.label?.trim().toLowerCase() === detailAction.name.trim().toLowerCase()
+                  );
+                  if (!matchingActiveEffect || !onDispelEffect) return null;
+                  return (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDispelEffect(matchingActiveEffect.id);
+                        setHoveredAction(null);
+                        setPinnedAction(null);
+                        onClearInspectedAura?.();
+                      }}
+                      className="px-2 py-0.5 rounded bg-red-950/90 hover:bg-red-900 border border-red-500/60 hover:border-red-400 text-red-200 hover:text-white font-bold transition-all cursor-pointer active:scale-95 shadow-sm flex items-center gap-1 shrink-0"
+                      title={`Dispel / End ${matchingActiveEffect.name} from battlemap`}
+                    >
+                      <X className="w-3 h-3 text-red-300" />
+                      <span>Dispel Active Spell</span>
+                    </button>
+                  );
+                })()}
               </div>
             </div>
 
@@ -2690,6 +2717,30 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                 Right-click any HUD action anytime to inspect.
               </span>
               <div className="flex items-center gap-2">
+                {(() => {
+                  const matchingActiveEffect = activeEffects.find(eff =>
+                    eff.id === inspectedAction.id ||
+                    eff.spellId === inspectedAction.id ||
+                    eff.name.trim().toLowerCase() === inspectedAction.name.trim().toLowerCase() ||
+                    eff.label?.trim().toLowerCase() === inspectedAction.name.trim().toLowerCase()
+                  );
+                  if (!matchingActiveEffect || !onDispelEffect) return null;
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onDispelEffect(matchingActiveEffect.id);
+                        setInspectedAction(null);
+                        onClearInspectedAura?.();
+                      }}
+                      className="px-3 py-1.5 rounded-xl font-bold text-xs font-mono bg-red-950/90 hover:bg-red-900 border border-red-500/60 text-red-200 hover:text-white transition-all shadow-md active:scale-95 cursor-pointer flex items-center gap-1.5"
+                      title={`Dispel / End ${matchingActiveEffect.name} from battlemap`}
+                    >
+                      <X className="w-3.5 h-3.5 text-red-300" />
+                      <span>Dispel Active Spell</span>
+                    </button>
+                  );
+                })()}
                 <button
                   type="button"
                   onClick={() => {

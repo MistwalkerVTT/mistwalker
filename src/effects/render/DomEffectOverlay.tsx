@@ -26,6 +26,7 @@ interface DomEffectOverlayProps {
   onInspectEffect?: (effect: VttEffectInstance) => void;
   onClearTokenAura?: (tokenId: string, auraName?: string) => void;
   onRemoveTokenBubble?: (tokenId: string, bubbleId: string) => void;
+  isDM?: boolean;
 }
 
 const AURA_OR_TOKEN_BUFF_KEYWORDS = [
@@ -206,7 +207,8 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
   onDispelEffect,
   onInspectEffect,
   onClearTokenAura,
-  onRemoveTokenBubble
+  onRemoveTokenBubble,
+  isDM = false
 }) => {
   // Lifetime expiration timer for non-persistent single-shot blasts (e.g. 5s fallback)
   useEffect(() => {
@@ -586,9 +588,11 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
           );
         })}
 
-        {/* 2b. Direct On-Map Clickable Title & Dispel Pins for Persistent / Looping Spell Animations */}
+        {/* 2b. Direct On-Map Clickable Title & Dispel Pins for Persistent / Looping Spell Animations (or ANY active effect when DM) */}
         {effects.map((effect) => {
-          if ((!onDispelEffect && !onInspectEffect) || (!effect.isPersistent && !effect.loop)) return null;
+          if (!onDispelEffect && !onInspectEffect) return null;
+          // DM can always dispel any effect on the board; players see dispel pins for persistent/looping effects
+          if (!isDM && !effect.isPersistent && !effect.loop) return null;
 
           const attachedToken = resolveAttachedToken(effect, tokens, gridSize);
           const attachedTokenSize = attachedToken ? (attachedToken.size || 1) : 1;
@@ -603,7 +607,7 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
 
           // Vertically stack dispel badges when multiple auras/spells are attached to the same token or position
           const matchingEffects = effects.filter(e => {
-            if (!e.isPersistent && !e.loop) return false;
+            if (!isDM && !e.isPersistent && !e.loop) return false;
             const otherAttached = resolveAttachedToken(e, tokens, gridSize);
             if (attachedToken && otherAttached) {
               return otherAttached.id === attachedToken.id;
@@ -658,7 +662,7 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                       onDispelEffect(effect.id);
                     }}
                     className="p-0.5 rounded-full hover:bg-red-500/30 text-zinc-400 hover:text-red-400 transition-colors cursor-pointer shrink-0"
-                    title={`Dispel ${effect.name} (Keep other active animations)`}
+                    title={isDM ? `DM Dispel / Remove ${effect.name}` : `Dispel ${effect.name} (Keep other active animations)`}
                     aria-label={`Dispel ${effect.name}`}
                   >
                     <X className="w-3.5 h-3.5" />
@@ -767,7 +771,7 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                         onClearTokenAura(token.id, auraName);
                       }}
                       className="p-0.5 rounded-full hover:bg-red-500/30 text-zinc-400 hover:text-red-400 transition-colors cursor-pointer shrink-0"
-                      title={`Remove ${auraName}`}
+                      title={isDM ? `DM Remove ${auraName}` : `Remove ${auraName}`}
                       aria-label={`Remove ${auraName}`}
                     >
                       <X className="w-3.5 h-3.5" />

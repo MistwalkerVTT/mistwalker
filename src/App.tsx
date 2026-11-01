@@ -432,7 +432,8 @@ const TokenImage = React.memo(({
   onContextMenu,
   onMouseEnter,
   onMouseLeave,
-  onTargetToken
+  onTargetToken,
+  isAimingAction
 }: any) => {
   const effectiveTokenUrl = token.url || token.avatarUrl || token.imageUrl || token.customMonsterData?.avatarUrl || '';
   const isGif = Boolean(effectiveTokenUrl && effectiveTokenUrl.toLowerCase().endsWith('.gif'));
@@ -552,7 +553,7 @@ const TokenImage = React.memo(({
   const isTokenDraggingRef = useRef<boolean>(false);
   const lastTokenTapTimeRef = useRef<number>(0);
   const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
-  const isAimingSpell = tool === 'spell_aim';
+  const isAimingSpell = tool === 'spell_aim' || Boolean(isAimingAction);
 
   const clearLongPress = () => {
     if (longPressTimerRef.current) {
@@ -586,6 +587,10 @@ const TokenImage = React.memo(({
       draggable={!isSpacePressed && !isAimingSpell}
       dragDistance={8}
       onMouseDown={(e) => {
+        if (isAimingSpell) {
+          e.cancelBubble = true;
+          return;
+        }
         if (!isSpacePressed && e.evt?.button !== 2) {
           e.cancelBubble = true;
         }
@@ -3230,8 +3235,12 @@ export default function App() {
         if (state.polygonReveals) setPolygonReveals(state.polygonReveals);
         if (state.visionConfig) setVisionConfig(state.visionConfig);
         if (state.activeSceneInfo) setActiveSceneInfo(state.activeSceneInfo);
+        if (state.effects && Array.isArray(state.effects)) setEffects(state.effects);
         if (typeof state.autoApplyMonsterDamage === 'boolean') setAutoApplyMonsterDamage(state.autoApplyMonsterDamage);
         return;
+      }
+      if (state?.effects && Array.isArray(state.effects)) {
+        setEffects(state.effects);
       }
       if (state?.walls && Array.isArray(state.walls)) {
         const liveSlot = liveMapIdRef.current;
@@ -6107,10 +6116,40 @@ export default function App() {
       socketRef.current.emit('EFFECT_REMOVE', { id: effectId });
     }
     soundCatalog.play('magic_shatter');
+    if (target?.assetKey === 'spiritual_weapon' && target.attachedTokenId) {
+      handleDeleteToken(target.attachedTokenId);
+    }
     toast.success(`Dispelled ${target?.name || 'spell animation'}!`, {
       description: 'The visual effect has been removed without clearing other spells.'
     });
-  }, [effects]);
+  }, [effects, handleDeleteToken]);
+
+  const handleClearTokenAura = useCallback((tokenId: string, auraName?: string) => {
+    const targetTok = tokensRef.current.find(t => t.id === tokenId);
+    handleUpdateToken(tokenId, {
+      auraRadius: undefined,
+      auraColor: undefined,
+      auraName: undefined,
+      auraOpacity: undefined,
+      auras: []
+    });
+    toast.info(`Removed ${auraName || 'aura'} from ${targetTok?.name || 'token'}`);
+  }, [handleUpdateToken]);
+
+  const handleRemoveTokenBubble = useCallback((tokenId: string, bubbleId: string) => {
+    setTokens(prev => {
+      const next = prev.map(t => t.id === tokenId ? { ...t, bubbles: (t.bubbles || []).filter(b => b.id !== bubbleId) } : t);
+      tokensRef.current = next;
+      const curSlot = activeMapIdRef.current;
+      if (mapsDataRef.current[curSlot]) {
+        mapsDataRef.current[curSlot].tokens = next;
+      }
+      if (socketRef.current?.connected && (curSlot === liveMapIdRef.current)) {
+        socketRef.current.emit('SYNC_TOKENS', next);
+      }
+      return next;
+    });
+  }, []);
 
   const handleEffectComplete = useCallback((effectId: string) => {
     setEffects(prev => prev.filter(e => e.id !== effectId));
@@ -10815,6 +10854,9 @@ export default function App() {
               aimCurrent={aimCurrent}
               onEffectComplete={handleEffectComplete}
               onDispelEffect={handleDispelEffect}
+              onClearTokenAura={handleClearTokenAura}
+              onRemoveTokenBubble={handleRemoveTokenBubble}
+              isDM={true}
               onInspectEffect={(effect) => {
                 const lookedUp = lookupDndRuleDetails(effect.name, 'aura', effect.radiusFeet, effect.castAtLevel);
                 setInspectedRuleEntry({
