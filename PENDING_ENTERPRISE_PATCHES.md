@@ -14,6 +14,27 @@
 
 ## Pending Changes Queue for Future Enterprise Patch
 
+### [2026-11-01] feat(dm): make all DM monster HUD buttons fully interactive with checks, saves, initiative, and multi-damage rolls
+- **Commit**: `f393c1a`
+- **Files Changed**:
+  - `src/App.tsx`
+  - `src/components/DmMonsterDock.tsx`
+- **Summary**:
+  - Made every button on the DM Monster HUD dock fully functional:
+    - **Ability Score Buttons (STR, DEX, CON, INT, WIS, CHA)**: Left-clicking rolls an Ability Check (`1d20 + mod`) in 3D physics dice and broadcasts to the chat log. Right-clicking rolls a Saving Throw (`1d20 + saveMod`) in 3D dice.
+    - **Initiative Roll Button ([INIT +X])**: Clicking rolls initiative (`1d20 + initiativeBonus`) in 3D dice and automatically sets or updates the monster's initiative in the Combat Tracker and token state across all clients.
+    - **Passive Perception Button ([PP XX])**: Clicking rolls an active Perception Check (`1d20 + (PP - 10)`) in 3D physics dice.
+    - **Armor Class ([XX AC]) & Speed ([XX ft.]) Buttons**: Made clickable with rule inspection and speed mode breakdown tooltips.
+    - **Save DC Badges ([DC XX]) on Action Cards**: Made clickable; rolls saving throw checks vs the DC in 3D physics dice.
+    - **Secondary Damage Badges ([Plus +XdY])**: Now rendered and clickable for complex multi-damage monster attacks (such as Moonlight Slam: 1d8 + 4 bludgeoning plus 1d8 radiant).
+    - **Quick [Roll] Button Upgrade**: Now rolls the d20 attack together with all primary and secondary damage dice tumbling simultaneously in 3D physics dice, or rolls the damage dice + save check together for saving throw abilities.
+- **Impact / Testing Notes**:
+  - Click any ability score pill in the monster dock to roll an ability check in 3D dice. Right-click to roll a saving throw.
+  - Click `[INIT]` on the monster dock to roll initiative and verify it updates the Combat Tracker.
+  - Click `[PP]` to roll perception. Click `[DC XX]` to roll a saving throw check.
+
+---
+
 ### [2026-11-01] feat(dm): expand DM monster HUD with tactical targeting, aiming banner, interactive rolls and traits
 - **Commit**: `ff8309d`
 - **Files Changed**:
