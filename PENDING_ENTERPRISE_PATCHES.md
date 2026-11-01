@@ -14,6 +14,27 @@
 
 ## Pending Changes Queue for Future Enterprise Patch
 
+### [2026-11-01] feat(dm-hud): add auto-roll toggle and direct attack card targeting with manual/3d dice prompt
+- **Commit**: `3df4862`
+- **Files Changed**:
+  - `src/App.tsx`
+  - `src/components/DmMonsterDock.tsx`
+  - `src/services/monsterHudService.ts`
+- **Summary**:
+  - Brought complete Player HUD parity to the DM Monster HUD for attacks, actions, targeting, and animations:
+    - **Interactive Auto Roll Toggle Switch**: Added the `Auto Roll: ON / OFF` toggle pill in the DM monster dock header. Allows DM to choose between full automatic dice rolling & HP mutation or visual animations with manual/3D roll prompts.
+    - **Click-to-Aim Anywhere on Attack Card**: Clicking an attack or action card anywhere immediately arms targeting, launches the projectile/aiming reticle and displays the pinned Aiming banner with `[Target Self]` and `[Cancel]`.
+    - **Target Token Selection, Animations & SFX**: Clicking any token on the battlemap triggers the respective JB2A visual effect and audio.
+    - **Combat Prompt Modal When Auto Roll is OFF**: If Auto Roll is turned OFF, targeting plays the spell/attack animation on the target and opens `CombatDicePromptModal`, allowing the DM to input their manual physical dice roll or click to roll 3D dice in MistWalker, then resolve damage or toggle auto roll.
+    - **Offensive Action Target Classification**: Fixed bug in `monsterHudService` where actions with no reach or missing explicit range were misclassified as self-actions and defaulted to `'Self'`, preventing targeting; offensive actions and attacks now properly enter aiming mode and default to reach 5 ft.
+- **Impact / Testing Notes**:
+  - Select any monster token as DM. Click any attack card (e.g. Moonlight Slam or Moonlight Blast).
+  - Target reticle appears and connects to cursor. Click a target token on the battlemap.
+  - With Auto Roll ON: strike animation plays, d20 attack rolls vs AC, damage rolls in 3D physics dice, and target token HP updates automatically.
+  - With Auto Roll OFF: strike animation plays immediately, then prompt modal opens for manual or 3D dice input. Toggle Auto Roll ON/OFF anytime in the monster header.
+
+---
+
 ### [2026-11-01] fix(vtt): restore original unified pointer and pan interaction in DM view
 - **Commit**: `647b02f`
 - **Files Changed**:
