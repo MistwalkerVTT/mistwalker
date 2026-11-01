@@ -575,49 +575,161 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
               {/* Senses, Immunities, Resistances Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {hudData.senses && (
-                  <div className="p-2 rounded-xl bg-zinc-900/70 border border-zinc-800">
+                  <div
+                    onClick={() => onInspectRule && onInspectRule('Senses', 'rule')}
+                    className="p-2 rounded-xl bg-zinc-900/70 border border-zinc-800 hover:border-zinc-700 transition-colors cursor-pointer"
+                    title="Click to inspect rules on creature senses"
+                  >
                     <span className="text-[10px] uppercase font-bold text-zinc-500 block mb-0.5">Senses</span>
                     <span className="text-zinc-300">{hudData.senses}</span>
                   </div>
                 )}
                 {hudData.damageResistances && (
-                  <div className="p-2 rounded-xl bg-zinc-900/70 border border-zinc-800">
+                  <div
+                    onClick={() => onInspectRule && onInspectRule(hudData.damageResistances || '', 'rule')}
+                    className="p-2 rounded-xl bg-zinc-900/70 border border-zinc-800 hover:border-amber-500/40 transition-colors cursor-pointer"
+                    title="Click to inspect damage resistance rules"
+                  >
                     <span className="text-[10px] uppercase font-bold text-amber-500 block mb-0.5">Damage Resistances</span>
                     <span className="text-zinc-300">{hudData.damageResistances}</span>
                   </div>
                 )}
                 {hudData.damageImmunities && (
-                  <div className="p-2 rounded-xl bg-zinc-900/70 border border-zinc-800">
+                  <div
+                    onClick={() => onInspectRule && onInspectRule(hudData.damageImmunities || '', 'rule')}
+                    className="p-2 rounded-xl bg-zinc-900/70 border border-zinc-800 hover:border-emerald-500/40 transition-colors cursor-pointer"
+                    title="Click to inspect damage immunity rules"
+                  >
                     <span className="text-[10px] uppercase font-bold text-emerald-500 block mb-0.5">Damage Immunities</span>
                     <span className="text-zinc-300">{hudData.damageImmunities}</span>
                   </div>
                 )}
                 {hudData.conditionImmunities && (
-                  <div className="p-2 rounded-xl bg-zinc-900/70 border border-zinc-800">
+                  <div
+                    onClick={() => onInspectRule && onInspectRule(hudData.conditionImmunities || '', 'rule')}
+                    className="p-2 rounded-xl bg-zinc-900/70 border border-zinc-800 hover:border-emerald-500/40 transition-colors cursor-pointer"
+                    title="Click to inspect condition immunity rules"
+                  >
                     <span className="text-[10px] uppercase font-bold text-emerald-500 block mb-0.5">Condition Immunities</span>
                     <span className="text-zinc-300">{hudData.conditionImmunities}</span>
                   </div>
                 )}
                 {hudData.damageVulnerabilities && (
-                  <div className="p-2 rounded-xl bg-zinc-900/70 border border-zinc-800">
+                  <div
+                    onClick={() => onInspectRule && onInspectRule(hudData.damageVulnerabilities || '', 'rule')}
+                    className="p-2 rounded-xl bg-zinc-900/70 border border-zinc-800 hover:border-rose-500/40 transition-colors cursor-pointer"
+                    title="Click to inspect vulnerability rules"
+                  >
                     <span className="text-[10px] uppercase font-bold text-rose-500 block mb-0.5">Vulnerabilities</span>
                     <span className="text-zinc-300">{hudData.damageVulnerabilities}</span>
                   </div>
                 )}
                 {hudData.savingThrows && (
-                  <div className="p-2 rounded-xl bg-zinc-900/70 border border-zinc-800">
+                  <div
+                    onClick={() => onInspectRule && onInspectRule('Saving Throws', 'rule')}
+                    className="p-2 rounded-xl bg-zinc-900/70 border border-zinc-800 hover:border-blue-500/40 transition-colors cursor-pointer"
+                    title="Click to inspect saving throw rules"
+                  >
                     <span className="text-[10px] uppercase font-bold text-blue-400 block mb-0.5">Saving Throws</span>
                     <span className="text-zinc-300">{hudData.savingThrows}</span>
                   </div>
                 )}
               </div>
 
-              {/* Traits List */}
+              {/* Interactive Creature Traits List */}
               <div className="space-y-1.5 pt-1">
                 <span className="text-[10px] uppercase font-bold text-zinc-500 block">Creature Traits</span>
                 {hudData.traits.map((tr, idx) => (
-                  <div key={tr.id || idx} className="p-2.5 rounded-xl bg-zinc-900/60 border border-zinc-800">
-                    <span className="font-bold text-red-300 font-mono block mb-1">{tr.name}</span>
+                  <div
+                    key={tr.id || idx}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      if (onInspectRule) onInspectRule(tr.name, 'trait');
+                    }}
+                    className="p-2.5 rounded-xl bg-zinc-900/60 border border-zinc-800 flex flex-col gap-1.5 transition-colors hover:border-zinc-700"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                        <span className="font-bold text-red-300 font-mono truncate">{tr.name}</span>
+                        {onInspectRule && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onInspectRule(tr.name, 'trait');
+                            }}
+                            className="p-0.5 rounded text-zinc-500 hover:text-zinc-200 transition-colors cursor-pointer"
+                            title="Inspect trait details"
+                          >
+                            <Info className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Interactive Trait Action Buttons */}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {tr.recharge && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (!tr.isRecharged) {
+                                onRollRecharge(tr);
+                              } else {
+                                onToggleRecharge(tr.name);
+                              }
+                            }}
+                            className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase transition-all cursor-pointer ${
+                              tr.isRecharged
+                                ? 'bg-emerald-950 border border-emerald-500/40 text-emerald-300'
+                                : 'bg-amber-950 border border-amber-500/50 text-amber-300 hover:bg-amber-900'
+                            }`}
+                            title={tr.isRecharged ? 'Ready to use' : 'Recharge spent! Click to roll 1d6'}
+                          >
+                            {tr.isRecharged ? `Ready (${tr.recharge})` : `Roll Recharge (${tr.recharge})`}
+                          </button>
+                        )}
+
+                        {tr.saveDc && (
+                          <span className="px-2 py-0.5 rounded bg-amber-950/90 border border-amber-500/40 text-amber-300 text-[10px] font-bold">
+                            {tr.saveAbility || 'Save'} DC {tr.saveDc}
+                          </span>
+                        )}
+
+                        {tr.damageFormula && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (onRollDamage) onRollDamage(tr);
+                              else onQuickRollAction(tr);
+                            }}
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-all cursor-pointer active:scale-95 ${
+                              tr.isHeal
+                                ? 'bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border-emerald-500/50'
+                                : 'bg-red-950 hover:bg-red-900 text-red-300 border-red-500/50'
+                            }`}
+                            title={`Roll ${tr.isHeal ? 'Healing' : 'Damage'}: ${tr.damageFormula}`}
+                          >
+                            {tr.isHeal ? 'Heal' : 'Roll'} {tr.damageFormula}
+                          </button>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onQuickRollAction(tr);
+                          }}
+                          className="px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white border border-zinc-700 text-[10px] font-bold transition-all cursor-pointer active:scale-95"
+                          title="Trigger/Announce trait in combat log"
+                        >
+                          Trigger
+                        </button>
+                      </div>
+                    </div>
+
                     <p className="text-zinc-400 text-xs leading-relaxed">{tr.description}</p>
                   </div>
                 ))}
@@ -634,24 +746,48 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                     : `+${action.hitBonus}`
                   : null;
 
+                const ActionIcon =
+                  action.category === 'attacks' ? Swords :
+                  action.category === 'spells' ? Sparkles :
+                  action.category === 'reactions' ? Shield :
+                  action.category === 'legendary' ? Crown : Zap;
+
                 return (
                   <div
                     key={action.id || idx}
                     onMouseEnter={() => setHoveredAction(action)}
                     onMouseLeave={() => setHoveredAction(null)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      if (onInspectRule) onInspectRule(action.name, action.type || 'action');
+                    }}
                     className={`group p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between gap-2 ${
                       isTargetingThis
-                        ? 'border-red-400 bg-red-950/30 shadow-[0_0_15px_rgba(239,68,68,0.4)] ring-1 ring-red-400'
+                        ? 'border-amber-400 bg-red-950/40 shadow-[0_0_15px_rgba(245,158,11,0.4)] ring-1 ring-amber-400'
                         : 'border-zinc-800/90 hover:border-red-500/50 bg-zinc-900/80 hover:bg-zinc-900'
                     }`}
                   >
-                    {/* Top Row: Name + Range/Level Badge */}
+                    {/* Top Row: Icon + Name + Badges + Inspect */}
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
+                          <ActionIcon className="w-3.5 h-3.5 text-red-400 shrink-0" />
                           <span className="text-xs font-bold text-zinc-100 group-hover:text-red-200 truncate">
                             {action.name}
                           </span>
+                          {onInspectRule && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onInspectRule(action.name, action.type || 'action');
+                              }}
+                              className="p-0.5 text-zinc-500 hover:text-zinc-200 transition-colors cursor-pointer"
+                              title="Inspect 5e rules & spell details"
+                            >
+                              <Info className="w-3 h-3" />
+                            </button>
+                          )}
                           {action.level !== undefined && (
                             <span className="px-1.5 py-0.2 rounded bg-blue-950 border border-blue-500/40 text-blue-300 text-[9px] font-bold shrink-0">
                               {action.level === 0 ? 'Cantrip' : `Lvl ${action.level}`}
@@ -687,7 +823,7 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                               onToggleRecharge(action.name);
                             }
                           }}
-                          className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase transition-all ${
+                          className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase transition-all cursor-pointer ${
                             action.isRecharged
                               ? 'bg-emerald-950 border border-emerald-500/40 text-emerald-300'
                               : 'bg-amber-950 border border-amber-500/50 text-amber-300 hover:bg-amber-900'
@@ -722,7 +858,7 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                       )}
 
                       {action.saveDc && (
-                        <div className="flex flex-col items-center px-2 py-0.5 rounded bg-amber-950/90 border border-amber-500/40 text-amber-300">
+                        <div className="flex flex-col items-center px-2 py-0.5 rounded bg-amber-950/90 border border-amber-500/40 text-amber-300 shrink-0">
                           <span className="text-[7px] uppercase text-amber-400/80 leading-none">
                             {action.saveAbility || 'Save'}
                           </span>
@@ -735,11 +871,15 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            onSelectAction(action);
+                            if (onRollDamage) {
+                              onRollDamage(action);
+                            } else {
+                              onQuickRollAction(action);
+                            }
                           }}
                           className="flex flex-col items-center px-2 py-0.5 rounded bg-red-950/90 hover:bg-red-900 border border-red-500/40 hover:border-red-400 text-red-300 hover:text-white transition-all cursor-pointer active:scale-95 shadow-sm group/dmg shrink-0"
-                          title={`Aim & Cast: ${action.name} (${action.damageFormula})`}
-                          aria-label={`Aim ${action.name}: ${action.damageFormula}`}
+                          title={`Click to Roll Damage: ${action.damageFormula} ${action.damageType || ''}`}
+                          aria-label={`Roll Damage: ${action.damageFormula}`}
                         >
                           <span className="text-[7px] uppercase text-red-400/80 group-hover/dmg:text-red-200 leading-none">Dmg</span>
                           <span className="font-bold text-xs">{action.damageFormula}</span>
@@ -753,14 +893,14 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                       <button
                         type="button"
                         onClick={() => onSelectAction(action)}
-                        className={`flex-1 py-1 px-2 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 transition-all ${
+                        className={`flex-1 py-1 px-2 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
                           isTargetingThis
-                            ? 'bg-red-500 text-white shadow-[0_0_10px_rgba(239,68,68,0.5)]'
+                            ? 'bg-amber-500 text-zinc-950 shadow-[0_0_10px_rgba(245,158,11,0.5)] font-extrabold'
                             : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white'
                         }`}
-                        title="Aim & Place on Battlemap"
+                        title="Aim & Click Target on Battlemap"
                       >
-                        <Crosshair className="w-3 h-3 text-red-400" />
+                        <Crosshair className={`w-3 h-3 ${isTargetingThis ? 'text-zinc-950 animate-pulse' : 'text-amber-400'}`} />
                         <span>{isTargetingThis ? 'Aiming...' : 'Aim'}</span>
                       </button>
 
@@ -769,7 +909,7 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                         <button
                           type="button"
                           onClick={() => onQuickRollAction(action)}
-                          className="py-1 px-2.5 rounded-lg bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-700/60 text-[10px] font-bold flex items-center gap-1 transition-all"
+                          className="py-1 px-2.5 rounded-lg bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-700/60 text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer active:scale-95"
                           title="Quick Roll Attack & Damage with 3D Physics Dice"
                         >
                           <Dices className="w-3 h-3 text-red-400" />

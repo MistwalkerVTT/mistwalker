@@ -429,7 +429,8 @@ const TokenImage = React.memo(({
   onDelete,
   onContextMenu,
   onMouseEnter,
-  onMouseLeave
+  onMouseLeave,
+  onTargetToken
 }: any) => {
   const effectiveTokenUrl = token.url || token.avatarUrl || token.imageUrl || token.customMonsterData?.avatarUrl || '';
   const isGif = Boolean(effectiveTokenUrl && effectiveTokenUrl.toLowerCase().endsWith('.gif'));
@@ -583,7 +584,6 @@ const TokenImage = React.memo(({
       draggable={!isSpacePressed && !isAimingSpell}
       dragDistance={8}
       onMouseDown={(e) => {
-        if (isAimingSpell) return;
         if (!isSpacePressed && e.evt?.button !== 2) {
           e.cancelBubble = true;
         }
@@ -644,6 +644,8 @@ const TokenImage = React.memo(({
       onTouchEnd={(e) => {
         if (isAimingSpell) {
           clearLongPress();
+          if (!isSpacePressed) e.cancelBubble = true;
+          if (onTargetToken) onTargetToken(token);
           return;
         }
         const startPos = touchStartPosRef.current;
@@ -665,8 +667,12 @@ const TokenImage = React.memo(({
         }
       }}
       onClick={(e) => {
-        if (isSpacePressed || isAimingSpell) return;
+        if (isSpacePressed) return;
         e.cancelBubble = true;
+        if (isAimingSpell) {
+          if (onTargetToken) onTargetToken(token);
+          return;
+        }
         const now = Date.now();
         if (now - lastTokenTapTimeRef.current > 250) {
           lastTokenTapTimeRef.current = now;
@@ -676,8 +682,12 @@ const TokenImage = React.memo(({
         }
       }}
       onTap={(e) => {
-        if (isSpacePressed || isAimingSpell) return;
+        if (isSpacePressed) return;
         e.cancelBubble = true;
+        if (isAimingSpell) {
+          if (onTargetToken) onTargetToken(token);
+          return;
+        }
         const now = Date.now();
         if (now - lastTokenTapTimeRef.current > 250) {
           lastTokenTapTimeRef.current = now;
@@ -4962,6 +4972,332 @@ export default function App() {
         : `Rolled ${d20} ${modStr} = ${total} to Hit!`
     });
   }, [selectedTokenIds, tokens]);
+
+  const handleRollDmMonsterDamage = useCallback((action: MonsterActionItem) => {
+    const singleToken = selectedTokenIds.length === 1 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
+    if (!singleToken || !action.damageFormula) return;
+
+    const evalDmg = evaluateDiceFormula(action.damageFormula, false);
+    const rolledDamage = evalDmg.total;
+    const damageBreakdown = evalDmg.breakdown;
+    const diceResults = evalDmg.dice.map(d => ({ sides: d.sides, result: d.result, type: d.type || `d${d.sides}` }));
+
+    const diceEvent: DdbDiceRollEvent = {
+      id: `roll-${Date.now()}`,
+      characterName: singleToken.name || 'Monster',
+      avatarUrl: singleToken.url,
+      action: `${action.name} (Damage)`,
+      rollType: action.isHeal ? 'heal' : 'damage',
+      formula: `${action.damageFormula} → ${damageBreakdown}`,
+      diceNotation: diceResults.map(d => d.type).join('+') || '1d6',
+      dice: diceResults,
+      total: rolledDamage,
+      isCritical: false,
+      isFumble: false,
+      theme: 'rust',
+      themeColor: '#dc2626',
+      timestamp: Date.now(),
+      source: 'local'
+    };
+
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', diceEvent);
+    }
+    if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+      (window as any).__mistwalkerRoll3d(diceEvent);
+    }
+
+    toast.success(`${singleToken.name}: ${action.name} Damage!`, {
+      description: `Rolled ${rolledDamage} ${action.damageType || ''} (${action.damageFormula} → ${damageBreakdown})`
+    });
+  }, [selectedTokenIds, tokens]);
+
+  const handleDmTargetToken = useCallback((targetToken: Token, overrideAction?: MonsterActionItem) => {
+    const action = overrideAction || activeDmMonsterAction;
+    const singleToken = selectedTokenIds.length === 1 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
+    if (!singleToken || !action) return;
+
+    // 1. Calculate distance on battlemap grid
+    const cRadius = ((singleToken.size || 1) * gridSize) / 2;
+    const tRadius = ((targetToken.size || 1) * gridSize) / 2;
+    const casterCenter = { x: singleToken.x + cRadius, y: singleToken.y + cRadius };
+    const targetCenter = { x: targetToken.x + tRadius, y: targetToken.y + tRadius };
+    const distPx = Math.hypot(targetCenter.x - casterCenter.x, targetCenter.y - casterCenter.y);
+    const distFt = Math.round((distPx / gridSize) * 5);
+
+    // Range advisory
+    if (action.rangeFt && action.rangeFt > 0 && distFt > action.rangeFt + 5) {
+      toast.info(`Target ${targetToken.name} is ${distFt} ft away (${action.name} range: ${action.rangeFt} ft). Executing action.`);
+    }
+
+    // 2. Visual Animation & Sound
+    let matchedAsset = activeEquippedAsset;
+    if (!matchedAsset) {
+      if (action.jb2aAssetId) matchedAsset = JB2A_REGISTRY.find(a => a.id === action.jb2aAssetId);
+      if (!matchedAsset) matchedAsset = findJb2aAsset(action.name);
+      if (!matchedAsset && action.damageType) {
+        if (action.damageType === 'fire') matchedAsset = findJb2aAsset('fire_bolt');
+        else if (action.damageType === 'cold') matchedAsset = findJb2aAsset('ray_of_frost');
+        else if (action.damageType === 'lightning') matchedAsset = findJb2aAsset('shocking_grasp') || findJb2aAsset('lightning_bolt');
+        else if (action.damageType === 'necrotic') matchedAsset = findJb2aAsset('chill_touch');
+        else if (action.damageType === 'radiant') matchedAsset = findJb2aAsset('sacred_flame');
+        else if (action.damageType === 'force') matchedAsset = findJb2aAsset('magic_missile');
+        else if (action.type === 'attack' || action.category === 'attacks') matchedAsset = findJb2aAsset('attack_slash');
+      }
+    }
+
+    const isSelfTarget = targetToken.id === singleToken.id;
+    const isTrajectory = !isSelfTarget && (matchedAsset?.paradigm === 'projectile' || matchedAsset?.paradigm === 'ray' || distFt > 5);
+    const aimAngleDeg = Math.atan2(targetCenter.y - casterCenter.y, targetCenter.x - casterCenter.x) * (180 / Math.PI);
+
+    if (matchedAsset) {
+      const newEffect: VttEffectInstance = {
+        id: `eff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        name: isSelfTarget ? matchedAsset.name : `${matchedAsset.name} (${targetToken.name})`,
+        label: isSelfTarget ? matchedAsset.label : `${matchedAsset.label} on ${targetToken.name}`,
+        assetKey: matchedAsset.id,
+        videoUrl: (isTrajectory && matchedAsset.projectileWebm) ? matchedAsset.projectileWebm : matchedAsset.webm,
+        loopVideoUrl: matchedAsset.loopWebm,
+        thumbUrl: matchedAsset.thumb,
+        paradigm: isTrajectory ? 'projectile' : matchedAsset.paradigm,
+        x: isTrajectory ? casterCenter.x : targetCenter.x,
+        y: isTrajectory ? casterCenter.y : targetCenter.y,
+        originX: casterCenter.x,
+        originY: casterCenter.y,
+        targetX: targetCenter.x,
+        targetY: targetCenter.y,
+        sizeFt: matchedAsset.defaultSizeFt || 5,
+        rotation: isTrajectory ? aimAngleDeg : 0,
+        opacity: 1.0,
+        blendMode: matchedAsset.blendMode,
+        isPersistent: Boolean(matchedAsset.isPersistent),
+        loop: Boolean(matchedAsset.isPersistent),
+        attachedTokenId: isSelfTarget ? singleToken.id : undefined,
+        castTime: Date.now(),
+        durationMs: isTrajectory ? 2500 : 4000,
+        soundKey: matchedAsset.soundKey,
+        color: matchedAsset.color,
+        trajectory: isTrajectory ? {
+          startX: casterCenter.x,
+          startY: casterCenter.y,
+          endX: targetCenter.x,
+          endY: targetCenter.y,
+          speedPxSec: 1400,
+          burstOnImpact: true,
+          burstVideoUrl: matchedAsset.burstWebm || matchedAsset.webm,
+          burstSoundKey: matchedAsset.soundKey
+        } : undefined,
+        ownerId: singleToken.id,
+        casterName: singleToken.name
+      };
+      setEffects(prev => [...prev, newEffect]);
+      if (matchedAsset.soundKey) soundCatalog.play(matchedAsset.soundKey);
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('EFFECT_SPAWN', newEffect);
+      }
+    }
+
+    // 3. Combat Resolution (To-Hit, Save, Damage, HP Mutation)
+    const diceResults: Array<{ sides: number; result: number; type: string }> = [];
+    let isHit = true;
+    let isCrit = false;
+    let isFumble = false;
+    let attackTotal = 0;
+    let d20Result = 0;
+    const targetAc = targetToken.ac ?? 10;
+
+    // A. Attack roll if hitBonus is present
+    if (action.hitBonus !== undefined) {
+      const rawHit = typeof action.hitBonus === 'number'
+        ? action.hitBonus
+        : (parseInt(String(action.hitBonus).replace('+', ''), 10) || 0);
+      d20Result = Math.floor(Math.random() * 20) + 1;
+      attackTotal = d20Result + rawHit;
+      isCrit = d20Result === 20;
+      isFumble = d20Result === 1;
+      isHit = isCrit || (!isFumble && attackTotal >= targetAc);
+      diceResults.push({ sides: 20, result: d20Result, type: 'd20' });
+    }
+
+    // B. Saving Throw roll if saveDc is present and no hitBonus
+    let saveFailed = true;
+    let targetSaveRoll = 0;
+    if (action.saveDc && action.hitBonus === undefined) {
+      const saveD20 = Math.floor(Math.random() * 20) + 1;
+      targetSaveRoll = saveD20;
+      saveFailed = targetSaveRoll < action.saveDc;
+    }
+
+    // C. Damage calculation
+    let rolledDamage = 0;
+    let damageBreakdown = '';
+    if (action.damageFormula) {
+      if (action.hitBonus !== undefined && !isHit) {
+        rolledDamage = 0;
+      } else {
+        const evalDmg = evaluateDiceFormula(action.damageFormula, isCrit);
+        rolledDamage = evalDmg.total;
+        damageBreakdown = evalDmg.breakdown;
+        if (action.saveDc && !saveFailed) {
+          // Half damage on save success
+          rolledDamage = Math.floor(rolledDamage / 2);
+        }
+        diceResults.push(...evalDmg.dice.map(d => ({ sides: d.sides, result: d.result, type: d.type || `d${d.sides}` })));
+      }
+    }
+
+    // D. Apply HP Mutation to Target Token
+    const deltaHp = action.isHeal ? rolledDamage : -rolledDamage;
+    if (deltaHp !== 0 && (action.hitBonus === undefined || isHit)) {
+      setTokens(prev => {
+        const next = prev.map(t => {
+          if (t.id !== targetToken.id) return t;
+          const currentMax = t.maxHp || 10;
+          const current = t.currentHp !== undefined ? t.currentHp : (t.hp !== undefined ? t.hp : currentMax);
+          let nextHp = current;
+          let nextTemp = t.tempHp || 0;
+
+          if (deltaHp < 0) {
+            const dmg = Math.abs(deltaHp);
+            if (nextTemp > 0) {
+              if (nextTemp >= dmg) {
+                nextTemp -= dmg;
+              } else {
+                const rem = dmg - nextTemp;
+                nextTemp = 0;
+                nextHp = Math.max(0, nextHp - rem);
+              }
+            } else {
+              nextHp = Math.max(0, nextHp - dmg);
+            }
+          } else if (deltaHp > 0) {
+            nextHp = Math.min(currentMax, nextHp + deltaHp);
+          }
+
+          return { ...t, currentHp: nextHp, hp: nextHp, tempHp: nextTemp };
+        });
+
+        if (mapsDataRef.current[activeMapId]) mapsDataRef.current[activeMapId].tokens = next;
+        if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) {
+          socketRef.current.emit('SYNC_TOKENS', next);
+        }
+        return next;
+      });
+
+      setCombatTrackerCombatants(prev => prev.map(c => {
+        if (c.id === targetToken.id || (c as any).tokenId === targetToken.id || (c.name && targetToken.name && c.name.toLowerCase() === targetToken.name.toLowerCase())) {
+          const currentMax = c.maxHp || 10;
+          const current = c.currentHp !== undefined ? c.currentHp : currentMax;
+          const nextHp = Math.max(0, Math.min(currentMax, current + deltaHp));
+          return { ...c, currentHp: nextHp };
+        }
+        return c;
+      }));
+    }
+
+    // E. 3D Physics Dice Roll broadcast
+    const rawHit = action.hitBonus !== undefined ? (parseInt(String(action.hitBonus).replace('+', ''), 10) || 0) : 0;
+    const hitSignStr = rawHit >= 0 ? `+ ${rawHit}` : `- ${Math.abs(rawHit)}`;
+    const diceEvent: DdbDiceRollEvent = {
+      id: `roll-${Date.now()}`,
+      characterName: singleToken.name || 'Monster',
+      avatarUrl: singleToken.url,
+      action: `${action.name} vs ${targetToken.name}`,
+      rollType: action.isHeal ? 'heal' : (action.hitBonus !== undefined ? 'attack' : 'damage'),
+      formula: action.hitBonus !== undefined
+        ? `1d20 ${hitSignStr} → [${d20Result}] ${hitSignStr} = ${attackTotal} vs AC ${targetAc}${isHit && action.damageFormula ? ` | Dmg: ${action.damageFormula} → ${damageBreakdown}` : ''}`
+        : `${action.damageFormula || ''} → ${damageBreakdown}`,
+      diceNotation: diceResults.map(d => d.type).join('+') || '1d20',
+      dice: diceResults.length > 0 ? diceResults : [{ sides: 20, result: d20Result || 10, type: 'd20' }],
+      total: action.hitBonus !== undefined ? attackTotal : rolledDamage,
+      isCritical: isCrit,
+      isFumble: isFumble,
+      theme: 'rust',
+      themeColor: isCrit ? '#10b981' : isFumble ? '#ef4444' : '#dc2626',
+      timestamp: Date.now(),
+      source: 'local'
+    };
+
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', diceEvent);
+    }
+    if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+      (window as any).__mistwalkerRoll3d(diceEvent);
+    }
+
+    // F. Update Monster Consumable State
+    setTokens(prev => {
+      const next = prev.map(t => {
+        if (t.id !== singleToken.id) return t;
+        const curState = t.monsterState || {
+          rechargeAvailable: {},
+          spellSlotsUsed: {},
+          legendaryActionsMax: 3,
+          legendaryActionsUsed: 0
+        };
+        const nextState = { ...curState };
+        if (action.recharge) {
+          nextState.rechargeAvailable = { ...nextState.rechargeAvailable, [action.name]: false };
+        }
+        if (action.category === 'legendary') {
+          const cost = action.legendaryCost || 1;
+          nextState.legendaryActionsUsed = Math.min(nextState.legendaryActionsMax, (nextState.legendaryActionsUsed || 0) + cost);
+        }
+        if (action.level && action.level > 0) {
+          nextState.spellSlotsUsed = { ...nextState.spellSlotsUsed, [action.level]: (nextState.spellSlotsUsed[action.level] || 0) + 1 };
+        }
+        return { ...t, monsterState: nextState };
+      });
+      if (mapsDataRef.current[activeMapId]) mapsDataRef.current[activeMapId].tokens = next;
+      if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) {
+        socketRef.current.emit('SYNC_TOKENS', next);
+      }
+      return next;
+    });
+
+    // G. Descriptive Toast & Feedback
+    if (action.hitBonus !== undefined) {
+      if (isCrit) {
+        toast.success(`💥 CRITICAL HIT! ${singleToken.name}'s ${action.name} strikes ${targetToken.name}!`, {
+          description: `Attack: Natural 20 (${attackTotal}) vs AC ${targetAc} • Dealt ${rolledDamage} ${action.damageType || ''} damage!`
+        });
+      } else if (isFumble) {
+        toast.error(`❌ CRITICAL MISS! ${singleToken.name}'s ${action.name} fumbled!`, {
+          description: `Attack: Natural 1 vs AC ${targetAc} • Misses ${targetToken.name}.`
+        });
+      } else if (isHit) {
+        toast.success(`⚔️ ${singleToken.name}'s ${action.name} hits ${targetToken.name}!`, {
+          description: `Attack: ${attackTotal} vs AC ${targetAc} • Dealt ${rolledDamage} ${action.damageType || ''} damage.`
+        });
+      } else {
+        toast.info(`🛡️ ${singleToken.name}'s ${action.name} missed ${targetToken.name}.`, {
+          description: `Attack: ${attackTotal} vs AC ${targetAc} (Miss).`
+        });
+      }
+    } else if (action.saveDc) {
+      toast.success(`✨ ${singleToken.name} unleashed ${action.name} on ${targetToken.name}!`, {
+        description: `DC ${action.saveDc} ${action.saveAbility || ''} Save: Target rolled ${targetSaveRoll} (${saveFailed ? 'FAILED' : 'SUCCESS'}) • Dealt ${rolledDamage} ${action.damageType || ''} damage.`
+      });
+    } else {
+      toast.success(`${singleToken.name} executed ${action.name} on ${targetToken.name}!`, {
+        description: action.isHeal ? `Restored +${rolledDamage} HP.` : (rolledDamage > 0 ? `Dealt ${rolledDamage} ${action.damageType || ''} damage.` : action.description)
+      });
+    }
+
+    // Clear targeting
+    setActiveDmMonsterAction(null);
+    setActiveEquippedAsset(null);
+    setAimOrigin(null);
+    setAimCurrent(null);
+    setTool('select');
+  }, [activeDmMonsterAction, activeEquippedAsset, selectedTokenIds, tokens, gridSize, activeMapId]);
+
+  const handleDmTargetSelf = useCallback(() => {
+    const singleToken = selectedTokenIds.length === 1 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
+    if (singleToken && activeDmMonsterAction) {
+      handleDmTargetToken(singleToken, activeDmMonsterAction);
+    }
+  }, [selectedTokenIds, tokens, activeDmMonsterAction, handleDmTargetToken]);
 
   const handleRollDmMonsterRecharge = useCallback((action: MonsterActionItem) => {
     const singleToken = selectedTokenIds.length === 1 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
@@ -9738,6 +10074,7 @@ export default function App() {
                     isSpacePressed={isSpacePressed}
                     combatants={combatTrackerCombatants}
                     characters={compendiumCharacters}
+                    onTargetToken={handleDmTargetToken}
                     onMouseEnter={handleTokenHoverEnter}
                     onMouseLeave={handleTokenHoverLeave}
                     onClick={(e: any) => {
@@ -10389,6 +10726,8 @@ export default function App() {
                       onSelectAction={handleSelectDmMonsterAction}
                       onQuickRollAction={handleQuickRollDmMonsterAction}
                       onRollToHit={handleRollDmMonsterToHit}
+                      onRollDamage={handleRollDmMonsterDamage}
+                      onTargetSelf={handleDmTargetSelf}
                       activeTargetingAction={activeDmMonsterAction}
                       onCancelTargeting={() => {
                         setActiveDmMonsterAction(null);
@@ -10415,6 +10754,10 @@ export default function App() {
                       elevation={singleSelectedToken.elevation || 0}
                       isFlying={Boolean(singleSelectedToken.isFlying)}
                       onUpdateFlight={(updates) => handleUpdateSelectedFlight(updates)}
+                      onInspectRule={(ruleName, kind) => {
+                        const rule = lookupDndRuleDetails(ruleName, (kind as any) || 'action');
+                        if (rule) setInspectedRuleEntry(rule);
+                      }}
                     />
                   );
                 }
