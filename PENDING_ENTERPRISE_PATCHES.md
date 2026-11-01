@@ -402,6 +402,25 @@
 
 ---
 
+### [2026-10-31] fix(e2e): fix target.closest TypeError, Firestore onSnapshot error fallback, roomAnnotations partial sync, and IntroScreen video preload contention
+- **Commit**: `e64d8c7`
+- **Files Changed**:
+  - `server.ts`
+  - `src/App.tsx`
+  - `src/components/IntroScreen.tsx`
+  - `src/lib/firebase.ts`
+  - `src/main.tsx`
+- **Summary**:
+  - Guarded `target.closest(...)` calls in `src/App.tsx` with `typeof target.closest === 'function'` so `keydown` and `mousedown` events dispatched on `window` or `document` never throw `TypeError: target.closest is not a function`.
+  - Updated `handleFirestoreError` and `subscribeToAllies` in `src/lib/firebase.ts` so read/subscription errors gracefully invoke `callback([])` (falling back to `DEFAULT_ALLIES`) instead of throwing an uncaught exception inside asynchronous `onSnapshot` handlers.
+  - Added `Array.isArray(state.roomAnnotations)` and weather/grid properties to `isPartialPatch` in `server.ts` (`SYNC_STATE`), and added `fogResetKey` to `resetFog()` in `src/App.tsx`, so partial `roomAnnotations` sync packets and fog resets are never dropped by the server's blank-state guard.
+  - Converted the top-level `import { createServer } from "vite"` in `server.ts` to a dev-only dynamic import (`if (process.env.NODE_ENV !== "production")`), eliminating unnecessary Vite compiler loading on production server startup.
+  - Statically imported `IntroScreen` in `src/main.tsx` to eliminate the initial Suspense waterfall, and deferred `IntroScreen.tsx` portal video metadata warmup (`12.87 MB` across 7 WebM files) until after core JS bundles load so browser HTTP connections are never saturated on frame 0.
+- **Impact / Testing Notes**:
+  - Verified with 49/49 passing checks in the automated Headless Chrome real-browser E2E + Backend HTTP + Multi-Client Socket.IO + Vision Engine test suite (0 uncaught exceptions, 0 console errors).
+
+---
+
 ### Template for Incoming Entries:
 ```markdown
 ### [YYYY-MM-DD] <Title / Commit Short Summary>
