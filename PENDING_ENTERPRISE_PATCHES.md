@@ -421,6 +421,23 @@
 
 ---
 
+### [2026-11-01] feat(mobile): fix DashboardHomeHub sidebar/top clipping, clamp mobile flyouts, and add DM touch pinch-zoom & long-press
+- **Commit**: `e7d49de`
+- **Files Changed**:
+  - `src/App.tsx`
+  - `src/components/DashboardHomeHub.tsx`
+  - `src/components/IntroScreen.tsx`
+  - `src/components/LeftSidebar.tsx`
+- **Summary**:
+  - Fixed mobile/tablet left-edge and top clipping on `DashboardHomeHub` (`left-16 xl:inset-0` and removing `justify-center` on the scroll container while preserving `my-auto` vertical centering on desktop).
+  - Updated `LeftSidebar` for mobile (`max-md:overflow-y-auto`, touch-device hover guard via `matchMedia('(hover: none)')`, and `max-sm:` viewport clamping on flyout drawers so Pin/Close buttons never overflow narrow phone screens).
+  - Added 2-finger pinch-to-zoom & pan, 1-finger touch tool forwarding, and `480ms` long-press token context menu support to the DM Konva `<Stage>` and `TokenImage` in `src/App.tsx`, plus `100dvh` viewport height and mobile clamping for floating toolbars.
+  - Preserved the desktop (`>= 768px` / `>= 1280px`) layout and mouse/hover interactions 100% unchanged.
+- **Impact / Testing Notes**:
+  - Verify on mobile portrait (`~390x844`) that `DashboardHomeHub` is neither covered on the left by `LeftSidebar` nor clipped at the top, and verify desktop layout remains identical.
+
+---
+
 ### Template for Incoming Entries:
 ```markdown
 ### [YYYY-MM-DD] <Title / Commit Short Summary>
