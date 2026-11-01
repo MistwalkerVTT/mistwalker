@@ -438,6 +438,21 @@
 
 ---
 
+### [2026-11-01] fix(touch): overhaul 2-finger pinch-to-zoom with capture-phase interception, anchored math, and zero mid-pinch re-renders
+- **Commit**: `18dd18d`
+- **Files Changed**:
+  - `src/App.tsx`
+  - `src/components/PlayerView.tsx`
+- **Summary**:
+  - Attached native capture-phase (`{ capture: true, passive: false }`) multi-touch listeners directly on the Konva Stage container in both `src/App.tsx` (DM View) and `src/components/PlayerView.tsx` (Player View) so `Konva.DD` 1-finger drag and child token bubble cancellation never fight 2-finger pinch gestures.
+  - Replaced incremental per-frame delta math with container-relative anchored world-point math (`newPos = center - startWorldPoint * newScale`), eliminating cumulative drift and the `64px` sidebar coordinate offset.
+  - Eliminated mid-pinch React state updates (`setStageScale` / `setStagePos`), driving the Konva stage and DOM FX overlays imperatively at 60fps during the pinch and committing React state once when all fingers lift.
+  - Added trailing single-finger release absorption (`2 -> 1 -> 0` fingers) so lifting one finger slightly before the other never causes the map to jump, and enabled smooth 1-finger touch pan on empty map in DM View when `tool === 'select' || tool === 'pan'`.
+- **Impact / Testing Notes**:
+  - Test 2-finger pinch-to-zoom and pan on mobile/tablet touchscreens in both DM View and Player View.
+
+---
+
 ### Template for Incoming Entries:
 ```markdown
 ### [YYYY-MM-DD] <Title / Commit Short Summary>
