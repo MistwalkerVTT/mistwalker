@@ -14,6 +14,28 @@
 
 ## Pending Changes Queue for Future Enterprise Patch
 
+### [2026-11-01] feat(auras): replace aura of life/vitality animations and update boundary circle styling
+- **Commit**: `40712b0`
+- **Files Changed**:
+  - `src/effects/render/DomEffectOverlay.tsx`
+  - `src/effects/db/jb2aRegistry.ts`
+  - `src/effects/db/tokenFxMap.ts`
+  - `src/types/aura.ts`
+- **Summary**:
+  - **Aura of Life**: Completely replaced the old intense burst with the high-fidelity JB2A looping nature orbit animation (`/jb2a/Library/Generic/Template/Circle/Aura/AuraThemedOrbitLoopNature01_01_Regular_Green_700x700.webm`), providing a clean, subtle circulating preservation ward.
+  - **Aura of Vitality**: Replaced the harsh template with the official JB2A looping healing ability asset (`/jb2a/Library/Generic/Healing/HealingAbility_02_Regular_GreenOrange_Loop_600x600.webm`), delivering gentle pulsing restoration particles.
+  - **Boundary Circle Color Rules**:
+    - **Aura of Protection**: Circle changed to **white** (`#ffffff`).
+    - **Aura of Courage**: Circle changed to **red** (`#ef4444`).
+    - **Antilife Shell**: Circle changed to **blue** (`#3b82f6`).
+  - **Excluded From Boundary Circles**: Removed external perimeter lines from `Spirit Guardians`, `Darkness`, `Wall of Fire`, `Shield of Faith`, and `Fog Cloud`.
+- **Impact / Testing Notes**:
+  - Cast or equip Aura of Life & Aura of Vitality and verify smooth, subtle animations with no visual clutter.
+  - Verify Aura of Protection displays a crisp white outline circle, Aura of Courage displays a red circle, and Antilife Shell displays a blue circle.
+  - Verify Spirit Guardians, Darkness, Wall of Fire, Shield of Faith, and Fog Cloud do not render boundary lines.
+
+---
+
 ### [2026-11-01] feat(vtt): unify DM mouse and touch interaction to match fluid Player View mechanics
 - **Commit**: `40712b0`
 - **Files Changed**:
