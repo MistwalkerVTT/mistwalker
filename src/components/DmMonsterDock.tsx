@@ -25,6 +25,7 @@ import {
   Info
 } from 'lucide-react';
 import { DmMonsterHudData, MonsterActionItem, DmMonsterActionCategory } from '../types/monsterHud';
+import { classifySpellMechanics } from '../services/spellResolutionEngine';
 
 interface DmMonsterDockProps {
   hudData: DmMonsterHudData;
@@ -139,6 +140,23 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
     return levels;
   }, [hudData.spells]);
 
+  const isMonsterAttackRoll = (action: MonsterActionItem | null | undefined): boolean => {
+    if (!action) return false;
+    if (action.category === 'spells' || action.type === 'spell') {
+      const profile = classifySpellMechanics({
+        name: action.name,
+        description: action.description,
+        attackType: action.type === 'attack' ? 'spell' : undefined,
+        saveDcAbility: action.saveAbility,
+        damageFormula: action.damageFormula,
+        damageType: action.damageType,
+        isHealing: action.isHeal,
+      });
+      return profile.requiresAttackRoll;
+    }
+    return action.hitBonus !== undefined;
+  };
+
   // Ability modifier calculation
   const getModStr = (score: number) => {
     const mod = Math.floor((score - 10) / 2);
@@ -164,7 +182,7 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
             </span>
 
             {/* Hit Roll Button */}
-            {activeTargetingAction.hitBonus !== undefined && (
+            {isMonsterAttackRoll(activeTargetingAction) && activeTargetingAction.hitBonus !== undefined && (
               <button
                 type="button"
                 onClick={(e) => {
@@ -820,7 +838,7 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 max-h-[220px] overflow-y-auto pr-1 sidebar-scrollbar">
               {currentCategoryList.map((action, idx) => {
                 const isTargetingThis = activeTargetingAction?.id === action.id;
-                const formattedHit = action.hitBonus !== undefined
+                const formattedHit = (isMonsterAttackRoll(action) && action.hitBonus !== undefined)
                   ? String(action.hitBonus).startsWith('+') || String(action.hitBonus).startsWith('-')
                     ? String(action.hitBonus)
                     : `+${action.hitBonus}`

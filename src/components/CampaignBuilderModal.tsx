@@ -32,7 +32,9 @@ import {
   GripVertical,
   Copy,
   Download,
-  Swords
+  Swords,
+  Clock,
+  RotateCcw
 } from 'lucide-react';
 import {
   Campaign,
@@ -50,7 +52,17 @@ import {
 import { toast } from 'sonner';
 import { isVideoAsset, saveLocalAsset } from '../lib/storageCache';
 import { SceneTokenPlacementCanvas } from './SceneTokenPlacementCanvas';
-import { UploadedAsset, WallSegment, VisionConfig, RoomAnnotation, ChapterPdfDigest, ChapterSceneAssociation, normalizeRoomAnnotation, normalizeRoomAnnotations } from '../types';
+import { UploadedAsset, WallSegment, VisionConfig, RoomAnnotation, ChapterPdfDigest, ChapterSceneAssociation, normalizeRoomAnnotation, normalizeRoomAnnotations,
+  ScenePlayInstance,
+  Combatant,
+  RevealPoint
+} from '../types';
+import {
+  listSceneInstances,
+  saveSceneInstance,
+  deleteSceneInstance,
+  getLocalCachedSceneInstances
+} from '../services/sceneInstanceService';
 import { PRESET_BATTLEMAPS, PresetBattlemap } from '../data/presetBattlemaps';
 import { digestChapterPdf, digestChapterFlow } from '../services/aiService';
 import { CampaignPdfImporterModal } from './CampaignPdfImporterModal';
@@ -76,6 +88,15 @@ interface CampaignBuilderModalProps {
   currentActiveDmNotes?: string;
   initialTab?: 'campaigns' | 'arena';
   onLaunchArenaPreview?: () => void;
+  // Live Game Play Instance (Runtime Checkpoint) Support
+  currentReveals?: RevealPoint[];
+  currentPolygonReveals?: number[][];
+  currentCombatants?: Combatant[];
+  currentCombatRound?: number;
+  currentCombatTurnIndex?: number;
+  currentShowCombatTracker?: boolean;
+  onLoadPlayInstance?: (instance: ScenePlayInstance, baseScene: Scene, campaignId: string, chapterId: string) => void;
+  activeDmSlot?: string;
 }
 
 export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
@@ -95,7 +116,15 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
   onOpenDndChatbot,
   currentActiveDmNotes,
   initialTab = 'campaigns',
-  onLaunchArenaPreview
+  onLaunchArenaPreview,
+  currentReveals = [],
+  currentPolygonReveals = [],
+  currentCombatants = [],
+  currentCombatRound = 1,
+  currentCombatTurnIndex = 0,
+  currentShowCombatTracker = false,
+  onLoadPlayInstance,
+  activeDmSlot = 'DM1'
 }) => {
   const [activeManagerTab, setActiveManagerTab] = useState<'campaigns' | 'arena'>(initialTab);
   useEffect(() => {
@@ -118,6 +147,8 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
   const [digestProgressText, setDigestProgressText] = useState<string>('');
   const [roomFilterQuery, setRoomFilterQuery] = useState<string>('');
   const [roomFilterTab, setRoomFilterTab] = useState<'all' | 'unplaced' | 'placed'>('all');
+
+
   const [isPdfImporterOpen, setIsPdfImporterOpen] = useState<boolean>(false);
   const pdfInputRef = useRef<HTMLInputElement>(null);
 
@@ -373,6 +404,146 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
       setEditedSceneTokens(selectedScene.tokens || []);
     }
   }, [selectedScene, activeSceneInfo, currentActiveDmNotes]);
+
+  // Live Game Play Instance (Runtime Checkpoint) state
+  const [playInstances, setPlayInstances] = useState<ScenePlayInstance[]>([]);
+  const [loadingInstances, setLoadingInstances] = useState<boolean>(false);
+  const [checkpointName, setCheckpointName] = useState<string>('');
+  const [isSavingInstance, setIsSavingInstance] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!selectedScene?.sceneId) {
+      setPlayInstances([]);
+      return;
+    }
+    const cached = getLocalCachedSceneInstances(selectedScene.sceneId);
+    setPlayInstances(cached);
+
+    setLoadingInstances(true);
+    listSceneInstances(selectedScene.sceneId)
+      .then(items => {
+        setPlayInstances(items);
+      })
+      .catch(err => {
+        console.warn('Failed to load play instances for scene:', err);
+      })
+      .finally(() => {
+        setLoadingInstances(false);
+      });
+  }, [selectedScene?.sceneId]);
+
+  const handleCapturePlayInstance = async () => {
+    if (!selectedScene || !selectedCampaign || !selectedChapter) return;
+    setIsSavingInstance(true);
+    try {
+      const aliveCount = (currentTokens || []).filter((t: any) => t.currentHp === undefined || t.currentHp > 0).length;
+      const openedDoors = (currentWalls || []).filter((w: any) => w.doorState === 'open').length;
+      const round = currentCombatRound || 1;
+      const nameToUse = checkpointName.trim() || `Session Checkpoint - Round ${round}`;
+
+      const payload = {
+        campaignId: selectedCampaign.campaignId,
+        chapterId: selectedChapter.chapterId,
+        sceneId: selectedScene.sceneId,
+        sceneTitle: selectedScene.sceneTitle,
+        instanceName: nameToUse,
+        dmSlot: activeDmSlot || 'DM1',
+        runtimeState: {
+          tokens: currentTokens || [],
+          walls: currentWalls || [],
+          reveals: currentReveals || [],
+          polygonReveals: currentPolygonReveals || [],
+          isFogVisible: currentIsFogVisible ?? true,
+          combatants: currentCombatants || [],
+          combatRound: round,
+          combatTurnIndex: currentCombatTurnIndex || 0,
+          showCombatTracker: currentShowCombatTracker ?? false
+        },
+        summaryStats: {
+          aliveTokensCount: aliveCount,
+          combatRound: round,
+          doorsOpenedCount: openedDoors
+        }
+      };
+
+      const saved = await saveSceneInstance(payload);
+      setPlayInstances(prev => [saved, ...prev.filter(i => i.instanceId !== saved.instanceId)]);
+      setCheckpointName('');
+      toast.success(`Saved Game Checkpoint: "${saved.instanceName}"`, {
+        description: 'Runtime play state captured without modifying the base scene blueprint.'
+      });
+    } catch (err) {
+      console.error('Failed to capture play instance:', err);
+      toast.error('Failed to save game instance checkpoint.');
+    } finally {
+      setIsSavingInstance(false);
+    }
+  };
+
+  const handleOverwritePlayInstance = async (inst: ScenePlayInstance) => {
+    if (!selectedScene || !selectedCampaign || !selectedChapter) return;
+    try {
+      const aliveCount = (currentTokens || []).filter((t: any) => t.currentHp === undefined || t.currentHp > 0).length;
+      const openedDoors = (currentWalls || []).filter((w: any) => w.doorState === 'open').length;
+      const round = currentCombatRound || 1;
+
+      const payload = {
+        campaignId: selectedCampaign.campaignId,
+        chapterId: selectedChapter.chapterId,
+        sceneId: selectedScene.sceneId,
+        sceneTitle: selectedScene.sceneTitle,
+        instanceName: inst.instanceName,
+        dmSlot: activeDmSlot || inst.dmSlot || 'DM1',
+        runtimeState: {
+          tokens: currentTokens || [],
+          walls: currentWalls || [],
+          reveals: currentReveals || [],
+          polygonReveals: currentPolygonReveals || [],
+          isFogVisible: currentIsFogVisible ?? true,
+          combatants: currentCombatants || [],
+          combatRound: round,
+          combatTurnIndex: currentCombatTurnIndex || 0,
+          showCombatTracker: currentShowCombatTracker ?? false
+        },
+        summaryStats: {
+          aliveTokensCount: aliveCount,
+          combatRound: round,
+          doorsOpenedCount: openedDoors
+        }
+      };
+
+      const updated = await saveSceneInstance(payload, inst.instanceId);
+      setPlayInstances(prev => [updated, ...prev.filter(i => i.instanceId !== inst.instanceId)]);
+      toast.success(`Overwrote Game Checkpoint: "${inst.instanceName}"`, {
+        description: 'Slot updated with latest canvas state. Base blueprint unchanged.'
+      });
+    } catch (err) {
+      console.error('Failed to overwrite play instance:', err);
+      toast.error('Failed to update game checkpoint.');
+    }
+  };
+
+  const handleDeletePlayInstance = async (inst: ScenePlayInstance) => {
+    if (!confirm(`Delete game checkpoint "${inst.instanceName}"?`)) return;
+    try {
+      await deleteSceneInstance(inst.instanceId, inst.sceneId);
+      setPlayInstances(prev => prev.filter(i => i.instanceId !== inst.instanceId));
+      toast.success(`Deleted checkpoint "${inst.instanceName}"`);
+    } catch (err) {
+      console.error('Failed to delete play instance:', err);
+      toast.error('Failed to delete checkpoint.');
+    }
+  };
+
+  const handleResumePlayInstance = (inst: ScenePlayInstance) => {
+    if (!selectedScene || !selectedCampaign || !selectedChapter) return;
+    if (onLoadPlayInstance) {
+      onLoadPlayInstance(inst, selectedScene, selectedCampaign.campaignId, selectedChapter.chapterId);
+      onClose();
+    } else {
+      handleLaunchScene(selectedScene);
+    }
+  };
 
   // Toggle tree expansion
   const toggleCampaignExpand = (id: string) => {
@@ -2599,10 +2770,10 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
                           id="btn-launch-scene-vtt"
                           onClick={() => handleLaunchScene(selectedScene)}
                           className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow-lg shadow-emerald-950/50 active:scale-95"
-                          title="Load this scene map and tokens onto the live VTT canvas and broadcast to all connected player views"
+                          title="Launch fresh pristine scene blueprint (unplayed template) onto the live canvas"
                         >
                           <Play className="w-3.5 h-3.5 fill-white" />
-                          Load Live
+                          Load Base Blueprint (Fresh Reset)
                         </button>
                         {(['DM1', 'DM2', 'DM3'] as const).map(dmSlot => (
                           <button
@@ -2622,10 +2793,10 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
                         onClick={() => handleSaveSceneChanges(false)}
                         disabled={isSaving}
                         className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-zinc-950 font-bold text-xs flex items-center gap-1.5 transition-all shadow-lg shadow-amber-950/40 active:scale-95"
-                        title="Save battlemap, placed tokens, and DM notes to Firestore"
+                        title="Save master scene blueprint (base map, walls, rooms, pristine tokens) to Firestore"
                       >
                         <Save className="w-3.5 h-3.5" />
-                        Save ({editedSceneTokens.length})
+                        Blueprint Save (Map Maker) ({editedSceneTokens.length})
                       </button>
                     </div>
                   </div>
@@ -2638,10 +2809,10 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
                         onClick={() => handleSaveSceneChanges(true)}
                         disabled={isSaving}
                         className="px-2.5 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/40 border border-blue-500/40 disabled:opacity-50 text-blue-200 text-[11px] font-medium flex items-center gap-1.5 transition-all"
-                        title="Import tokens currently placed on the live VTT canvas into this scene"
+                        title="Import current tokens and walls from live canvas into this base scene blueprint"
                       >
                         <ArrowRight className="w-3.5 h-3.5" />
-                        Pull from Canvas
+                        Pull Blueprint from Canvas
                       </button>
                     )}
 
@@ -2712,7 +2883,22 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
                   </div>
                 </div>
 
-                {/* Map Asset & Storage Section */}
+                                {/* 2-Column Responsive Layout: Map Blueprint (Creator Setup) vs Live Game Instances (Play Saves) */}
+                <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 items-start">
+                  
+                  {/* Left/Main Column: Map Authoring Blueprint (Creator Setup) */}
+                  <div className="xl:col-span-7 space-y-4 min-w-0">
+                    <div className="flex items-center gap-2 px-1">
+                      <span className="w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)]" />
+                      <span className="text-xs font-mono font-bold uppercase tracking-wider text-amber-300">
+                        Map Authoring Blueprint (Creator Setup)
+                      </span>
+                      <span className="text-[10px] font-mono text-zinc-500">
+                        • Pristine Map Template
+                      </span>
+                    </div>
+
+{/* Map Asset & Storage Section */}
                 <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-5 space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
@@ -2973,8 +3159,187 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
                     </button>
                   </div>
                 </div>
+                  </div>
+                  {/* Right-Hand Column / Panel: Live Game Instances (Play Saves) */}
+                  <div className="xl:col-span-5 space-y-4 min-w-0">
+                    <div className="flex items-center gap-2 px-1">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse" />
+                      <span className="text-xs font-mono font-bold uppercase tracking-wider text-emerald-300">
+                        Active Play Checkpoints
+                      </span>
+                      <span className="text-[10px] font-mono text-zinc-500">
+                        • Session Saves
+                      </span>
+                    </div>
 
-                {/* Option to Add Another Scene Underneath */}
+                    {/* Dark-themed card: Live Game Instances */}
+                    <div className="bg-zinc-900/90 border border-zinc-800 rounded-xl p-4 space-y-4 shadow-xl">
+                      <div className="flex items-center justify-between pb-3 border-b border-zinc-800/80">
+                        <div className="flex items-center gap-2">
+                          <span className="text-base">🎮</span>
+                          <div>
+                            <h3 className="text-sm font-bold font-mono text-zinc-100 flex items-center gap-2">
+                              Live Game Instances
+                              <span className="text-[10px] font-sans font-normal text-emerald-400 bg-emerald-950/50 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                                Play Saves
+                              </span>
+                            </h3>
+                            <p className="text-[10px] text-zinc-400 font-sans mt-0.5">
+                              Runtime session snapshots (HP, open doors, explored fog, combat round)
+                            </p>
+                          </div>
+                        </div>
+                        <span className="px-2 py-0.5 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-300 font-mono text-[10px]">
+                          {playInstances.length} {playInstances.length === 1 ? 'Save' : 'Saves'}
+                        </span>
+                      </div>
+
+                      {/* Capture Current Table State Bar */}
+                      <div className="p-3 bg-zinc-950/80 rounded-xl border border-zinc-800/90 space-y-2.5">
+                        <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400">
+                          <span className="font-semibold text-zinc-300">Capture Live Table State</span>
+                          {activeDmSlot && (
+                            <span className="px-1.5 py-0.2 rounded bg-zinc-800 text-amber-300 border border-zinc-700 text-[10px]">
+                              {activeDmSlot} Slot
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                          <input
+                            type="text"
+                            value={checkpointName}
+                            onChange={(e) => setCheckpointName(e.target.value)}
+                            placeholder={`Session Checkpoint - Round ${currentCombatRound || 1}`}
+                            className="flex-1 min-w-0 px-3 py-2 bg-zinc-900 border border-zinc-750 focus:border-amber-500/70 rounded-xl text-xs text-zinc-200 placeholder:text-zinc-500 font-sans focus:outline-none transition-colors"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleCapturePlayInstance}
+                            disabled={isSavingInstance}
+                            className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-zinc-950 font-bold font-mono text-xs flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95 disabled:opacity-50 shrink-0 cursor-pointer"
+                            title="Snapshots active tokens, door states, explored fog, and combat round without touching the base scene blueprint"
+                          >
+                            <Save className="w-3.5 h-3.5" />
+                            <span>{isSavingInstance ? 'Saving...' : '+ Save Current Game Instance'}</span>
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-zinc-500 font-sans leading-tight">
+                          Does not overwrite your pristine map blueprint. You can always revert or reset.
+                        </p>
+                      </div>
+
+                      {/* Saved Instances List (Scoped to Active sceneId) */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400">
+                          <span>Saved Checkpoints for this Scene</span>
+                          {loadingInstances && <span className="text-[10px] text-zinc-500 animate-pulse">Syncing...</span>}
+                        </div>
+
+                        {playInstances.length === 0 ? (
+                          <div className="py-8 px-4 rounded-xl border border-dashed border-zinc-800 text-center bg-zinc-950/40">
+                            <Clock className="w-6 h-6 mx-auto mb-1.5 text-zinc-600 opacity-60" />
+                            <p className="text-xs font-mono text-zinc-400 font-medium">No live game instances saved yet</p>
+                            <p className="text-[10px] text-zinc-500 font-sans mt-0.5 max-w-[260px] mx-auto">
+                              Capture a checkpoint above to preserve mid-combat rounds, damaged tokens, opened doors, or player fog exploration.
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1 sidebar-scrollbar">
+                            {playInstances.map((inst) => {
+                              const dateStr = new Date(inst.updatedAt || inst.createdAt).toLocaleDateString(undefined, {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: 'numeric',
+                                minute: '2-digit'
+                              });
+                              const revealsCount = (inst.runtimeState.reveals?.length || 0) + (inst.runtimeState.polygonReveals?.length || 0);
+
+                              return (
+                                <div
+                                  key={inst.instanceId}
+                                  className="p-3 rounded-xl bg-zinc-950/70 hover:bg-zinc-950 border border-zinc-800 hover:border-zinc-700 transition-all flex flex-col gap-2.5 group"
+                                >
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="text-xs font-bold font-mono text-zinc-200 truncate">
+                                          {inst.instanceName}
+                                        </span>
+                                        {inst.dmSlot && (
+                                          <span className="px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-400 border border-zinc-700 text-[9px] font-mono">
+                                            {inst.dmSlot}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <span className="text-[10px] text-zinc-500 font-mono block mt-0.5">
+                                        {dateStr}
+                                      </span>
+                                    </div>
+
+                                    {/* Overwrite & Delete Buttons */}
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOverwritePlayInstance(inst)}
+                                        className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-amber-300 border border-zinc-700/80 transition-all active:scale-95 cursor-pointer"
+                                        title={`Overwrite "${inst.instanceName}" with current live table state`}
+                                      >
+                                        <RefreshCw className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeletePlayInstance(inst)}
+                                        className="p-1.5 rounded-lg bg-red-950/40 hover:bg-red-900/60 text-red-400 hover:text-red-200 border border-red-800/40 transition-all active:scale-95 cursor-pointer"
+                                        title={`Delete "${inst.instanceName}"`}
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  {/* Pill Badges: Metadata */}
+                                  <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-mono">
+                                    <span className="px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-300">
+                                      {inst.summaryStats.aliveTokensCount} Tokens
+                                    </span>
+                                    {(inst.summaryStats.combatRound > 1 || inst.runtimeState.showCombatTracker) ? (
+                                      <span className="px-2 py-0.5 rounded-md bg-rose-950/60 border border-rose-800/50 text-rose-300 flex items-center gap-1 font-semibold">
+                                        <Swords className="w-3 h-3 text-rose-400" />
+                                        Round {inst.summaryStats.combatRound || 1}
+                                      </span>
+                                    ) : null}
+                                    <span className="px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-400">
+                                      {revealsCount > 0 ? `${revealsCount} Fog Reveals` : 'Fog Hidden'}
+                                    </span>
+                                    {inst.summaryStats.doorsOpenedCount > 0 && (
+                                      <span className="px-2 py-0.5 rounded-md bg-amber-950/50 border border-amber-800/40 text-amber-300">
+                                        {inst.summaryStats.doorsOpenedCount} Doors Open
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Action Button: Resume Game */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleResumePlayInstance(inst)}
+                                    className="w-full py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold font-mono text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-emerald-950/40 active:scale-98 cursor-pointer mt-0.5"
+                                    title="Load blueprint map and restore runtime play state (tokens, open doors, fog reveals, combat)"
+                                  >
+                                    <Play className="w-3.5 h-3.5 fill-white" />
+                                    <span>Resume Game ({inst.instanceName})</span>
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+{/* Option to Add Another Scene Underneath */}
                 <div className="pt-4 border-t border-zinc-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-zinc-900/40 rounded-2xl p-4 border border-zinc-800/50">
                   <div>
                     <h4 className="text-xs font-bold font-mono text-zinc-200 flex items-center gap-2">

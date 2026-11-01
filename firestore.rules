@@ -44,6 +44,13 @@ service cloud.firestore {
       allow delete: if isValidId(sessionId);
     }
 
+    // Scene Play Instances Collection (Runtime Checkpoints)
+    match /scenePlayInstances/{instanceId} {
+      allow read: if true;
+      allow create, update: if isValidId(instanceId);
+      allow delete: if isValidId(instanceId);
+    }
+
     // Uploaded Assets Library (Maps, Tokens, PDFs, Media)
     match /uploadedAssets/{assetId} {
       allow read: if true;

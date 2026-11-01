@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { HudCharacterData, HudActionItem, HudActionCategory, computeUpcastFormula, evaluateDiceFormula } from '../types/hud';
 import { findJb2aAsset } from '../effects/db/jb2aRegistry';
+import { classifySpellMechanics } from '../services/spellResolutionEngine';
 import { toast } from 'sonner';
 
 interface PlayerHeroDockProps {
@@ -274,8 +275,29 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
     });
   };
 
+  // Check if an action is an attack that actually requires a d20 attack roll to hit
+  const isAttackRollAction = useCallback((action: HudActionItem | null | undefined): boolean => {
+    if (!action) return false;
+    // Spells are classified via the D&D 2024 spell resolution engine
+    if (action.category === 'spells' || action.subCategory === 'spell') {
+      const profile = classifySpellMechanics({
+        name: action.name,
+        description: action.description,
+        attackType: action.isAttack ? 'spell' : undefined,
+        saveDcAbility: action.saveAbility,
+        damageFormula: action.damageFormula,
+        damageType: action.damageType,
+        isHealing: action.isHeal,
+      });
+      return profile.requiresAttackRoll;
+    }
+    // Weapon / unarmed / physical attacks with hitBonus
+    return action.hitBonus !== undefined;
+  }, []);
+
   // Dedicated To-Hit Roll Handler
   const handleRollToHit = (action: HudActionItem) => {
+    if (!isAttackRollAction(action)) return;
     if (onRollToHit) {
       onRollToHit(action);
       return;
@@ -802,7 +824,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                 )}
                 <span className="hidden sm:inline text-zinc-400"> — Click target on battlemap</span>
               </span>
-              {currentTargetingAction.hitBonus !== undefined && (
+              {isAttackRollAction(currentTargetingAction) && currentTargetingAction.hitBonus !== undefined && (
                 <button
                   type="button"
                   onClick={(e) => {
@@ -1038,7 +1060,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                 {detailAction.rangeFt !== undefined && (
                   <span>• {detailAction.rangeFt > 0 ? `${detailAction.rangeFt} ft.` : 'Self'}</span>
                 )}
-                {detailAction.hitBonus !== undefined && (
+                {isAttackRollAction(detailAction) && detailAction.hitBonus !== undefined && (
                   <button
                     type="button"
                     onClick={(e) => {
@@ -1626,7 +1648,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                   </div>
 
                   <div className="flex items-center gap-1.5 shrink-0 font-mono text-[10px]">
-                    {action.hitBonus !== undefined && (
+                    {isAttackRollAction(action) && action.hitBonus !== undefined && (
                       <button
                         type="button"
                         onClick={(e) => {
@@ -2385,7 +2407,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
 
                     {/* Right: D&D Beyond Hit / Save / Damage / Uses Badges */}
                     <div className="flex items-center gap-1.5 shrink-0 font-mono text-[10px]">
-                      {formattedHit && (
+                      {isAttackRollAction(action) && formattedHit && (
                         <button
                           type="button"
                           onClick={(e) => {
@@ -2584,9 +2606,9 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
             </div>
 
             {/* Attack / Damage / Save Badges Bar */}
-            {(inspectedAction.hitBonus !== undefined || inspectedAction.saveDc || inspectedAction.damageFormula || inspectedAction.uses) && (
+            {((isAttackRollAction(inspectedAction) && inspectedAction.hitBonus !== undefined) || inspectedAction.saveDc || inspectedAction.damageFormula || inspectedAction.uses) && (
               <div className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900/20 border-b border-zinc-800/60 flex-wrap text-xs font-mono shrink-0">
-                {inspectedAction.hitBonus !== undefined && (
+                {isAttackRollAction(inspectedAction) && inspectedAction.hitBonus !== undefined && (
                   <button
                     type="button"
                     onClick={() => {

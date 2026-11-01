@@ -1,3 +1,5 @@
+import type { SceneToken } from './lib/firebase';
+
 export interface RevealPoint {
   x: number;
   y: number;
@@ -469,4 +471,32 @@ export * from './types/monsterHud';
 export type { Ally, AllyAction, AllyTrait } from './types/ally';
 export type { Monster } from './types/monster';
 export type { SceneToken as Token } from './lib/firebase';
+
+export interface ScenePlayInstance {
+  instanceId: string;
+  campaignId: string;
+  chapterId?: string;
+  sceneId: string;
+  sceneTitle: string;
+  instanceName: string;
+  dmSlot?: 'DM1' | 'DM2' | 'DM3' | string;
+  createdAt: number;
+  updatedAt: number;
+  runtimeState: {
+    tokens: SceneToken[];
+    walls: WallSegment[];
+    reveals: RevealPoint[];
+    polygonReveals: number[][];
+    isFogVisible: boolean;
+    combatants: Combatant[];
+    combatRound: number;
+    combatTurnIndex: number;
+    showCombatTracker: boolean;
+  };
+  summaryStats: {
+    aliveTokensCount: number;
+    combatRound: number;
+    doorsOpenedCount: number;
+  };
+}
 

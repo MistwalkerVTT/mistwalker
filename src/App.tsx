@@ -161,7 +161,8 @@ import {
   AURA_COLOR_PALETTE,
   TokenMonsterState,
   DmMonsterHudData,
-  MonsterActionItem
+  MonsterActionItem,
+  ScenePlayInstance
 } from './types';
 import { PresetBattlemap } from './data/presetBattlemaps';
 import { DynamicLightingLayer } from './components/DynamicLightingLayer';
@@ -4279,6 +4280,84 @@ export default function App() {
       });
     }
   };
+
+  // Load a saved runtime session checkpoint (Play Save) while preserving the pristine scene blueprint
+  const handleLoadPlayInstance = useCallback(async (
+    instance: ScenePlayInstance,
+    baseScene: Scene,
+    campaignId: string,
+    chapterId: string
+  ) => {
+    // 1. First load the pristine base scene blueprint for map asset, grid, annotations, etc.
+    await handleLoadSceneFromCampaign(baseScene, campaignId, chapterId);
+
+    // 2. Overlay live game runtime state (tokens, open/closed doors, fog reveals, active combat)
+    const runtime = instance.runtimeState;
+    if (runtime) {
+      if (runtime.tokens && Array.isArray(runtime.tokens)) {
+        const mappedTokens: Token[] = (runtime.tokens as any[]).map(t => {
+          const effectiveUrl = t.url || t.avatarUrl || '';
+          return {
+            ...t,
+            url: effectiveUrl,
+            avatarUrl: effectiveUrl
+          } as Token;
+        });
+        setTokens(mappedTokens);
+        tokensRef.current = mappedTokens;
+        const curSlot = activeMapIdRef.current;
+        if (mapsDataRef.current[curSlot]) {
+          mapsDataRef.current[curSlot].tokens = mappedTokens;
+        }
+      }
+      if (runtime.walls && Array.isArray(runtime.walls)) {
+        const normalizedWalls = runtime.walls.map(w => normalizeArenaWallSegment(w));
+        setWalls(normalizedWalls);
+        const curSlot = activeMapIdRef.current;
+        if (mapsDataRef.current[curSlot]) {
+          mapsDataRef.current[curSlot].walls = normalizedWalls;
+        }
+      }
+      if (runtime.reveals && Array.isArray(runtime.reveals)) {
+        setReveals(runtime.reveals);
+      }
+      if (runtime.polygonReveals && Array.isArray(runtime.polygonReveals)) {
+        setPolygonReveals(runtime.polygonReveals);
+      }
+      if (typeof runtime.isFogVisible === 'boolean') {
+        setIsFogVisible(runtime.isFogVisible);
+      }
+      if (runtime.combatants && Array.isArray(runtime.combatants)) {
+        setCombatTrackerCombatants(runtime.combatants);
+      }
+      if (typeof runtime.combatRound === 'number') {
+        setCombatTrackerRound(runtime.combatRound);
+      }
+      if (typeof runtime.combatTurnIndex === 'number') {
+        setCombatTrackerTurnIndex(runtime.combatTurnIndex);
+      }
+      if (typeof runtime.showCombatTracker === 'boolean') {
+        setShowCombatTracker(runtime.showCombatTracker);
+      }
+    }
+
+    // 3. Broadcast to all connected player views via Socket.IO
+    setTimeout(() => {
+      broadcastFullState();
+      if (socketRef.current?.connected && runtime) {
+        socketRef.current.emit('SYNC_COMBAT_STATE', {
+          combatants: runtime.combatants || [],
+          round: runtime.combatRound || 1,
+          turnIndex: runtime.combatTurnIndex || 0,
+          showCombatTracker: runtime.showCombatTracker ?? false
+        });
+      }
+    }, 150);
+
+    toast.success(`Resumed Game Checkpoint: "${instance.instanceName}"`, {
+      description: `Loaded ${runtime?.tokens?.length || 0} tokens, Round ${runtime?.combatRound || 1}, and runtime fog reveals.`
+    });
+  }, [handleLoadSceneFromCampaign, broadcastFullState]);
 
   // Automatically sync live VTT wall & door edits back to Battle Arena config when an Arena Map is loaded live
   useEffect(() => {
@@ -13248,6 +13327,14 @@ export default function App() {
               setShowCampaignBuilder(false);
               setShowDmArenaPreview(true);
             }}
+            currentReveals={reveals}
+            currentPolygonReveals={polygonReveals}
+            currentCombatants={combatTrackerCombatants}
+            currentCombatRound={combatTrackerRound}
+            currentCombatTurnIndex={combatTrackerTurnIndex}
+            currentShowCombatTracker={showCombatTracker}
+            onLoadPlayInstance={handleLoadPlayInstance}
+            activeDmSlot={activeMapId}
           />
         </React.Suspense>
       )}

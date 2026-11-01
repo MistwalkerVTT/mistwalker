@@ -224,6 +224,8 @@ export interface SceneToken {
   monsterState?: TokenMonsterState;
 }
 
+export type { ScenePlayInstance } from '../types';
+
 export interface Scene {
   sceneId: string;
   sceneTitle: string;

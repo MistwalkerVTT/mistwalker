@@ -131,6 +131,7 @@ import {
   loadPlayerAutoRollMap,
   savePlayerAutoRollPreference
 } from '../types/hud';
+import { classifySpellMechanics } from '../services/spellResolutionEngine';
 import { TokenDragRuler, TokenDragState, parseSpeedFt } from './TokenDragRuler';
 import { RoomHotspotLayer } from './RoomHotspotLayer';
 import {
@@ -5160,6 +5161,27 @@ export default function PlayerView() {
   }, [activeTargetingAction, claimedToken, gridSize, selectedDicePreset, activeWildShape, handleUpdateToken]);
 
   const handleRollToHit = useCallback((action: HudActionItem) => {
+    // If this is a spell action, verify with the D&D 2024 spell resolution engine that it actually requires an attack roll
+    if (action.category === 'spells' || action.subCategory === 'spell') {
+      const profile = classifySpellMechanics({
+        name: action.name,
+        description: action.description,
+        attackType: action.isAttack ? 'spell' : undefined,
+        saveDcAbility: action.saveAbility,
+        damageFormula: action.damageFormula,
+        damageType: action.damageType,
+        isHealing: action.isHeal
+      });
+      if (!profile.requiresAttackRoll) {
+        toast.info(`${action.name} does not use an Attack Roll!`, {
+          description: profile.requiresTargetSave
+            ? `Target creatures must roll a ${profile.saveAbility || 'Saving'} Throw against your Spell Save DC ${hudCharacterData?.spellSaveDc || action.saveDc || 13}.`
+            : `${action.name} automatically takes effect without rolling to hit.`
+        });
+        return;
+      }
+    }
+
     if (action.hitBonus === undefined) return;
 
     const rawHit = typeof action.hitBonus === 'number'
@@ -6014,13 +6036,26 @@ export default function PlayerView() {
         : action.name;
 
     if (!isAutoRollDiceEnabledRef.current) {
-      const isAttackAction = Boolean(
+      let isAttackAction = Boolean(
         action.isAttack ||
         action.hitBonus !== undefined ||
         action.category === 'attacks' ||
         action.subCategory === 'weapon' ||
         action.subCategory === 'unarmed'
       );
+
+      if (action.category === 'spells' || action.subCategory === 'spell') {
+        const profile = classifySpellMechanics({
+          name: action.name,
+          description: action.description,
+          attackType: action.isAttack ? 'spell' : undefined,
+          saveDcAbility: action.saveAbility,
+          damageFormula: action.damageFormula,
+          damageType: action.damageType,
+          isHealing: action.isHeal
+        });
+        isAttackAction = profile.requiresAttackRoll;
+      }
 
       const rawHit = typeof action.hitBonus === 'number'
         ? action.hitBonus
