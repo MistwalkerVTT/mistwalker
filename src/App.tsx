@@ -4534,19 +4534,31 @@ export default function App() {
       diceResults.push({ sides: 20, result: d20Result, type: 'd20' });
     }
 
-    // 2. Damage Roll
+    // 2. Damage Roll (Primary + Secondary)
     let rolledDamage = 0;
     let damageBreakdown = '';
     if (action.damageFormula) {
       const evalDmg = evaluateDiceFormula(action.damageFormula, isCrit);
       rolledDamage = evalDmg.total;
-      damageBreakdown = evalDmg.breakdown;
-      if (action.hitBonus === undefined) {
-        diceResults.push(...evalDmg.dice.map(d => ({ sides: d.sides, result: d.result, type: d.type || `d${d.sides}` })));
-      }
+      damageBreakdown = `${evalDmg.breakdown} ${action.damageType || ''}`.trim();
+      diceResults.push(...evalDmg.dice.map(d => ({ sides: d.sides, result: d.result, type: d.type || `d${d.sides}` })));
     }
 
-    // 3. 3D Physics Dice Event
+    if (action.secondaryDamageFormula) {
+      const evalSec = evaluateDiceFormula(action.secondaryDamageFormula, isCrit);
+      rolledDamage += evalSec.total;
+      damageBreakdown += ` + ${evalSec.breakdown} ${action.secondaryDamageType || ''}`.trim();
+      diceResults.push(...evalSec.dice.map(d => ({ sides: d.sides, result: d.result, type: d.type || `d${d.sides}` })));
+    }
+
+    // 3. Save DC Roll if this is a saving throw without hitBonus
+    let saveD20 = 0;
+    if (action.saveDc && action.hitBonus === undefined) {
+      saveD20 = Math.floor(Math.random() * 20) + 1;
+      diceResults.push({ sides: 20, result: saveD20, type: 'd20' });
+    }
+
+    // 4. 3D Physics Dice Event
     const rawHit = action.hitBonus !== undefined ? (parseInt(String(action.hitBonus).replace('+', ''), 10) || 0) : 0;
     const hitSignStr = rawHit >= 0 ? `+ ${rawHit}` : `- ${Math.abs(rawHit)}`;
     const diceEvent: DdbDiceRollEvent = {
@@ -4557,7 +4569,7 @@ export default function App() {
       rollType: action.isHeal ? 'heal' : (action.hitBonus !== undefined ? 'attack' : 'damage'),
       formula: action.hitBonus !== undefined
         ? `1d20 ${hitSignStr} → [${d20Result}] ${hitSignStr} = ${attackTotal}${action.damageFormula ? ` | Dmg: ${action.damageFormula} → ${damageBreakdown}` : ''}`
-        : `${action.damageFormula || ''} → ${damageBreakdown}`,
+        : (action.saveDc ? `DC ${action.saveDc} ${action.saveAbility || ''} Save [d20: ${saveD20}] | Dmg: ${damageBreakdown}` : `${action.damageFormula || ''} → ${damageBreakdown}`),
       diceNotation: diceResults.map(d => d.type).join('+'),
       dice: diceResults,
       total: action.hitBonus !== undefined ? attackTotal : rolledDamage,
@@ -4978,9 +4990,16 @@ export default function App() {
     if (!singleToken || !action.damageFormula) return;
 
     const evalDmg = evaluateDiceFormula(action.damageFormula, false);
-    const rolledDamage = evalDmg.total;
-    const damageBreakdown = evalDmg.breakdown;
+    let rolledDamage = evalDmg.total;
+    let damageBreakdown = `${evalDmg.breakdown} ${action.damageType || ''}`.trim();
     const diceResults = evalDmg.dice.map(d => ({ sides: d.sides, result: d.result, type: d.type || `d${d.sides}` }));
+
+    if (action.secondaryDamageFormula) {
+      const evalSec = evaluateDiceFormula(action.secondaryDamageFormula, false);
+      rolledDamage += evalSec.total;
+      damageBreakdown += ` + ${evalSec.breakdown} ${action.secondaryDamageType || ''}`.trim();
+      diceResults.push(...evalSec.dice.map(d => ({ sides: d.sides, result: d.result, type: d.type || `d${d.sides}` })));
+    }
 
     const diceEvent: DdbDiceRollEvent = {
       id: `roll-${Date.now()}`,
@@ -4988,7 +5007,7 @@ export default function App() {
       avatarUrl: singleToken.url,
       action: `${action.name} (Damage)`,
       rollType: action.isHeal ? 'heal' : 'damage',
-      formula: `${action.damageFormula} → ${damageBreakdown}`,
+      formula: `${action.damageFormula}${action.secondaryDamageFormula ? ` + ${action.secondaryDamageFormula}` : ''} → ${damageBreakdown}`,
       diceNotation: diceResults.map(d => d.type).join('+') || '1d6',
       dice: diceResults,
       total: rolledDamage,
@@ -5008,9 +5027,261 @@ export default function App() {
     }
 
     toast.success(`${singleToken.name}: ${action.name} Damage!`, {
-      description: `Rolled ${rolledDamage} ${action.damageType || ''} (${action.damageFormula} → ${damageBreakdown})`
+      description: `Rolled ${rolledDamage} total (${damageBreakdown})`
     });
   }, [selectedTokenIds, tokens]);
+
+  const handleRollDmMonsterSaveDc = useCallback((action: MonsterActionItem) => {
+    const singleToken = selectedTokenIds.length === 1 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
+    if (!singleToken || !action.saveDc) return;
+
+    const saveDc = action.saveDc;
+    const ab = action.saveAbility || 'Save';
+    const d20 = Math.floor(Math.random() * 20) + 1;
+    const passed = d20 >= saveDc;
+
+    const diceEvent: DdbDiceRollEvent = {
+      id: `roll-${Date.now()}`,
+      characterName: `${singleToken.name || 'Monster'} • ${action.name}`,
+      avatarUrl: singleToken.url,
+      action: `${ab} Save vs DC ${saveDc}`,
+      rollType: 'save',
+      formula: `1d20 vs DC ${saveDc} → [${d20}]`,
+      diceNotation: '1d20',
+      dice: [{ sides: 20, result: d20, type: 'd20' }],
+      total: d20,
+      isCritical: d20 === 20,
+      isFumble: d20 === 1,
+      theme: 'rust',
+      themeColor: passed ? '#10b981' : '#ef4444',
+      timestamp: Date.now(),
+      source: 'local'
+    };
+
+    if (socketRef.current?.connected) socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', diceEvent);
+    if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+      (window as any).__mistwalkerRoll3d(diceEvent);
+    }
+
+    if (passed) {
+      toast.success(`🛡️ DC ${saveDc} ${ab} Save SUCCESS (Rolled ${d20})`, {
+        description: `${action.name}: Target succeeded on saving throw!`
+      });
+    } else {
+      toast.error(`💥 DC ${saveDc} ${ab} Save FAILED (Rolled ${d20})`, {
+        description: `${action.name}: Target failed saving throw (DC ${saveDc})!`
+      });
+    }
+  }, [selectedTokenIds, tokens]);
+
+  const handleRollDmMonsterAbilityCheck = useCallback((ability: string, score: number) => {
+    const singleToken = selectedTokenIds.length === 1 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
+    if (!singleToken) return;
+
+    const mod = Math.floor((score - 10) / 2);
+    const modStr = mod >= 0 ? `+${mod}` : `${mod}`;
+    const d20 = Math.floor(Math.random() * 20) + 1;
+    const total = d20 + mod;
+
+    const diceEvent: DdbDiceRollEvent = {
+      id: `roll-${Date.now()}`,
+      characterName: singleToken.name || 'Monster',
+      avatarUrl: singleToken.url,
+      action: `${ability} Check`,
+      rollType: 'check',
+      formula: `1d20 ${modStr} → [${d20}] ${modStr} = ${total}`,
+      diceNotation: '1d20',
+      dice: [{ sides: 20, result: d20, type: 'd20' }],
+      modifier: mod,
+      total,
+      isCritical: d20 === 20,
+      isFumble: d20 === 1,
+      theme: 'rust',
+      themeColor: d20 === 20 ? '#10b981' : d20 === 1 ? '#ef4444' : '#f59e0b',
+      timestamp: Date.now(),
+      source: 'local'
+    };
+
+    if (socketRef.current?.connected) socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', diceEvent);
+    if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+      (window as any).__mistwalkerRoll3d(diceEvent);
+    }
+
+    toast.success(`${singleToken.name}: ${ability} Check = ${total}`, {
+      description: `d20: ${d20} ${modStr} = ${total}`
+    });
+  }, [selectedTokenIds, tokens]);
+
+  const handleRollDmMonsterSavingThrow = useCallback((ability: string, score: number) => {
+    const singleToken = selectedTokenIds.length === 1 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
+    if (!singleToken) return;
+
+    const mod = Math.floor((score - 10) / 2);
+    const modStr = mod >= 0 ? `+${mod}` : `${mod}`;
+    const d20 = Math.floor(Math.random() * 20) + 1;
+    const total = d20 + mod;
+
+    const diceEvent: DdbDiceRollEvent = {
+      id: `roll-${Date.now()}`,
+      characterName: singleToken.name || 'Monster',
+      avatarUrl: singleToken.url,
+      action: `${ability} Saving Throw`,
+      rollType: 'save',
+      formula: `1d20 ${modStr} → [${d20}] ${modStr} = ${total}`,
+      diceNotation: '1d20',
+      dice: [{ sides: 20, result: d20, type: 'd20' }],
+      modifier: mod,
+      total,
+      isCritical: d20 === 20,
+      isFumble: d20 === 1,
+      theme: 'rust',
+      themeColor: d20 === 20 ? '#10b981' : d20 === 1 ? '#ef4444' : '#3b82f6',
+      timestamp: Date.now(),
+      source: 'local'
+    };
+
+    if (socketRef.current?.connected) socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', diceEvent);
+    if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+      (window as any).__mistwalkerRoll3d(diceEvent);
+    }
+
+    toast.success(`${singleToken.name}: ${ability} Save = ${total}`, {
+      description: `d20: ${d20} ${modStr} = ${total}`
+    });
+  }, [selectedTokenIds, tokens]);
+
+  const handleRollDmMonsterInitiative = useCallback(() => {
+    const singleToken = selectedTokenIds.length === 1 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
+    if (!singleToken) return;
+
+    const dmMonsterHudData = buildDmMonsterHudData(singleToken, compendiumMonsters);
+    const bonus = dmMonsterHudData?.initiativeBonus ?? 0;
+    const d20 = Math.floor(Math.random() * 20) + 1;
+    const total = Math.max(1, d20 + bonus);
+    const modStr = bonus >= 0 ? `+${bonus}` : `${bonus}`;
+
+    const diceEvent: DdbDiceRollEvent = {
+      id: `roll-${Date.now()}`,
+      characterName: singleToken.name || 'Monster',
+      avatarUrl: singleToken.url,
+      action: 'Initiative Roll',
+      rollType: 'check',
+      formula: `1d20 ${modStr} → [${d20}] ${modStr} = ${total}`,
+      diceNotation: '1d20',
+      dice: [{ sides: 20, result: d20, type: 'd20' }],
+      modifier: bonus,
+      total,
+      isCritical: d20 === 20,
+      isFumble: d20 === 1,
+      theme: 'rust',
+      themeColor: d20 === 20 ? '#10b981' : d20 === 1 ? '#ef4444' : '#f59e0b',
+      timestamp: Date.now(),
+      source: 'local'
+    };
+
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', diceEvent);
+    }
+    if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+      (window as any).__mistwalkerRoll3d(diceEvent);
+    }
+
+    // Update token initiative locally & via socket
+    setTokens(prev => {
+      const next = prev.map(t => t.id === singleToken.id ? { ...t, initiative: total } : t);
+      if (mapsDataRef.current[activeMapId]) mapsDataRef.current[activeMapId].tokens = next;
+      if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) socketRef.current.emit('SYNC_TOKENS', next);
+      return next;
+    });
+
+    // Update or insert into Combat Tracker
+    setCombatTrackerCombatants(prev => {
+      const existingIdx = prev.findIndex(c => c.tokenId === singleToken.id || c.id === singleToken.id || (c.name && singleToken.name && c.name.toLowerCase() === singleToken.name.toLowerCase()));
+      if (existingIdx !== -1) {
+        const next = [...prev];
+        next[existingIdx] = { ...next[existingIdx], initiative: total };
+        return next;
+      } else {
+        const newCombatant = {
+          id: singleToken.id,
+          name: singleToken.name || 'Monster',
+          type: 'enemy' as const,
+          initiative: total,
+          initiativeBonus: bonus,
+          maxHp: singleToken.maxHp || singleToken.hp || 10,
+          currentHp: singleToken.currentHp ?? singleToken.hp ?? 10,
+          ac: singleToken.ac || 10,
+          passivePerception: dmMonsterHudData?.passivePerception || 10,
+          conditions: singleToken.conditions || [],
+          elevation: singleToken.elevation || 0,
+          isFlying: Boolean(singleToken.isFlying)
+        };
+        return [...prev, newCombatant];
+      }
+    });
+
+    toast.success(`🎲 ${singleToken.name} rolled Initiative: ${total}!`, {
+      description: `d20: ${d20} ${modStr} = ${total}. Set in Combat Tracker.`
+    });
+  }, [selectedTokenIds, tokens, compendiumMonsters, activeMapId]);
+
+  const handleRollDmMonsterPerception = useCallback(() => {
+    const singleToken = selectedTokenIds.length === 1 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
+    if (!singleToken) return;
+
+    const dmMonsterHudData = buildDmMonsterHudData(singleToken, compendiumMonsters);
+    const pp = dmMonsterHudData?.passivePerception || 10;
+    const bonus = pp - 10;
+    const d20 = Math.floor(Math.random() * 20) + 1;
+    const total = d20 + bonus;
+    const modStr = bonus >= 0 ? `+${bonus}` : `${bonus}`;
+
+    const diceEvent: DdbDiceRollEvent = {
+      id: `roll-${Date.now()}`,
+      characterName: singleToken.name || 'Monster',
+      avatarUrl: singleToken.url,
+      action: 'Perception Check',
+      rollType: 'check',
+      formula: `1d20 ${modStr} → [${d20}] ${modStr} = ${total}`,
+      diceNotation: '1d20',
+      dice: [{ sides: 20, result: d20, type: 'd20' }],
+      modifier: bonus,
+      total,
+      isCritical: d20 === 20,
+      isFumble: d20 === 1,
+      theme: 'rust',
+      themeColor: d20 === 20 ? '#10b981' : d20 === 1 ? '#ef4444' : '#10b981',
+      timestamp: Date.now(),
+      source: 'local'
+    };
+
+    if (socketRef.current?.connected) socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', diceEvent);
+    if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+      (window as any).__mistwalkerRoll3d(diceEvent);
+    }
+
+    toast.success(`👁️ ${singleToken.name}: Perception = ${total}`, {
+      description: `d20: ${d20} ${modStr} = ${total} (Passive Perception: ${pp})`
+    });
+  }, [selectedTokenIds, tokens, compendiumMonsters]);
+
+  const handleInspectDmMonsterAc = useCallback(() => {
+    const singleToken = selectedTokenIds.length === 1 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
+    if (!singleToken) return;
+    const dmMonsterHudData = buildDmMonsterHudData(singleToken, compendiumMonsters);
+    toast.info(`🛡️ ${singleToken.name} Armor Class: ${dmMonsterHudData?.ac || singleToken.ac || 10}`, {
+      description: dmMonsterHudData?.acNotes ? `Notes: ${dmMonsterHudData.acNotes}` : 'Standard Armor Class rating.'
+    });
+  }, [selectedTokenIds, tokens, compendiumMonsters]);
+
+  const handleInspectDmMonsterSpeed = useCallback(() => {
+    const singleToken = selectedTokenIds.length === 1 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
+    if (!singleToken) return;
+    const dmMonsterHudData = buildDmMonsterHudData(singleToken, compendiumMonsters);
+    toast.info(`👟 ${singleToken.name} Movement Speeds`, {
+      description: dmMonsterHudData?.speed || singleToken.speed || '30 ft.'
+    });
+  }, [selectedTokenIds, tokens, compendiumMonsters]);
 
   const handleDmTargetToken = useCallback((targetToken: Token, overrideAction?: MonsterActionItem) => {
     const action = overrideAction || activeDmMonsterAction;
@@ -10727,6 +10998,13 @@ export default function App() {
                       onQuickRollAction={handleQuickRollDmMonsterAction}
                       onRollToHit={handleRollDmMonsterToHit}
                       onRollDamage={handleRollDmMonsterDamage}
+                      onRollSaveDc={handleRollDmMonsterSaveDc}
+                      onRollAbilityCheck={handleRollDmMonsterAbilityCheck}
+                      onRollSavingThrow={handleRollDmMonsterSavingThrow}
+                      onRollInitiative={handleRollDmMonsterInitiative}
+                      onRollPerception={handleRollDmMonsterPerception}
+                      onInspectAc={handleInspectDmMonsterAc}
+                      onInspectSpeed={handleInspectDmMonsterSpeed}
                       onTargetSelf={handleDmTargetSelf}
                       activeTargetingAction={activeDmMonsterAction}
                       onCancelTargeting={() => {

@@ -32,6 +32,13 @@ interface DmMonsterDockProps {
   onQuickRollAction: (action: MonsterActionItem) => void;
   onRollToHit?: (action: MonsterActionItem) => void;
   onRollDamage?: (action: MonsterActionItem) => void;
+  onRollSaveDc?: (action: MonsterActionItem) => void;
+  onRollAbilityCheck?: (ability: string, score: number) => void;
+  onRollSavingThrow?: (ability: string, score: number) => void;
+  onRollInitiative?: () => void;
+  onRollPerception?: () => void;
+  onInspectAc?: () => void;
+  onInspectSpeed?: () => void;
   onTargetSelf?: () => void;
   activeTargetingAction?: MonsterActionItem | null;
   onCancelTargeting?: () => void;
@@ -59,6 +66,13 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
   onQuickRollAction,
   onRollToHit,
   onRollDamage,
+  onRollSaveDc,
+  onRollAbilityCheck,
+  onRollSavingThrow,
+  onRollInitiative,
+  onRollPerception,
+  onInspectAc,
+  onInspectSpeed,
   onTargetSelf,
   activeTargetingAction,
   onCancelTargeting,
@@ -305,34 +319,54 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
           </div>
         </div>
 
-        {/* Vital Statistics Badges */}
+        {/* Vital Statistics Badges - All Fully Clickable and Interactive */}
         <div className="flex items-center gap-2">
           {/* AC Badge */}
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-zinc-900/90 border border-zinc-800 text-xs font-bold text-amber-300">
+          <button
+            type="button"
+            onClick={() => onInspectAc ? onInspectAc() : onInspectRule?.('Armor Class', 'rule')}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 hover:border-amber-500/50 text-xs font-bold text-amber-300 transition-all cursor-pointer active:scale-95 shadow-sm"
+            title={hudData.acNotes ? `${hudData.ac} AC (${hudData.acNotes}) - Click to inspect` : `${hudData.ac} AC - Click to inspect`}
+          >
             <Shield className="w-3.5 h-3.5 text-amber-400" />
-            <span>{hudData.ac}</span>
-            {hudData.acNotes && <span className="text-[9px] text-zinc-500">AC</span>}
-          </div>
+            <span>{hudData.ac} AC</span>
+          </button>
 
           {/* Speed Badge */}
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-zinc-900/90 border border-zinc-800 text-xs text-zinc-300">
+          <button
+            type="button"
+            onClick={() => onInspectSpeed ? onInspectSpeed() : onInspectRule?.('Speed', 'rule')}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 hover:border-blue-500/50 text-xs text-zinc-300 transition-all cursor-pointer active:scale-95 shadow-sm"
+            title={`Speed: ${hudData.speed} - Click to inspect`}
+          >
             <Footprints className="w-3.5 h-3.5 text-blue-400" />
             <span>{hudData.speed.split(',')[0]}</span>
-          </div>
+          </button>
 
           {/* Passive Perception */}
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-zinc-900/90 border border-zinc-800 text-xs text-zinc-300">
+          <button
+            type="button"
+            onClick={() => onRollPerception ? onRollPerception() : onInspectRule?.('Perception', 'skill')}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 hover:border-emerald-500/50 text-xs text-zinc-300 transition-all cursor-pointer active:scale-95 shadow-sm"
+            title="Click to Roll Perception Check (1d20 + PP bonus)"
+          >
             <Eye className="w-3.5 h-3.5 text-emerald-400" />
             <span>PP {hudData.passivePerception}</span>
-          </div>
+          </button>
 
-          {/* Initiative Bonus */}
-          <div className="flex items-center gap-1 px-2 py-1 rounded-xl bg-zinc-900/90 border border-zinc-800 text-xs text-zinc-300 font-bold">
-            <span className="text-[10px] text-zinc-500 uppercase">Init</span>
-            <span className="text-amber-400">
+          {/* Initiative Roll Button */}
+          <button
+            type="button"
+            onClick={() => onRollInitiative ? onRollInitiative() : null}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-zinc-900/90 hover:bg-amber-950/60 border border-zinc-800 hover:border-amber-500/60 text-xs text-zinc-300 font-bold transition-all cursor-pointer active:scale-95 shadow-sm group/init"
+            title={`Click to Roll Initiative for ${hudData.name} (1d20 ${hudData.initiativeBonus >= 0 ? `+${hudData.initiativeBonus}` : hudData.initiativeBonus}) and set in Combat Tracker`}
+          >
+            <Dices className="w-3.5 h-3.5 text-amber-400 group-hover/init:animate-pulse" />
+            <span className="text-[10px] text-zinc-400 uppercase">Init</span>
+            <span className="text-amber-400 font-bold">
               {hudData.initiativeBonus >= 0 ? `+${hudData.initiativeBonus}` : hudData.initiativeBonus}
             </span>
-          </div>
+          </button>
 
           {/* Flight & Altitude Controls */}
           {onUpdateFlight && (
@@ -416,8 +450,8 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
         <div className="p-3 space-y-3">
           {/* Ability Scores & Legendary Actions Sub-Bar */}
           <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 bg-zinc-900/60 rounded-xl border border-zinc-800/80 text-[11px]">
-            {/* Ability Scores Strip */}
-            <div className="flex items-center gap-2.5 overflow-x-auto sidebar-scrollbar py-0.5">
+            {/* Ability Scores Strip - Fully Interactive Buttons */}
+            <div className="flex items-center gap-2 overflow-x-auto sidebar-scrollbar py-0.5">
               {[
                 { label: 'STR', val: hudData.str },
                 { label: 'DEX', val: hudData.dex },
@@ -426,11 +460,21 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                 { label: 'WIS', val: hudData.wis },
                 { label: 'CHA', val: hudData.cha }
               ].map(ab => (
-                <div key={ab.label} className="flex items-baseline gap-1 px-1.5 py-0.5 rounded bg-zinc-950 border border-zinc-800/60 shrink-0">
-                  <span className="font-bold text-zinc-400 text-[10px]">{ab.label}</span>
+                <button
+                  key={ab.label}
+                  type="button"
+                  onClick={() => onRollAbilityCheck?.(ab.label, ab.val)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    onRollSavingThrow?.(ab.label, ab.val);
+                  }}
+                  className="flex items-baseline gap-1 px-2 py-1 rounded-lg bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 hover:border-amber-500/50 text-zinc-200 hover:text-white transition-all cursor-pointer active:scale-95 shadow-sm shrink-0 group/stat"
+                  title={`Click to Roll ${ab.label} Check (1d20 ${getModStr(ab.val)}) • Right-click for Saving Throw`}
+                >
+                  <span className="font-bold text-zinc-400 group-hover/stat:text-amber-400 text-[10px] transition-colors">{ab.label}</span>
                   <span className="font-bold text-zinc-100">{ab.val}</span>
-                  <span className="text-[10px] text-amber-400">({getModStr(ab.val)})</span>
-                </div>
+                  <span className="text-[10px] text-amber-400 font-bold">({getModStr(ab.val)})</span>
+                </button>
               ))}
             </div>
 
@@ -858,12 +902,22 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                       )}
 
                       {action.saveDc && (
-                        <div className="flex flex-col items-center px-2 py-0.5 rounded bg-amber-950/90 border border-amber-500/40 text-amber-300 shrink-0">
-                          <span className="text-[7px] uppercase text-amber-400/80 leading-none">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onRollSaveDc) onRollSaveDc(action);
+                            else onQuickRollAction(action);
+                          }}
+                          className="flex flex-col items-center px-2 py-0.5 rounded bg-amber-950/90 hover:bg-amber-900 border border-amber-500/40 hover:border-amber-400 text-amber-300 hover:text-white transition-all cursor-pointer active:scale-95 shadow-sm group/dc shrink-0"
+                          title={`Click to Roll ${action.saveAbility || ''} DC ${action.saveDc} Save Check`}
+                          aria-label={`Roll Save DC ${action.saveDc}`}
+                        >
+                          <span className="text-[7px] uppercase text-amber-400/80 group-hover/dc:text-amber-200 leading-none">
                             {action.saveAbility || 'Save'}
                           </span>
                           <span className="font-bold text-xs">DC {action.saveDc}</span>
-                        </div>
+                        </button>
                       )}
 
                       {action.damageFormula && (
@@ -883,6 +937,23 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                         >
                           <span className="text-[7px] uppercase text-red-400/80 group-hover/dmg:text-red-200 leading-none">Dmg</span>
                           <span className="font-bold text-xs">{action.damageFormula}</span>
+                        </button>
+                      )}
+
+                      {action.secondaryDamageFormula && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onRollDamage) onRollDamage(action);
+                            else onQuickRollAction(action);
+                          }}
+                          className="flex flex-col items-center px-1.5 py-0.5 rounded bg-purple-950/90 hover:bg-purple-900 border border-purple-500/40 hover:border-purple-400 text-purple-300 hover:text-white transition-all cursor-pointer active:scale-95 shadow-sm group/dmg2 shrink-0"
+                          title={`Click to Roll Secondary Damage: +${action.secondaryDamageFormula} ${action.secondaryDamageType || ''}`}
+                          aria-label={`Roll Secondary Damage: +${action.secondaryDamageFormula}`}
+                        >
+                          <span className="text-[7px] uppercase text-purple-400/80 group-hover/dmg2:text-purple-200 leading-none">Plus</span>
+                          <span className="font-bold text-xs">+{action.secondaryDamageFormula}</span>
                         </button>
                       )}
                     </div>
@@ -905,12 +976,12 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                       </button>
 
                       {/* Quick Roll in 3D Dice */}
-                      {(action.hitBonus !== undefined || action.damageFormula !== undefined) && (
+                      {(action.hitBonus !== undefined || action.damageFormula !== undefined || action.saveDc !== undefined) && (
                         <button
                           type="button"
                           onClick={() => onQuickRollAction(action)}
                           className="py-1 px-2.5 rounded-lg bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-700/60 text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer active:scale-95"
-                          title="Quick Roll Attack & Damage with 3D Physics Dice"
+                          title="Quick Roll Attack, Save DC, & Damage with 3D Physics Dice"
                         >
                           <Dices className="w-3 h-3 text-red-400" />
                           <span>Roll</span>
