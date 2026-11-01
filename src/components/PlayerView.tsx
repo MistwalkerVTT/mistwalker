@@ -17,6 +17,7 @@ import {
   ZoomOut,
   RotateCcw,
   Tv,
+  Folder,
   Shield,
   Users,
   User,
