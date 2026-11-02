@@ -14,6 +14,28 @@
 
 ## Pending Changes Queue for Future Enterprise Patch
 
+### [2026-11-02] fix: guarantee spacebar hold-to-pan overrides all tools and objects in DM and Player view
+- **Commit**: `5e8792b`
+- **Files Changed**:
+  - `src/App.tsx`
+  - `src/components/PlayerView.tsx`
+  - `server/ddbGameLogDaemon.ts`
+  - `src/components/DiceTableOverlay.tsx`
+  - `src/components/PlayerHeroDock.tsx`
+  - `src/components/RollSummaryToast.tsx`
+  - `src/services/spellResolutionEngine.ts`
+- **Summary**:
+  - **Stage Draggable Gate Override**: Updated Stage `draggable` calculation in DM View (`App.tsx`) to `Boolean((isSpacePressed || isShiftPanActive) || (!isCanvasDrawingTool && !isDraggingToken && !hoveredZoneId && !isRoomDrawerOpen && !selectionBox.active))`. Previously, whenever any drawing or measurement tool (`wall`, `fog reveal`, `draw`, `erase`, `spell aim`, etc.) was active, `draggable` evaluated to false even while holding Spacebar.
+  - **Token & Interactive Element Event Bubbling**: In `TokenItem` (`App.tsx`) and `PlayerToken` (`PlayerView.tsx`), bypassed `e.cancelBubble = true` and `draggable` when `isSpacePressed` is true. Clicking anywhere on the canvas (even on tokens, hotspots, or shapes) while holding Spacebar now smoothly initiates and maintains stage pan drag.
+  - **Player View Spacebar Pan Parity**: Added `isSpacePressed` state, keyboard listeners (`keydown`, `keyup`, `blur`), grab cursor feedback, floating status indicator, and stage draggable override to `PlayerView.tsx`, enabling identical hold-to-pan fluid mouse controls in Player View.
+- **Impact / Testing Notes**:
+  - Select any drawing tool (e.g. Wall line tool, Fog polygon reveal, or Spell Aim) in DM View.
+  - Hold down the Spacebar: cursor changes to `grab` and the "Pan / Move Map (Spacebar Held)" pill appears.
+  - Click and drag anywhere on the map, including directly over tokens: the map pans fluidly without placing walls, dropping spells, or dragging tokens.
+  - Open Player View and hold Spacebar: verify the same fluid hold-to-pan navigation works seamlessly.
+
+---
+
 ### [2026-11-02] refactor(campaign): clean up Scene Manager modal layout, header flex wrapping, and play checkpoints panel
 - **Commit**: `7388b99`
 - **Files Changed**:
