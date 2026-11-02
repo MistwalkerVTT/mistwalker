@@ -14,6 +14,28 @@
 
 ## Pending Changes Queue for Future Enterprise Patch
 
+### [2026-11-02] refactor(campaign): clean up Scene Manager modal layout, header flex wrapping, and play checkpoints panel
+- **Commit**: `7388b99`
+- **Files Changed**:
+  - `src/components/CampaignBuilderModal.tsx`
+- **Summary**:
+  - **Modal Close (×) Button Relocation**: Moved the close button from the left action group to the far top-right header container (`ml-auto flex items-center gap-3`) styled as a dedicated `h-9 w-9` rounded-lg button.
+  - **Scene Title Flex Crush Resolution**: Structured the middle header into two clean logical rows:
+    - *Top Row*: Thumbnail, Campaign/Chapter breadcrumbs, editable scene title (`min-w-[220px] flex-1 text-xl font-bold truncate`), and stat pill badges (`tokens`, `walls/doors`, `rooms`).
+    - *Action Toolbar Row*: Wrapped the primary and secondary scene actions (`Load Base Blueprint`, `DM1 | DM2 | DM3`, `Blueprint Save`, `Pull Blueprint from Canvas`, `Add Scene`, `Duplicate`, `Import`, `Export`, `Delete`) into a dedicated `flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-zinc-850/80` row underneath, preventing any lateral compression on the title.
+  - **Redesigned Live Game Instances Panel**:
+    - Enhanced parent grid layout to `grid-cols-1 xl:grid-cols-12 gap-6` with `xl:col-span-5 min-w-[340px]` for play checkpoints.
+    - Simplified card header with single clean badge (`N Saves`) and full-width subtitle.
+    - Refactored "Capture Live Table State" box into a vertical stack with a full-width input, full-width save button (`w-full h-9`), and clear helper text.
+    - Converted saved checkpoints into a vertical two-row card with title/metadata on top and action buttons (`▶ Resume Game`, `↻ Overwrite`, `🗑 Delete`) spanning cleanly across the bottom.
+- **Impact / Testing Notes**:
+  - Open Campaign Builder & Scene Manager.
+  - Verify the modal close button is in the far top-right corner.
+  - Inspect the selected scene header: scene title now has ample horizontal room and actions sit cleanly below it.
+  - Test saving a new play checkpoint: text input and button are full width with zero clipping or text crushing.
+
+---
+
 ### [2026-11-02] fix(dashboard): eliminate startup scene hydration flicker with synchronous metadata cache and loading skeleton
 - **Commit**: `5320cd8`
 - **Files Changed**:
