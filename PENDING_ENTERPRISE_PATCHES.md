@@ -14,6 +14,15 @@
 
 ## Pending Changes Queue for Future Enterprise Patch
 
+### [2026-11-02] fix(canvas): add optional chaining to selectionBox in Stage draggable prop
+- **Commit**: `aa884a0`
+- **Files Changed**:
+  - `src/App.tsx`
+- **Summary**:
+  - Fixed runtime error `Cannot read properties of null (reading 'active')` when opening DM view by changing `!selectionBox.active` to `!selectionBox?.active` in Konva Stage's `draggable` prop.
+
+---
+
 ### [2026-11-02] fix: guarantee spacebar hold-to-pan overrides all tools and objects in DM and Player view
 - **Commit**: `5e8792b`
 - **Files Changed**:
