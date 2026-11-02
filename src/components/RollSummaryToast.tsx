@@ -25,8 +25,20 @@ export const RollSummaryToast: React.FC<Props> = ({ roll, onDismiss }) => {
 
   if (!roll || !isVisible) return null;
 
-  const isCrit = roll.isCritical || (roll.dice?.some(d => d.sides === 20 && d.result === 20) ?? false);
-  const isFumble = roll.isFumble || (roll.dice?.some(d => d.sides === 20 && d.result === 1) ?? false);
+  const actionLower = (roll.action || '').toLowerCase();
+  const isHealOrDamageOnly = roll.rollType === 'heal' ||
+    roll.rollType === 'damage' ||
+    actionLower.includes('heal') ||
+    actionLower.includes('potion') ||
+    actionLower.includes('damage');
+
+  const hasD20 = roll.dice?.some(d => d.sides === 20 || d.type === 'd20');
+  const d20Rolled1 = roll.dice?.some(d => (d.sides === 20 || d.type === 'd20') && d.result === 1) ?? false;
+  const d20Rolled20 = roll.dice?.some(d => (d.sides === 20 || d.type === 'd20') && d.result === 20) ?? false;
+
+  // Healing rolls and non-d20 damage rolls never fumble or critically fumble
+  const isFumble = !isHealOrDamageOnly && (roll.isFumble || (hasD20 && d20Rolled1));
+  const isCrit = (roll.isCritical || (hasD20 && d20Rolled20)) && !isHealOrDamageOnly;
 
   return (
     <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[290] pointer-events-auto select-none animate-in fade-in slide-in-from-top-4 duration-300">

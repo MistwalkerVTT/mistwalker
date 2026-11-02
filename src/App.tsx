@@ -588,16 +588,18 @@ const TokenImage = React.memo(({
       draggable={!isSpacePressed && !isAimingSpell}
       dragDistance={8}
       onMouseDown={(e) => {
+        if (isSpacePressed) return;
         if (isAimingSpell) {
           e.cancelBubble = true;
           return;
         }
-        if (!isSpacePressed && e.evt?.button !== 2) {
+        if (e.evt?.button !== 2) {
           e.cancelBubble = true;
         }
       }}
       onMouseUp={(e) => {
-        if (!isSpacePressed && e.evt?.button !== 2) {
+        if (isSpacePressed) return;
+        if (e.evt?.button !== 2) {
           e.cancelBubble = true;
         }
       }}
@@ -710,6 +712,7 @@ const TokenImage = React.memo(({
         }
       }}
       onDblClick={(e) => {
+        if (isSpacePressed) return;
         if (isAimingSpell) return;
         e.cancelBubble = true;
         if (onDblClick) {
@@ -717,6 +720,7 @@ const TokenImage = React.memo(({
         }
       }}
       onDblTap={(e) => {
+        if (isSpacePressed) return;
         if (isAimingSpell) return;
         e.cancelBubble = true;
         if (onDblClick) {
@@ -765,7 +769,11 @@ const TokenImage = React.memo(({
         setIsHovered(false);
         const stage = e.target.getStage();
         if (stage && !isTokenDraggingRef.current) {
-          stage.container().style.cursor = tool === 'spell_aim' ? 'crosshair' : 'default';
+          if (isSpacePressed) {
+            stage.container().style.cursor = 'grab';
+          } else {
+            stage.container().style.cursor = tool === 'spell_aim' ? 'crosshair' : 'default';
+          }
         }
         if (onMouseLeave) {
           onMouseLeave(e);
@@ -10299,8 +10307,8 @@ export default function App() {
                   });
                 }
               }}
-              draggable={!isCanvasDrawingTool && !isDraggingToken && !hoveredZoneId && !isRoomDrawerOpen}
-              className={tool === 'spell_aim' ? 'cursor-crosshair' : 'cursor-default'}
+              draggable={Boolean((isSpacePressed || isShiftPanActive) || (!isCanvasDrawingTool && !isDraggingToken && !hoveredZoneId && !isRoomDrawerOpen && !selectionBox.active))}
+              className={isSpacePressed || isShiftPanActive ? 'cursor-grab' : tool === 'spell_aim' ? 'cursor-crosshair' : 'cursor-default'}
               onDragStart={(e) => {
                 if (e.target === stageRef.current && !isDraggingTokenRef.current) {
                   setActiveTokenMenu(null);

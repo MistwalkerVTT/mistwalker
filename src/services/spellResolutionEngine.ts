@@ -263,6 +263,7 @@ export function classifySpellMechanics(input: {
   description?: string;
   attackType?: string;
   saveDcAbility?: string;
+  saveDc?: number | string;
   damageFormula?: string;
   damageType?: string;
   isHealing?: boolean;
@@ -271,6 +272,7 @@ export function classifySpellMechanics(input: {
   const desc = (input.description ?? '').toLowerCase();
   const override = KNOWN_SPELL_OVERRIDES[normalizedName];
 
+  // 0. Curated Overrides always win first
   if (override && override.archetype) {
     return {
       spellName: input.name,
@@ -290,7 +292,7 @@ export function classifySpellMechanics(input: {
     };
   }
 
-  // 1. Check for Healing / Temp HP
+  // 1. Healing & Temp HP spells NEVER roll to hit
   if (
     input.isHealing ||
     /\b(regains?\s+\d+d\d+|regains?\s+hit\s+points|restore[sd]?\s+hit\s+points|temporary\s+hit\s+points)\b/i.test(desc)
@@ -306,32 +308,13 @@ export function classifySpellMechanics(input: {
     };
   }
 
-  // 2. Check for Explicit Spell Attack Roll ("melee spell attack", "ranged spell attack", "spell attack roll")
-  const hasSpellAttackText =
-    Boolean(input.attackType) ||
-    /\b(melee\s+spell\s+attack|ranged\s+spell\s+attack|spell\s+attack\s+roll|make\s+a\s+ranged\s+attack|make\s+a\s+melee\s+attack)\b/i.test(
-      desc
-    );
-
-  if (hasSpellAttackText) {
-    const dmgMatch = desc.match(/(\d+d\d+(?:\s*[+-]\s*\d+)?)\s+(\w+)\s+damage/i);
-    return {
-      spellName: input.name,
-      archetype: 'attack_roll',
-      requiresAttackRoll: true,
-      requiresTargetSave: false,
-      damageFormula: input.damageFormula || dmgMatch?.[1],
-      damageType: input.damageType || dmgMatch?.[2],
-      jb2aSuggestedCategory: 'projectile',
-    };
-  }
-
-  // 3. Check for Saving Throw ("must succeed on a Dexterity saving throw", "Constitution saving throw")
+  // 2. Saving Throw Check MUST run BEFORE generic attackType flags!
+  // Many DDB/SRD spells have isAttack=true or hitBonus populated erroneously even when they use a Save DC.
   const saveMatch = desc.match(
     /\b(strength|dexterity|constitution|intelligence|wisdom|charisma|str|dex|con|int|wis|cha)\s+saving\s+throw\b/i
   );
 
-  if (saveMatch || input.saveDcAbility) {
+  if (saveMatch || input.saveDcAbility || input.saveDc) {
     const rawAbility = (input.saveDcAbility || saveMatch?.[1] || 'dex').toLowerCase();
     const saveAbility = ABILITY_MAP[rawAbility] ?? 'DEX';
     const isHalfOnSave = /\b(half\s+as\s+much\s+damage|half\s+damage)\b/i.test(desc);
@@ -350,7 +333,29 @@ export function classifySpellMechanics(input: {
     };
   }
 
-  // 4. Check for Auto-Hit Damage (Deals damage in text/formula, but NO attack roll and NO saving throw)
+  // 3. Explicit Spell Attack Text in description ("ranged spell attack", "melee spell attack", "spell attack roll")
+  const hasExplicitSpellAttackText =
+    /\b(melee\s+spell\s+attack|ranged\s+spell\s+attack|spell\s+attack\s+roll|make\s+a\s+ranged\s+attack|make\s+a\s+melee\s+attack)\b/i.test(
+      desc
+    );
+
+  // Only trust input.attackType if the description does NOT say "automatically hits" or lack attack wording
+  const isAutoHitText = /\b(automatically\s+hits|darts?\s+hit\s+simultaneously|without\s+making\s+an\s+attack\s+roll)\b/i.test(desc);
+
+  if (!isAutoHitText && (hasExplicitSpellAttackText || Boolean(input.attackType))) {
+    const dmgMatch = desc.match(/(\d+d\d+(?:\s*[+-]\s*\d+)?)\s+(\w+)\s+damage/i);
+    return {
+      spellName: input.name,
+      archetype: 'attack_roll',
+      requiresAttackRoll: true,
+      requiresTargetSave: false,
+      damageFormula: input.damageFormula || dmgMatch?.[1],
+      damageType: input.damageType || dmgMatch?.[2],
+      jb2aSuggestedCategory: 'projectile',
+    };
+  }
+
+  // 4. Auto-Hit Damage (Deals damage, no save, no attack roll — e.g. Magic Missile, Spike Growth, Cloud of Daggers)
   const autoDmgMatch = desc.match(/(\d+d\d+(?:\s*[+-]\s*\d+)?)\s+(\w+)\s+damage/i);
   if (input.damageFormula || autoDmgMatch) {
     return {
@@ -364,7 +369,7 @@ export function classifySpellMechanics(input: {
     };
   }
 
-  // 5. Default to Utility / Control Zone
+  // 5. Utility / Control Zone
   return {
     spellName: input.name,
     archetype: 'utility_zone',
@@ -373,7 +378,6 @@ export function classifySpellMechanics(input: {
     jb2aSuggestedCategory: 'aura',
   };
 }
-
 /**
  * Resolves Saving Throws for one or more target tokens against a caster's Spell Save DC.
  */

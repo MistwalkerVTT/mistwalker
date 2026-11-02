@@ -57,6 +57,7 @@ import {
   Copy,
   Wand2,
   Target,
+  Hand,
   Info,
   Dices,
   Palette,
@@ -131,7 +132,7 @@ import {
   loadPlayerAutoRollMap,
   savePlayerAutoRollPreference
 } from '../types/hud';
-import { classifySpellMechanics } from '../services/spellResolutionEngine';
+import { classifySpellMechanics, resolveSpellSavingThrows } from '../services/spellResolutionEngine';
 import { TokenDragRuler, TokenDragState, parseSpeedFt } from './TokenDragRuler';
 import { RoomHotspotLayer } from './RoomHotspotLayer';
 import {
@@ -451,9 +452,11 @@ const PlayerToken = React.memo(({
   onDragStartToken,
   onClaimToken,
   onContextMenu,
-  showHp = true
+  showHp = true,
+  isSpacePressed = false
 }: {
   showHp?: boolean;
+  isSpacePressed?: boolean;
   token: Token;
   gridSize: number;
   gridOffsetX?: number;
@@ -707,9 +710,14 @@ const PlayerToken = React.memo(({
       x={token.x}
       y={token.y}
       name="token"
-      draggable={!isTargetingActive && !isCondition && canDrag}
+      draggable={!isSpacePressed && !isTargetingActive && !isCondition && canDrag}
       dragDistance={8}
       onMouseEnter={(e: any) => {
+        if (isSpacePressed) {
+          const container = e.target.getStage()?.container();
+          if (container) container.style.cursor = 'grab';
+          return;
+        }
         if (canDrag && !isCurrentlyDraggingRef.current) {
           const container = e.target.getStage()?.container();
           if (container) container.style.cursor = 'grab';
@@ -718,15 +726,17 @@ const PlayerToken = React.memo(({
       onMouseLeave={(e: any) => {
         if (!isCurrentlyDraggingRef.current) {
           const container = e.target.getStage()?.container();
-          if (container) container.style.cursor = 'default';
+          if (container) container.style.cursor = isSpacePressed ? 'grab' : 'default';
         }
       }}
       onMouseDown={(e: any) => {
+        if (isSpacePressed) return;
         if (!isCondition && e.evt?.button !== 2) {
           e.cancelBubble = true;
         }
       }}
       onMouseUp={(e: any) => {
+        if (isSpacePressed) return;
         if (!isCondition && e.evt?.button !== 2) {
           e.cancelBubble = true;
         }
@@ -814,6 +824,7 @@ const PlayerToken = React.memo(({
       onDragMove={handleDragMove}
       onDragEnd={handleDragEnd}
       onClick={(e: any) => {
+        if (isSpacePressed) return;
         if (!isCurrentlyDraggingRef.current && !longPressFiredRef.current) {
           const now = Date.now();
           if (now - lastTokenTapTimeRef.current < 300) return;
@@ -831,6 +842,7 @@ const PlayerToken = React.memo(({
         }
       }}
       onTap={(e: any) => {
+        if (isSpacePressed) return;
         if (!isCurrentlyDraggingRef.current && !longPressFiredRef.current) {
           const now = Date.now();
           if (now - lastTokenTapTimeRef.current < 300) return;
@@ -1188,6 +1200,7 @@ const PlayerToken = React.memo(({
     prevProps.stageScale === nextProps.stageScale &&
     prevProps.canDrag === nextProps.canDrag &&
     prevProps.isTargetingActive === nextProps.isTargetingActive &&
+    prevProps.isSpacePressed === nextProps.isSpacePressed &&
     prevProps.showHp === nextProps.showHp
   );
 });
@@ -3570,6 +3583,68 @@ export default function PlayerView() {
   }, [imageStatus, imageFile, activeSceneInfo]);
 
   const [isDraggingToken, setIsDraggingToken] = useState(false);
+  const [isSpacePressed, setIsSpacePressed] = useState<boolean>(false);
+  const spacePanActiveRef = useRef<boolean>(false);
+
+  // Spacebar Hold-To-Pan (Guaranteed pan / move map parity with DM View)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable ||
+          (typeof target.closest === 'function' && target.closest('input, textarea, select, [contenteditable="true"]')))
+      ) {
+        return;
+      }
+
+      if (e.code === 'Space' || e.key === ' ') {
+        e.preventDefault();
+        if (!spacePanActiveRef.current) {
+          spacePanActiveRef.current = true;
+          setIsSpacePressed(true);
+          if (stageRef.current) {
+            stageRef.current.container().style.cursor = 'grab';
+          }
+        }
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space' || e.key === ' ') {
+        if (spacePanActiveRef.current) {
+          spacePanActiveRef.current = false;
+          setIsSpacePressed(false);
+          if (stageRef.current) {
+            stageRef.current.container().style.cursor = activeEquippedAsset ? 'crosshair' : 'default';
+          }
+        }
+      }
+    };
+
+    const handleBlur = () => {
+      if (spacePanActiveRef.current) {
+        spacePanActiveRef.current = false;
+        setIsSpacePressed(false);
+      }
+      if (stageRef.current) {
+        stageRef.current.container().style.cursor = activeEquippedAsset ? 'crosshair' : 'default';
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', handleBlur);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', handleBlur);
+    };
+  }, [activeEquippedAsset]);
 
   // Seize / Claim Character Action (Pure state selection with zero camera reaction)
   const handleClaimToken = useCallback((tokenId: string) => {
@@ -5959,6 +6034,21 @@ export default function PlayerView() {
         };
       });
     }
+    // 3. Classify spell mechanics & auto-cast resolution
+    const isSpellAction = action.category === 'spells' || action.subCategory === 'spell';
+    const spellProfile = isSpellAction
+      ? classifySpellMechanics({
+          name: action.name,
+          description: action.description,
+          attackType: action.isAttack && !action.saveDc && !action.saveAbility ? 'spell' : undefined,
+          saveDcAbility: action.saveAbility,
+          saveDc: action.saveDc,
+          damageFormula: action.damageFormula,
+          damageType: action.damageType,
+          isHealing: action.isHeal,
+        })
+      : null;
+
     let formula = action.damageFormula || (action as any).damage;
     const lowerActionName = action.name.toLowerCase();
 
@@ -5974,51 +6064,183 @@ export default function PlayerView() {
     }
 
     if (!formula && action.isHeal) {
-      if (lowerActionName.includes('healing word')) formula = '1d4 + 3';
-      else if (lowerActionName.includes('cure wounds')) formula = '1d8 + 3';
+      if (lowerActionName.includes('healing word')) formula = '2d4 + 3';
+      else if (lowerActionName.includes('cure wounds')) formula = '2d8 + 3';
       else formula = '1d8 + 2';
     }
 
+    const upcastSuffix =
+      action.castAtLevel && action.castAtLevel > (action.level ?? 0)
+        ? expendedActionSlot >= 1 && action.castAtLevel > expendedActionSlot
+          ? ` [Lvl ${action.castAtLevel} • Uses Lvl ${expendedActionSlot} Slot]`
+          : ` [Lvl ${action.castAtLevel} Slot]`
+        : '';
+
     let calculatedDeltaHp = 0;
-    if (formula && isAutoRollDiceEnabledRef.current) {
-      const evaluated = evaluateDiceFormula(formula, false);
-      const rolledTotal = evaluated.total;
-      const diceResults = evaluated.dice;
+    if (isAutoRollDiceEnabledRef.current) {
+      if (spellProfile?.archetype === 'utility_zone') {
+        // Skip all dice rolls and only spawn visual effect
+        calculatedDeltaHp = 0;
+      } else if (spellProfile?.archetype === 'saving_throw') {
+        // Saving Throw: Do NOT roll caster d20!
+        if (formula) {
+          const evaluated = evaluateDiceFormula(formula, false);
+          const activeChar = compendiumCharacters.find(c => c.id === caster.id || c.name.toLowerCase() === (caster.name || '').toLowerCase()) ||
+            DEFAULT_CHARACTERS.find(c => c.id === caster.id || c.name.toLowerCase() === (caster.name || '').toLowerCase());
 
-      calculatedDeltaHp = action.isHeal ? rolledTotal : -rolledTotal;
+          const saveResults = resolveSpellSavingThrows({
+            caster: activeChar,
+            targets: [targetToken as any],
+            profile: spellProfile,
+            rolledBaseDamage: evaluated.total
+          });
 
-      const upcastSuffix =
-        action.castAtLevel && action.castAtLevel > (action.level ?? 0)
-          ? expendedActionSlot >= 1 && action.castAtLevel > expendedActionSlot
-            ? ` [Lvl ${action.castAtLevel} • Uses Lvl ${expendedActionSlot} Slot]`
-            : ` [Lvl ${action.castAtLevel} Slot]`
-          : '';
+          const res = saveResults[0];
+          calculatedDeltaHp = -res.damageTaken;
 
-      const diceEvent: DdbDiceRollEvent = {
-        id: `roll-${Date.now()}`,
-        characterId: String(hudCharacterData?.id || caster.id || ''),
-        characterName: caster.name || 'Hero',
-        avatarUrl: hudCharacterData?.avatarUrl || caster.avatarUrl || caster.url,
-        action: `${action.name}${upcastSuffix} (${action.isHeal ? 'Healing' : 'Damage'})`,
-        rollType: action.isHeal ? 'heal' : 'damage',
-        formula: `${formula} → ${evaluated.breakdown}`,
-        diceNotation: formula,
-        dice: diceResults.length > 0 ? diceResults : [{ sides: action.isHeal ? 8 : 20, result: Math.abs(calculatedDeltaHp), type: action.isHeal ? 'd8' : 'd20' }],
-        modifier: evaluated.bonus,
-        total: Math.abs(calculatedDeltaHp),
-        isCritical: false,
-        isFumble: false,
-        theme: selectedDicePreset.id,
-        themeColor: action.isHeal ? '#10b981' : selectedDicePreset.theme.primaryColor,
-        timestamp: Date.now(),
-        source: 'player'
-      };
+          const diceEvent: DdbDiceRollEvent = {
+            id: `roll-${Date.now()}`,
+            characterId: String(hudCharacterData?.id || caster.id || ''),
+            characterName: caster.name || 'Hero',
+            avatarUrl: hudCharacterData?.avatarUrl || caster.avatarUrl || caster.url,
+            action: `${action.name}${upcastSuffix} (DC ${res.dc} ${res.saveAbility} Save)`,
+            rollType: 'damage',
+            formula: `${formula} → ${evaluated.breakdown}`,
+            diceNotation: formula,
+            dice: evaluated.dice.length > 0 ? evaluated.dice : [{ sides: 8, result: evaluated.total, type: 'd8' }],
+            modifier: evaluated.bonus,
+            total: evaluated.total,
+            isCritical: false,
+            isFumble: false,
+            theme: selectedDicePreset.id,
+            themeColor: '#f59e0b',
+            timestamp: Date.now(),
+            source: 'player'
+          };
 
-      if (socketRef.current?.connected) {
-        socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', diceEvent);
-      }
-      if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
-        (window as any).__mistwalkerRoll3d(diceEvent);
+          if (socketRef.current?.connected) {
+            socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', diceEvent);
+          }
+          if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+            (window as any).__mistwalkerRoll3d(diceEvent);
+          }
+
+          toast.info(`${targetToken.name || 'Target'}: ${res.saveAbility} Save ${res.succeeded ? 'SUCCESS' : 'FAILED'}!`, {
+            description: `Rolled ${res.totalRoll} (d20: ${res.d20Roll} + ${res.saveBonus}) vs DC ${res.dc} → Took ${res.damageTaken} ${action.damageType || 'damage'}${res.succeeded && spellProfile.saveOutcome === 'half_damage' ? ' (Half Damage)' : res.succeeded ? ' (Negated)' : ''}`
+          });
+        }
+      } else if (spellProfile?.archetype === 'attack_roll' || (!isSpellAction && action.hitBonus !== undefined)) {
+        // Attack Roll: 1d20 + hitBonus vs Target AC
+        const rawHit = typeof action.hitBonus === 'number'
+          ? action.hitBonus
+          : (parseInt(String(action.hitBonus || '+6').replace('+', ''), 10) || 6);
+        const modStr = rawHit >= 0 ? `+${rawHit}` : `${rawHit}`;
+        const d20 = Math.floor(Math.random() * 20) + 1;
+        const totalHit = d20 + rawHit;
+        const isCrit = d20 === 20;
+        const isFumble = d20 === 1;
+        const targetAc = Number((targetToken as any).ac || (targetToken as any).armorClass || (targetToken as any).stats?.armorClass || 12);
+        const isHit = isCrit || (!isFumble && totalHit >= targetAc);
+
+        // Emit to-hit d20 roll
+        const hitDiceEvent: DdbDiceRollEvent = {
+          id: `hit-${Date.now()}`,
+          characterId: String(hudCharacterData?.id || caster.id || ''),
+          characterName: caster.name || 'Hero',
+          avatarUrl: hudCharacterData?.avatarUrl || caster.avatarUrl || caster.url,
+          action: `${action.name} (To Hit)`,
+          rollType: 'attack',
+          formula: `1d20 ${modStr}`,
+          diceNotation: '1d20',
+          dice: [{ sides: 20, result: d20, type: 'd20' }],
+          modifier: rawHit,
+          total: totalHit,
+          isCritical: isCrit,
+          isFumble: isFumble,
+          theme: selectedDicePreset.id,
+          themeColor: isCrit ? '#10b981' : isFumble ? '#ef4444' : selectedDicePreset.theme.primaryColor,
+          timestamp: Date.now(),
+          source: 'player'
+        };
+
+        if (socketRef.current?.connected) {
+          socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', hitDiceEvent);
+        }
+        if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+          (window as any).__mistwalkerRoll3d(hitDiceEvent);
+        }
+
+        if (!isHit) {
+          calculatedDeltaHp = 0;
+          toast.error(`${action.name} MISSED ${targetToken.name || 'Target'}!`, {
+            description: isFumble
+              ? `Natural 1 Fumble! (${totalHit} vs AC ${targetAc})`
+              : `Rolled ${totalHit} (d20: ${d20} ${modStr}) vs AC ${targetAc}`
+          });
+        } else if (formula) {
+          const evaluated = evaluateDiceFormula(formula, isCrit);
+          calculatedDeltaHp = action.isHeal ? evaluated.total : -evaluated.total;
+
+          const dmgDiceEvent: DdbDiceRollEvent = {
+            id: `dmg-${Date.now()}`,
+            characterId: String(hudCharacterData?.id || caster.id || ''),
+            characterName: caster.name || 'Hero',
+            avatarUrl: hudCharacterData?.avatarUrl || caster.avatarUrl || caster.url,
+            action: `${action.name}${upcastSuffix} (${action.isHeal ? 'Healing' : isCrit ? 'CRITICAL HIT' : 'Damage'})`,
+            rollType: action.isHeal ? 'heal' : 'damage',
+            formula: `${formula} → ${evaluated.breakdown}`,
+            diceNotation: formula,
+            dice: evaluated.dice.length > 0 ? evaluated.dice : [{ sides: action.isHeal ? 8 : 20, result: Math.abs(calculatedDeltaHp), type: action.isHeal ? 'd8' : 'd20' }],
+            modifier: evaluated.bonus,
+            total: Math.abs(calculatedDeltaHp),
+            isCritical: isCrit,
+            isFumble: false,
+            theme: selectedDicePreset.id,
+            themeColor: action.isHeal ? '#10b981' : isCrit ? '#10b981' : selectedDicePreset.theme.primaryColor,
+            timestamp: Date.now() + 100,
+            source: 'player'
+          };
+
+          if (socketRef.current?.connected) {
+            socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', dmgDiceEvent);
+          }
+          if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+            (window as any).__mistwalkerRoll3d(dmgDiceEvent);
+          }
+        }
+      } else if (formula) {
+        // Auto-hit damage or healing buff: Never roll d20!
+        const evaluated = evaluateDiceFormula(formula, false);
+        const rolledTotal = evaluated.total;
+        const diceResults = evaluated.dice;
+        calculatedDeltaHp = action.isHeal ? rolledTotal : -rolledTotal;
+
+        const diceEvent: DdbDiceRollEvent = {
+          id: `roll-${Date.now()}`,
+          characterId: String(hudCharacterData?.id || caster.id || ''),
+          characterName: caster.name || 'Hero',
+          avatarUrl: hudCharacterData?.avatarUrl || caster.avatarUrl || caster.url,
+          action: `${action.name}${upcastSuffix} (${action.isHeal ? 'Healing' : 'Auto-Hit Damage'})`,
+          rollType: action.isHeal ? 'heal' : 'damage',
+          formula: `${formula} → ${evaluated.breakdown}`,
+          diceNotation: formula,
+          dice: diceResults.length > 0 ? diceResults : [{ sides: action.isHeal ? 8 : 20, result: Math.abs(calculatedDeltaHp), type: action.isHeal ? 'd8' : 'd20' }],
+          modifier: evaluated.bonus,
+          total: Math.abs(calculatedDeltaHp),
+          isCritical: false,
+          isFumble: false,
+          theme: selectedDicePreset.id,
+          themeColor: action.isHeal ? '#10b981' : selectedDicePreset.theme.primaryColor,
+          timestamp: Date.now(),
+          source: 'player'
+        };
+
+        if (socketRef.current?.connected) {
+          socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', diceEvent);
+        }
+        if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+          (window as any).__mistwalkerRoll3d(diceEvent);
+        }
       }
     }
 
@@ -6045,11 +6267,12 @@ export default function PlayerView() {
       );
 
       if (action.category === 'spells' || action.subCategory === 'spell') {
-        const profile = classifySpellMechanics({
+        const profile = spellProfile || classifySpellMechanics({
           name: action.name,
           description: action.description,
-          attackType: action.isAttack ? 'spell' : undefined,
+          attackType: action.isAttack && !action.saveDc && !action.saveAbility ? 'spell' : undefined,
           saveDcAbility: action.saveAbility,
+          saveDc: action.saveDc,
           damageFormula: action.damageFormula,
           damageType: action.damageType,
           isHealing: action.isHeal
@@ -6278,6 +6501,12 @@ export default function PlayerView() {
   };
 
   const handleStageMouseDown = (e: any) => {
+    if (isSpacePressed) {
+      if (stageRef.current) {
+        stageRef.current.container().style.cursor = 'grabbing';
+      }
+      return;
+    }
     const stage = e.target.getStage();
     const point = stage ? getStageRelativePointerPosition(stage) : null;
 
@@ -6408,6 +6637,7 @@ export default function PlayerView() {
   };
 
   const handleStageMouseMove = (e: any) => {
+    if (isSpacePressed) return;
     if (!activeEquippedAsset) return;
     const stage = e.target.getStage();
     if (!stage) return;
@@ -6417,6 +6647,12 @@ export default function PlayerView() {
   };
 
   const handleStageMouseUp = () => {
+    if (isSpacePressed) {
+      if (stageRef.current) {
+        stageRef.current.container().style.cursor = 'grab';
+      }
+      return;
+    }
     const wasStageDragAiming = isStageDragAimingRef.current;
     isStageDragAimingRef.current = false;
     if (hasCastOnMouseDownRef.current) {
@@ -8031,6 +8267,14 @@ export default function PlayerView() {
         </div>
       )}
 
+      {/* Pan / Move Map Indicator when Spacebar is held */}
+      {isSpacePressed && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[45] pointer-events-none flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-900/90 border border-emerald-500/50 backdrop-blur shadow-xl text-xs font-mono text-emerald-300 animate-in fade-in">
+          <Hand className="w-3.5 h-3.5 text-emerald-400" />
+          <span>Pan / Move Map (Spacebar Held)</span>
+        </div>
+      )}
+
       {/* ========================================================= */}
       {/* Fullscreen Konva Stage Canvas                              */}
       {/* ========================================================= */}
@@ -8042,8 +8286,8 @@ export default function PlayerView() {
         scaleY={stageScaleRef.current}
         x={stagePosRef.current.x}
         y={stagePosRef.current.y}
-        draggable={!isDraggingToken && !activeEquippedAsset}
-        className={activeEquippedAsset ? "cursor-crosshair" : "cursor-default"}
+        draggable={isSpacePressed || (!isDraggingToken && !activeEquippedAsset)}
+        className={isSpacePressed ? "cursor-grab" : activeEquippedAsset ? "cursor-crosshair" : "cursor-default"}
         onContextMenu={(e) => e.evt.preventDefault()}
         onMouseDown={handleStageMouseDown}
         onMouseMove={handleStageMouseMove}
@@ -8227,6 +8471,7 @@ export default function PlayerView() {
           {visibleTokens.map((token) => (
               <PlayerToken
                 showHp={showHpDisplay}
+                isSpacePressed={isSpacePressed}
                 key={token.id}
                 token={token}
                 gridSize={gridSize}

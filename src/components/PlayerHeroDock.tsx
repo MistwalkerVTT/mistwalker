@@ -283,8 +283,9 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
       const profile = classifySpellMechanics({
         name: action.name,
         description: action.description,
-        attackType: action.isAttack ? 'spell' : undefined,
+        attackType: action.isAttack && !action.saveDc && !action.saveAbility ? 'spell' : undefined,
         saveDcAbility: action.saveAbility,
+        saveDc: action.saveDc,
         damageFormula: action.damageFormula,
         damageType: action.damageType,
         isHealing: action.isHeal,
@@ -292,7 +293,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
       return profile.requiresAttackRoll;
     }
     // Weapon / unarmed / physical attacks with hitBonus
-    return action.hitBonus !== undefined;
+    return action.hitBonus !== undefined && !action.saveDc && !action.saveAbility && !action.isHeal;
   }, []);
 
   // Dedicated To-Hit Roll Handler

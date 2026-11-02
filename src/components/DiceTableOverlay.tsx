@@ -94,7 +94,13 @@ export const DiceTableOverlay: React.FC<Props> = ({
     setActiveRollToast(rollData);
 
     // If Nat 20, trigger critical hit screen shake
-    const isCrit = rollData.isCritical || rollData.dice?.some(d => d.sides === 20 && d.result === 20);
+    const actionLower = (rollData.action || '').toLowerCase();
+    const isHealOrDamageOnly = rollData.rollType === 'heal' ||
+      rollData.rollType === 'damage' ||
+      actionLower.includes('heal') ||
+      actionLower.includes('potion') ||
+      actionLower.includes('damage');
+    const isCrit = !isHealOrDamageOnly && (rollData.isCritical || rollData.dice?.some(d => (d.sides === 20 || d.type === 'd20') && d.result === 20));
     if (isCrit && onCriticalHit) {
       onCriticalHit();
     }
@@ -133,8 +139,8 @@ export const DiceTableOverlay: React.FC<Props> = ({
           requests.push({
             type: dieType,
             result: d.result,
-            isCritical: (dieType === 'd20' || d.sides === 20) && d.result === 20,
-            isFumble: (dieType === 'd20' || d.sides === 20) && d.result === 1
+            isCritical: !isHealOrDamageOnly && (dieType === 'd20' || d.sides === 20) && d.result === 20,
+            isFumble: !isHealOrDamageOnly && (dieType === 'd20' || d.sides === 20) && d.result === 1
           });
         }
       } else {
@@ -154,8 +160,8 @@ export const DiceTableOverlay: React.FC<Props> = ({
           requests.push({
             type: dieType,
             result: val,
-            isCritical: sides === 20 && val === 20,
-            isFumble: sides === 20 && val === 1
+            isCritical: !isHealOrDamageOnly && sides === 20 && val === 20,
+            isFumble: !isHealOrDamageOnly && sides === 20 && val === 1
           });
         }
       }

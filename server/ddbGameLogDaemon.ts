@@ -259,8 +259,17 @@ export class DdbGameLogDaemon {
         formula = dice.map(d => `${d.type} (${d.result})`).join(' + ');
       }
 
-      const isCrit = dice.some(d => d.sides === 20 && d.result === 20);
-      const isFumble = dice.some(d => d.sides === 20 && d.result === 1);
+      const rawRollType = rawRolls[0]?.rollType || 'roll';
+      const actionLower = (action || '').toLowerCase();
+      const isHealOrDamageOnly = rawRollType === 'heal' ||
+        rawRollType === 'damage' ||
+        actionLower.includes('heal') ||
+        actionLower.includes('potion') ||
+        actionLower.includes('damage');
+
+      const hasD20 = dice.some(d => d.sides === 20 || d.type === 'd20');
+      const isCrit = !isHealOrDamageOnly && dice.some(d => (d.sides === 20 || d.type === 'd20') && d.result === 20);
+      const isFumble = !isHealOrDamageOnly && hasD20 && dice.some(d => (d.sides === 20 || d.type === 'd20') && d.result === 1);
 
       // Standard basic D&D rendered dice (clean amber/gold)
       const theme = 'default';
