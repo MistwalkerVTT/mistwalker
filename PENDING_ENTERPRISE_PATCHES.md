@@ -14,6 +14,21 @@
 
 ## Pending Changes Queue for Future Enterprise Patch
 
+### [2026-11-02] fix(dashboard): eliminate startup scene hydration flicker with synchronous metadata cache and loading skeleton
+- **Commit**: `5320cd8`
+- **Files Changed**:
+  - `src/App.tsx`
+  - `src/components/DashboardHomeHub.tsx`
+- **Summary**:
+  - **Eliminated Startup Card Race Condition**: Resolved the race condition where `DashboardHomeHub` briefly displayed the default "Guild House" fallback on frame 1 while `campaignsList` was empty, before switching to "Three Moons Vault" (latest timestamp scan) and then finally "Three Moons Dungeon" (Firestore active session arrival).
+  - **Synchronous Frame-1 Local Cache**: Stored self-contained metadata (`mistwalker_last_active_scene_meta`) with scene ID, title, campaign title, chapter title, thumbnails, token count, and wall count whenever a scene loads or saves. Read synchronously on initial render in both `App.tsx` and `DashboardHomeHub.tsx` so the true last active scene appears immediately on frame 1.
+  - **Dark Pulsing Skeleton Gate**: Introduced `isHydratingScene` state. If no local cache exists yet on a cold device and cloud hydration is still pending, the "Resume Adventure" card renders a subtle dark pulsing skeleton instead of flashing the demo "Guild House" template.
+- **Impact / Testing Notes**:
+  - Reload MistWalker on desktop or mobile.
+  - Observe the "Resume Adventure" card: it renders the true last active scene ("Three Moons Dungeon") instantly on frame 1 with 0 flicker or mid-load layout shifts.
+
+---
+
 ### [2026-11-01] feat(campaign): separate map blueprints from live game session checkpoints with dedicated scene instance service and 2-column detail UI
 - **Commit**: `4413c1b`
 - **Files Changed**:
