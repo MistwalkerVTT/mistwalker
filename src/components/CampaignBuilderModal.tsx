@@ -2172,7 +2172,7 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
             </button>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-3">
             <button
               id="btn-share-player-view-modal"
               onClick={() => {
@@ -2193,7 +2193,7 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
               <button
                 id="btn-create-campaign"
                 onClick={() => setShowCreateCampaignModal(true)}
-                className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-amber-950/40 active:scale-95"
+                className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-amber-950/40 active:scale-95 cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 New Campaign
@@ -2201,7 +2201,8 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
             )}
             <button
               onClick={onClose}
-              className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+              className="h-9 w-9 flex items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900/80 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
+              title="Close Scene Manager"
             >
               <X className="w-5 h-5" />
             </button>
@@ -2691,85 +2692,85 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
               <div className="space-y-6">
                 {/* Scene Header & Primary Actions */}
                 <div className="flex flex-col gap-3 pb-4 border-b border-zinc-800">
-                  {/* Row 1: thumbnail + title/stats (left) and primary actions (right) */}
-                  <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
-                    <div className="flex items-start gap-3.5 min-w-0 flex-1">
-                      {/* Scene thumbnail */}
-                      <div className="relative w-28 aspect-video shrink-0 rounded-xl overflow-hidden border border-zinc-700 bg-zinc-950 flex items-center justify-center">
-                        <ImageIcon className="w-5 h-5 text-zinc-700 absolute" />
-                        {(selectedScene.mapThumbnailUrl || currentMapUrl) && !isVideoAsset(selectedScene.mapThumbnailUrl || currentMapUrl || '') && (
-                          <img
-                            src={selectedScene.mapThumbnailUrl || currentMapUrl}
-                            alt={selectedScene.sceneTitle}
-                            className="relative w-full h-full object-cover"
-                            referrerPolicy="no-referrer"
-                            onError={(e) => {
-                              const img = e.currentTarget;
-                              const alt = currentMapUrl;
-                              if (alt && !img.dataset.triedAlt && img.getAttribute('src') !== alt) {
-                                img.dataset.triedAlt = '1';
-                                img.src = alt;
-                              } else {
-                                img.style.display = 'none';
-                              }
-                            }}
-                          />
-                        )}
-                      </div>
-
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-x-1.5 text-[11px] font-mono text-zinc-500 mb-0.5">
-                          <span className="truncate max-w-[220px]">{selectedCampaign?.campaignTitle}</span>
-                          <span>›</span>
-                          <span className="truncate max-w-[220px]">{selectedChapter?.chapterTitle}</span>
-                        </div>
-                        {isEditingScene ? (
-                          <input
-                            type="text"
-                            value={editedTitle}
-                            onChange={(e) => setEditedTitle(e.target.value)}
-                            className="text-lg font-bold font-mono bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-1 text-white w-full max-w-md focus:outline-none focus:border-amber-500"
-                          />
-                        ) : (
-                          <div className="flex items-center gap-2 min-w-0">
-                            <h1 className="text-xl font-bold font-mono text-white tracking-tight truncate" title={selectedScene.sceneTitle}>
-                              {selectedScene.sceneTitle}
-                            </h1>
-                            <button
-                              onClick={() => setIsEditingScene(true)}
-                              className="p-1 text-zinc-500 hover:text-zinc-200 shrink-0"
-                              title="Edit Title"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        )}
-                        <div className="flex flex-wrap items-center gap-1.5 mt-1.5 text-[11px] font-mono">
-                          <span className="px-2 py-0.5 rounded-md bg-blue-500/10 border border-blue-500/25 text-blue-300 font-medium">
-                            {editedSceneTokens.length} tokens
-                          </span>
-                          {selectedScene.walls && selectedScene.walls.length > 0 && (
-                            <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 font-medium">
-                              {selectedScene.walls.length} walls/doors
-                            </span>
-                          )}
-                          {selectedScene.roomAnnotations && selectedScene.roomAnnotations.length > 0 && (
-                            <span className="px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/25 text-amber-400 font-semibold flex items-center gap-1">
-                              <MapPin className="w-3 h-3" />
-                              {selectedScene.roomAnnotations.length} rooms
-                            </span>
-                          )}
-                        </div>
-                      </div>
+                  {/* Top Row: Thumbnail + Breadcrumb + Editable Title + Stat Pills */}
+                  <div className="flex items-start gap-3.5 min-w-0 w-full">
+                    {/* Scene thumbnail */}
+                    <div className="relative w-28 aspect-video shrink-0 rounded-xl overflow-hidden border border-zinc-700 bg-zinc-950 flex items-center justify-center">
+                      <ImageIcon className="w-5 h-5 text-zinc-700 absolute" />
+                      {(selectedScene.mapThumbnailUrl || currentMapUrl) && !isVideoAsset(selectedScene.mapThumbnailUrl || currentMapUrl || '') && (
+                        <img
+                          src={selectedScene.mapThumbnailUrl || currentMapUrl}
+                          alt={selectedScene.sceneTitle}
+                          className="relative w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            const img = e.currentTarget;
+                            const alt = currentMapUrl;
+                            if (alt && !img.dataset.triedAlt && img.getAttribute('src') !== alt) {
+                              img.dataset.triedAlt = '1';
+                              img.src = alt;
+                            } else {
+                              img.style.display = 'none';
+                            }
+                          }}
+                        />
+                      )}
                     </div>
 
-                    {/* Primary actions */}
-                    <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    <div className="min-w-[220px] flex-1">
+                      <div className="flex flex-wrap items-center gap-x-1.5 text-[11px] font-mono text-zinc-500 mb-0.5">
+                        <span className="truncate max-w-[220px]">{selectedCampaign?.campaignTitle}</span>
+                        <span>›</span>
+                        <span className="truncate max-w-[220px]">{selectedChapter?.chapterTitle}</span>
+                      </div>
+                      {isEditingScene ? (
+                        <input
+                          type="text"
+                          value={editedTitle}
+                          onChange={(e) => setEditedTitle(e.target.value)}
+                          className="text-lg font-bold font-mono bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-1 text-white w-full max-w-md focus:outline-none focus:border-amber-500"
+                        />
+                      ) : (
+                        <div className="flex items-center gap-2 min-w-0">
+                          <h1 className="text-xl font-bold font-mono text-white tracking-tight truncate" title={selectedScene.sceneTitle}>
+                            {selectedScene.sceneTitle}
+                          </h1>
+                          <button
+                            onClick={() => setIsEditingScene(true)}
+                            className="p-1 text-zinc-500 hover:text-zinc-200 shrink-0 cursor-pointer"
+                            title="Edit Title"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1.5 text-[11px] font-mono">
+                        <span className="px-2 py-0.5 rounded-md bg-blue-500/10 border border-blue-500/25 text-blue-300 font-medium">
+                          {editedSceneTokens.length} tokens
+                        </span>
+                        {selectedScene.walls && selectedScene.walls.length > 0 && (
+                          <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 font-medium">
+                            {selectedScene.walls.length} walls/doors
+                          </span>
+                        )}
+                        {selectedScene.roomAnnotations && selectedScene.roomAnnotations.length > 0 && (
+                          <span className="px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/25 text-amber-400 font-semibold flex items-center gap-1">
+                            <MapPin className="w-3 h-3" />
+                            {selectedScene.roomAnnotations.length} rooms
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Action Toolbar Row: Grouped action buttons & secondary tools */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-zinc-850/80 w-full">
+                    <div className="flex flex-wrap items-center gap-2">
                       <div className="flex items-center gap-1">
                         <button
                           id="btn-launch-scene-vtt"
                           onClick={() => handleLaunchScene(selectedScene)}
-                          className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow-lg shadow-emerald-950/50 active:scale-95"
+                          className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-emerald-950/50 active:scale-95 cursor-pointer"
                           title="Launch fresh pristine scene blueprint (unplayed template) onto the live canvas"
                         >
                           <Play className="w-3.5 h-3.5 fill-white" />
@@ -2780,7 +2781,7 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
                             key={dmSlot}
                             type="button"
                             onClick={() => handleLaunchScene(selectedScene, dmSlot)}
-                            className="px-2.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 font-bold font-mono text-xs transition-all"
+                            className="px-2.5 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 font-bold font-mono text-xs transition-all cursor-pointer"
                             title={`Load Scene into ${dmSlot} View`}
                           >
                             {dmSlot}
@@ -2792,89 +2793,86 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
                         id="btn-save-scene-tokens"
                         onClick={() => handleSaveSceneChanges(false)}
                         disabled={isSaving}
-                        className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-zinc-950 font-bold text-xs flex items-center gap-1.5 transition-all shadow-lg shadow-amber-950/40 active:scale-95"
+                        className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-zinc-950 font-bold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-amber-950/40 active:scale-95 cursor-pointer"
                         title="Save master scene blueprint (base map, walls, rooms, pristine tokens) to Firestore"
                       >
                         <Save className="w-3.5 h-3.5" />
                         Blueprint Save (Map Maker) ({editedSceneTokens.length})
                       </button>
-                    </div>
-                  </div>
 
-                  {/* Row 2: secondary scene tools */}
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {currentTokens.length > 0 && (
+                      {currentTokens.length > 0 && (
+                        <button
+                          id="btn-save-scene-canvas-changes"
+                          onClick={() => handleSaveSceneChanges(true)}
+                          disabled={isSaving}
+                          className="px-2.5 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/40 border border-blue-500/40 disabled:opacity-50 text-blue-200 text-[11px] font-medium flex items-center gap-1.5 transition-all cursor-pointer"
+                          title="Import current tokens and walls from live canvas into this base scene blueprint"
+                        >
+                          <ArrowRight className="w-3.5 h-3.5" />
+                          Pull Blueprint from Canvas
+                        </button>
+                      )}
+
                       <button
-                        id="btn-save-scene-canvas-changes"
-                        onClick={() => handleSaveSceneChanges(true)}
-                        disabled={isSaving}
-                        className="px-2.5 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/40 border border-blue-500/40 disabled:opacity-50 text-blue-200 text-[11px] font-medium flex items-center gap-1.5 transition-all"
-                        title="Import current tokens and walls from live canvas into this base scene blueprint"
+                        id="btn-add-scene-below"
+                        type="button"
+                        onClick={() => {
+                          setInsertAfterSceneId(selectedScene.sceneId);
+                          setNewSceneTitle('');
+                          setShowAddSceneModal(true);
+                        }}
+                        className="px-2.5 py-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-[11px] font-medium flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                        title={`Add another scene directly underneath "${selectedScene.sceneTitle}"`}
                       >
-                        <ArrowRight className="w-3.5 h-3.5" />
-                        Pull Blueprint from Canvas
+                        <Plus className="w-3.5 h-3.5 text-emerald-400" />
+                        Add Scene
                       </button>
-                    )}
 
-                    <button
-                      id="btn-add-scene-below"
-                      type="button"
-                      onClick={() => {
-                        setInsertAfterSceneId(selectedScene.sceneId);
-                        setNewSceneTitle('');
-                        setShowAddSceneModal(true);
-                      }}
-                      className="px-2.5 py-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-[11px] font-medium flex items-center gap-1.5 transition-all active:scale-95"
-                      title={`Add another scene directly underneath "${selectedScene.sceneTitle}"`}
-                    >
-                      <Plus className="w-3.5 h-3.5 text-emerald-400" />
-                      Add Scene
-                    </button>
+                      <button
+                        id="btn-duplicate-scene-inspector"
+                        type="button"
+                        onClick={() => handleDuplicateScene(selectedScene, selectedChapter?.chapterId, selectedCampaign?.campaignId)}
+                        className="px-2.5 py-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-blue-300 border border-zinc-700 text-[11px] font-medium flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                        title={`Duplicate "${selectedScene.sceneTitle}" with all battlemap, tokens, rooms, and walls intact`}
+                      >
+                        <Copy className="w-3.5 h-3.5 text-blue-400" />
+                        Duplicate
+                      </button>
 
-                    <button
-                      id="btn-duplicate-scene-inspector"
-                      type="button"
-                      onClick={() => handleDuplicateScene(selectedScene, selectedChapter?.chapterId, selectedCampaign?.campaignId)}
-                      className="px-2.5 py-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-blue-300 border border-zinc-700 text-[11px] font-medium flex items-center gap-1.5 transition-all active:scale-95"
-                      title={`Duplicate "${selectedScene.sceneTitle}" with all battlemap, tokens, rooms, and walls intact`}
-                    >
-                      <Copy className="w-3.5 h-3.5 text-blue-400" />
-                      Duplicate
-                    </button>
+                      <div className="w-px h-5 bg-zinc-800 mx-0.5 hidden sm:block" />
 
-                    <div className="w-px h-5 bg-zinc-800 mx-0.5" />
+                      <label
+                        id="btn-import-scene-bundle"
+                        className="px-2.5 py-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-amber-300 border border-zinc-700 text-[11px] font-medium flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                        title="Import a .json scene bundle into this chapter"
+                      >
+                        <Upload className="w-3.5 h-3.5 text-amber-400" />
+                        Import
+                        <input
+                          type="file"
+                          accept=".json"
+                          onChange={handleImportSceneFile}
+                          className="hidden"
+                        />
+                      </label>
 
-                    <label
-                      id="btn-import-scene-bundle"
-                      className="px-2.5 py-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-amber-300 border border-zinc-700 text-[11px] font-medium flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-                      title="Import a .json scene bundle into this chapter"
-                    >
-                      <Upload className="w-3.5 h-3.5 text-amber-400" />
-                      Import
-                      <input
-                        type="file"
-                        accept=".json"
-                        onChange={handleImportSceneFile}
-                        className="hidden"
-                      />
-                    </label>
-
-                    <button
-                      id="btn-export-scene-bundle"
-                      type="button"
-                      onClick={() => handleExportScene(selectedScene)}
-                      className="px-2.5 py-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-emerald-300 border border-zinc-700 text-[11px] font-medium flex items-center gap-1.5 transition-all active:scale-95"
-                      title={`Export complete scene bundle for "${selectedScene.sceneTitle}" (map, walls, rooms, grid, fog)`}
-                    >
-                      <Download className="w-3.5 h-3.5 text-emerald-400" />
-                      Export
-                    </button>
+                      <button
+                        id="btn-export-scene-bundle"
+                        type="button"
+                        onClick={() => handleExportScene(selectedScene)}
+                        className="px-2.5 py-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-emerald-300 border border-zinc-700 text-[11px] font-medium flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                        title={`Export complete scene bundle for "${selectedScene.sceneTitle}" (map, walls, rooms, grid, fog)`}
+                      >
+                        <Download className="w-3.5 h-3.5 text-emerald-400" />
+                        Export
+                      </button>
+                    </div>
 
                     <button
                       id="btn-delete-scene-inspector"
                       type="button"
                       onClick={() => promptDeleteScene(selectedScene.sceneId, selectedScene.sceneTitle, selectedCampaign?.campaignId, selectedChapter?.chapterId)}
-                      className="ml-auto px-2.5 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 hover:border-red-500/50 text-red-300 hover:text-red-200 text-[11px] font-bold font-mono flex items-center gap-1.5 transition-all active:scale-95"
+                      className="px-2.5 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 hover:border-red-500/50 text-red-300 hover:text-red-200 text-[11px] font-bold font-mono flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer shrink-0"
                       title="Delete this scene from the chapter"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -2884,7 +2882,7 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
                 </div>
 
                                 {/* 2-Column Responsive Layout: Map Blueprint (Creator Setup) vs Live Game Instances (Play Saves) */}
-                <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 items-start">
+                <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
                   
                   {/* Left/Main Column: Map Authoring Blueprint (Creator Setup) */}
                   <div className="xl:col-span-7 space-y-4 min-w-0">
@@ -3161,7 +3159,7 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
                 </div>
                   </div>
                   {/* Right-Hand Column / Panel: Live Game Instances (Play Saves) */}
-                  <div className="xl:col-span-5 space-y-4 min-w-0">
+                  <div className="xl:col-span-5 min-w-[340px] space-y-4">
                     <div className="flex items-center gap-2 px-1">
                       <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse" />
                       <span className="text-xs font-mono font-bold uppercase tracking-wider text-emerald-300">
@@ -3174,57 +3172,59 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
 
                     {/* Dark-themed card: Live Game Instances */}
                     <div className="bg-zinc-900/90 border border-zinc-800 rounded-xl p-4 space-y-4 shadow-xl">
-                      <div className="flex items-center justify-between pb-3 border-b border-zinc-800/80">
-                        <div className="flex items-center gap-2">
-                          <span className="text-base">🎮</span>
-                          <div>
-                            <h3 className="text-sm font-bold font-mono text-zinc-100 flex items-center gap-2">
+                      {/* Card Header Cleanup */}
+                      <div className="pb-3 border-b border-zinc-800/80">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="text-base">🎮</span>
+                            <h3 className="text-sm font-bold font-mono text-zinc-100">
                               Live Game Instances
-                              <span className="text-[10px] font-sans font-normal text-emerald-400 bg-emerald-950/50 px-2 py-0.5 rounded-full border border-emerald-500/30">
-                                Play Saves
-                              </span>
                             </h3>
-                            <p className="text-[10px] text-zinc-400 font-sans mt-0.5">
-                              Runtime session snapshots (HP, open doors, explored fog, combat round)
-                            </p>
                           </div>
+                          <span className="whitespace-nowrap rounded-full bg-zinc-800 px-2.5 py-0.5 text-xs font-medium text-zinc-300 font-mono">
+                            {playInstances.length} {playInstances.length === 1 ? 'Save' : 'Saves'}
+                          </span>
                         </div>
-                        <span className="px-2 py-0.5 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-300 font-mono text-[10px]">
-                          {playInstances.length} {playInstances.length === 1 ? 'Save' : 'Saves'}
-                        </span>
+                        <p className="text-xs text-zinc-400 font-sans mt-1">
+                          Runtime session snapshots (HP, open doors, explored fog, combat round)
+                        </p>
                       </div>
 
-                      {/* Capture Current Table State Bar */}
-                      <div className="p-3 bg-zinc-950/80 rounded-xl border border-zinc-800/90 space-y-2.5">
-                        <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400">
-                          <span className="font-semibold text-zinc-300">Capture Live Table State</span>
+                      {/* Capture Current Table State Bar (Vertical Stack) */}
+                      <div className="p-3.5 rounded-xl bg-zinc-950/70 border border-zinc-800/80 flex flex-col gap-2.5">
+                        {/* Row 1 (Header) */}
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-semibold text-zinc-200">Capture Live Table State</span>
                           {activeDmSlot && (
-                            <span className="px-1.5 py-0.2 rounded bg-zinc-800 text-amber-300 border border-zinc-700 text-[10px]">
+                            <span className="text-[11px] px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 font-mono">
                               {activeDmSlot} Slot
                             </span>
                           )}
                         </div>
 
-                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                          <input
-                            type="text"
-                            value={checkpointName}
-                            onChange={(e) => setCheckpointName(e.target.value)}
-                            placeholder={`Session Checkpoint - Round ${currentCombatRound || 1}`}
-                            className="flex-1 min-w-0 px-3 py-2 bg-zinc-900 border border-zinc-750 focus:border-amber-500/70 rounded-xl text-xs text-zinc-200 placeholder:text-zinc-500 font-sans focus:outline-none transition-colors"
-                          />
-                          <button
-                            type="button"
-                            onClick={handleCapturePlayInstance}
-                            disabled={isSavingInstance}
-                            className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-zinc-950 font-bold font-mono text-xs flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95 disabled:opacity-50 shrink-0 cursor-pointer"
-                            title="Snapshots active tokens, door states, explored fog, and combat round without touching the base scene blueprint"
-                          >
-                            <Save className="w-3.5 h-3.5" />
-                            <span>{isSavingInstance ? 'Saving...' : '+ Save Current Game Instance'}</span>
-                          </button>
-                        </div>
-                        <p className="text-[10px] text-zinc-500 font-sans leading-tight">
+                        {/* Row 2 (Full-Width Input) */}
+                        <input
+                          type="text"
+                          value={checkpointName}
+                          onChange={(e) => setCheckpointName(e.target.value)}
+                          placeholder={`Session Checkpoint - Round ${currentCombatRound || 1}`}
+                          className="w-full h-9 px-3 rounded-lg bg-zinc-900 border border-zinc-700/80 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-amber-500/60 focus:outline-none transition-colors"
+                        />
+
+                        {/* Row 3 (Full-Width Save Button) */}
+                        <button
+                          type="button"
+                          onClick={handleCapturePlayInstance}
+                          disabled={isSavingInstance}
+                          className="w-full h-9 px-3 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-semibold text-xs flex items-center justify-center gap-2 shadow-sm transition-colors whitespace-nowrap cursor-pointer active:scale-98 disabled:opacity-50"
+                          title="Snapshots active tokens, door states, explored fog, and combat round without touching the base scene blueprint"
+                        >
+                          <Save className="w-3.5 h-3.5" />
+                          <span>{isSavingInstance ? 'Saving...' : '+ Save Current Game Instance'}</span>
+                        </button>
+
+                        {/* Row 4 (Helper Note) */}
+                        <p className="text-[11px] leading-relaxed text-zinc-500">
                           Does not overwrite your pristine map blueprint. You can always revert or reset.
                         </p>
                       </div>
@@ -3245,7 +3245,7 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
                             </p>
                           </div>
                         ) : (
-                          <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1 sidebar-scrollbar">
+                          <div className="space-y-2.5 max-h-[360px] overflow-y-auto pr-1 sidebar-scrollbar">
                             {playInstances.map((inst) => {
                               const dateStr = new Date(inst.updatedAt || inst.createdAt).toLocaleDateString(undefined, {
                                 month: 'short',
@@ -3258,77 +3258,76 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
                               return (
                                 <div
                                   key={inst.instanceId}
-                                  className="p-3 rounded-xl bg-zinc-950/70 hover:bg-zinc-950 border border-zinc-800 hover:border-zinc-700 transition-all flex flex-col gap-2.5 group"
+                                  className="flex flex-col gap-2 p-3 rounded-lg bg-zinc-950/60 hover:bg-zinc-950 border border-zinc-800/80 hover:border-zinc-750 transition-all group"
                                 >
-                                  <div className="flex items-start justify-between gap-2">
-                                    <div className="min-w-0 flex-1">
-                                      <div className="flex items-center gap-1.5 flex-wrap">
-                                        <span className="text-xs font-bold font-mono text-zinc-200 truncate">
+                                  {/* Top Row: Title, DM Slot, Timestamp & Stat Pills */}
+                                  <div className="flex flex-col gap-1.5 min-w-0">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                                        <span className="text-xs font-bold font-mono text-zinc-100 truncate">
                                           {inst.instanceName}
                                         </span>
                                         {inst.dmSlot && (
-                                          <span className="px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-400 border border-zinc-700 text-[9px] font-mono">
+                                          <span className="px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-400 border border-zinc-750 text-[9px] font-mono shrink-0">
                                             {inst.dmSlot}
                                           </span>
                                         )}
                                       </div>
-                                      <span className="text-[10px] text-zinc-500 font-mono block mt-0.5">
+                                      <span className="text-[10px] text-zinc-500 font-mono shrink-0">
                                         {dateStr}
                                       </span>
                                     </div>
 
-                                    {/* Overwrite & Delete Buttons */}
-                                    <div className="flex items-center gap-1 shrink-0">
-                                      <button
-                                        type="button"
-                                        onClick={() => handleOverwritePlayInstance(inst)}
-                                        className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-amber-300 border border-zinc-700/80 transition-all active:scale-95 cursor-pointer"
-                                        title={`Overwrite "${inst.instanceName}" with current live table state`}
-                                      >
-                                        <RefreshCw className="w-3.5 h-3.5" />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleDeletePlayInstance(inst)}
-                                        className="p-1.5 rounded-lg bg-red-950/40 hover:bg-red-900/60 text-red-400 hover:text-red-200 border border-red-800/40 transition-all active:scale-95 cursor-pointer"
-                                        title={`Delete "${inst.instanceName}"`}
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </button>
+                                    {/* Pill Badges: Metadata */}
+                                    <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-mono">
+                                      <span className="px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-300">
+                                        {inst.summaryStats.aliveTokensCount} Tokens
+                                      </span>
+                                      {(inst.summaryStats.combatRound > 1 || inst.runtimeState.showCombatTracker) ? (
+                                        <span className="px-2 py-0.5 rounded-md bg-rose-950/60 border border-rose-800/50 text-rose-300 flex items-center gap-1 font-semibold">
+                                          <Swords className="w-3 h-3 text-rose-400" />
+                                          Round {inst.summaryStats.combatRound || 1}
+                                        </span>
+                                      ) : null}
+                                      <span className="px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-400">
+                                        {revealsCount > 0 ? `${revealsCount} Fog Reveals` : 'Fog Hidden'}
+                                      </span>
+                                      {inst.summaryStats.doorsOpenedCount > 0 && (
+                                        <span className="px-2 py-0.5 rounded-md bg-amber-950/50 border border-amber-800/40 text-amber-300">
+                                          {inst.summaryStats.doorsOpenedCount} Doors Open
+                                        </span>
+                                      )}
                                     </div>
                                   </div>
 
-                                  {/* Pill Badges: Metadata */}
-                                  <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-mono">
-                                    <span className="px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-300">
-                                      {inst.summaryStats.aliveTokensCount} Tokens
-                                    </span>
-                                    {(inst.summaryStats.combatRound > 1 || inst.runtimeState.showCombatTracker) ? (
-                                      <span className="px-2 py-0.5 rounded-md bg-rose-950/60 border border-rose-800/50 text-rose-300 flex items-center gap-1 font-semibold">
-                                        <Swords className="w-3 h-3 text-rose-400" />
-                                        Round {inst.summaryStats.combatRound || 1}
-                                      </span>
-                                    ) : null}
-                                    <span className="px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-400">
-                                      {revealsCount > 0 ? `${revealsCount} Fog Reveals` : 'Fog Hidden'}
-                                    </span>
-                                    {inst.summaryStats.doorsOpenedCount > 0 && (
-                                      <span className="px-2 py-0.5 rounded-md bg-amber-950/50 border border-amber-800/40 text-amber-300">
-                                        {inst.summaryStats.doorsOpenedCount} Doors Open
-                                      </span>
-                                    )}
+                                  {/* Bottom Row: Actions (▶ Resume, ↻ Overwrite, 🗑 Delete) spanning cleanly */}
+                                  <div className="flex items-center gap-1.5 w-full pt-1.5 border-t border-zinc-850/60">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleResumePlayInstance(inst)}
+                                      className="flex-1 py-1.5 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold font-mono text-xs flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-98 cursor-pointer truncate"
+                                      title="Load blueprint map and restore runtime play state (tokens, open doors, fog reveals, combat)"
+                                    >
+                                      <Play className="w-3 h-3 fill-white shrink-0" />
+                                      <span className="truncate">Resume Game</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOverwritePlayInstance(inst)}
+                                      className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-amber-300 border border-zinc-700/80 transition-all active:scale-95 cursor-pointer shrink-0"
+                                      title={`Overwrite "${inst.instanceName}" with current live table state`}
+                                    >
+                                      <RefreshCw className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeletePlayInstance(inst)}
+                                      className="p-1.5 rounded-lg bg-red-950/40 hover:bg-red-900/60 text-red-400 hover:text-red-200 border border-red-800/40 transition-all active:scale-95 cursor-pointer shrink-0"
+                                      title={`Delete "${inst.instanceName}"`}
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
                                   </div>
-
-                                  {/* Action Button: Resume Game */}
-                                  <button
-                                    type="button"
-                                    onClick={() => handleResumePlayInstance(inst)}
-                                    className="w-full py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold font-mono text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-emerald-950/40 active:scale-98 cursor-pointer mt-0.5"
-                                    title="Load blueprint map and restore runtime play state (tokens, open doors, fog reveals, combat)"
-                                  >
-                                    <Play className="w-3.5 h-3.5 fill-white" />
-                                    <span>Resume Game ({inst.instanceName})</span>
-                                  </button>
                                 </div>
                               );
                             })}
