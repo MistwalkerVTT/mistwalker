@@ -10307,7 +10307,7 @@ export default function App() {
                   });
                 }
               }}
-              draggable={Boolean((isSpacePressed || isShiftPanActive) || (!isCanvasDrawingTool && !isDraggingToken && !hoveredZoneId && !isRoomDrawerOpen && !selectionBox.active))}
+              draggable={Boolean((isSpacePressed || isShiftPanActive) || (!isCanvasDrawingTool && !isDraggingToken && !hoveredZoneId && !isRoomDrawerOpen && !selectionBox?.active))}
               className={isSpacePressed || isShiftPanActive ? 'cursor-grab' : tool === 'spell_aim' ? 'cursor-crosshair' : 'cursor-default'}
               onDragStart={(e) => {
                 if (e.target === stageRef.current && !isDraggingTokenRef.current) {
