@@ -49,6 +49,7 @@ interface DashboardHomeHubProps {
   hasActiveMapSession?: boolean;
   onResumeActiveMap?: () => void;
   activeMapSlotName?: string;
+  isHydratingScene?: boolean;
 }
 
 export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
@@ -74,13 +75,16 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
   isFirebaseConnected = true,
   hasActiveMapSession,
   onResumeActiveMap,
-  activeMapSlotName
+  activeMapSlotName,
+  isHydratingScene = false
 }) => {
   const [isDragOverDropzone, setIsDragOverDropzone] = useState(false);
 
   // Retrieve last active scene info from localStorage as fast fallback
   const cachedLastActive = useMemo(() => {
     try {
+      const rawMeta = localStorage.getItem('mistwalker_last_active_scene_meta');
+      if (rawMeta) return JSON.parse(rawMeta);
       const raw = localStorage.getItem('mistwalker_last_active_scene');
       if (raw) return JSON.parse(raw);
     } catch {}
@@ -106,14 +110,15 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
               tokenCount: matchedScene.tokens?.length || 0,
               wallCount: matchedScene.walls?.length || 0,
               isRealSave: true,
-              sourceLabel: 'Last Active Scene'
+              sourceLabel: 'Last Active Scene',
+              isLoading: false
             };
           }
         }
       }
     }
 
-    // 2. Try matching with cached localStorage last saved scene
+    // 2. Try matching with cached localStorage last saved scene in campaignsList
     if (cachedLastActive?.campaignId && cachedLastActive?.sceneId) {
       const matchedCamp = campaignsList.find(c => c.campaignId === cachedLastActive.campaignId);
       if (matchedCamp) {
@@ -130,14 +135,51 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
               tokenCount: matchedScene.tokens?.length || 0,
               wallCount: matchedScene.walls?.length || 0,
               isRealSave: true,
-              sourceLabel: 'Last Saved Scene'
+              sourceLabel: 'Last Saved Scene',
+              isLoading: false
             };
           }
         }
       }
     }
 
-    // 3. Scan all campaigns and chapters to locate the scene with the latest updatedAt timestamp
+    // 3. Instant Synchronous Cached Fallback (Frame 1):
+    // If campaignsList is still empty or loading from Firestore, but we have cached metadata
+    // in localStorage for the user's last active scene, construct a synthetic Scene immediately
+    // so the UI never flashes "Guild House" or an incorrect scene during initial startup.
+    if (cachedLastActive?.sceneId && cachedLastActive?.sceneTitle) {
+      const syntheticScene: Scene = {
+        sceneId: cachedLastActive.sceneId,
+        sceneTitle: cachedLastActive.sceneTitle,
+        mapUrl: cachedLastActive.mapUrl || '',
+        mapThumbnailUrl: cachedLastActive.mapThumbnailUrl || cachedLastActive.mapUrl,
+        mapWidth: cachedLastActive.mapWidth,
+        mapHeight: cachedLastActive.mapHeight,
+        dmNotes: cachedLastActive.dmNotes || '',
+        tokens: cachedLastActive.tokens || [],
+        walls: cachedLastActive.walls || [],
+        gridSize: cachedLastActive.gridSize || 50,
+        reveals: cachedLastActive.reveals || [],
+        polygonReveals: cachedLastActive.polygonReveals || [],
+        updatedAt: cachedLastActive.timestamp || Date.now()
+      };
+
+      return {
+        scene: syntheticScene,
+        campaignId: cachedLastActive.campaignId || '',
+        chapterId: cachedLastActive.chapterId || '',
+        campaignTitle: cachedLastActive.campaignTitle || 'Campaign',
+        chapterTitle: cachedLastActive.chapterTitle || 'Chapter',
+        sceneTitle: cachedLastActive.sceneTitle,
+        tokenCount: cachedLastActive.tokensCount ?? (cachedLastActive.tokens?.length || 0),
+        wallCount: cachedLastActive.wallsCount ?? (cachedLastActive.walls?.length || 0),
+        isRealSave: true,
+        sourceLabel: 'Last Active Scene',
+        isLoading: false
+      };
+    }
+
+    // 4. Scan all campaigns and chapters to locate the scene with the latest updatedAt timestamp
     let latestScene: Scene | null = null;
     let latestCampId = '';
     let latestChapId = '';
@@ -173,11 +215,29 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
         tokenCount: latestScene.tokens?.length || 0,
         wallCount: latestScene.walls?.length || 0,
         isRealSave: true,
-        sourceLabel: 'Latest Saved Scene'
+        sourceLabel: 'Latest Saved Scene',
+        isLoading: false
       };
     }
 
-    // 4. Fallback to demo Guild House scene if no user campaigns exist
+    // 5. If currently hydrating from cloud and no local cache exists, display loading skeleton
+    if (isHydratingScene) {
+      return {
+        scene: DEMO_GV_SCENE,
+        campaignId: DEMO_GV_CAMPAIGN.campaignId,
+        chapterId: DEMO_GV_CHAPTER.chapterId,
+        campaignTitle: '',
+        chapterTitle: '',
+        sceneTitle: '',
+        tokenCount: 0,
+        wallCount: 0,
+        isRealSave: false,
+        sourceLabel: 'Loading...',
+        isLoading: true
+      };
+    }
+
+    // 6. Fallback to demo Guild House scene if no user campaigns exist after loading completes
     return {
       scene: DEMO_GV_SCENE,
       campaignId: DEMO_GV_CAMPAIGN.campaignId,
@@ -188,9 +248,10 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
       tokenCount: DEMO_GV_SCENE.tokens?.length || 10,
       wallCount: DEMO_GV_SCENE.walls?.length || 64,
       isRealSave: false,
-      sourceLabel: 'Demo Scene'
+      sourceLabel: 'Demo Scene',
+      isLoading: false
     };
-  }, [campaignsList, lastActiveSession, cachedLastActive]);
+  }, [campaignsList, lastActiveSession, cachedLastActive, isHydratingScene]);
 
   const displayScene = resolvedResumeData.scene;
   const displayCampaignTitle = resolvedResumeData.campaignTitle;
@@ -318,39 +379,53 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
               </div>
 
               {/* Scene Miniature Card */}
-              <div className="w-full h-36 rounded-2xl overflow-hidden border border-zinc-850 relative mb-3 bg-zinc-900 group-hover:border-zinc-700 transition-colors shadow-inner">
-                {displayScene.mapThumbnailUrl || displayScene.mapUrl ? (
-                  <img
-                    src={displayScene.mapThumbnailUrl || displayScene.mapUrl}
-                    alt={displaySceneTitle}
-                    className="w-full h-full object-cover object-center filter brightness-[0.85] group-hover:scale-105 transition-transform duration-500"
-                  />
-                ) : (
-                  <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-b from-zinc-900 to-zinc-950 text-zinc-600">
-                    <BookOpen className="w-8 h-8 mb-1 opacity-40" />
-                    <span className="text-xs font-mono">Battlemap Scene</span>
-                  </div>
-                )}
-                <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/20 to-transparent" />
-                <div className="absolute bottom-2.5 left-2.5 right-2.5 sm:left-3 sm:right-3 text-left min-w-0">
-                  <h3 className="text-sm font-bold text-amber-200 truncate font-mono drop-shadow">
-                    {displaySceneTitle}
-                  </h3>
-                  <p className="text-[11px] text-zinc-400 truncate font-sans">
-                    {displayCampaignTitle} • {displayChapterTitle}
-                  </p>
+              {resolvedResumeData.isLoading ? (
+                <div className="w-full h-36 rounded-2xl border border-zinc-800 relative mb-3 bg-zinc-900/60 animate-pulse flex flex-col justify-end p-3 overflow-hidden shadow-inner">
+                  <div className="h-4 w-3/4 bg-zinc-800 rounded mb-2" />
+                  <div className="h-3 w-1/2 bg-zinc-800/80 rounded" />
                 </div>
-              </div>
+              ) : (
+                <div className="w-full h-36 rounded-2xl overflow-hidden border border-zinc-850 relative mb-3 bg-zinc-900 group-hover:border-zinc-700 transition-colors shadow-inner">
+                  {displayScene.mapThumbnailUrl || displayScene.mapUrl ? (
+                    <img
+                      src={displayScene.mapThumbnailUrl || displayScene.mapUrl}
+                      alt={displaySceneTitle}
+                      className="w-full h-full object-cover object-center filter brightness-[0.85] group-hover:scale-105 transition-transform duration-500"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-b from-zinc-900 to-zinc-950 text-zinc-600">
+                      <BookOpen className="w-8 h-8 mb-1 opacity-40" />
+                      <span className="text-xs font-mono">Battlemap Scene</span>
+                    </div>
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/20 to-transparent" />
+                  <div className="absolute bottom-2.5 left-2.5 right-2.5 sm:left-3 sm:right-3 text-left min-w-0">
+                    <h3 className="text-sm font-bold text-amber-200 truncate font-mono drop-shadow">
+                      {displaySceneTitle}
+                    </h3>
+                    <p className="text-[11px] text-zinc-400 truncate font-sans">
+                      {displayCampaignTitle} • {displayChapterTitle}
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Scene Stats Pills */}
-              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-4 text-[11px] font-mono text-zinc-400">
-                <span className="px-2 sm:px-2.5 py-1 rounded-lg bg-zinc-900/90 border border-zinc-800 text-zinc-300 shrink-0">
-                  Tokens: <strong className="text-emerald-400">{tokenCount}</strong>
-                </span>
-                <span className="px-2 sm:px-2.5 py-1 rounded-lg bg-zinc-900/90 border border-zinc-800 text-zinc-300 shrink-0">
-                  Walls: <strong className="text-amber-400">{wallCount}</strong>
-                </span>
-              </div>
+              {resolvedResumeData.isLoading ? (
+                <div className="flex items-center gap-2 mb-4 animate-pulse">
+                  <div className="h-6 w-20 bg-zinc-900 rounded-lg border border-zinc-800" />
+                  <div className="h-6 w-20 bg-zinc-900 rounded-lg border border-zinc-800" />
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-4 text-[11px] font-mono text-zinc-400">
+                  <span className="px-2 sm:px-2.5 py-1 rounded-lg bg-zinc-900/90 border border-zinc-800 text-zinc-300 shrink-0">
+                    Tokens: <strong className="text-emerald-400">{tokenCount}</strong>
+                  </span>
+                  <span className="px-2 sm:px-2.5 py-1 rounded-lg bg-zinc-900/90 border border-zinc-800 text-zinc-300 shrink-0">
+                    Walls: <strong className="text-amber-400">{wallCount}</strong>
+                  </span>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2 pt-2 border-t border-zinc-850/80 min-w-0">

@@ -2003,6 +2003,14 @@ export default function App() {
 
   const [campaignsList, setCampaignsList] = useState<Campaign[]>([]);
   const [lastActiveSession, setLastActiveSession] = useState<ActiveSessionData | null>(null);
+  const [isHydratingScene, setIsHydratingScene] = useState<boolean>(() => {
+    try {
+      const cached = localStorage.getItem('mistwalker_last_active_scene_meta') || localStorage.getItem('mistwalker_last_active_scene');
+      return !cached;
+    } catch {
+      return true;
+    }
+  });
   const [activeDmNotes, setActiveDmNotes] = useState<string>('');
   const [isQuickSaving, setIsQuickSaving] = useState<boolean>(false);
   const [isQuotaExceeded, setIsQuotaExceeded] = useState(false);
@@ -2015,7 +2023,43 @@ export default function App() {
     mapThumbnailUrl?: string;
     mapWidth?: number;
     mapHeight?: number;
-  } | null>(null);
+  } | null>(() => {
+    try {
+      const rawMeta = localStorage.getItem('mistwalker_last_active_scene_meta');
+      if (rawMeta) {
+        const parsed = JSON.parse(rawMeta);
+        if (parsed?.sceneId && parsed?.sceneTitle) {
+          return {
+            campaignId: parsed.campaignId || '',
+            chapterId: parsed.chapterId || '',
+            sceneId: parsed.sceneId,
+            sceneTitle: parsed.sceneTitle,
+            mapUrl: parsed.mapUrl,
+            mapThumbnailUrl: parsed.mapThumbnailUrl,
+            mapWidth: parsed.mapWidth,
+            mapHeight: parsed.mapHeight
+          };
+        }
+      }
+      const raw = localStorage.getItem('mistwalker_last_active_scene');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed?.sceneId && parsed?.sceneTitle) {
+          return {
+            campaignId: parsed.campaignId || '',
+            chapterId: parsed.chapterId || '',
+            sceneId: parsed.sceneId,
+            sceneTitle: parsed.sceneTitle,
+            mapUrl: parsed.mapUrl,
+            mapThumbnailUrl: parsed.mapThumbnailUrl,
+            mapWidth: parsed.mapWidth,
+            mapHeight: parsed.mapHeight
+          };
+        }
+      }
+    } catch {}
+    return null;
+  });
 
   // Connection and Quota state listeners
   useEffect(() => {
@@ -3950,6 +3994,7 @@ export default function App() {
   useEffect(() => {
     const unsub = subscribeToCampaigns((list) => {
       setCampaignsList(list);
+      setIsHydratingScene(false);
     });
     return () => unsub();
   }, []);
@@ -3958,6 +4003,7 @@ export default function App() {
   useEffect(() => {
     const unsub = subscribeToActiveSession((session) => {
       setLastActiveSession(session);
+      setIsHydratingScene(false);
     });
     return () => unsub();
   }, []);
@@ -4253,19 +4299,30 @@ export default function App() {
 
     // Persist as last active scene in local storage for instant offline resume
     try {
-      localStorage.setItem('mistwalker_last_active_scene', JSON.stringify({
+      const matchedCamp = campaignsList.find(c => c.campaignId === campaignId);
+      const matchedChap = matchedCamp?.chapters?.find(ch => ch.chapterId === chapterId);
+      const activeMeta = {
         campaignId,
         chapterId,
+        campaignTitle: matchedCamp?.campaignTitle || (campaignId === '__arena__' ? 'Battle Arena' : 'Campaign'),
+        chapterTitle: matchedChap?.chapterTitle || 'Chapter',
         sceneId: scene.sceneId,
         sceneTitle: scene.sceneTitle,
         mapUrl: authoritativeMapUrl,
-        mapThumbnailUrl: scene.mapThumbnailUrl,
+        mapThumbnailUrl: scene.mapThumbnailUrl || authoritativeMapUrl,
         mapWidth: scene.mapWidth,
         mapHeight: scene.mapHeight,
         tokensCount: loadedTokens.length,
         wallsCount: (scene.walls || []).length,
+        tokens: loadedTokens,
+        walls: scene.walls || [],
+        gridSize: scene.gridSize || 50,
+        reveals: loadedReveals,
+        polygonReveals: loadedPolygonReveals,
         timestamp: Date.now()
-      }));
+      };
+      localStorage.setItem('mistwalker_last_active_scene', JSON.stringify(activeMeta));
+      localStorage.setItem('mistwalker_last_active_scene_meta', JSON.stringify(activeMeta));
     } catch {}
 
     const wallCount = scene.walls?.length || 0;
@@ -4574,19 +4631,30 @@ export default function App() {
       } catch {}
       toast.success(`Saved "${updatedScene.sceneTitle}" with ${sceneTokensToSave.length} tokens${wallCount > 0 ? `, ${wallCount} walls/doors` : ''}${roomCount > 0 ? `, and ${roomCount} polygon rooms` : ''} to Campaign!`);
       try {
-        localStorage.setItem('mistwalker_last_active_scene', JSON.stringify({
+        const matchedCamp = campaignsList.find(c => c.campaignId === activeSceneInfo.campaignId);
+        const matchedChap = matchedCamp?.chapters?.find(ch => ch.chapterId === activeSceneInfo.chapterId);
+        const activeMeta = {
           campaignId: activeSceneInfo.campaignId,
           chapterId: activeSceneInfo.chapterId,
+          campaignTitle: matchedCamp?.campaignTitle || (activeSceneInfo.campaignId === '__arena__' ? 'Battle Arena' : 'Campaign'),
+          chapterTitle: matchedChap?.chapterTitle || 'Chapter',
           sceneId: updatedScene.sceneId,
           sceneTitle: updatedScene.sceneTitle,
           mapUrl: updatedScene.mapUrl,
-          mapThumbnailUrl: updatedScene.mapThumbnailUrl,
+          mapThumbnailUrl: updatedScene.mapThumbnailUrl || updatedScene.mapUrl,
           mapWidth: updatedScene.mapWidth,
           mapHeight: updatedScene.mapHeight,
           tokensCount: sceneTokensToSave.length,
           wallsCount: (walls || []).length,
+          tokens: sceneTokensToSave,
+          walls: walls || [],
+          gridSize: gridSize || 50,
+          reveals: reveals || [],
+          polygonReveals: polygonReveals || [],
           timestamp: Date.now()
-        }));
+        };
+        localStorage.setItem('mistwalker_last_active_scene', JSON.stringify(activeMeta));
+        localStorage.setItem('mistwalker_last_active_scene_meta', JSON.stringify(activeMeta));
       } catch {}
     } catch (err: any) {
       console.error('Quick save scene error:', err);
@@ -4617,19 +4685,30 @@ export default function App() {
     });
     setActiveDmNotes(scene.dmNotes || '');
     try {
-      localStorage.setItem('mistwalker_last_active_scene', JSON.stringify({
+      const matchedCamp = campaignsList.find(c => c.campaignId === campaignId);
+      const matchedChap = matchedCamp?.chapters?.find(ch => ch.chapterId === chapterId);
+      const activeMeta = {
         campaignId,
         chapterId,
+        campaignTitle: matchedCamp?.campaignTitle || (campaignId === '__arena__' ? 'Battle Arena' : 'Campaign'),
+        chapterTitle: matchedChap?.chapterTitle || 'Chapter',
         sceneId: scene.sceneId,
         sceneTitle: scene.sceneTitle,
         mapUrl: scene.mapUrl,
-        mapThumbnailUrl: scene.mapThumbnailUrl,
+        mapThumbnailUrl: scene.mapThumbnailUrl || scene.mapUrl,
         mapWidth: scene.mapWidth,
         mapHeight: scene.mapHeight,
         tokensCount: scene.tokens?.length || 0,
         wallsCount: scene.walls?.length || 0,
+        tokens: scene.tokens || [],
+        walls: scene.walls || [],
+        gridSize: scene.gridSize || 50,
+        reveals: scene.reveals || [],
+        polygonReveals: scene.polygonReveals || [],
         timestamp: Date.now()
-      }));
+      };
+      localStorage.setItem('mistwalker_last_active_scene', JSON.stringify(activeMeta));
+      localStorage.setItem('mistwalker_last_active_scene_meta', JSON.stringify(activeMeta));
     } catch {}
     toast.success(`Saved scene "${scene.sceneTitle}" into Campaign!`);
   };
@@ -10114,6 +10193,7 @@ export default function App() {
             hasActiveMapSession={Boolean(mapsDataRef.current[activeMapId]?.imageFile)}
             onResumeActiveMap={handleResumeActiveMap}
             activeMapSlotName={activeMapId}
+            isHydratingScene={isHydratingScene}
           />
         ) : (
           <div
