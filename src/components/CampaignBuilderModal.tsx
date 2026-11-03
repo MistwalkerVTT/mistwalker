@@ -65,7 +65,6 @@ import {
 } from '../services/sceneInstanceService';
 import { PRESET_BATTLEMAPS, PresetBattlemap } from '../data/presetBattlemaps';
 import { digestChapterPdf, digestChapterFlow } from '../services/aiService';
-import { CampaignPdfImporterModal } from './CampaignPdfImporterModal';
 import { ArenaManagerPanel } from './ArenaManagerPanel';
 import { isUniversalVttFile, parseUniversalVtt } from '../services/universalVttService';
 import { DEMO_GV_CAMPAIGN, DEMO_GV_CHAPTER, DEMO_GV_SCENE, DEMO_GV_ROOM_ZONES, DEMO_GV_TOKENS, DEMO_GV_PDF_DIGEST } from '../data/demoCampaignGv';
@@ -147,9 +146,6 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
   const [digestProgressText, setDigestProgressText] = useState<string>('');
   const [roomFilterQuery, setRoomFilterQuery] = useState<string>('');
   const [roomFilterTab, setRoomFilterTab] = useState<'all' | 'unplaced' | 'placed'>('all');
-
-
-  const [isPdfImporterOpen, setIsPdfImporterOpen] = useState<boolean>(false);
   const pdfInputRef = useRef<HTMLInputElement>(null);
 
   // Expanded folders in tree view
@@ -3468,20 +3464,11 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
-                            onClick={() => setIsPdfImporterOpen(true)}
-                            className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold font-mono flex items-center gap-2 transition-all shadow-md shadow-blue-950/50 active:scale-95 cursor-pointer"
-                            title="Automated D&D Chapter Ingestion: Extract battlemaps, room annotations, and baseline walls from official adventure PDF"
-                          >
-                            <Sparkles className="w-4 h-4 text-blue-200" />
-                            Import from Adventure PDF
-                          </button>
-                          <button
-                            type="button"
                             onClick={() => pdfInputRef.current?.click()}
                             disabled={isDigestingPdf}
-                            className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-300 text-xs font-bold font-mono flex items-center gap-2 transition-all"
+                            className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-bold font-mono flex items-center gap-2 transition-all shadow-md shadow-blue-950/50 active:scale-95 cursor-pointer"
                           >
-                            <CloudUpload className="w-4 h-4 text-zinc-400" />
+                            <CloudUpload className="w-4 h-4 text-blue-200" />
                             Upload PDF
                           </button>
                         </div>
@@ -4116,20 +4103,6 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
           </div>
         )}
 
-        {/* Adventure PDF Ingestion Modal */}
-        <CampaignPdfImporterModal
-          isOpen={isPdfImporterOpen}
-          onClose={() => {
-            setIsPdfImporterOpen(false);
-            getCampaignsList().then(setCampaigns).catch(console.warn);
-          }}
-          campaigns={campaigns}
-          activeCampaignId={selectedCampaignId || undefined}
-          activeChapterId={selectedChapterId || undefined}
-          onSceneImported={(_scene, _campId, _chapId) => {
-            getCampaignsList().then(setCampaigns).catch(console.warn);
-          }}
-        />
       </div>
     </div>
   );
