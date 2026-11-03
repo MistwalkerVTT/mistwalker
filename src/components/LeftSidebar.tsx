@@ -2644,6 +2644,40 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                       </div>
                     </div>
 
+                    {/* Interactive Grid Calibration Box Trace Tool */}
+                    <div className="flex flex-col gap-1.5 bg-gradient-to-r from-cyan-950/40 to-zinc-950/60 p-2.5 rounded-xl border border-cyan-800/40">
+                      <div className="flex items-center justify-between text-xs font-mono">
+                        <span className="text-cyan-300 font-bold flex items-center gap-1.5">
+                          <Scan className="w-3.5 h-3.5 text-cyan-400" />
+                          CALIBRATE BY BOX
+                        </span>
+                        {tool === 'grid_calibrate' && (
+                          <span className="text-[10px] text-cyan-400 font-mono animate-pulse">DRAWING...</span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-zinc-400 leading-tight">
+                        Trace an existing tile or grid square on the map image. The grid size and alignment will instantly measure and snap to that exact box.
+                      </p>
+                      <button
+                        onClick={() => {
+                          if (tool === 'grid_calibrate') {
+                            setTool('pan');
+                          } else {
+                            setGridVisible(true);
+                            setTool('grid_calibrate');
+                          }
+                        }}
+                        className={`w-full py-2 px-3 rounded-lg text-xs font-bold font-mono transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm border ${
+                          tool === 'grid_calibrate'
+                            ? 'bg-cyan-500 text-zinc-950 border-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.5)]'
+                            : 'bg-cyan-950/60 hover:bg-cyan-900/80 text-cyan-200 hover:text-white border-cyan-600/50 hover:border-cyan-400'
+                        }`}
+                      >
+                        <Scan className="w-4 h-4" />
+                        {tool === 'grid_calibrate' ? 'Cancel Box Tracing' : 'Trace Grid Square Box'}
+                      </button>
+                    </div>
+
                     {/* Grid Alignment Nudge */}
                     <div className="flex flex-col gap-2 bg-zinc-950/60 p-2.5 rounded-xl border border-zinc-800">
                       <div className="flex items-center justify-between text-xs font-mono">

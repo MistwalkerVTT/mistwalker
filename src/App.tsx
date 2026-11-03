@@ -1431,6 +1431,7 @@ export default function App() {
     tool === 'polygon_zone' ||
     tool === 'measure' ||
     tool === 'ai-describe' ||
+    tool === 'grid_calibrate' ||
     tool === 'token' ||
     tool === 'spell_aim'
   );
@@ -1531,6 +1532,10 @@ export default function App() {
   const [aiDescribeResult, setAiDescribeResult] = useState<string | null>(null);
   const [aiDescribeError, setAiDescribeError] = useState<string | null>(null);
   const [isAiDescribingLoading, setIsAiDescribingLoading] = useState(false);
+
+  // Interactive Grid Box Calibration State
+  const [gridCalibrateRect, setGridCalibrateRect] = useState<{ startX: number; startY: number; currentX: number; currentY: number } | null>(null);
+  const [isCalibratingGrid, setIsCalibratingGrid] = useState<boolean>(false);
 
   const [auraColor, setAuraColor] = useState<string>('rgba(59, 130, 246, 0.4)');
   const [measureStart, setMeasureStart] = useState<{ x: number, y: number } | null>(null);
@@ -8029,6 +8034,9 @@ export default function App() {
     } else if (tool === 'ai-describe') {
       setIsAiDescribing(true);
       setAiDescribeRect({ x: point.x, y: point.y, w: 0, h: 0 });
+    } else if (tool === 'grid_calibrate') {
+      setIsCalibratingGrid(true);
+      setGridCalibrateRect({ startX: point.x, startY: point.y, currentX: point.x, currentY: point.y });
     } else if (tool === 'measure') {
       setIsMeasuring(true);
       setMeasureStart(point);
@@ -8117,6 +8125,12 @@ export default function App() {
         ...aiDescribeRect,
         w: point.x - aiDescribeRect.x,
         h: point.y - aiDescribeRect.y
+      });
+    } else if (tool === 'grid_calibrate' && isCalibratingGrid && gridCalibrateRect) {
+      setGridCalibrateRect({
+        ...gridCalibrateRect,
+        currentX: point.x,
+        currentY: point.y
       });
     } else if (tool === 'measure' && isMeasuring) {
       setMeasureEnd(point);
@@ -8272,6 +8286,38 @@ export default function App() {
     if (tool === 'ai-describe' && isAiDescribing && aiDescribeRect) {
       triggerAiDescribe(aiDescribeRect);
       return; // Handled async
+    }
+    if (tool === 'grid_calibrate' && isCalibratingGrid && gridCalibrateRect) {
+      setIsCalibratingGrid(false);
+      const minX = Math.min(gridCalibrateRect.startX, gridCalibrateRect.currentX);
+      const maxX = Math.max(gridCalibrateRect.startX, gridCalibrateRect.currentX);
+      const minY = Math.min(gridCalibrateRect.startY, gridCalibrateRect.currentY);
+      const maxY = Math.max(gridCalibrateRect.startY, gridCalibrateRect.currentY);
+      const boxW = Math.round(maxX - minX);
+      const boxH = Math.round(maxY - minY);
+      setGridCalibrateRect(null);
+
+      // Require at least a 10px box to calibrate
+      if (boxW >= 10 && boxH >= 10) {
+        const measuredSize = Math.max(10, Math.min(500, Math.round(((boxW + boxH) / 2) * 10) / 10));
+        // Calculate offset so the grid line snaps exactly to the box's top-left corner
+        const newOffsetX = Math.round(((minX % measuredSize) + measuredSize) % measuredSize);
+        const newOffsetY = Math.round(((minY % measuredSize) + measuredSize) % measuredSize);
+
+        setGridSize(measuredSize);
+        setGridOffsetX(newOffsetX);
+        setGridOffsetY(newOffsetY);
+        setGridVisible(true);
+        setTool('pan');
+
+        toast.success(
+          `Grid snapped to measured box: ${measuredSize}px (Offset: ${newOffsetX}, ${newOffsetY})`,
+          { icon: '📐' }
+        );
+      } else {
+        toast.info('Box too small to calibrate grid (drag across a square)');
+      }
+      return;
     }
     if (tool === 'measure') {
       setIsMeasuring(false);
@@ -9223,7 +9269,7 @@ export default function App() {
       if (container) {
         if (isSpacePressed || isShiftPanActive) {
           container.style.cursor = 'grab';
-        } else if (tool === 'spell_aim') {
+        } else if (tool === 'spell_aim' || tool === 'grid_calibrate') {
           container.style.cursor = 'crosshair';
         } else {
           container.style.cursor = 'default';
@@ -10207,7 +10253,7 @@ export default function App() {
           />
         ) : (
           <div
-            className={`flex-1 h-full relative touch-none ${tool === 'spell_aim' ? 'cursor-crosshair' : 'cursor-default'}`}
+            className={`flex-1 h-full relative touch-none ${tool === 'spell_aim' || tool === 'grid_calibrate' ? 'cursor-crosshair' : 'cursor-default'}`}
             onDragOver={(e) => {
               e.preventDefault();
               e.dataTransfer.dropEffect = 'copy';
@@ -10310,7 +10356,7 @@ export default function App() {
                 }
               }}
               draggable={Boolean((isSpacePressed || isShiftPanActive) || (!isCanvasDrawingTool && !isDraggingToken && !hoveredZoneId && !isRoomDrawerOpen && !selectionBox?.active))}
-              className={isSpacePressed || isShiftPanActive ? 'cursor-grab' : tool === 'spell_aim' ? 'cursor-crosshair' : 'cursor-default'}
+              className={isSpacePressed || isShiftPanActive ? 'cursor-grab' : (tool === 'spell_aim' || tool === 'grid_calibrate') ? 'cursor-crosshair' : 'cursor-default'}
               onDragStart={(e) => {
                 if (e.target === stageRef.current && !isDraggingTokenRef.current) {
                   setActiveTokenMenu(null);
@@ -10634,7 +10680,7 @@ export default function App() {
                 </Layer>
               )}
 
-              {(currentPolygonPoints.length > 0 || aiDescribeRect) && (
+              {(currentPolygonPoints.length > 0 || aiDescribeRect || gridCalibrateRect) && (
                 <Layer>
                   {/* Current Polygon Preview */}
                   {currentPolygonPoints.length > 0 && (
@@ -10708,6 +10754,61 @@ export default function App() {
                     </Group>
                   )}
                   
+                  {/* Grid Box Calibration Preview */}
+                  {gridCalibrateRect && (() => {
+                    const minX = Math.min(gridCalibrateRect.startX, gridCalibrateRect.currentX);
+                    const minY = Math.min(gridCalibrateRect.startY, gridCalibrateRect.currentY);
+                    const width = Math.abs(gridCalibrateRect.currentX - gridCalibrateRect.startX);
+                    const height = Math.abs(gridCalibrateRect.currentY - gridCalibrateRect.startY);
+                    const avgPx = Math.round(((width + height) / 2) * 10) / 10;
+                    return (
+                      <Group>
+                        <Rect
+                          x={minX}
+                          y={minY}
+                          width={width}
+                          height={height}
+                          stroke="#06b6d4"
+                          strokeWidth={2.5 / stageScale}
+                          dash={[6 / stageScale, 4 / stageScale]}
+                          fill="rgba(6, 182, 212, 0.18)"
+                          cornerRadius={2 / stageScale}
+                        />
+                        {/* Corner markers */}
+                        <Circle x={minX} y={minY} radius={4 / stageScale} fill="#06b6d4" />
+                        <Circle x={minX + width} y={minY} radius={4 / stageScale} fill="#06b6d4" />
+                        <Circle x={minX} y={minY + height} radius={4 / stageScale} fill="#06b6d4" />
+                        <Circle x={minX + width} y={minY + height} radius={4 / stageScale} fill="#06b6d4" />
+
+                        {/* Dimension & Prompt Tag */}
+                        <Group x={minX} y={minY - 26 / stageScale}>
+                          <Rect
+                            x={0}
+                            y={0}
+                            width={160 / stageScale}
+                            height={22 / stageScale}
+                            fill="rgba(8, 51, 68, 0.95)"
+                            stroke="#06b6d4"
+                            strokeWidth={1 / stageScale}
+                            cornerRadius={4 / stageScale}
+                          />
+                          <Text
+                            x={0}
+                            y={0}
+                            width={160 / stageScale}
+                            height={22 / stageScale}
+                            text={`Snap: ${Math.round(width)}×${Math.round(height)} (${avgPx}px)`}
+                            fill="#67e8f9"
+                            fontSize={11 / stageScale}
+                            fontStyle="bold"
+                            align="center"
+                            verticalAlign="middle"
+                          />
+                        </Group>
+                      </Group>
+                    );
+                  })()}
+
                   {aiDescribeRect && (
                     <Group>
                       <Rect
