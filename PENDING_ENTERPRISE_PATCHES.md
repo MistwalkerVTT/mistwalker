@@ -14,6 +14,29 @@
 
 ## Pending Changes Queue for Future Enterprise Patch
 
+### [2026-11-03] feat(tactical): separate descriptive badges from room zone labels and fix polygon save coercion
+- **Commit**: `0abbc1b`
+- **Files Changed**:
+  - `src/types.ts`
+  - `src/components/RoomHotspotLayer.tsx`
+  - `src/components/RoomLabelEditorModal.tsx`
+  - `src/components/LeftSidebar.tsx`
+  - `src/App.tsx`
+  - `src/lib/firebase.ts`
+- **Summary**:
+  - **Polygon Room Zone Normalization Bug**: Fixed the normalization coercion bug in `normalizeRoomAnnotation` where `typeof raw.visibleToPlayers === 'boolean'` inadvertently coerced completed polygon room zones into `'label'`, wiping `roomNumber` and rendering polygons as badge pills. Room zones with polygons are now strictly classified as `type: 'room'` with `roomNumber` preserved. Existing scenes with polygon points automatically self-heal upon load.
+  - **Canvas Room Labels vs Badges Separation**:
+    - *Room Zone Labels*: Rendered at the center of the drawn polygon with the room number/code (e.g. `Room 1`, `T1`, `V8`). Hovering over the room label highlights the drawn polygon on the canvas; right-clicking or clicking opens the room zone details / briefing drawer.
+    - *Descriptive Badges*: Rendered as tactical badge pills for items, stairs, treasure, canopic jars, sarcophagi, pits, and descriptions, supporting custom glyphs and player visibility toggles.
+  - **Tactical Layers Sidebar Overhaul (`LeftSidebar.tsx`)**:
+    - Replaced ambiguous 3-button room tool layout with two clear primary tools: `[ Room Polygon ]` and `[ Descriptive Badge ]` with dedicated contextual guides.
+    - Replaced the single combined "Rooms & Labels" list with a clean segmented filter (`All`, `Room Labels`, `Badges`) and two clearly separated sections:
+      1. *Room Zone Labels ({count})*: Displays room number badge, title, polygon vertex count, hover-to-highlight on canvas, click to open details, and delete button.
+      2. *Descriptive Badges ({count})*: Displays glyph icon, badge text, `Player Visible` / `DM Only` tag, click to edit badge, and delete button.
+  - **Descriptive Badge Editor Presets (`RoomLabelEditorModal.tsx`)**: Expanded badge presets and icon glyphs to include Treasure (`🪙`), Urn / Canopic Jar (`🏺`), Sarcophagus / Tomb (`⚰️`), and Pit / Chasm (`🕳️`).
+
+---
+
 ### [2026-11-02] fix(canvas): add optional chaining to selectionBox in Stage draggable prop
 - **Commit**: `aa884a0`
 - **Files Changed**:
