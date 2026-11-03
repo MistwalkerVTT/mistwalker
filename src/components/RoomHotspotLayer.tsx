@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Group, Rect, Line, Text, Circle } from 'react-konva';
-import { RoomAnnotation, CampaignMode, normalizeRoomAnnotations } from '../types';
+import { RoomAnnotation, CampaignMode, normalizeRoomAnnotations, isDescriptiveBadge } from '../types';
 
 export const LABEL_GLYPHS: Record<string, string> = {
   'stairs-up': '⤊',
@@ -15,7 +15,19 @@ export const LABEL_GLYPHS: Record<string, string> = {
   'arrow-down': '⬇',
   'door': '🚪',
   'tag': '🏷️',
-  'warning': '⚠️'
+  'warning': '⚠️',
+  'treasure': '🪙',
+  'chest': '📦',
+  'jar': '🏺',
+  'urn': '🏺',
+  'coffin': '⚰️',
+  'sarcophagus': '⚰️',
+  'pit': '🕳️',
+  'skull': '💀',
+  'book': '📖',
+  'key': '🗝️',
+  'fire': '🔥',
+  'eye': '👁️'
 };
 
 interface RoomHotspotLayerProps {
@@ -64,7 +76,7 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
   // In Player View, only display annotations explicitly marked as 'label' with visibleToPlayers === true.
   // Room polygons, secret rooms, and DM briefings are NEVER rendered to player clients.
   const visibleAnnotations = isPlayerView
-    ? safeAnnotations.filter((a) => (a.type === 'label' || a.type === 'hazard' || a.isHazard) && a.visibleToPlayers === true)
+    ? safeAnnotations.filter((a) => (isDescriptiveBadge(a) || a.type === 'hazard' || a.isHazard) && a.visibleToPlayers === true)
     : safeAnnotations;
 
   if (visibleAnnotations.length === 0) return null;
@@ -93,8 +105,8 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
           : [];
 
         // Center calculation for label badge button
-        let centerPixelX = pixelX + (anno.type === 'label' ? 0 : pixelW / 2);
-        let centerPixelY = pixelY + (anno.type === 'label' ? 0 : pixelH / 2);
+        let centerPixelX = pixelX + (isDescriptiveBadge(anno) ? 0 : pixelW / 2);
+        let centerPixelY = pixelY + (isDescriptiveBadge(anno) ? 0 : pixelH / 2);
         if (hasPolygon && pixelPolyPoints.length >= 6) {
           let sumX = 0;
           let sumY = 0;
@@ -157,7 +169,7 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
         // =========================================================================
         // 1. TACTICAL MAP LABEL PILL (e.g. "Stairs up to...", "Ladder down to...")
         // =========================================================================
-        if (anno.type === 'label') {
+        if (isDescriptiveBadge(anno)) {
           const glyph = LABEL_GLYPHS[anno.icon || 'stairs-up'] || '🏷️';
           const fullLabel = `${glyph}  ${anno.label}`;
           const fontSize = Math.max(10, Math.min(18, 11.5 / stageScale));

@@ -106,6 +106,8 @@ import {
   VisionConfig,
   CampaignMode,
   RoomAnnotation,
+  isDescriptiveBadge,
+  isRoomZone,
   isMonsterToken,
   NarrationVoice,
   NARRATION_VOICES
@@ -499,6 +501,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
     }
   }, []);
   const [lightingSubTab, setLightingSubTab] = useState<'lighting' | 'fog' | 'grid' | 'zones'>('lighting');
+  const [roomListFilter, setRoomListFilter] = useState<'all' | 'rooms' | 'badges'>('all');
   const [fxCategory, setFxCategory] = useState<'spells' | 'tactical'>('spells');
   const [fxSubTab, setFxSubTab] = useState<'features' | 'weather' | 'scale'>('features');
   const [selectedScalePreset, setSelectedScalePreset] = useState<MapSizePresetKey>('medium');
@@ -2693,12 +2696,16 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
               {/* ========================================================================= */}
               {/* TAB 4: ROOM POLYGONS & BRIEFINGS                                          */}
               {/* ========================================================================= */}
-              {lightingSubTab === 'zones' && (
+              {lightingSubTab === 'zones' && (() => {
+                const roomZones = (roomAnnotations || []).filter(isRoomZone);
+                const descriptiveBadges = (roomAnnotations || []).filter(isDescriptiveBadge);
+
+                return (
                 <div className="flex flex-col gap-3">
-                  {/* Room Zone Tools */}
+                  {/* Room Tools Header */}
                   <div className="flex flex-col gap-2">
-                    <span className="text-[10px] uppercase font-bold font-mono text-zinc-400">Room Tools</span>
-                    <div className="grid grid-cols-3 gap-1.5">
+                    <span className="text-[10px] uppercase font-bold font-mono text-zinc-400">Tactical Room Tools</span>
+                    <div className="grid grid-cols-2 gap-2">
                       <button
                         id="btn-sidebar-zone-polygon"
                         onClick={() => {
@@ -2709,39 +2716,19 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                           setTool(nextTool);
                           setCurrentPolygonPoints([]);
                         }}
-                        className={`py-2 px-1.5 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-1 cursor-pointer ${
+                        className={`py-2 px-2 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-1.5 cursor-pointer ${
                           tool === 'zone' || tool === 'polygon_zone'
                             ? 'bg-amber-500 text-zinc-950 border-amber-400 shadow-md shadow-amber-500/30'
                             : 'bg-zinc-800 hover:bg-zinc-750 border-zinc-700 text-zinc-300 hover:text-white'
                         }`}
-                        title="Draw polygon room outline on canvas"
+                        title="Draw polygon room outline with tied Room Label (Room 1, T1...)"
                       >
                         <Pentagon className="w-3.5 h-3.5 shrink-0" />
-                        <span className="truncate">{tool === 'zone' || tool === 'polygon_zone' ? 'Drawing' : 'Polygon'}</span>
+                        <span className="truncate">{tool === 'zone' || tool === 'polygon_zone' ? 'Drawing...' : 'Room Polygon'}</span>
                       </button>
 
                       <button
-                        id="btn-sidebar-hotspot-tool"
-                        onClick={() => {
-                          if (setCampaignMode && campaignMode !== 'creator') {
-                            setCampaignMode('creator');
-                          }
-                          const nextTool = tool === 'hotspot' ? 'select' : 'hotspot';
-                          setTool(nextTool);
-                        }}
-                        className={`py-2 px-1.5 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-1 cursor-pointer ${
-                          tool === 'hotspot'
-                            ? 'bg-amber-500 text-zinc-950 border-amber-400 shadow-md shadow-amber-500/30'
-                            : 'bg-zinc-800 hover:bg-zinc-750 border-zinc-700 text-zinc-300 hover:text-white'
-                        }`}
-                        title="Place numbered room badge on canvas"
-                      >
-                        <MapPin className="w-3.5 h-3.5 shrink-0" />
-                        <span className="truncate">{tool === 'hotspot' ? 'Placing' : 'Badge'}</span>
-                      </button>
-
-                      <button
-                        id="btn-sidebar-label-tool"
+                        id="btn-sidebar-badge-tool"
                         onClick={() => {
                           if (setCampaignMode && campaignMode !== 'creator') {
                             setCampaignMode('creator');
@@ -2749,15 +2736,15 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                           const nextTool = tool === 'label' ? 'select' : 'label';
                           setTool(nextTool);
                         }}
-                        className={`py-2 px-1.5 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-1 cursor-pointer ${
+                        className={`py-2 px-2 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-1.5 cursor-pointer ${
                           tool === 'label'
                             ? 'bg-amber-500 text-zinc-950 border-amber-400 shadow-md shadow-amber-500/30'
                             : 'bg-zinc-800 hover:bg-zinc-750 border-zinc-700 text-zinc-300 hover:text-white'
                         }`}
-                        title="Place label on canvas (e.g. 'Stairs up to...', 'Ladder down to...')"
+                        title="Place descriptive badge on canvas (stairs, treasure, items, room descriptions...)"
                       >
                         <Tag className="w-3.5 h-3.5 shrink-0" />
-                        <span className="truncate">{tool === 'label' ? 'Placing' : 'Label'}</span>
+                        <span className="truncate">{tool === 'label' ? 'Placing...' : 'Descriptive Badge'}</span>
                       </button>
                     </div>
 
@@ -2766,21 +2753,13 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                       <div className="p-2.5 bg-amber-950/30 border border-amber-500/40 rounded-xl text-[10px] font-mono text-amber-200/90 space-y-1">
                         <div className="font-bold text-amber-300 flex items-center gap-1">
                           <Pentagon className="w-3 h-3 text-amber-400" />
-                          <span>Drawing Room Polygon:</span>
+                          <span>Drawing Room Polygon &amp; Label:</span>
                         </div>
                         <div>• Click map to place corner vertices</div>
                         <div>• Click first point (or double-click) to complete</div>
+                        <div>• Sets tied Room Label (Room 1, T1) &amp; DM notes</div>
+                        <div>• Hovering Room Label on canvas highlights polygon</div>
                         <div>• Right-click or Esc to cancel</div>
-                      </div>
-                    )}
-
-                    {tool === 'hotspot' && (
-                      <div className="p-2.5 bg-amber-950/30 border border-amber-500/40 rounded-xl text-[10px] font-mono text-amber-200/90 space-y-1">
-                        <div className="font-bold text-amber-300 flex items-center gap-1">
-                          <MapPin className="w-3 h-3 text-amber-400" />
-                          <span>Placing Room Badge:</span>
-                        </div>
-                        <div>• Click anywhere on the map to drop a numbered room marker</div>
                       </div>
                     )}
 
@@ -2788,67 +2767,160 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                       <div className="p-2.5 bg-amber-950/30 border border-amber-500/40 rounded-xl text-[10px] font-mono text-amber-200/90 space-y-1">
                         <div className="font-bold text-amber-300 flex items-center gap-1">
                           <Tag className="w-3 h-3 text-amber-400" />
-                          <span>Placing Map Label:</span>
+                          <span>Placing Descriptive Badge:</span>
                         </div>
-                        <div>• Click anywhere on the map to place a label</div>
-                        <div>• Quick presets for stairs, ladders, portals, and trapdoors</div>
+                        <div>• Click anywhere on the map to place a badge</div>
+                        <div>• Quick presets for stairs, treasure, jars, pits, and POIs</div>
                         <div>• Can toggle visibility to players</div>
                         <div>• Right-click or Esc to cancel</div>
                       </div>
                     )}
                   </div>
 
-                  {/* Saved Room Annotations & Labels List */}
-                  <div className="flex flex-col gap-2 pt-2 border-t border-zinc-800">
-                    <div className="flex items-center justify-between text-[10px] font-mono text-zinc-400">
-                      <span className="font-bold text-zinc-300 uppercase">
-                        Rooms &amp; Labels ({roomAnnotations.length})
-                      </span>
+                  {/* Filter Switcher for Room Labels vs Badges */}
+                  <div className="pt-2 border-t border-zinc-800 flex flex-col gap-2">
+                    <div className="flex items-center gap-1 p-0.5 bg-zinc-900 border border-zinc-800 rounded-lg text-[10px] font-mono">
+                      <button
+                        type="button"
+                        onClick={() => setRoomListFilter('all')}
+                        className={`flex-1 py-1 rounded text-center font-bold transition-colors cursor-pointer ${
+                          roomListFilter === 'all'
+                            ? 'bg-amber-500 text-black shadow-xs'
+                            : 'text-zinc-400 hover:text-zinc-200'
+                        }`}
+                      >
+                        All ({(roomAnnotations || []).length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRoomListFilter('rooms')}
+                        className={`flex-1 py-1 rounded text-center font-bold transition-colors cursor-pointer ${
+                          roomListFilter === 'rooms'
+                            ? 'bg-amber-500 text-black shadow-xs'
+                            : 'text-zinc-400 hover:text-zinc-200'
+                        }`}
+                      >
+                        Room Labels ({roomZones.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRoomListFilter('badges')}
+                        className={`flex-1 py-1 rounded text-center font-bold transition-colors cursor-pointer ${
+                          roomListFilter === 'badges'
+                            ? 'bg-amber-500 text-black shadow-xs'
+                            : 'text-zinc-400 hover:text-zinc-200'
+                        }`}
+                      >
+                        Badges ({descriptiveBadges.length})
+                      </button>
                     </div>
 
-                    {roomAnnotations.length === 0 ? (
-                      <div className="p-3 bg-zinc-950/40 border border-zinc-800/80 rounded-xl text-center flex flex-col items-center justify-center gap-1.5 py-4">
-                        <Pentagon className="w-5 h-5 text-zinc-600" />
-                        <span className="text-[11px] font-mono text-zinc-400">No rooms or labels yet</span>
-                        <span className="text-[9.5px] text-zinc-500 leading-tight">
-                          Select &quot;Draw Polygon&quot; to map rooms, or &quot;Place Label&quot; to add stairs, ladders, or points of interest.
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="max-h-[240px] overflow-y-auto flex flex-col gap-1.5 pr-1 sidebar-scrollbar">
-                        {roomAnnotations.map((anno, idx) => {
-                          const isLabel = anno.type === 'label';
-                          const glyph = isLabel ? (LABEL_GLYPHS[anno.icon || 'stairs-up'] || '🏷️') : null;
+                    <div className="max-h-[270px] overflow-y-auto flex flex-col gap-3 pr-1 sidebar-scrollbar">
+                      {/* SECTION 1: ROOM ZONE LABELS */}
+                      {(roomListFilter === 'all' || roomListFilter === 'rooms') && (
+                        <div className="flex flex-col gap-1.5">
+                          <div className="flex items-center justify-between text-[10px] font-mono text-zinc-400 px-0.5">
+                            <span className="font-bold text-amber-300 uppercase flex items-center gap-1.5">
+                              <Pentagon className="w-3 h-3 text-amber-400" />
+                              Room Zone Labels ({roomZones.length})
+                            </span>
+                            <span className="text-[9px] text-zinc-500">Hover shows polygon</span>
+                          </div>
 
-                          return (
-                            <div
-                              key={anno.id || idx}
-                              onClick={() => onOpenZoneDetails?.(anno)}
-                              className="p-2.5 rounded-xl bg-zinc-950/60 border border-zinc-800 hover:border-amber-500/40 transition-all flex items-center justify-between gap-2 cursor-pointer group"
-                            >
-                              <div className="flex items-center gap-2 min-w-0">
-                                {isLabel ? (
-                                  <span
-                                    className="w-5 h-5 rounded-lg border text-[11px] font-bold flex items-center justify-center shrink-0 shadow-sm"
-                                    style={{
-                                      backgroundColor: `${anno.color || '#f59e0b'}25`,
-                                      borderColor: anno.color || '#f59e0b',
-                                      color: anno.color || '#f59e0b'
-                                    }}
-                                  >
-                                    {glyph}
-                                  </span>
-                                  ) : (
-                                    <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold font-mono flex items-center justify-center shrink-0">
+                          {roomZones.length === 0 ? (
+                            <div className="p-2.5 bg-zinc-950/40 border border-zinc-850 rounded-xl text-center">
+                              <span className="text-[10px] text-zinc-500">No room zones yet. Draw with &quot;Room Polygon&quot;.</span>
+                            </div>
+                          ) : (
+                            roomZones.map((anno, idx) => {
+                              const roomTitle = anno.roomNumber ? `${anno.roomNumber}: ${anno.roomName || 'Room'}` : (anno.roomName || anno.label || `Room ${idx + 1}`);
+                              const vertexCount = anno.polygonPoints && anno.polygonPoints.length >= 6 ? Math.round(anno.polygonPoints.length / 2) : 0;
+
+                              return (
+                                <div
+                                  key={anno.id || idx}
+                                  onClick={() => onOpenZoneDetails?.(anno)}
+                                  onMouseEnter={() => onHoverZone?.(anno.id)}
+                                  onMouseLeave={() => onHoverZone?.(null)}
+                                  className="p-2.5 rounded-xl bg-zinc-950/70 border border-amber-500/20 hover:border-amber-400 hover:bg-zinc-900/80 transition-all flex items-center justify-between gap-2 cursor-pointer group shadow-xs"
+                                >
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="w-6 h-6 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-bold font-mono flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                                       {anno.roomNumber || idx + 1}
                                     </span>
-                                  )}
-                                  <div className="min-w-0">
-                                    <div className="flex items-center gap-1.5">
-                                      <span className="text-xs font-bold text-zinc-200 group-hover:text-amber-200 truncate block">
-                                        {anno.label || anno.roomName || `Room ${anno.roomNumber || idx + 1}`}
-                                      </span>
-                                      {isLabel && (
+                                    <div className="min-w-0">
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-xs font-bold text-zinc-200 group-hover:text-amber-200 truncate block">
+                                          {roomTitle}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-2 text-[9px] text-zinc-500">
+                                        <span>{vertexCount > 0 ? `${vertexCount} vertices` : 'Box Area'}</span>
+                                        {anno.boxedText && <span className="truncate max-w-[120px]">• {anno.boxedText}</span>}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onDeleteZoneAnnotation?.(anno.id);
+                                    }}
+                                    className="text-zinc-500 hover:text-red-400 p-1 rounded transition-colors cursor-pointer"
+                                    title="Delete Room Zone"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      )}
+
+                      {/* SECTION 2: DESCRIPTIVE BADGES */}
+                      {(roomListFilter === 'all' || roomListFilter === 'badges') && (
+                        <div className="flex flex-col gap-1.5 pt-1">
+                          <div className="flex items-center justify-between text-[10px] font-mono text-zinc-400 px-0.5">
+                            <span className="font-bold text-sky-300 uppercase flex items-center gap-1.5">
+                              <Tag className="w-3 h-3 text-sky-400" />
+                              Descriptive Badges ({descriptiveBadges.length})
+                            </span>
+                            <span className="text-[9px] text-zinc-500">Items &amp; POIs</span>
+                          </div>
+
+                          {descriptiveBadges.length === 0 ? (
+                            <div className="p-2.5 bg-zinc-950/40 border border-zinc-850 rounded-xl text-center">
+                              <span className="text-[10px] text-zinc-500">No descriptive badges yet. Drop with &quot;Descriptive Badge&quot;.</span>
+                            </div>
+                          ) : (
+                            descriptiveBadges.map((anno, idx) => {
+                              const glyph = LABEL_GLYPHS[anno.icon || 'tag'] || '🏷️';
+
+                              return (
+                                <div
+                                  key={anno.id || idx}
+                                  onClick={() => onOpenZoneDetails?.(anno)}
+                                  onMouseEnter={() => onHoverZone?.(anno.id)}
+                                  onMouseLeave={() => onHoverZone?.(null)}
+                                  className="p-2.5 rounded-xl bg-zinc-950/60 border border-zinc-800 hover:border-sky-400/50 hover:bg-zinc-900/80 transition-all flex items-center justify-between gap-2 cursor-pointer group"
+                                >
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span
+                                      className="w-6 h-6 rounded-lg border text-[11px] font-bold flex items-center justify-center shrink-0 shadow-sm"
+                                      style={{
+                                        backgroundColor: `${anno.color || '#0ea5e9'}25`,
+                                        borderColor: anno.color || '#0ea5e9',
+                                        color: anno.color || '#0ea5e9'
+                                      }}
+                                    >
+                                      {glyph}
+                                    </span>
+                                    <div className="min-w-0">
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-xs font-bold text-zinc-200 group-hover:text-sky-200 truncate block">
+                                          {anno.label || anno.roomName || 'Badge'}
+                                        </span>
                                         <span
                                           className={`text-[8px] px-1 py-0.5 rounded font-mono font-bold shrink-0 ${
                                             anno.visibleToPlayers
@@ -2858,34 +2930,36 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                                         >
                                           {anno.visibleToPlayers ? 'Player Visible' : 'DM Only'}
                                         </span>
+                                      </div>
+                                      {anno.dmNotes && (
+                                        <p className="text-[9px] text-zinc-500 truncate max-w-[150px]">
+                                          {anno.dmNotes}
+                                        </p>
                                       )}
                                     </div>
-                                    {(anno.boxedText || anno.dmNotes) && (
-                                      <p className="text-[9.5px] text-zinc-500 truncate">
-                                        {anno.boxedText || anno.dmNotes}
-                                      </p>
-                                    )}
                                   </div>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onDeleteZoneAnnotation?.(anno.id);
-                                }}
-                                className="text-zinc-500 hover:text-red-400 p-1 rounded transition-colors cursor-pointer"
-                                title="Delete Annotation"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onDeleteZoneAnnotation?.(anno.id);
+                                    }}
+                                    className="text-zinc-500 hover:text-red-400 p-1 rounded transition-colors cursor-pointer"
+                                    title="Delete Badge"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
-              )}
+                );
+              })()}
             </div>
           )}
           {activeGroup === 'combat' && (

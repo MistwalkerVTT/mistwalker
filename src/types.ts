@@ -181,7 +181,20 @@ export interface VisionConfig {
 export * from './types/hazard';
 import { HazardType, HazardSeverity, HazardBypassRules } from './types/hazard';
 
-export type RoomAnnotationType = 'room' | 'label' | 'hazard';
+export type RoomAnnotationType = 'room' | 'label' | 'badge' | 'hazard';
+
+export function isDescriptiveBadge(anno: RoomAnnotation | null | undefined): boolean {
+  if (!anno) return false;
+  if (anno.isHazard || anno.type === 'hazard') return false;
+  if (Array.isArray(anno.polygonPoints) && anno.polygonPoints.length >= 6) return false;
+  return anno.type === 'badge' || anno.type === 'label' || Boolean(anno.icon);
+}
+
+export function isRoomZone(anno: RoomAnnotation | null | undefined): boolean {
+  if (!anno) return false;
+  if (anno.isHazard || anno.type === 'hazard') return false;
+  return !isDescriptiveBadge(anno);
+}
 
 export interface RoomAnnotation {
   id: string;
@@ -246,31 +259,39 @@ export function normalizeRoomAnnotation(
     };
   }
   const isHazard = raw.type === 'hazard' || Boolean(raw.isHazard);
-  const isLabel =
+  const hasPolygon = Array.isArray(raw.polygonPoints) && raw.polygonPoints.length >= 6;
+
+  // A descriptive badge represents points-of-interest, items, stairs, treasure, or descriptions without a polygon boundary.
+  // Room zones have polygon boundaries or are explicitly typed as 'room' (or have roomNumber without badge glyph/icon).
+  const isBadge =
     !isHazard &&
-    (raw.type === 'label' ||
-      Boolean(raw.icon) ||
-      typeof raw.visibleToPlayers === 'boolean');
+    !hasPolygon &&
+    raw.type !== 'room' &&
+    (raw.type === 'badge' || raw.type === 'label' || Boolean(raw.icon));
+
+  const type: RoomAnnotationType = isHazard ? 'hazard' : isBadge ? 'badge' : 'room';
+
   const id =
     typeof raw.id === 'string' && raw.id.trim().length > 0
       ? raw.id
-      : `${isLabel ? 'label' : 'room'}_${raw.createdAt || Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`;
+      : `${isHazard ? 'hazard' : isBadge ? 'badge' : 'room'}_${raw.createdAt || Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`;
   const rawBounds = raw.bounds && typeof raw.bounds === 'object' ? raw.bounds : {};
   const bounds = {
     x: typeof rawBounds.x === 'number' && !isNaN(rawBounds.x) ? rawBounds.x : 50,
     y: typeof rawBounds.y === 'number' && !isNaN(rawBounds.y) ? rawBounds.y : 50,
-    width: typeof rawBounds.width === 'number' && !isNaN(rawBounds.width) ? rawBounds.width : (isLabel ? 8 : 6),
-    height: typeof rawBounds.height === 'number' && !isNaN(rawBounds.height) ? rawBounds.height : (isLabel ? 4 : 3),
+    width: typeof rawBounds.width === 'number' && !isNaN(rawBounds.width) ? rawBounds.width : (isBadge ? 8 : 6),
+    height: typeof rawBounds.height === 'number' && !isNaN(rawBounds.height) ? rawBounds.height : (isBadge ? 4 : 3),
   };
+  const roomNumber = isBadge ? undefined : (typeof raw.roomNumber === 'string' && raw.roomNumber.trim().length > 0 ? raw.roomNumber.trim() : (raw.roomNumber !== undefined ? String(raw.roomNumber) : undefined));
   const label =
     (typeof raw.label === 'string' && raw.label.trim()) ||
     (typeof raw.roomName === 'string' && raw.roomName.trim()) ||
-    (isLabel ? 'Map Label' : `Room ${raw.roomNumber || idx + 1}`);
+    (isBadge ? 'Descriptive Badge' : (roomNumber ? `Room ${roomNumber}` : `Room ${idx + 1}`));
 
   return {
     ...raw,
     id,
-    type: isHazard ? 'hazard' : isLabel ? 'label' : 'room',
+    type,
     isHazard: isHazard || Boolean(raw.isHazard),
     hazardType: raw.hazardType || (isHazard ? 'lava' : undefined),
     hazardSeverity: raw.hazardSeverity || (isHazard ? 'lethal' : undefined),
@@ -281,10 +302,10 @@ export function normalizeRoomAnnotation(
     hazardCondition: raw.hazardCondition,
     bypassRules: raw.bypassRules,
     label,
-    roomNumber: isLabel ? undefined : raw.roomNumber,
+    roomNumber,
     roomName: raw.roomName || label,
-    icon: isLabel ? (raw.icon || 'stairs-up') : raw.icon,
-    visibleToPlayers: isLabel ? (raw.visibleToPlayers !== false) : raw.visibleToPlayers,
+    icon: isBadge ? (raw.icon || 'stairs-up') : raw.icon,
+    visibleToPlayers: isBadge ? (raw.visibleToPlayers !== false) : (raw.visibleToPlayers === true),
     bounds,
     polygonPoints: Array.isArray(raw.polygonPoints)
       ? raw.polygonPoints.map((n: any) => Number(n)).filter((n: number) => !isNaN(n))

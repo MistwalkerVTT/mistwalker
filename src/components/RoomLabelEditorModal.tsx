@@ -27,29 +27,34 @@ export interface RoomLabelEditorModalProps {
 }
 
 const PRESET_CHIPS = [
+  { label: 'Treasure', icon: 'treasure', color: '#f59e0b' },
+  { label: 'Canopic Jar', icon: 'jar', color: '#10b981' },
+  { label: 'Sarcophagus', icon: 'sarcophagus', color: '#8b5cf6' },
+  { label: 'Pit', icon: 'pit', color: '#f43f5e' },
   { label: 'Stairs up to...', icon: 'stairs-up', color: '#f59e0b' },
   { label: 'Stairs down to...', icon: 'stairs-down', color: '#f59e0b' },
   { label: 'Ladder down to...', icon: 'ladder', color: '#10b981' },
-  { label: 'Ladder up to...', icon: 'ladder', color: '#10b981' },
   { label: 'Trapdoor to...', icon: 'trapdoor', color: '#f97316' },
   { label: 'Portal to...', icon: 'portal', color: '#8b5cf6' },
   { label: 'Secret passage to...', icon: 'secret', color: '#ec4899' },
-  { label: 'To Upper Level', icon: 'arrow-up', color: '#0ea5e9' },
-  { label: 'To Lower Level', icon: 'arrow-down', color: '#0ea5e9' },
   { label: 'Exit to...', icon: 'door', color: '#14b8a6' }
 ];
 
 const ICONS_LIST = [
+  { id: 'treasure', label: 'Treasure / Coin', glyph: '🪙' },
+  { id: 'chest', label: 'Chest / Container', glyph: '📦' },
+  { id: 'jar', label: 'Canopic Jar / Urn', glyph: '🏺' },
+  { id: 'sarcophagus', label: 'Sarcophagus / Tomb', glyph: '⚰️' },
+  { id: 'pit', label: 'Pit / Chasm', glyph: '🕳️' },
   { id: 'stairs-up', label: 'Stairs Up', glyph: '⤊' },
   { id: 'stairs-down', label: 'Stairs Down', glyph: '⤋' },
   { id: 'ladder', label: 'Ladder', glyph: '🪜' },
   { id: 'trapdoor', label: 'Trapdoor', glyph: '🚪' },
   { id: 'portal', label: 'Portal', glyph: '🌀' },
-  { id: 'secret', label: 'Secret Door', glyph: '🗝️' },
-  { id: 'arrow-up', label: 'Up Arrow', glyph: '⬆' },
-  { id: 'arrow-down', label: 'Down Arrow', glyph: '⬇' },
+  { id: 'secret', label: 'Secret / Key', glyph: '🗝️' },
+  { id: 'skull', label: 'Danger / Remains', glyph: '💀' },
+  { id: 'tag', label: 'Description Badge', glyph: '🏷️' },
   { id: 'door', label: 'Door / Exit', glyph: '🚪' },
-  { id: 'tag', label: 'Sign / Tag', glyph: '🏷️' },
   { id: 'warning', label: 'Hazard', glyph: '⚠️' }
 ];
 
@@ -120,8 +125,8 @@ export const RoomLabelEditorModal: React.FC<RoomLabelEditorModalProps> = ({
 
     const completeAnnotation: RoomAnnotation = {
       ...(initialAnnotation || {}),
-      id: initialAnnotation?.id || `label_${now}_${Math.random().toString(36).substring(2, 7)}`,
-      type: 'label',
+      id: initialAnnotation?.id || `badge_${now}_${Math.random().toString(36).substring(2, 7)}`,
+      type: 'badge',
       label: labelText.trim(),
       roomName: labelText.trim(),
       icon: selectedIcon,
@@ -177,7 +182,7 @@ export const RoomLabelEditorModal: React.FC<RoomLabelEditorModalProps> = ({
             </div>
             <div>
               <h2 className="text-sm font-bold text-zinc-100 font-mono tracking-wide">
-                {initialAnnotation ? 'Edit Map Label' : 'Place Map Label'}
+                {initialAnnotation ? 'Edit Descriptive Badge' : 'Place Descriptive Badge'}
               </h2>
               <p className="text-[10px] text-zinc-400">
                 Tactical room transition &amp; point of interest marker

@@ -156,6 +156,8 @@ import {
   ChapterPdfDigest,
   normalizeRoomAnnotation,
   normalizeRoomAnnotations,
+  isDescriptiveBadge,
+  isRoomZone,
   isMonsterToken,
   AURA_PRESETS,
   AURA_COLOR_PALETTE,
@@ -7261,7 +7263,7 @@ export default function App() {
       // Also persist to mapZones document
       saveMapZone(campId, scnId, zoneWithScene).catch(console.warn);
 
-      if (zoneWithScene.type === 'label') {
+      if (isDescriptiveBadge(zoneWithScene)) {
         toast.success(`Label "${zoneWithScene.label}" saved to scene bundle!`, {
           icon: '🏷️'
         });
@@ -10026,7 +10028,7 @@ export default function App() {
           setCampaignMode={handleModeChange}
           roomAnnotations={roomAnnotations}
           onOpenZoneDetails={(anno) => {
-            if (anno.type === 'label') {
+            if (isDescriptiveBadge(anno)) {
               setEditingLabelAnnotation(anno);
               setPendingLabelPosition(null);
               setIsLabelEditorOpen(true);
@@ -10759,7 +10761,7 @@ export default function App() {
                         dd._dragElements.forEach((elem: any) => elem?.node?.stopDrag?.());
                       }
                     } catch {}
-                    if (anno.type === 'label') {
+                    if (isDescriptiveBadge(anno)) {
                       setEditingLabelAnnotation(anno);
                       setPendingLabelPosition(null);
                       setIsLabelEditorOpen(true);
@@ -10787,7 +10789,7 @@ export default function App() {
                         dd._dragElements.forEach((elem: any) => elem?.node?.stopDrag?.());
                       }
                     } catch {}
-                    if (anno.type === 'label') {
+                    if (isDescriptiveBadge(anno)) {
                       setEditingLabelAnnotation(anno);
                       setPendingLabelPosition(null);
                       setIsLabelEditorOpen(true);

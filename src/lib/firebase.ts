@@ -190,7 +190,7 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   }
 }
 
-import { WallSegment, VisionConfig, RoomAnnotation, ChapterPdfDigest, RevealPoint, TokenMonsterState, normalizeRoomAnnotation, normalizeRoomAnnotations } from '../types';
+import { WallSegment, VisionConfig, RoomAnnotation, ChapterPdfDigest, RevealPoint, TokenMonsterState, normalizeRoomAnnotation, normalizeRoomAnnotations, isDescriptiveBadge } from '../types';
 
 // Data Interfaces as specified in User Requirements
 export interface SceneToken {
@@ -1479,7 +1479,7 @@ export async function saveMapZone(
   const normalized = normalizeRoomAnnotation(zone, 0, sceneId || 'default', campaignId || 'default');
   const zoneId = normalized.id || `zone_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   const now = Date.now();
-  const isLabel = normalized.type === 'label';
+  const isLabel = isDescriptiveBadge(normalized);
   const roomNumber = isLabel
     ? undefined
     : (normalized.roomNumber || (normalized.label ? normalized.label.split(/[\s\-:]/)[0] : '1'));
@@ -1489,7 +1489,7 @@ export async function saveMapZone(
   const zoneData: RoomAnnotation = {
     ...normalized,
     id: zoneId,
-    type: isLabel ? 'label' : 'room',
+    type: isLabel ? 'badge' : (normalized.type || 'room'),
     roomNumber,
     roomName,
     label,
