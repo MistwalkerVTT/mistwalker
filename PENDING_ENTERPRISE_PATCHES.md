@@ -14,6 +14,18 @@
 
 ## Pending Changes Queue for Future Enterprise Patch
 
+### [2026-11-03] feat(grid): add interactive grid calibration box tracing tool to tactical layers
+- **Commit**: `07f7a9e`
+- **Files Changed**:
+  - `src/App.tsx`
+  - `src/components/LeftSidebar.tsx`
+- **Summary**:
+  - Added an interactive "CALIBRATE BY BOX" / "Trace Grid Square Box" tool in the Tactical Layers Grid panel.
+  - Allows tracing an existing tile or printed square on a battlemap image with a click-and-drag box.
+  - Automatically measures width and height, computes new `gridSize` and alignment offsets (`gridOffsetX`, `gridOffsetY`), aligns the grid to the drawn box, and snaps the virtual battle grid directly to the artwork.
+
+---
+
 ### [2026-11-03] feat(tactical): separate descriptive badges from room zone labels and fix polygon save coercion
 - **Commit**: `0abbc1b`
 - **Files Changed**:
