@@ -14,6 +14,17 @@
 
 ## Pending Changes Queue for Future Enterprise Patch
 
+### [2026-11-03] refactor(campaign): remove complex adventure pdf importer in favor of standard upload digest
+- **Commit**: `dc95195`
+- **Files Changed**:
+  - `src/components/CampaignBuilderModal.tsx`
+- **Summary**:
+  - Removed "Import from Adventure PDF" button, state (`isPdfImporterOpen`), and modal mount (`<CampaignPdfImporterModal>`).
+  - Elevated standard "Upload PDF" button to primary call-to-action in the Chapter PDF header.
+  - Standardized on the text/lore ingestion pipeline (`handleUploadAndDigestPdf` / `pdfDigest`) which non-destructively parses story beats, room keys, and boxed text without spawning phantom scenes or skewed wall coordinates.
+
+---
+
 ### [2026-11-03] feat(grid): add interactive grid calibration box tracing tool to tactical layers
 - **Commit**: `07f7a9e`
 - **Files Changed**:
