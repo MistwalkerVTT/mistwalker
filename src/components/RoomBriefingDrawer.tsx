@@ -34,6 +34,7 @@ import {
 import ReactMarkdown from 'react-markdown';
 import { RoomAnnotation, ChapterPdfDigest } from '../types';
 import { Monster } from '../types/monster';
+import type { HandoutItem } from '../types/handout';
 import { HazardType, HazardSeverity, HAZARD_PRESETS } from '../types/hazard';
 import { AlertTriangle, Flame } from 'lucide-react';
 import { updateRoomAnnotation } from '../lib/updateRoomAnnotation';
@@ -92,6 +93,8 @@ export interface RoomBriefingDrawerProps {
   onSelectRoomByNumber?: (roomNumber: string) => void;
   onUpdateDigest?: (updatedDigest: ChapterPdfDigest) => Promise<void> | void;
   onRedrawPolygon?: (room: RoomAnnotation) => void;
+  chapterHandouts?: HandoutItem[];
+  onPresentHandout?: (item: HandoutItem) => void;
 }
 
 export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
@@ -115,7 +118,9 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
   roomAnnotations = [],
   onSelectRoomByNumber,
   onUpdateDigest,
-  onRedrawPolygon
+  onRedrawPolygon,
+  chapterHandouts = [],
+  onPresentHandout
 }) => {
   const [activeRoom, setActiveRoom] = useState<RoomAnnotation | null>(room);
   const [drawerTab, setDrawerTab] = useState<'room' | 'flow'>(initialTab);
@@ -1142,7 +1147,7 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
                         monsters: manualMonsters,
                         hiddenMonsterNames: hiddenMonsterNames
                       };
-                      onRedrawPolygon(currentDraft);
+                      onRedrawPolygon?.(currentDraft);
                     }}
                     className="px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40 font-mono text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
                     title="Trace a new polygon boundary on the battlemap for this room zone"
@@ -1418,6 +1423,73 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
                         >
                           Read Beat
                         </button>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+
+              {/* Contextual Linked Handouts, Puzzles, Secrets & Tomes for this Room */}
+              {(() => {
+                const targetNum = (activeRoom.roomNumber || activeRoom.label || '').trim().toLowerCase().replace(/^(area|room|zone)\s*/i, '');
+                if (!targetNum) return null;
+                const pool = [
+                  ...(chapterHandouts || []),
+                  ...(chapterPdfDigest?.handouts || [])
+                ];
+                const map = new Map<string, HandoutItem>();
+                pool.forEach((h) => map.set(h.id, h));
+                const allHandouts = Array.from(map.values());
+
+                const linkedHandouts = allHandouts.filter((h) => {
+                  if (!h.roomNumbers || h.roomNumbers.length === 0) return false;
+                  return h.roomNumbers.some((r) => {
+                    const cleanR = r.trim().toLowerCase().replace(/^(area|room|zone)\s*/i, '');
+                    return cleanR === targetNum || r.trim().toLowerCase() === targetNum;
+                  });
+                });
+
+                if (linkedHandouts.length === 0) return null;
+
+                return (
+                  <div className="p-3 rounded-2xl bg-indigo-950/25 border border-indigo-500/30 flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono uppercase tracking-wider font-bold text-indigo-300 flex items-center gap-1.5">
+                        <BookOpen className="w-3.5 h-3.5 text-indigo-400" />
+                        Room Handouts, Puzzles & Secrets ({linkedHandouts.length})
+                      </span>
+                    </div>
+                    {linkedHandouts.map((handout) => (
+                      <div key={handout.id} className="p-2.5 rounded-xl bg-zinc-950/80 border border-indigo-500/25 flex flex-col gap-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 truncate">
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                              {handout.category}
+                            </span>
+                            <span className="text-xs font-bold text-zinc-100 truncate">{handout.title}</span>
+                          </div>
+                          {onPresentHandout && (
+                            <button
+                              type="button"
+                              onClick={() => onPresentHandout(handout)}
+                              className="px-2 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-mono font-bold shrink-0 transition-colors cursor-pointer"
+                              title="Broadcast directly to all players' screens"
+                            >
+                              Present to Table
+                            </button>
+                          )}
+                        </div>
+                        {handout.content && (
+                          <p className="text-[11px] text-zinc-300 font-serif line-clamp-2 italic leading-relaxed">
+                            "{handout.content}"
+                          </p>
+                        )}
+                        {handout.dmSecretNotes && (
+                          <div className="p-1.5 rounded-lg bg-purple-950/30 border border-purple-500/20 text-[10px] font-mono text-purple-300">
+                            <span className="font-bold">DM Secret: </span>
+                            {handout.dmSecretNotes}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

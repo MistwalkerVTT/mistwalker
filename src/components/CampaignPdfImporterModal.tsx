@@ -35,9 +35,10 @@ import {
   ExtractedMapResult,
   IngestionPipelineStep
 } from '../services/pdfIngestionService';
-import { Campaign, Chapter, Scene, saveSceneToCampaign, getCampaignsList, saveCampaignDoc } from '../lib/firebase';
+import { Campaign, Chapter, Scene, saveSceneToCampaign, getCampaignsList, saveCampaignDoc, saveHandoutsToChapter } from '../lib/firebase';
 import { UploadedAsset, WallSegment, RoomAnnotation } from '../types';
 import { Monster } from '../types/monster';
+import { HandoutItem } from '../types/handout';
 
 export interface CampaignPdfImporterModalProps {
   isOpen: boolean;
@@ -90,10 +91,12 @@ export const CampaignPdfImporterModal: React.FC<CampaignPdfImporterModalProps> =
   const [ingestedChapterTitle, setIngestedChapterTitle] = useState<string>('');
   const [extractedScenes, setExtractedScenes] = useState<IngestedSceneItem[]>([]);
   const [ingestedMonsters, setIngestedMonsters] = useState<Monster[]>([]);
+  const [ingestedHandouts, setIngestedHandouts] = useState<HandoutItem[]>([]);
   const [activeSceneIndex, setActiveSceneIndex] = useState<number>(0);
   const [selectedRoomIndex, setSelectedRoomIndex] = useState<number | null>(null);
   const [selectedMonsterIndex, setSelectedMonsterIndex] = useState<number | null>(null);
-  const [rightSidebarTab, setRightSidebarTab] = useState<'rooms' | 'monsters'>('rooms');
+  const [selectedHandoutIndex, setSelectedHandoutIndex] = useState<number | null>(null);
+  const [rightSidebarTab, setRightSidebarTab] = useState<'rooms' | 'monsters' | 'handouts'>('rooms');
 
   // Preview display toggles & viewport
   const [showWalls, setShowWalls] = useState<boolean>(true);
@@ -211,15 +214,20 @@ export const CampaignPdfImporterModal: React.FC<CampaignPdfImporterModalProps> =
       setIngestedChapterTitle(result.chapterTitle || selectedFile.name.replace(/\.[^/.]+$/, ''));
       setExtractedScenes(result.scenes);
       setIngestedMonsters(result.ingestedMonsters || []);
+      setIngestedHandouts(result.handouts || []);
       setActiveSceneIndex(0);
       setSelectedRoomIndex(result.scenes[0]?.rooms.length > 0 ? 0 : null);
       if (result.ingestedMonsters && result.ingestedMonsters.length > 0) {
         setSelectedMonsterIndex(0);
       }
+      if (result.handouts && result.handouts.length > 0) {
+        setSelectedHandoutIndex(0);
+      }
       setViewMode('preview');
       const monsterCount = result.ingestedMonsters?.length || 0;
+      const handoutCount = result.handouts?.length || 0;
       toast.success(
-        `Successfully ingested ${result.scenes.length} scene(s) and auto-added ${monsterCount} monster(s) to Compendium!`
+        `Successfully ingested ${result.scenes.length} scene(s), ${monsterCount} monster(s), and ${handoutCount} handout(s)!`
       );
     } catch (err: any) {
       console.error('PDF ingestion pipeline failed:', err);
@@ -327,6 +335,16 @@ export const CampaignPdfImporterModal: React.FC<CampaignPdfImporterModalProps> =
       for (const item of extractedScenes) {
         await saveSceneToCampaign(targetCampId, targetChapId, item.scene);
         onSceneImported?.(item.scene, targetCampId, targetChapId);
+      }
+
+      // Save extracted adventure handouts & puzzles directly to the chapter
+      if (ingestedHandouts.length > 0) {
+        const handoutsWithIds = ingestedHandouts.map((h) => ({
+          ...h,
+          campaignId: targetCampId,
+          chapterId: targetChapId
+        }));
+        await saveHandoutsToChapter(targetCampId, targetChapId, handoutsWithIds);
       }
 
       toast.success(
@@ -984,6 +1002,18 @@ export const CampaignPdfImporterModal: React.FC<CampaignPdfImporterModalProps> =
                       <Skull className="w-3.5 h-3.5" />
                       <span>Monsters ({ingestedMonsters.length})</span>
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setRightSidebarTab('handouts')}
+                      className={`flex-1 py-2.5 px-3 text-xs font-mono font-bold flex items-center justify-center gap-1.5 border-b-2 transition-all cursor-pointer ${
+                        rightSidebarTab === 'handouts'
+                          ? 'border-indigo-500 text-indigo-400 bg-indigo-500/5'
+                          : 'border-transparent text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/50'
+                      }`}
+                    >
+                      <BookOpen className="w-3.5 h-3.5" />
+                      <span>Handouts ({ingestedHandouts.length})</span>
+                    </button>
                   </div>
 
                   {rightSidebarTab === 'rooms' ? (
@@ -1090,7 +1120,7 @@ export const CampaignPdfImporterModal: React.FC<CampaignPdfImporterModalProps> =
                     )}
                   </div>
                 </>
-              ) : (
+              ) : rightSidebarTab === 'monsters' ? (
                 <>
                   {/* Monsters Quick Pill Selector */}
                   <div className="p-2 border-b border-zinc-800/60 bg-zinc-950/40 flex items-center gap-1.5 overflow-x-auto text-[11px] font-mono shrink-0">
@@ -1244,6 +1274,106 @@ export const CampaignPdfImporterModal: React.FC<CampaignPdfImporterModalProps> =
                     )}
                   </div>
                 </>
+              ) : (
+                <>
+                  {/* Handouts Quick Pill Selector */}
+                  <div className="p-2 border-b border-zinc-800/60 bg-zinc-950/40 flex items-center gap-1.5 overflow-x-auto text-[11px] font-mono shrink-0">
+                    {ingestedHandouts.map((handout, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setSelectedHandoutIndex(idx)}
+                        className={`px-2.5 py-1 rounded-lg font-bold shrink-0 transition-all cursor-pointer truncate max-w-[140px] ${
+                          selectedHandoutIndex === idx
+                            ? 'bg-indigo-600 text-white shadow-sm'
+                            : 'bg-zinc-800/70 text-zinc-400 hover:text-zinc-200'
+                        }`}
+                      >
+                        {handout.title || `Handout ${idx + 1}`}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                    {selectedHandoutIndex !== null && ingestedHandouts[selectedHandoutIndex] ? (
+                      (() => {
+                        const h = ingestedHandouts[selectedHandoutIndex];
+                        return (
+                          <div className="space-y-4 animate-in fade-in">
+                            <div className="p-3 rounded-2xl bg-zinc-950 border border-zinc-800 shadow-md">
+                              <div className="flex items-center justify-between">
+                                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                                  {h.category}
+                                </span>
+                                {h.roomNumbers && h.roomNumbers.length > 0 && (
+                                  <span className="text-[10px] font-mono text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                                    Rooms: {h.roomNumbers.join(', ')}
+                                  </span>
+                                )}
+                              </div>
+                              <h3 className="text-base font-bold text-zinc-100 mt-2">{h.title}</h3>
+                              {h.subtitle && <p className="text-xs text-zinc-400 italic">{h.subtitle}</p>}
+                            </div>
+
+                            {/* Content Preview */}
+                            <div className="p-3.5 rounded-2xl bg-zinc-950/70 border border-zinc-850 space-y-2">
+                              <span className="text-[11px] font-mono uppercase font-bold text-zinc-400">
+                                Handout / Tome Text
+                              </span>
+                              <p className="text-xs text-zinc-300 font-serif whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">
+                                {h.content}
+                              </p>
+                              {h.signature && (
+                                <p className="text-right text-xs italic text-indigo-300">{h.signature}</p>
+                              )}
+                            </div>
+
+                            {/* Riddle / Puzzle Hints & Solution */}
+                            {(h.riddleAnswer || (h.riddleHints && h.riddleHints.length > 0)) && (
+                              <div className="p-3.5 rounded-2xl bg-amber-950/20 border border-amber-500/30 space-y-2">
+                                <span className="text-[11px] font-mono uppercase font-bold text-amber-400">
+                                  Puzzle / Riddle Solution
+                                </span>
+                                {h.riddleAnswer && (
+                                  <div className="text-xs text-amber-200">
+                                    <span className="font-bold">Answer: </span>
+                                    {h.riddleAnswer}
+                                  </div>
+                                )}
+                                {h.riddleHints && h.riddleHints.length > 0 && (
+                                  <div className="text-xs text-zinc-400 space-y-1">
+                                    <div className="font-semibold text-zinc-300">Hints:</div>
+                                    <ul className="list-disc list-inside space-y-0.5">
+                                      {h.riddleHints.map((hint, hintIdx) => (
+                                        <li key={hintIdx}>{hint}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* DM Secret Notes */}
+                            {h.dmSecretNotes && (
+                              <div className="p-3.5 rounded-2xl bg-purple-950/20 border border-purple-500/30 space-y-1.5">
+                                <span className="text-[11px] font-mono uppercase font-bold text-purple-400">
+                                  DM Secret Notes & Checks
+                                </span>
+                                <p className="text-xs text-purple-200 leading-relaxed">{h.dmSecretNotes}</p>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()
+                    ) : (
+                      <div className="p-8 text-center text-zinc-500 text-xs">
+                        {ingestedHandouts.length > 0
+                          ? 'Select a handout from the list above to inspect details.'
+                          : 'No specific handouts, puzzles, or secrets detected in this PDF chapter.'}
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
             </div>
           </div>
@@ -1257,6 +1387,7 @@ export const CampaignPdfImporterModal: React.FC<CampaignPdfImporterModalProps> =
                 {extractedScenes.reduce((acc, s) => acc + s.rooms.length, 0)} Rooms •{' '}
                 {extractedScenes.reduce((acc, s) => acc + (s.scene.walls?.length || 0), 0)} Walls & Doors
                 {ingestedMonsters.length > 0 && ` • ${ingestedMonsters.length} Compendium Monster(s)`}
+                {ingestedHandouts.length > 0 && ` • ${ingestedHandouts.length} Handout(s)`}
               </span>
             </div>
 

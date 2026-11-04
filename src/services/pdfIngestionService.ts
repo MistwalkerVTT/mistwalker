@@ -2,6 +2,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 import { uploadAndRegisterAsset, saveSceneToCampaign, saveMonster, getMonstersList } from '../lib/firebase';
 import { Scene, RoomAnnotation, WallSegment, UploadedAsset } from '../types';
 import { Monster } from '../types/monster';
+import { HandoutItem } from '../types/handout';
 import { snapPointToGrid, snapToGrid } from '../lib/visionEngine';
 import { getAiHeaders } from './aiService';
 import { isNonCreatureStatOrItem } from '../data/srdMonstersCatalog';
@@ -46,6 +47,7 @@ export interface ParsedChapter {
   chapterTitle: string;
   allMonsters?: string[];
   scenes: ParsedScene[];
+  handouts?: HandoutItem[];
 }
 
 export interface ExtractedMapResult {
@@ -724,6 +726,7 @@ export async function runPdfIngestionPipeline(
     rooms: ParsedRoom[];
   }>;
   ingestedMonsters: Monster[];
+  handouts: HandoutItem[];
 }> {
   // Step 1: Parsing Text
   options?.onProgress?.({
@@ -823,15 +826,33 @@ export async function runPdfIngestionPipeline(
     });
   }
 
+  // Link handouts to chapter, campaign, and matching scenes
+  const finalizedHandouts: HandoutItem[] = (parsedChapter.handouts || []).map((h) => {
+    let matchedSceneId = h.sceneId;
+    if (!matchedSceneId && h.sceneTitle) {
+      const match = scenesOut.find(
+        (s) => s.sceneTitle.toLowerCase().trim() === (h.sceneTitle || '').toLowerCase().trim()
+      );
+      if (match) matchedSceneId = match.scene.sceneId;
+    }
+    return {
+      ...h,
+      campaignId: options?.campaignId || h.campaignId,
+      chapterId: options?.chapterId || h.chapterId,
+      sceneId: matchedSceneId || (scenesOut.length === 1 ? scenesOut[0].scene.sceneId : undefined)
+    };
+  });
+
   options?.onProgress?.({
     step: 'complete',
-    message: `Adventure ingestion complete! Ready with ${scenesOut.length} scene(s) and ${ingestedMonsters.length} monster(s) in Compendium.`,
+    message: `Adventure ingestion complete! Ready with ${scenesOut.length} scene(s), ${ingestedMonsters.length} monster(s), and ${finalizedHandouts.length} handout(s).`,
     progressPercent: 100
   });
 
   return {
     chapterTitle: parsedChapter.chapterTitle,
     scenes: scenesOut,
-    ingestedMonsters
+    ingestedMonsters,
+    handouts: finalizedHandouts
   };
 }

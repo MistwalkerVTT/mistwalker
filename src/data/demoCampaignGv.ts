@@ -2,6 +2,7 @@ import guildhouseMainLevelImg from '../assets/images/guildhouse_main_level.jpg';
 import guildhouse2ndFloorImg from '../assets/images/guildhouse_2nd_floor.jpg';
 import { Campaign, Scene, Chapter, SceneToken } from '../lib/firebase';
 import { RoomAnnotation, WallSegment, ChapterPdfDigest } from '../types';
+import type { HandoutItem } from '../types/handout';
 
 /**
  * Prebuilt Demo Campaign: "The Guild House - Main Level"
@@ -1521,7 +1522,73 @@ export const DEMO_GV_TOKENS: SceneToken[] = [
   }
 ];
 
+export const DEMO_GV_HANDOUTS: HandoutItem[] = [
+  {
+    id: 'handout_golden_vault_directive',
+    title: 'Sealed Directive from the Golden Vault',
+    subtitle: 'Confidential Mission Briefing',
+    category: 'letter',
+    themeStyle: 'parchment',
+    campaignId: 'camp-mtouse1g',
+    chapterId: 'chap-mtoussuc',
+    sceneId: 'scene-guildhouse-main',
+    sceneTitle: 'The Guild House - Main Level',
+    roomNumbers: ['G1'],
+    content: `Operatives,\n\nShould you choose to accept this assignment, your objective lies within the Agile Hand thieves guildhouse. Infiltrate the premises and recover Constantori's sentient occult portrait before midnight when planar warding cycles renew.\n\nLeave no trace of the Golden Vault's involvement. Burn this missive once memorized.`,
+    signature: '— The Curator',
+    sealText: 'GV',
+    isSharedWithParty: true,
+    dmSecretNotes: 'Give the party 250 gp advance expenses if they consult the contact at the local tavern before departing.',
+    createdAt: 1700000000000,
+    updatedAt: 1700000000000
+  },
+  {
+    id: 'handout_guildmaster_horse_deed',
+    title: 'Deed of Horse Ownership',
+    subtitle: 'Concealed in Loose Plank Drop Box',
+    category: 'secret',
+    themeStyle: 'parchment',
+    campaignId: 'camp-mtouse1g',
+    chapterId: 'chap-mtoussuc',
+    sceneId: 'scene-guildhouse-main',
+    sceneTitle: 'The Guild House - Main Level',
+    roomNumbers: ['G1'],
+    content: `This parchment confirms the transfer of ownership of two thoroughbred riding horses from the North Gate Stables to Guildmaster Dusk of the Agile Hand guild. Signed and sealed under the sign of the Black Raven.`,
+    signature: '— North Gate Quartermaster',
+    sealText: 'BR',
+    isSharedWithParty: false,
+    dmSecretNotes: 'Found inside the dusty satchel under the loose floorboard in front of area G10. Can be used as blackmail or leverage against Guildmaster Dusk.',
+    createdAt: 1700000000000,
+    updatedAt: 1700000000000
+  },
+  {
+    id: 'handout_crypt_riddle_tablet',
+    title: 'Inscription on the Vault Door',
+    subtitle: 'Carved in Deep Primordial Runes',
+    category: 'riddle',
+    themeStyle: 'stone_tablet',
+    campaignId: 'camp-mtouse1g',
+    chapterId: 'chap-mtoussuc',
+    sceneId: 'scene-guildhouse-main',
+    sceneTitle: 'The Guild House - Main Level',
+    roomNumbers: ['G4'],
+    content: `"I speak without a mouth and hear without ears.\nI have no body, training, or spear,\nYet I come alive with the wind's first breath.\nSpeak my true name to pass beyond death."`,
+    riddleHints: [
+      'Listen closely in a canyon or empty cathedral.',
+      'It repeats only what is spoken to it.'
+    ],
+    revealedHintCount: 0,
+    riddleAnswer: 'An Echo',
+    isAnswerRevealed: false,
+    isSharedWithParty: false,
+    dmSecretNotes: 'Speaking "Echo" aloud in Common or Primordial unlocks the door without triggering the poison gas needle.',
+    createdAt: 1700000000000,
+    updatedAt: 1700000000000
+  }
+];
+
 export const DEMO_GV_PDF_DIGEST: ChapterPdfDigest = {
+  handouts: DEMO_GV_HANDOUTS,
   "rooms": [
     {
       "roomName": "Front Porch",
@@ -3990,6 +4057,7 @@ export const DEMO_GV_CHAPTER: Chapter = {
   orderIndex: 0,
   pdfFilename: 'Keys_from_the_Golden_Vault_Masterpiece_Imbroglio.pdf',
   pdfDigest: DEMO_GV_PDF_DIGEST,
+  handouts: DEMO_GV_HANDOUTS,
   scenes: [DEMO_GV_SCENE, DEMO_GV_SCENE_2ND_FLOOR]
 };
 

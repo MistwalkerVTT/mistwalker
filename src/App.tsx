@@ -122,6 +122,7 @@ import {
   subscribeToCampaigns,
   saveCampaignDoc,
   saveSceneToCampaign,
+  saveHandoutsToChapter,
   UploadedAsset,
   subscribeToUploadedAssets,
   uploadAndRegisterAsset,
@@ -195,6 +196,7 @@ import {
   HandoutsJournalModal,
   HandoutSpotlightModal
 } from './components/HandoutsJournalSystem';
+import { HandoutItem } from './types/handout';
 import {
   useAudioMixerJukebox,
   AudioMixerJukeboxModal,
@@ -2479,6 +2481,34 @@ export default function App() {
 
   // Stand-Alone Player Handouts, Visual Props & Shared Journal System
   const [showHandoutsJournalModal, setShowHandoutsJournalModal] = useState(false);
+
+  const currentActiveChapter = useMemo(() => {
+    if (!activeSceneInfo?.campaignId || !activeSceneInfo?.chapterId) return null;
+    const camp = campaignsList.find((c) => c.campaignId === activeSceneInfo.campaignId);
+    return camp?.chapters?.find((ch) => ch.chapterId === activeSceneInfo.chapterId) || null;
+  }, [campaignsList, activeSceneInfo?.campaignId, activeSceneInfo?.chapterId]);
+
+  const activeChapterHandouts = useMemo(() => {
+    const direct = currentActiveChapter?.handouts || [];
+    const fromDigest = currentActiveChapter?.pdfDigest?.handouts || [];
+    const map = new Map<string, HandoutItem>();
+    direct.forEach((h) => map.set(h.id, h));
+    fromDigest.forEach((h) => map.set(h.id, h));
+    return Array.from(map.values());
+  }, [currentActiveChapter]);
+
+  const handlePersistChapterHandouts = useCallback(
+    async (handouts: HandoutItem[]) => {
+      if (!activeSceneInfo?.campaignId || !activeSceneInfo?.chapterId) return;
+      try {
+        await saveHandoutsToChapter(activeSceneInfo.campaignId, activeSceneInfo.chapterId, handouts);
+      } catch (err) {
+        console.warn('[App] Failed to persist chapter handouts to Firestore:', err);
+      }
+    },
+    [activeSceneInfo?.campaignId, activeSceneInfo?.chapterId]
+  );
+
   const {
     handouts: partyHandouts,
     quests: partyQuests,
@@ -2501,7 +2531,10 @@ export default function App() {
   } = useHandoutsJournalSystem({
     role: 'dm',
     currentCharacterName: 'Dungeon Master',
-    socketRef
+    socketRef,
+    activeChapterId: activeSceneInfo?.chapterId,
+    chapterHandouts: activeChapterHandouts,
+    onPersistHandouts: handlePersistChapterHandouts
   });
 
   // Stand-Alone Soundboard & Ambient Audio Mixer (Jukebox & Spatial 2D Audio)
@@ -13626,6 +13659,8 @@ export default function App() {
           return null;
         })()}
         availableMonsters={compendiumMonsters}
+        chapterHandouts={activeChapterHandouts.length > 0 ? activeChapterHandouts : partyHandouts}
+        onPresentHandout={presentHandoutToTable}
         onSpawnMonsterToken={handleSpawnMonsterToken}
         initialTab={drawerInitialTab}
         activeSceneTitle={activeSceneInfo?.sceneTitle}
@@ -14000,6 +14035,10 @@ export default function App() {
         quests={partyQuests}
         journalEntries={partyJournalEntries}
         activePresentation={activeHandoutPresentation}
+        activeChapterId={activeSceneInfo?.chapterId}
+        activeSceneId={activeSceneInfo?.sceneId}
+        activeChapterTitle={currentActiveChapter?.chapterTitle || activeSceneInfo?.chapterTitle}
+        activeSceneTitle={activeSceneInfo?.sceneTitle}
         onSaveHandout={addOrUpdateHandout}
         onDeleteHandout={deleteHandout}
         onPresentHandout={presentHandoutToTable}

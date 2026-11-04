@@ -1134,6 +1134,51 @@ export async function saveSceneToCampaign(
 }
 
 /**
+ * Save or update adventure handouts directly attached to a campaign chapter
+ */
+export async function saveHandoutsToChapter(
+  campaignId: string,
+  chapterId: string,
+  handouts: HandoutItem[]
+): Promise<Campaign> {
+  const path = `campaigns/${campaignId}`;
+  try {
+    const docRef = doc(db, 'campaigns', campaignId);
+    const snap = await getDoc(docRef);
+    if (!snap.exists()) {
+      throw new Error(`Campaign ${campaignId} not found`);
+    }
+    const camp = snap.data() as Campaign;
+    const updatedChapters = (camp.chapters || []).map((ch) => {
+      if (ch.chapterId === chapterId) {
+        const existing = ch.handouts || [];
+        const map = new Map<string, HandoutItem>();
+        existing.forEach((h) => map.set(h.id, h));
+        handouts.forEach((h) => map.set(h.id, h));
+        return {
+          ...ch,
+          handouts: Array.from(map.values())
+        };
+      }
+      return ch;
+    });
+
+    const updatedCamp: Campaign = {
+      ...camp,
+      chapters: updatedChapters,
+      updatedAt: Date.now()
+    };
+
+    const payload = cleanForFirestore(updatedCamp);
+    await setDoc(docRef, payload, { merge: true });
+    return updatedCamp;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+    throw error;
+  }
+}
+
+/**
  * Create a new campaign containing an initial chapter and scene
  */
 export async function createCampaignWithScene(

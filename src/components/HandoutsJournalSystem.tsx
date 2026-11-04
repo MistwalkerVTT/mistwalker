@@ -124,8 +124,11 @@ export function useHandoutsJournalSystem(options: {
   role: 'dm' | 'player';
   currentCharacterName?: string;
   socketRef: React.MutableRefObject<any>;
+  activeChapterId?: string;
+  chapterHandouts?: HandoutItem[];
+  onPersistHandouts?: (handouts: HandoutItem[]) => void;
 }) {
-  const { role, currentCharacterName, socketRef } = options;
+  const { role, currentCharacterName, socketRef, activeChapterId, chapterHandouts, onPersistHandouts } = options;
   const [state, setState] = useState<HandoutsJournalState>(loadInitialState);
   const [inspectedHandout, setInspectedHandout] = useState<HandoutItem | null>(null);
   const [hasUnreadUpdate, setHasUnreadUpdate] = useState(false);
@@ -134,6 +137,20 @@ export function useHandoutsJournalSystem(options: {
   useEffect(() => {
     latestCharNameRef.current = currentCharacterName;
   }, [currentCharacterName]);
+
+  // Whenever the active chapter changes or chapterHandouts are provided from campaign doc, merge them in
+  useEffect(() => {
+    if (!chapterHandouts || chapterHandouts.length === 0) return;
+    setState((prev) => {
+      const map = new Map<string, HandoutItem>();
+      prev.handouts.forEach((h) => map.set(h.id, h));
+      chapterHandouts.forEach((h) => map.set(h.id, h));
+      return {
+        ...prev,
+        handouts: Array.from(map.values())
+      };
+    });
+  }, [chapterHandouts]);
 
   // Persist to localStorage
   useEffect(() => {
@@ -233,18 +250,23 @@ export function useHandoutsJournalSystem(options: {
   // Actions
   const saveHandout = useCallback(
     (item: HandoutItem) => {
+      const itemWithChapter: HandoutItem = {
+        ...item,
+        chapterId: item.chapterId || activeChapterId
+      };
       setState((prev) => {
-        const exists = prev.handouts.some((h) => h.id === item.id);
+        const exists = prev.handouts.some((h) => h.id === itemWithChapter.id);
         const nextHandouts = exists
-          ? prev.handouts.map((h) => (h.id === item.id ? item : h))
-          : [item, ...prev.handouts];
+          ? prev.handouts.map((h) => (h.id === itemWithChapter.id ? itemWithChapter : h))
+          : [itemWithChapter, ...prev.handouts];
         const next = { ...prev, handouts: nextHandouts };
         emitSync({ handouts: nextHandouts });
+        onPersistHandouts?.(nextHandouts);
         return next;
       });
-      setInspectedHandout((prev) => (prev && prev.id === item.id ? item : prev));
+      setInspectedHandout((prev) => (prev && prev.id === itemWithChapter.id ? itemWithChapter : prev));
     },
-    [emitSync]
+    [emitSync, activeChapterId, onPersistHandouts]
   );
 
   const deleteHandout = useCallback(
@@ -252,11 +274,12 @@ export function useHandoutsJournalSystem(options: {
       setState((prev) => {
         const nextHandouts = prev.handouts.filter((h) => h.id !== id);
         emitSync({ handouts: nextHandouts });
+        onPersistHandouts?.(nextHandouts);
         return { ...prev, handouts: nextHandouts };
       });
       setInspectedHandout((prev) => (prev && prev.id === id ? null : prev));
     },
-    [emitSync]
+    [emitSync, onPersistHandouts]
   );
 
   const presentHandoutToPlayers = useCallback(
@@ -448,14 +471,29 @@ const CATEGORY_META: Record<
     badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/40'
   },
   riddle: {
-    label: 'Riddle / Puzzle',
+    label: 'Riddle',
     icon: KeyRound,
     badgeClass: 'bg-purple-500/20 text-purple-300 border-purple-500/40'
+  },
+  puzzle: {
+    label: 'Puzzle / Enigma',
+    icon: Sparkles,
+    badgeClass: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
+  },
+  secret: {
+    label: 'Secret / Clue',
+    icon: Lock,
+    badgeClass: 'bg-rose-500/20 text-rose-300 border-rose-500/40'
   },
   prop: {
     label: 'Visual Prop / Art',
     icon: ImageIcon,
     badgeClass: 'bg-sky-500/20 text-sky-300 border-sky-500/40'
+  },
+  tome: {
+    label: 'Ancient Tome',
+    icon: Feather,
+    badgeClass: 'bg-amber-600/20 text-amber-200 border-amber-600/40'
   },
   map: {
     label: 'Regional / Lore Map',
@@ -875,6 +913,10 @@ export const HandoutsJournalModal: React.FC<{
   quests: SharedQuestItem[];
   journalEntries: SharedJournalEntry[];
   activePresentation?: any;
+  activeChapterId?: string;
+  activeSceneId?: string;
+  activeChapterTitle?: string;
+  activeSceneTitle?: string;
   onSaveHandout: (item: HandoutItem) => void;
   onDeleteHandout: (id: string) => void;
   onPresentHandout?: (item: HandoutItem, targetCharacterNames?: string[]) => void;
@@ -895,6 +937,10 @@ export const HandoutsJournalModal: React.FC<{
   handouts,
   quests,
   journalEntries,
+  activeChapterId,
+  activeSceneId,
+  activeChapterTitle,
+  activeSceneTitle,
   onSaveHandout,
   onDeleteHandout,
   onPresentHandout,
@@ -935,16 +981,24 @@ export const HandoutsJournalModal: React.FC<{
   const [newJournalCategory, setNewJournalCategory] = useState<'clue' | 'npc' | 'location' | 'session_log'>('clue');
   const [newJournalContent, setNewJournalContent] = useState('');
 
+  const [filterActiveChapterOnly, setFilterActiveChapterOnly] = useState<boolean>(true);
+
   if (!isOpen) return null;
 
   const filteredHandouts = handouts.filter((h) => {
+    // If filtering to active chapter and activeChapterId is present:
+    if (filterActiveChapterOnly && activeChapterId) {
+      // Show if tied to this chapter, or legacy unassigned handout without chapterId
+      if (h.chapterId && h.chapterId !== activeChapterId) return false;
+    }
     if (categoryFilter !== 'all' && h.category !== categoryFilter) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       return (
         h.title.toLowerCase().includes(q) ||
         (h.subtitle || '').toLowerCase().includes(q) ||
-        h.content.toLowerCase().includes(q)
+        h.content.toLowerCase().includes(q) ||
+        (h.roomNumbers || []).some((r) => r.toLowerCase().includes(q))
       );
     }
     return true;
@@ -954,7 +1008,10 @@ export const HandoutsJournalModal: React.FC<{
     const defaultTheme: Record<HandoutCategory, HandoutThemeStyle> = {
       letter: 'parchment',
       riddle: 'stone_tablet',
+      puzzle: 'stone_tablet',
+      secret: 'dark_obsidian',
       prop: 'dark_obsidian',
+      tome: 'arcane_tome',
       map: 'parchment',
       lore: 'arcane_tome'
     };
@@ -966,19 +1023,29 @@ export const HandoutsJournalModal: React.FC<{
           ? 'Sealed Parchment Missive'
           : presetCategory === 'riddle'
           ? 'Ancient Stone Inscription'
+          : presetCategory === 'puzzle'
+          ? 'Cryptic Vault Mechanism'
+          : presetCategory === 'secret'
+          ? 'Concealed Note / Diary Excerpt'
           : presetCategory === 'prop'
           ? 'Mysterious Artifact'
+          : presetCategory === 'tome'
+          ? 'Decipherable Ancient Grimoire'
           : presetCategory === 'map'
-          ? 'Recovered Cartographer Sketch'
+          ? 'Recovered Regional Map'
           : 'Tome of Forgotten Lore',
       subtitle: '',
       category: presetCategory,
       themeStyle: defaultTheme[presetCategory],
       content: '',
       imageUrl: '',
+      chapterId: activeChapterId,
+      sceneId: activeSceneId,
+      sceneTitle: activeSceneTitle,
+      roomNumbers: [],
       signature: presetCategory === 'letter' ? '— Unknown Benefactor' : '',
       sealText: presetCategory === 'letter' ? '👑' : '',
-      riddleHints: presetCategory === 'riddle' ? ['First clue...'] : [],
+      riddleHints: (presetCategory === 'riddle' || presetCategory === 'puzzle') ? ['First clue...'] : [],
       revealedHintCount: 0,
       riddleAnswer: '',
       isAnswerRevealed: false,
@@ -1094,9 +1161,42 @@ export const HandoutsJournalModal: React.FC<{
             <div className="flex-1 flex flex-col overflow-hidden border-r border-zinc-800/80">
               {/* Toolbar: Category Filter + Quick Create Buttons for DM */}
               <div className="p-3.5 bg-zinc-900/50 border-b border-zinc-800/80 space-y-2.5 shrink-0">
+                {activeChapterTitle && (
+                  <div className="p-2.5 rounded-xl bg-indigo-950/40 border border-indigo-500/30 flex items-center justify-between flex-wrap gap-2 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="p-1 rounded-lg bg-indigo-500/20 text-indigo-300">
+                        <MapIcon className="w-3.5 h-3.5" />
+                      </span>
+                      <div>
+                        <div className="font-bold text-zinc-100 flex items-center gap-1.5">
+                          <span>Chapter:</span>
+                          <span className="text-indigo-300">{activeChapterTitle}</span>
+                          {activeSceneTitle && (
+                            <span className="text-zinc-400 font-normal">({activeSceneTitle})</span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-zinc-400">
+                          {filteredHandouts.length} item(s) tied to current chapter.
+                        </div>
+                      </div>
+                    </div>
+                    {role === 'dm' && activeChapterId && (
+                      <label className="flex items-center gap-1.5 text-[11px] text-zinc-300 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={filterActiveChapterOnly}
+                          onChange={(e) => setFilterActiveChapterOnly(e.target.checked)}
+                          className="rounded border-zinc-700 bg-zinc-900 text-indigo-500 focus:ring-0"
+                        />
+                        <span>Active Chapter Only</span>
+                      </label>
+                    )}
+                  </div>
+                )}
+
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-1 flex-wrap">
-                    {(['all', 'letter', 'riddle', 'prop', 'map', 'lore'] as const).map((cat) => (
+                    {(['all', 'letter', 'riddle', 'puzzle', 'secret', 'prop', 'tome', 'map', 'lore'] as const).map((cat) => (
                       <button
                         key={cat}
                         type="button"
@@ -1133,37 +1233,58 @@ export const HandoutsJournalModal: React.FC<{
                     <button
                       type="button"
                       onClick={() => handleStartNewHandout('letter')}
-                      className="px-2.5 py-1 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-[11px] font-mono font-bold flex items-center gap-1 cursor-pointer"
+                      className="px-2 py-0.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-[11px] font-mono font-bold flex items-center gap-1 cursor-pointer"
                     >
-                      <Scroll className="w-3 h-3" /> Letter / Scroll
+                      <Scroll className="w-3 h-3" /> Letter
                     </button>
                     <button
                       type="button"
                       onClick={() => handleStartNewHandout('riddle')}
-                      className="px-2.5 py-1 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border border-purple-500/30 text-[11px] font-mono font-bold flex items-center gap-1 cursor-pointer"
+                      className="px-2 py-0.5 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border border-purple-500/30 text-[11px] font-mono font-bold flex items-center gap-1 cursor-pointer"
                     >
-                      <KeyRound className="w-3 h-3" /> Interactive Riddle
+                      <KeyRound className="w-3 h-3" /> Riddle
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleStartNewHandout('puzzle')}
+                      className="px-2 py-0.5 rounded-xl bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border border-indigo-500/30 text-[11px] font-mono font-bold flex items-center gap-1 cursor-pointer"
+                    >
+                      <Sparkles className="w-3 h-3" /> Puzzle
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleStartNewHandout('secret')}
+                      className="px-2 py-0.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-[11px] font-mono font-bold flex items-center gap-1 cursor-pointer"
+                    >
+                      <Lock className="w-3 h-3" /> Secret
                     </button>
                     <button
                       type="button"
                       onClick={() => handleStartNewHandout('prop')}
-                      className="px-2.5 py-1 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/30 text-[11px] font-mono font-bold flex items-center gap-1 cursor-pointer"
+                      className="px-2 py-0.5 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/30 text-[11px] font-mono font-bold flex items-center gap-1 cursor-pointer"
                     >
-                      <ImageIcon className="w-3 h-3" /> Image / Clue Prop
+                      <ImageIcon className="w-3 h-3" /> Prop
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleStartNewHandout('tome')}
+                      className="px-2 py-0.5 rounded-xl bg-amber-600/15 hover:bg-amber-600/25 text-amber-200 border border-amber-600/30 text-[11px] font-mono font-bold flex items-center gap-1 cursor-pointer"
+                    >
+                      <Feather className="w-3 h-3" /> Tome
                     </button>
                     <button
                       type="button"
                       onClick={() => handleStartNewHandout('map')}
-                      className="px-2.5 py-1 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-[11px] font-mono font-bold flex items-center gap-1 cursor-pointer"
+                      className="px-2 py-0.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-[11px] font-mono font-bold flex items-center gap-1 cursor-pointer"
                     >
-                      <MapIcon className="w-3 h-3" /> Regional Map
+                      <MapIcon className="w-3 h-3" /> Map
                     </button>
                     <button
                       type="button"
                       onClick={() => handleStartNewHandout('lore')}
-                      className="px-2.5 py-1 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-[11px] font-mono font-bold flex items-center gap-1 cursor-pointer"
+                      className="px-2 py-0.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 text-[11px] font-mono font-bold flex items-center gap-1 cursor-pointer"
                     >
-                      <BookOpen className="w-3 h-3" /> Tome Page
+                      <BookOpen className="w-3 h-3" /> Lore
                     </button>
                   </div>
                 )}
@@ -1191,12 +1312,19 @@ export const HandoutsJournalModal: React.FC<{
                       >
                         <div className="space-y-2">
                           <div className="flex items-center justify-between gap-2">
-                            <span
-                              className={`px-2 py-0.5 rounded-lg text-[10px] font-mono font-bold border flex items-center gap-1 ${meta.badgeClass}`}
-                            >
-                              <Icon className="w-3 h-3" />
-                              {meta.label}
-                            </span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span
+                                className={`px-2 py-0.5 rounded-lg text-[10px] font-mono font-bold border flex items-center gap-1 ${meta.badgeClass}`}
+                              >
+                                <Icon className="w-3 h-3" />
+                                {meta.label}
+                              </span>
+                              {item.roomNumbers && item.roomNumbers.length > 0 && (
+                                <span className="px-2 py-0.5 rounded-lg text-[10px] font-mono font-bold bg-amber-500/10 text-amber-300 border border-amber-500/30">
+                                  Room {item.roomNumbers.join(', ')}
+                                </span>
+                              )}
+                            </div>
 
                             {role === 'dm' && (
                               <button
@@ -1342,11 +1470,14 @@ export const HandoutsJournalModal: React.FC<{
                       }
                       className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-2.5 py-1.5 text-xs text-zinc-200 font-mono"
                     >
-                      <option value="letter">📜 Letter / Scroll</option>
-                      <option value="riddle">🧩 Riddle / Puzzle</option>
-                      <option value="prop">🖼️ Visual Prop / Art</option>
-                      <option value="map">🗺️ Regional / Lore Map</option>
-                      <option value="lore">📖 Tome / Codex</option>
+                      <option value="letter">📜 Letter / Missive</option>
+                      <option value="riddle">🧩 Riddle</option>
+                      <option value="puzzle">✨ Puzzle / Enigma</option>
+                      <option value="secret">🔒 Secret / Concealed Clue</option>
+                      <option value="prop">🖼️ Visual Prop / Relic</option>
+                      <option value="tome">🪶 Ancient Tome / Grimoire</option>
+                      <option value="map">🗺️ Regional / Overland Map</option>
+                      <option value="lore">📖 Lore / Codex</option>
                     </select>
                   </div>
 
@@ -1397,6 +1528,26 @@ export const HandoutsJournalModal: React.FC<{
                       onChange={(e) => setEditingHandout({ ...editingHandout, subtitle: e.target.value })}
                       className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-1.5 text-xs text-zinc-300 font-mono"
                       placeholder="e.g., Found in the Desk of the Cult Leader"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-mono uppercase text-zinc-400 font-bold block mb-1">
+                      Associated Room Numbers (Optional, comma-separated)
+                    </label>
+                    <input
+                      type="text"
+                      value={(editingHandout.roomNumbers || []).join(', ')}
+                      onChange={(e) =>
+                        setEditingHandout({
+                          ...editingHandout,
+                          roomNumbers: e.target.value
+                            .split(',')
+                            .map((s) => s.trim())
+                            .filter(Boolean)
+                        })
+                      }
+                      placeholder="e.g., G1, G4, Area 3"
+                      className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-1.5 text-xs text-amber-300 font-mono"
                     />
                   </div>
                 </div>
@@ -1478,8 +1629,8 @@ export const HandoutsJournalModal: React.FC<{
                   </div>
                 )}
 
-                {/* Riddle-specific: Answer & Progressive Hints */}
-                {editingHandout.category === 'riddle' && (
+                {/* Riddle & Puzzle specific: Answer & Progressive Hints */}
+                {(editingHandout.category === 'riddle' || editingHandout.category === 'puzzle') && (
                   <div className="p-3 rounded-2xl bg-purple-950/25 border border-purple-500/30 space-y-2.5">
                     <div>
                       <label className="text-[10px] font-mono uppercase text-purple-300 font-bold block mb-1">

@@ -742,23 +742,6 @@ Provide a valid JSON response matching this exact schema:
       "description": "Concealed treasure or lore discovery",
       "check": "DC 15 Investigation check"
     }
-  ],
-  "handouts": [
-    {
-      "title": "string",
-      "subtitle": "string",
-      "category": "letter | riddle | puzzle | secret | prop | tome | map | lore",
-      "themeStyle": "parchment | stone_tablet | royal_decree | arcane_tome | dark_obsidian",
-      "content": "string",
-      "signature": "string (optional)",
-      "sealText": "string (optional)",
-      "riddleHints": ["string"],
-      "riddleAnswer": "string (optional)",
-      "dmSecretNotes": "string (optional)",
-      "roomNumbers": ["string"],
-      "sceneTitle": "string (optional)",
-      "pageNumber": 1
-    }
   ]
 }`;
 
@@ -2736,23 +2719,6 @@ Respond with ONLY valid JSON strictly adhering to this structure:
       "sceneTitle": "string (optional)",
       "pageNumber": 1
     }
-  ],
-  "handouts": [
-    {
-      "title": "string",
-      "subtitle": "string",
-      "category": "letter | riddle | puzzle | secret | prop | tome | map | lore",
-      "themeStyle": "parchment | stone_tablet | royal_decree | arcane_tome | dark_obsidian",
-      "content": "string",
-      "signature": "string (optional)",
-      "sealText": "string (optional)",
-      "riddleHints": ["string"],
-      "riddleAnswer": "string (optional)",
-      "dmSecretNotes": "string (optional)",
-      "roomNumbers": ["string"],
-      "sceneTitle": "string (optional)",
-      "pageNumber": 1
-    }
   ]
 }`;
 
@@ -3186,6 +3152,39 @@ You MUST respond with ONLY a valid JSON object strictly matching this interface:
         }
       }
     }
+
+    // Sanitize adventure handouts & puzzles
+    parsedChapter.handouts = Array.isArray(parsedChapter.handouts)
+      ? parsedChapter.handouts.map((h: any, idx: number) => ({
+          id: `handout_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`,
+          title: String(h?.title || 'Adventure Handout').trim(),
+          subtitle: h?.subtitle ? String(h.subtitle).trim() : undefined,
+          category: ['letter', 'riddle', 'puzzle', 'secret', 'prop', 'tome', 'map', 'lore'].includes(h?.category)
+            ? h.category
+            : 'letter',
+          themeStyle: ['parchment', 'stone_tablet', 'royal_decree', 'arcane_tome', 'dark_obsidian'].includes(h?.themeStyle)
+            ? h.themeStyle
+            : 'parchment',
+          content: String(h?.content || '').trim(),
+          signature: h?.signature ? String(h.signature).trim() : undefined,
+          sealText: h?.sealText ? String(h.sealText).trim() : undefined,
+          riddleHints: Array.isArray(h?.riddleHints) ? h.riddleHints.map(String) : [],
+          revealedHintCount: 0,
+          riddleAnswer: h?.riddleAnswer ? String(h.riddleAnswer).trim() : undefined,
+          isAnswerRevealed: false,
+          isSharedWithParty: false,
+          dmSecretNotes: h?.dmSecretNotes ? String(h.dmSecretNotes).trim() : undefined,
+          roomNumbers: Array.isArray(h?.roomNumbers) ? h.roomNumbers.map(String) : [],
+          sceneTitle: h?.sceneTitle ? String(h.sceneTitle).trim() : undefined,
+          sourcePdf: {
+            filename: pdfPath ? pdfPath.split('/').pop() || 'adventure_chapter.pdf' : 'adventure_chapter.pdf',
+            pageNumber: Number(h?.pageNumber) || undefined,
+            extractedSnippet: h?.content ? String(h.content).slice(0, 150) : undefined
+          },
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        }))
+      : [];
 
     res.json({
       success: true,
