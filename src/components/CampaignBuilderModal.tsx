@@ -824,8 +824,8 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
       bounds: {
         x: Number(r.bounds?.x ?? 50),
         y: Number(r.bounds?.y ?? 50),
-        width: Number(r.bounds?.width ?? 6),
-        height: Number(r.bounds?.height ?? 3)
+        width: Number(r.bounds?.width ?? 20),
+        height: Number(r.bounds?.height ?? 14)
       },
       polygonPoints: r.polygonPoints ? r.polygonPoints.map(p => Number(p)) : undefined,
       boxedText: r.boxedText || '',

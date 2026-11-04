@@ -91,8 +91,8 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
         // Convert percentage bounds to actual pixel positions on the map (with safe fallback)
         const boundsX = typeof anno.bounds?.x === 'number' && !isNaN(anno.bounds.x) ? anno.bounds.x : 50;
         const boundsY = typeof anno.bounds?.y === 'number' && !isNaN(anno.bounds.y) ? anno.bounds.y : 50;
-        const boundsW = typeof anno.bounds?.width === 'number' && !isNaN(anno.bounds.width) ? anno.bounds.width : 6;
-        const boundsH = typeof anno.bounds?.height === 'number' && !isNaN(anno.bounds.height) ? anno.bounds.height : 3;
+        const boundsW = typeof anno.bounds?.width === 'number' && !isNaN(anno.bounds.width) ? anno.bounds.width : 20;
+        const boundsH = typeof anno.bounds?.height === 'number' && !isNaN(anno.bounds.height) ? anno.bounds.height : 14;
 
         const pixelX = (boundsX / 100) * mapW;
         const pixelY = (boundsY / 100) * mapH;
@@ -172,18 +172,18 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
         if (isDescriptiveBadge(anno)) {
           const glyph = LABEL_GLYPHS[anno.icon || 'stairs-up'] || '🏷️';
           const fullLabel = `${glyph}  ${anno.label}`;
-          // Badges scale down smoothly when scrolling outward (zooming out)
-          const scaleFactor = Math.min(1.0, Math.max(0.35, stageScale));
-          const fontSize = Math.max(9, Math.round(13 * scaleFactor));
-          const paddingX = Math.round(8 * scaleFactor);
-          const charW = fontSize * 0.65;
-          const pillW = Math.max(48 * scaleFactor, fullLabel.length * charW + paddingX * 2);
-          const pillH = Math.max(18 * scaleFactor, fontSize * 1.85);
-          const pillRadius = Math.max(3, Math.round(5 * scaleFactor));
-          const strokeWidth = isHovered ? 2 : 1.2;
-          const shadowBlur = isHovered ? 10 : 4;
-          const dotOffset = Math.round(6 * scaleFactor);
-          const dotRadius = Math.max(1.8, 2.5 * scaleFactor);
+          // Zoom-stabilized adaptive scaling: significantly larger initial pill box with robust visibility
+          const zoomStabilizer = Math.max(0.85, Math.min(2.4, 1 / Math.sqrt(Math.max(0.2, stageScale))));
+          const fontSize = Math.max(16, Math.round(22 * zoomStabilizer));
+          const paddingX = Math.round(20 * zoomStabilizer);
+          const charW = fontSize * 0.64;
+          const pillW = Math.max(100 * zoomStabilizer, fullLabel.length * charW + paddingX * 2);
+          const pillH = Math.max(44 * zoomStabilizer, Math.round(fontSize * 2.0));
+          const pillRadius = Math.max(6, Math.round(10 * zoomStabilizer));
+          const strokeWidth = isHovered ? 3.5 : 2.5;
+          const shadowBlur = isHovered ? 16 : 8;
+          const dotOffset = Math.round(10 * zoomStabilizer);
+          const dotRadius = Math.max(3.5, 5 * zoomStabilizer);
 
           return (
             <Group
@@ -281,16 +281,18 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
         const hazardGlyph = anno.hazardType === 'lava' ? '🔥' : anno.hazardType === 'chasm_fall' ? '🕳️' : anno.hazardType === 'acid_pool' ? '🧪' : '⚠️';
         const badgeText = isHazardAnno
           ? `${hazardGlyph} ${(anno.roomNumber || anno.hazardType || 'HAZARD').toUpperCase()}`
-          : (anno.roomNumber || displayLabel.substring(0, 4)).toUpperCase();
+          : (anno.roomNumber || displayLabel.substring(0, 5)).toUpperCase();
 
-        const scaleFactor = Math.min(1.0, Math.max(0.35, stageScale));
-        const fontSize = Math.max(8, Math.round(11 * scaleFactor));
-        const badgePadding = Math.round(6 * scaleFactor);
-        const badgeW = Math.max(20 * scaleFactor, badgeText.length * (fontSize * 0.6) + badgePadding * 2);
-        const badgeH = Math.round(fontSize * 1.6);
-        const roomStrokeW = isHovered ? 2 : 1.2;
-        const roomShadowBlur = isHovered ? 10 : 4;
-        const roomCornerR = Math.max(2, Math.round(4 * scaleFactor));
+        // Zoom-stabilized adaptive scaling: significantly larger initial room badge box
+        const zoomStabilizer = Math.max(0.85, Math.min(2.4, 1 / Math.sqrt(Math.max(0.2, stageScale))));
+        const fontSize = Math.max(16, Math.round(22 * zoomStabilizer));
+        const badgePadding = Math.round(18 * zoomStabilizer);
+        const charWidth = fontSize * 0.68;
+        const badgeW = Math.max(64 * zoomStabilizer, Math.round(badgeText.length * charWidth + badgePadding * 2));
+        const badgeH = Math.max(44 * zoomStabilizer, Math.round(fontSize * 2.0));
+        const roomStrokeW = isHovered ? 3.5 : 2.5;
+        const roomShadowBlur = isHovered ? 16 : 8;
+        const roomCornerR = Math.max(6, Math.round(10 * zoomStabilizer));
 
         return (
           <Group key={anno.id} id={`hotspot-${anno.id}`}>
@@ -384,20 +386,20 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
                 y={-(badgeH / 2)}
                 width={badgeW}
                 height={badgeH}
-                fill={isHovered ? '#f59e0b' : 'rgba(24, 24, 27, 0.95)'}
-                stroke={isHovered ? '#ffffff' : baseColor}
+                fill={isHovered ? '#f59e0b' : 'rgba(15, 23, 42, 0.95)'}
+                stroke={isHovered ? '#ffffff' : (isHazardAnno ? '#ef4444' : baseColor)}
                 strokeWidth={roomStrokeW}
                 cornerRadius={roomCornerR}
                 shadowColor={isHovered ? '#f59e0b' : 'black'}
                 shadowBlur={roomShadowBlur}
-                shadowOpacity={isHovered ? 0.95 : 0.8}
+                shadowOpacity={isHovered ? 0.95 : 0.85}
               />
               <Text
                 text={badgeText}
                 fontSize={fontSize}
-                fontFamily="monospace"
+                fontFamily="system-ui, -apple-system, sans-serif"
                 fontStyle="bold"
-                fill={isHovered ? '#000000' : '#fde68a'}
+                fill={isHovered ? '#000000' : (isHazardAnno ? '#fca5a5' : '#fef08a')}
                 align="center"
                 verticalAlign="middle"
                 x={-(badgeW / 2)}

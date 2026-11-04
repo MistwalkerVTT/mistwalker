@@ -191,6 +191,7 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 }
 
 import { WallSegment, VisionConfig, RoomAnnotation, ChapterPdfDigest, RevealPoint, TokenMonsterState, normalizeRoomAnnotation, normalizeRoomAnnotations, isDescriptiveBadge } from '../types';
+import type { HandoutItem } from '../types/handout';
 
 // Data Interfaces as specified in User Requirements
 export interface SceneToken {
@@ -267,6 +268,7 @@ export interface Chapter {
   pdfUrl?: string;
   pdfFilename?: string;
   pdfDigest?: ChapterPdfDigest;
+  handouts?: HandoutItem[];
 }
 
 export interface Campaign {
@@ -1026,8 +1028,24 @@ async function sanitizeSceneForStorage(scene: Scene): Promise<Scene> {
 
   // 3. Never allow a browser-local blob: URL to be stored in Firestore
   if (updatedScene.mapUrl && updatedScene.mapUrl.startsWith('blob:')) {
+    try {
+      const resp = await fetch(updatedScene.mapUrl);
+      if (resp.ok) {
+        const blobData = await resp.blob();
+        await saveLocalAsset(`scene_${updatedScene.sceneId}`, blobData);
+        if (updatedScene.sceneTitle) {
+          await saveLocalAsset(updatedScene.sceneTitle, blobData);
+        }
+      }
+    } catch (e) {
+      console.warn('[sanitizeSceneForStorage] Blob pre-cache notice:', e);
+    }
+
     const uploaded = await uploadBlobUrlToServer(updatedScene.mapUrl, updatedScene.sceneTitle || updatedScene.sceneId || 'map');
-    updatedScene.mapUrl = !uploaded.startsWith('blob:') ? uploaded : (updatedScene.mapThumbnailUrl || '');
+    // CRITICAL: Never overwrite mapUrl with mapThumbnailUrl! Overwriting with thumbnail poisons Firestore with pixelated maps.
+    updatedScene.mapUrl = (!uploaded.startsWith('blob:') && uploaded)
+      ? uploaded
+      : `local:scene_${updatedScene.sceneId}`;
   }
 
   return updatedScene;
@@ -1315,6 +1333,11 @@ async function uploadBlobUrlToServer(blobUrl: string, nameHint = 'map'): Promise
       const data = await upRes.json();
       if (data?.url && !data.url.startsWith('blob:')) {
         console.log(`[resolveMapSource] Auto-uploaded local blob to server: ${data.url}`);
+        try {
+          await saveLocalAsset(data.url, blob);
+          const filename = data.url.split('/').pop();
+          if (filename) await saveLocalAsset(filename, blob);
+        } catch {}
         return data.url;
       }
     }
@@ -1349,7 +1372,20 @@ export async function resolveMapSource(
     }
   }
 
-  // 1. FIRST: Check matched asset in uploadedAssets library for an authoritative persistent URL
+  // 1. Verify if scene.mapUrl is an active, valid blob URL in the current window session
+  if (scene.mapUrl && scene.mapUrl.startsWith('blob:')) {
+    try {
+      const probe = await fetch(scene.mapUrl);
+      if (probe.ok) {
+        uploadBlobUrlToServer(scene.mapUrl, scene.sceneTitle || scene.sceneId).catch(console.warn);
+        return scene.mapUrl;
+      }
+    } catch {
+      console.warn(`[resolveMapSource] Stale/dead blob URL detected for scene "${scene.sceneTitle}":`, scene.mapUrl);
+    }
+  }
+
+  // 2. Check matched asset in uploadedAssets library for an authoritative persistent URL
   if (uploadedAssetsList && uploadedAssetsList.length > 0) {
     const matched = uploadedAssetsList.find(a =>
       (a.thumbnailUrl && scene.mapThumbnailUrl && a.thumbnailUrl === scene.mapThumbnailUrl && a.url && !a.url.startsWith('blob:')) ||
@@ -1362,16 +1398,17 @@ export async function resolveMapSource(
       ))
     );
     if (matched && matched.url && (matched.url.startsWith('/') || matched.url.startsWith('http')) && !matched.url.startsWith('blob:')) {
-      return matched.url;
+      if (!matched.url.startsWith('/uploads/')) {
+        return matched.url;
+      }
+      try {
+        const headCheck = await fetch(matched.url, { method: 'HEAD' });
+        if (headCheck.ok) return matched.url;
+      } catch {}
     }
   }
 
-  // 2. SECOND: Check if scene.mapUrl is already a persistent server or HTTP URL
-  if (scene.mapUrl && (scene.mapUrl.startsWith('/') || scene.mapUrl.startsWith('http')) && !scene.mapUrl.startsWith('blob:')) {
-    return scene.mapUrl;
-  }
-
-  // 3. THIRD: Check client IndexedDB for full-resolution cached version (and auto-upload any blob: to server!)
+  // 3. PRIORITY: Check client IndexedDB for full-resolution cached version (and auto-upload to server)
   try {
     const cachedScene = await getLocalAsset(`scene_${scene.sceneId}`);
     if (cachedScene) {
@@ -1379,9 +1416,7 @@ export async function resolveMapSource(
       uploadBlobUrlToServer(cachedScene, scene.sceneTitle || scene.sceneId).catch(console.warn);
       return cachedScene;
     }
-  } catch (e) {
-    // ignore
-  }
+  } catch (e) {}
 
   if (scene.mapUrl) {
     try {
@@ -1399,9 +1434,7 @@ export async function resolveMapSource(
           return cachedByFilename;
         }
       }
-    } catch (e) {
-      // ignore
-    }
+    } catch (e) {}
   }
 
   if (scene.sceneTitle) {
@@ -1411,12 +1444,10 @@ export async function resolveMapSource(
         uploadBlobUrlToServer(cachedByTitle, scene.sceneTitle).catch(console.warn);
         return cachedByTitle;
       }
-    } catch (e) {
-      // ignore
-    }
+    } catch (e) {}
   }
 
-  // 4. Check matched asset's IndexedDB cache if server URL wasn't accessible yet
+  // 4. Check matched asset's IndexedDB cache
   if (uploadedAssetsList && uploadedAssetsList.length > 0) {
     const matched = uploadedAssetsList.find(a =>
       (a.thumbnailUrl && scene.mapThumbnailUrl && a.thumbnailUrl === scene.mapThumbnailUrl) ||
@@ -1433,32 +1464,32 @@ export async function resolveMapSource(
           uploadBlobUrlToServer(cachedAsset, matched.name || matched.assetId).catch(console.warn);
           return cachedAsset;
         }
-      } catch (e) {
-        // ignore
-      }
-      if (matched.url && !matched.url.startsWith('blob:') && !matched.url.startsWith('local:')) {
-        return matched.url;
-      }
+      } catch (e) {}
     }
   }
 
-  // 5. If HTTP/server URL or data URL
-  if (scene.mapUrl && (scene.mapUrl.startsWith('/') || scene.mapUrl.startsWith('http') || scene.mapUrl.startsWith('data:')) && !scene.mapUrl.startsWith('blob:')) {
+  // 5. Check if scene.mapUrl is a persistent server URL and verify reachability
+  if (scene.mapUrl && scene.mapUrl.startsWith('/uploads/')) {
+    try {
+      const headRes = await fetch(scene.mapUrl, { method: 'HEAD' });
+      if (headRes.ok) return scene.mapUrl;
+    } catch {}
+    console.warn(`[resolveMapSource] Server map URL ${scene.mapUrl} unreachable (Render cold restart/wiped disk)`);
+  } else if (scene.mapUrl && scene.mapUrl.startsWith('http') && !scene.mapUrl.startsWith('blob:')) {
     return scene.mapUrl;
   }
 
-  // 6. If blob URL is active in the current window, return immediately and sync to server in background
-  if (scene.mapUrl && scene.mapUrl.startsWith('blob:')) {
-    uploadBlobUrlToServer(scene.mapUrl, scene.sceneTitle || scene.sceneId).catch(console.warn);
+  // 6. If scene.mapUrl is a large data URL (not a thumbnail), return it
+  if (scene.mapUrl && scene.mapUrl.startsWith('data:') && scene.mapUrl !== scene.mapThumbnailUrl && scene.mapUrl.length > 100000) {
     return scene.mapUrl;
   }
 
-  // 7. Fallback to scene mapThumbnailUrl (base64 data URL) so remote displays never get a broken blob URL
+  // 7. Last resort fallback to scene mapThumbnailUrl
   if (scene.mapThumbnailUrl) {
     return scene.mapThumbnailUrl;
   }
 
-  if (scene.mapUrl && !scene.mapUrl.startsWith('blob:')) {
+  if (scene.mapUrl && !scene.mapUrl.startsWith('blob:') && !scene.mapUrl.startsWith('local:')) {
     return scene.mapUrl;
   }
   return '';

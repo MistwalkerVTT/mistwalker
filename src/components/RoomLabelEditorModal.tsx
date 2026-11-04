@@ -135,8 +135,8 @@ export const RoomLabelEditorModal: React.FC<RoomLabelEditorModalProps> = ({
       bounds: {
         x: pctX,
         y: pctY,
-        width: initialAnnotation?.bounds?.width || 8,
-        height: initialAnnotation?.bounds?.height || 4
+        width: initialAnnotation?.bounds?.width || 20,
+        height: initialAnnotation?.bounds?.height || 10
       },
       boxedText: initialAnnotation?.boxedText || '',
       dmNotes: dmNotes.trim(),
@@ -241,19 +241,19 @@ export const RoomLabelEditorModal: React.FC<RoomLabelEditorModalProps> = ({
             <label className="block text-[10px] uppercase font-bold font-mono text-zinc-400 mb-1.5">
               Canvas Preview
             </label>
-            <div className="p-3 bg-zinc-950/80 rounded-xl border border-zinc-800 flex items-center justify-center">
+            <div className="p-4 bg-zinc-950/80 rounded-xl border border-zinc-800 flex items-center justify-center">
               <div
-                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md border text-xs font-bold shadow-md transition-all"
+                className="inline-flex items-center gap-2.5 px-5 py-2.5 rounded-xl border-2 text-base font-bold shadow-xl transition-all"
                 style={{
-                  backgroundColor: 'rgba(15, 23, 42, 0.94)',
+                  backgroundColor: 'rgba(15, 23, 42, 0.96)',
                   borderColor: selectedColor,
-                  boxShadow: `0 0 10px ${selectedColor}40`
+                  boxShadow: `0 0 16px ${selectedColor}50`
                 }}
               >
-                <span className="text-sm">{activeGlyph}</span>
-                <span className="text-white font-sans">{labelText || 'Label Text'}</span>
+                <span className="text-xl">{activeGlyph}</span>
+                <span className="text-white font-sans tracking-wide text-base">{labelText || 'Label Text'}</span>
                 {visibleToPlayers && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 ml-0.5" title="Visible to players" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 border border-black ml-1.5 shrink-0" title="Visible to players" />
                 )}
               </div>
             </div>

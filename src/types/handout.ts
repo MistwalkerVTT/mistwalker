@@ -1,4 +1,4 @@
-export type HandoutCategory = 'letter' | 'riddle' | 'prop' | 'map' | 'lore';
+export type HandoutCategory = 'letter' | 'riddle' | 'puzzle' | 'secret' | 'prop' | 'tome' | 'map' | 'lore';
 
 export type HandoutThemeStyle = 'parchment' | 'stone_tablet' | 'royal_decree' | 'arcane_tome' | 'dark_obsidian';
 
@@ -12,7 +12,19 @@ export interface HandoutItem {
   imageUrl?: string;
   signature?: string;
   sealText?: string;
-  // Riddle-specific fields
+  // Tactical Campaign & Scene associations
+  campaignId?: string;
+  chapterId?: string;
+  sceneId?: string;
+  sceneTitle?: string;
+  roomNumbers?: string[]; // e.g. ["1", "4", "G3"] to anchor to room hotspots
+  // Provenance / Source PDF information
+  sourcePdf?: {
+    filename: string;
+    pageNumber?: number;
+    extractedSnippet?: string;
+  };
+  // Riddle & Puzzle mechanics
   riddleHints?: string[];
   revealedHintCount?: number;
   riddleAnswer?: string;
@@ -22,6 +34,11 @@ export interface HandoutItem {
   visibleToCharacterNames?: string[]; // Empty or undefined = all players when shared/presented
   // Secret DM notes (never sent/rendered to players)
   dmSecretNotes?: string;
+  dcCheck?: {
+    skill: string;
+    dc: number;
+    onSuccess: string;
+  };
   createdAt: number;
   updatedAt: number;
 }

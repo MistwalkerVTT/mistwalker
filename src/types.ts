@@ -1,4 +1,5 @@
 import type { SceneToken } from './lib/firebase';
+import type { HandoutItem } from './types/handout';
 
 export interface RevealPoint {
   x: number;
@@ -405,6 +406,7 @@ export interface ChapterPdfDigest {
   generalFeatures?: ChapterGeneralFeature[];
   roamingEncounters?: ChapterRoamingEncounter[];
   npcs?: ChapterNpcProfile[];
+  handouts?: HandoutItem[];
   rawSnippet?: string;
   digestedAt: number;
 }

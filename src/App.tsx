@@ -2230,7 +2230,7 @@ export default function App() {
   const [newLoreTitle, setNewLoreTitle] = useState('');
   const [loreError, setLoreError] = useState<string | null>(null);
 
-  // Battlemap load failure handler (never fallback to blurry thumbnail)
+  // Battlemap load failure handler (recovers high-res from IndexedDB and avoids blurry thumbnail poisoning)
   useEffect(() => {
     if (imageStatus === 'failed' && imageFile && mapType === 'image') {
       console.warn('[VTT] Active battlemap failed to load:', imageFile);
@@ -2245,22 +2245,65 @@ export default function App() {
       }
       if (activeSceneInfo?.sceneId === DEMO_GV_SCENE.sceneId || activeSceneInfo?.sceneTitle?.toLowerCase().includes('main level')) {
         const fallbackUrl = '/uploads/file-1792161909096-684999544.jpg';
-        if (imageFile !== fallbackUrl)
-        {
+        if (imageFile !== fallbackUrl) {
           console.log('[VTT] Auto-recovering Guildhouse Main Level map with static file:', fallbackUrl);
           setImageFile(fallbackUrl);
           return;
         }
       }
-      // General thumbnail fallback if full-res asset fails to load
-      if (activeSceneInfo?.mapThumbnailUrl && imageFile !== activeSceneInfo.mapThumbnailUrl) {
-        console.log('[VTT] Falling back to scene thumbnail data URL for map:', activeSceneInfo.sceneTitle);
-        setImageFile(activeSceneInfo.mapThumbnailUrl);
-        return;
-      }
-      toast.error('Failed to load map image asset. Please re-link or upload the file.', {
-        id: 'map-load-error'
-      });
+
+      // Asynchronous recovery pipeline: query IndexedDB for full-resolution map
+      let isCancelled = false;
+      (async () => {
+        try {
+          if (activeSceneInfo?.sceneId) {
+            const cachedScene = await getLocalAsset(`scene_${activeSceneInfo.sceneId}`);
+            if (cachedScene && !isCancelled) {
+              console.log('[VTT] Recovered full-resolution battlemap from IndexedDB cache for scene:', activeSceneInfo.sceneTitle);
+              setImageFile(cachedScene);
+              return;
+            }
+          }
+          if (activeSceneInfo?.mapUrl) {
+            const assetKey = activeSceneInfo.mapUrl.startsWith('local:') ? activeSceneInfo.mapUrl.replace('local:', '') : activeSceneInfo.mapUrl;
+            const cachedByUrl = await getLocalAsset(assetKey);
+            if (cachedByUrl && !isCancelled) {
+              console.log('[VTT] Recovered full-resolution battlemap by URL key from IndexedDB cache:', activeSceneInfo.sceneTitle);
+              setImageFile(cachedByUrl);
+              return;
+            }
+            const filename = activeSceneInfo.mapUrl.split('/').pop()?.split('?')[0];
+            if (filename) {
+              const cachedByFilename = await getLocalAsset(filename);
+              if (cachedByFilename && !isCancelled) {
+                console.log('[VTT] Recovered full-resolution battlemap by filename from IndexedDB cache:', activeSceneInfo.sceneTitle);
+                setImageFile(cachedByFilename);
+                return;
+              }
+            }
+          }
+          if (activeSceneInfo?.sceneTitle) {
+            const cachedByTitle = await getLocalAsset(activeSceneInfo.sceneTitle);
+            if (cachedByTitle && !isCancelled) {
+              console.log('[VTT] Recovered full-resolution battlemap by title from IndexedDB cache:', activeSceneInfo.sceneTitle);
+              setImageFile(cachedByTitle);
+              return;
+            }
+          }
+        } catch (recoverErr) {
+          console.warn('[VTT] IndexedDB recovery error:', recoverErr);
+        }
+
+        // If high-resolution asset is completely missing, alert the DM without poisoning the scene with a blurry thumbnail
+        if (!isCancelled) {
+          toast.error(`Battlemap file could not be loaded for "${activeSceneInfo?.sceneTitle || 'Scene'}". Click 'Re-link Map' to select the image file.`, {
+            id: 'map-load-error',
+            duration: 6000
+          });
+        }
+      })();
+
+      return () => { isCancelled = true; };
     }
   }, [imageStatus, imageFile, mapType, activeSceneInfo]);
 
@@ -3941,18 +3984,33 @@ export default function App() {
     setRoomAnnotations([]);
     setCurrentZonePolygonPoints([]);
 
-    // 1. Immediate optimistic map display: set best known immediate URL so the dashboard unmounts INSTANTLY
+    // 1. Immediate optimistic map display: pre-resolve potentially dead blobs, locals, or thumbnails first
     const targetSlot = (targetView || activeMapIdRef.current) as 'DM1' | 'DM2' | 'DM3';
-    const immediateUrl = scene.mapUrl || scene.mapThumbnailUrl || '';
-    if (immediateUrl) {
-      const isVideo = isVideoAsset(immediateUrl);
+    let fullResUrl = '';
+    const isPotentiallyDeadOrLocal = !scene.mapUrl ||
+      scene.mapUrl.startsWith('blob:') ||
+      scene.mapUrl.startsWith('local:') ||
+      Boolean(scene.mapThumbnailUrl && scene.mapUrl === scene.mapThumbnailUrl);
+
+    if (isPotentiallyDeadOrLocal) {
+      // Resolve authoritative map source first so we never flash a dead blob or pixelated thumbnail
+      try {
+        fullResUrl = await resolveMapSource(scene, uploadedMaps);
+      } catch (err) {
+        console.warn('[CampaignBuilder] resolveMapSource error:', err);
+      }
+    }
+
+    const effectiveMapUrl = fullResUrl || scene.mapUrl || scene.mapThumbnailUrl || '';
+    if (effectiveMapUrl && !effectiveMapUrl.startsWith('local:')) {
+      const isVideo = isVideoAsset(effectiveMapUrl) || isVideoAsset(scene.mapUrl);
       setMapType(isVideo ? 'video' : 'image');
-      setImageFile(immediateUrl);
+      setImageFile(effectiveMapUrl);
       if (isVideo) {
         if (scene.mapWidth && scene.mapHeight) {
           setVideoSize({ width: scene.mapWidth, height: scene.mapHeight });
         } else {
-          getVideoNaturalDimensions(immediateUrl).then(vDims => {
+          getVideoNaturalDimensions(effectiveMapUrl).then(vDims => {
             if (vDims.width > 0 && vDims.height > 0) {
               setVideoSize({ width: vDims.width, height: vDims.height });
             }
@@ -3963,12 +4021,12 @@ export default function App() {
       console.warn('[CampaignBuilder] Scene is missing mapUrl and thumbnail');
     }
 
-    let fullResUrl = immediateUrl;
-    if (scene.mapUrl || scene.mapThumbnailUrl || scene.sceneTitle) {
+    // If not already resolved via isPotentiallyDeadOrLocal, run background resolution check
+    if (!fullResUrl && (scene.mapUrl || scene.mapThumbnailUrl || scene.sceneTitle)) {
       try {
         const resolvedMapUrl = await resolveMapSource(scene, uploadedMaps);
         const bestUrl = resolvedMapUrl || scene.mapUrl || scene.mapThumbnailUrl || '';
-        if (bestUrl && bestUrl !== immediateUrl) {
+        if (bestUrl && bestUrl !== effectiveMapUrl && !bestUrl.startsWith('local:')) {
           fullResUrl = bestUrl;
           const isVideo = isVideoAsset(bestUrl) || isVideoAsset(scene.mapUrl);
           setMapType(isVideo ? 'video' : 'image');
@@ -4187,6 +4245,9 @@ export default function App() {
     try {
       const matchedCamp = campaignsList.find(c => c.campaignId === campaignId);
       const matchedChap = matchedCamp?.chapters?.find(ch => ch.chapterId === chapterId);
+      const safeAuthoritativeUrl = (authoritativeMapUrl && authoritativeMapUrl.startsWith('blob:'))
+        ? `local:scene_${scene.sceneId}`
+        : authoritativeMapUrl;
       const activeMeta = {
         campaignId,
         chapterId,
@@ -4194,8 +4255,8 @@ export default function App() {
         chapterTitle: matchedChap?.chapterTitle || 'Chapter',
         sceneId: scene.sceneId,
         sceneTitle: scene.sceneTitle,
-        mapUrl: authoritativeMapUrl,
-        mapThumbnailUrl: scene.mapThumbnailUrl || authoritativeMapUrl,
+        mapUrl: safeAuthoritativeUrl,
+        mapThumbnailUrl: scene.mapThumbnailUrl || (authoritativeMapUrl && !authoritativeMapUrl.startsWith('blob:') && !authoritativeMapUrl.startsWith('local:') ? authoritativeMapUrl : undefined),
         mapWidth: scene.mapWidth,
         mapHeight: scene.mapHeight,
         tokensCount: loadedTokens.length,
@@ -4519,6 +4580,9 @@ export default function App() {
       try {
         const matchedCamp = campaignsList.find(c => c.campaignId === activeSceneInfo.campaignId);
         const matchedChap = matchedCamp?.chapters?.find(ch => ch.chapterId === activeSceneInfo.chapterId);
+        const safeQuickMapUrl = (updatedScene.mapUrl && updatedScene.mapUrl.startsWith('blob:'))
+          ? `local:scene_${updatedScene.sceneId}`
+          : updatedScene.mapUrl;
         const activeMeta = {
           campaignId: activeSceneInfo.campaignId,
           chapterId: activeSceneInfo.chapterId,
@@ -4526,8 +4590,8 @@ export default function App() {
           chapterTitle: matchedChap?.chapterTitle || 'Chapter',
           sceneId: updatedScene.sceneId,
           sceneTitle: updatedScene.sceneTitle,
-          mapUrl: updatedScene.mapUrl,
-          mapThumbnailUrl: updatedScene.mapThumbnailUrl || updatedScene.mapUrl,
+          mapUrl: safeQuickMapUrl,
+          mapThumbnailUrl: updatedScene.mapThumbnailUrl || (safeQuickMapUrl && !safeQuickMapUrl.startsWith('local:') ? safeQuickMapUrl : undefined),
           mapWidth: updatedScene.mapWidth,
           mapHeight: updatedScene.mapHeight,
           tokensCount: sceneTokensToSave.length,
@@ -4573,6 +4637,9 @@ export default function App() {
     try {
       const matchedCamp = campaignsList.find(c => c.campaignId === campaignId);
       const matchedChap = matchedCamp?.chapters?.find(ch => ch.chapterId === chapterId);
+      const safeSavedMapUrl = (scene.mapUrl && scene.mapUrl.startsWith('blob:'))
+        ? `local:scene_${scene.sceneId}`
+        : scene.mapUrl;
       const activeMeta = {
         campaignId,
         chapterId,
@@ -4580,8 +4647,8 @@ export default function App() {
         chapterTitle: matchedChap?.chapterTitle || 'Chapter',
         sceneId: scene.sceneId,
         sceneTitle: scene.sceneTitle,
-        mapUrl: scene.mapUrl,
-        mapThumbnailUrl: scene.mapThumbnailUrl || scene.mapUrl,
+        mapUrl: safeSavedMapUrl,
+        mapThumbnailUrl: scene.mapThumbnailUrl || (safeSavedMapUrl && !safeSavedMapUrl.startsWith('local:') ? safeSavedMapUrl : undefined),
         mapWidth: scene.mapWidth,
         mapHeight: scene.mapHeight,
         tokensCount: scene.tokens?.length || 0,

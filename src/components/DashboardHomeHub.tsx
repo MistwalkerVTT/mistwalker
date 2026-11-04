@@ -152,8 +152,10 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
       const syntheticScene: Scene = {
         sceneId: cachedLastActive.sceneId,
         sceneTitle: cachedLastActive.sceneTitle,
-        mapUrl: cachedLastActive.mapUrl || '',
-        mapThumbnailUrl: cachedLastActive.mapThumbnailUrl || cachedLastActive.mapUrl,
+        mapUrl: (cachedLastActive.mapUrl && !cachedLastActive.mapUrl.startsWith('blob:'))
+          ? cachedLastActive.mapUrl
+          : `local:scene_${cachedLastActive.sceneId}`,
+        mapThumbnailUrl: cachedLastActive.mapThumbnailUrl || (cachedLastActive.mapUrl && !cachedLastActive.mapUrl.startsWith('blob:') && !cachedLastActive.mapUrl.startsWith('local:') ? cachedLastActive.mapUrl : undefined),
         mapWidth: cachedLastActive.mapWidth,
         mapHeight: cachedLastActive.mapHeight,
         dmNotes: cachedLastActive.dmNotes || '',
