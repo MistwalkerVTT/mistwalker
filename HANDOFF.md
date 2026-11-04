@@ -43,9 +43,12 @@ Mistwalker 3.0/
 ---
 
 ## 3. Recently Modularized Modules
+- **`src/components/canvas/TokenImage.tsx`**: Isolated 560-line Konva token renderer encapsulating token avatars, 3D flight & elevation elevation overlays, AC badges, D&D Beyond-synchronized HP status pills, aura perimeters, and multi-touch long-press gesture interactions.
+- **`src/components/sidebar/CombatFlyoutPanel.tsx`**: Dedicated combat flyout encapsulating Roll for Initiative, Combat Tracker toggle, automatic monster damage subtraction, Critical Hits Revisited reference trigger, and AoE shape measurement selectors.
+- **`src/components/sidebar/AiFlyoutPanel.tsx`**: Dedicated AI flyout for Gemini key configuration, D&D AI Chatbot launcher, AI battlemap generator, and ElevenLabs / Gemini script narration controls.
+- **`src/components/sidebar/DiceFlyoutPanel.tsx`**: Dedicated component for the 3D dice roller flyout and roll history.
 - **`src/hooks/useTacticalGrid.ts`**: Encapsulates `gridSize`, `gridOffsetX`, `gridOffsetY`, `gridVisible`, and interactive box-tracing calibration math (`startGridCalibration`, `updateGridCalibration`, `finishGridCalibration`).
 - **`src/components/canvas/GifImage.tsx`**: Isolated, reusable animated GIF and canvas frame renderer for Konva canvas, deduplicated between DM view (`App.tsx`) and player view (`PlayerView.tsx`).
-- **`src/components/sidebar/DiceFlyoutPanel.tsx`**: Dedicated component for the 3D dice roller flyout and roll history.
 - **`src/data/defaultTokens.ts`**: Single source of truth for standard character/monster token catalogs and 5e status conditions.
 - **`src/lib/canvasTransforms.ts`**: Pure mathematical utility for Konva rotation and coordinate translation.
 
