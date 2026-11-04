@@ -14,6 +14,27 @@
 
 ## Pending Changes Queue for Future Enterprise Patch
 
+### [2026-11-04] fix(arena): preserve original battlemap aspect ratios and natural dimensions without distortion
+- **Commit**: `2b6308b`
+- **Files Changed**:
+  - `src/components/PlayerArenaMode.tsx`
+  - `src/data/presetBattlemaps.ts`
+  - `src/components/ArenaManagerPanel.tsx`
+  - `src/components/RoomHotspotLayer.tsx`
+  - `src/lib/firebase.ts`
+- **Summary**:
+  - **Eliminated Fixed Aspect Ratio Squishing**: Removed the legacy override in `dynamicArenaDims` (`PlayerArenaMode.tsx`) that forcefully compressed/stretched maps into a rigid 22×14 (1320×840px, 1.57:1) box.
+  - **Natural Dimensions as Ground Truth**: Configured `dynamicArenaDims` to prioritize the map image's natural dimensions (`bgImage.naturalWidth`, `bgImage.naturalHeight`) directly from the loaded `HTMLImageElement`. Rendered `<KonvaImage>` and stage background rect at true 1:1 pixel dimensions, eliminating distortion across all aspect ratios (16:9, 3:2, 4:3, square, ultrawide).
+  - **Preset Dimensions Parity**: Corrected `PRESET_BATTLEMAPS` definitions to reflect their actual image resolutions:
+    - *Forest Ruins*: 1376×768 (1.79:1 widescreen, 23×13 grid)
+    - *Lavapit*: 1376×768 (1.79:1 widescreen, 23×13 grid)
+    - *Skeleton Crypt*: 1264×848 (1.49:1 landscape, 21×14 grid)
+    - *Subterranean Maze*: 1264×848 (1.49:1 landscape, 21×14 grid)
+  - **Arena Manager Organic Previews**: Tracked natural dimensions on image load in `ArenaManagerPanel.tsx` so the map preview container aspect ratio and SVG grid lines dynamically match the image's real aspect ratio with zero letterboxing or misalignment.
+  - **Dynamic Grid & Safe Token Spawning**: Grid columns (`arenaCols`) and rows (`arenaRows`) calculate dynamically from `Math.round(width / gridSize)` and `Math.round(height / gridSize)`, keeping all token spawn slots, boundary clamping, and hazards properly aligned.
+
+---
+
 ### [2026-11-04] fix(tactical): fix rooms subtab glitch caused by mode-change wall tool loop
 - **Commit**: `d939b51`
 - **Files Changed**:
