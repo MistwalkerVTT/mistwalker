@@ -1349,12 +1349,9 @@ export async function resolveMapSource(
     }
   }
 
-  // 1. FIRST: Check if scene.mapUrl is already an accessible server or HTTP URL (works across all computers!)
+  // 1. FIRST: Check if scene.mapUrl is already a server or HTTP URL (instant return, zero latency)
   if (scene.mapUrl && (scene.mapUrl.startsWith('/') || scene.mapUrl.startsWith('http')) && !scene.mapUrl.startsWith('blob:')) {
-    const isAccessible = await testMediaAccessible(scene.mapUrl, 1200);
-    if (isAccessible) {
-      return scene.mapUrl;
-    }
+    return scene.mapUrl;
   }
 
   // 2. SECOND: Check matched asset in uploadedAssets library for an accessible server or HTTP URL
@@ -1382,7 +1379,8 @@ export async function resolveMapSource(
     const cachedScene = await getLocalAsset(`scene_${scene.sceneId}`);
     if (cachedScene) {
       console.log(`[resolveMapSource] Restored full-res map from IndexedDB for scene "${scene.sceneTitle}"`);
-      return await uploadBlobUrlToServer(cachedScene, scene.sceneTitle || scene.sceneId);
+      uploadBlobUrlToServer(cachedScene, scene.sceneTitle || scene.sceneId).catch(console.warn);
+      return cachedScene;
     }
   } catch (e) {
     // ignore
@@ -1393,13 +1391,15 @@ export async function resolveMapSource(
       const assetKey = scene.mapUrl.startsWith('local:') ? scene.mapUrl.replace('local:', '') : scene.mapUrl;
       const cachedByUrl = await getLocalAsset(assetKey);
       if (cachedByUrl) {
-        return await uploadBlobUrlToServer(cachedByUrl, scene.sceneTitle || scene.sceneId);
+        uploadBlobUrlToServer(cachedByUrl, scene.sceneTitle || scene.sceneId).catch(console.warn);
+        return cachedByUrl;
       }
       const filename = scene.mapUrl.split('/').pop()?.split('?')[0];
       if (filename) {
         const cachedByFilename = await getLocalAsset(filename);
         if (cachedByFilename) {
-          return await uploadBlobUrlToServer(cachedByFilename, filename);
+          uploadBlobUrlToServer(cachedByFilename, filename).catch(console.warn);
+          return cachedByFilename;
         }
       }
     } catch (e) {
@@ -1411,7 +1411,8 @@ export async function resolveMapSource(
     try {
       const cachedByTitle = await getLocalAsset(scene.sceneTitle);
       if (cachedByTitle) {
-        return await uploadBlobUrlToServer(cachedByTitle, scene.sceneTitle);
+        uploadBlobUrlToServer(cachedByTitle, scene.sceneTitle).catch(console.warn);
+        return cachedByTitle;
       }
     } catch (e) {
       // ignore
@@ -1432,7 +1433,8 @@ export async function resolveMapSource(
                             (matched.url ? await getLocalAsset(matched.url) : null) ||
                             (matched.name ? await getLocalAsset(matched.name) : null);
         if (cachedAsset) {
-          return await uploadBlobUrlToServer(cachedAsset, matched.name || matched.assetId);
+          uploadBlobUrlToServer(cachedAsset, matched.name || matched.assetId).catch(console.warn);
+          return cachedAsset;
         }
       } catch (e) {
         // ignore
@@ -1448,13 +1450,10 @@ export async function resolveMapSource(
     return scene.mapUrl;
   }
 
-  // 6. If blob URL is active in the current window, auto-upload it to server so remote Player Views can load it
+  // 6. If blob URL is active in the current window, return immediately and sync to server in background
   if (scene.mapUrl && scene.mapUrl.startsWith('blob:')) {
-    const isBlobActive = await testMediaAccessible(scene.mapUrl);
-    if (isBlobActive) {
-      return await uploadBlobUrlToServer(scene.mapUrl, scene.sceneTitle || scene.sceneId);
-    }
-    console.warn(`[resolveMapSource] Stale blob URL detected for scene "${scene.sceneTitle}": ${scene.mapUrl}. Seeking fallback.`);
+    uploadBlobUrlToServer(scene.mapUrl, scene.sceneTitle || scene.sceneId).catch(console.warn);
+    return scene.mapUrl;
   }
 
   // 7. Fallback to scene mapThumbnailUrl (base64 data URL) so remote displays never get a broken blob URL

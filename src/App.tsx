@@ -4122,58 +4122,42 @@ export default function App() {
     setRoomAnnotations([]);
     setCurrentZonePolygonPoints([]);
 
-    // 1. Update Map with robust resolver (full-resolution asset with seamless thumbnail fallback)
-    let fullResUrl = '';
+    // 1. Immediate optimistic map display: set best known immediate URL so the dashboard unmounts INSTANTLY
     const targetSlot = (targetView || activeMapIdRef.current) as 'DM1' | 'DM2' | 'DM3';
-    if (scene.mapUrl || scene.mapThumbnailUrl || scene.sceneTitle) {
-      try {
-        const resolvedMapUrl = await resolveMapSource(scene, uploadedMaps);
-        fullResUrl = resolvedMapUrl || scene.mapUrl || scene.mapThumbnailUrl || '';
-
-        // Extra safeguard: if fullResUrl is empty or local reference, search uploadedMaps for full resolution asset
-        if (!fullResUrl || fullResUrl.startsWith('local:')) {
-          const matched = uploadedMaps.find(a => 
-            (a.assetId && (a.assetId === scene.sceneId || (scene.mapUrl && scene.mapUrl.includes(a.assetId)))) ||
-            (a.url && scene.mapUrl && a.url === scene.mapUrl) ||
-            (a.name && scene.sceneTitle && a.name.toLowerCase().trim() === scene.sceneTitle.toLowerCase().trim())
-          );
-          if (matched && matched.url && !matched.url.startsWith('local:')) {
-            fullResUrl = matched.url;
-          }
-        }
-
-        if (fullResUrl) {
-          const isVideo = isVideoAsset(fullResUrl) || isVideoAsset(scene.mapUrl);
-          setMapType(isVideo ? 'video' : 'image');
-          setImageFile(fullResUrl);
-          if (isVideo) {
-            if (scene.mapWidth && scene.mapHeight) {
-              setVideoSize({ width: scene.mapWidth, height: scene.mapHeight });
-            } else {
-              getVideoNaturalDimensions(fullResUrl).then(vDims => {
-                if (vDims.width > 0 && vDims.height > 0) {
-                  setVideoSize({ width: vDims.width, height: vDims.height });
-                }
-              });
+    const immediateUrl = scene.mapUrl || scene.mapThumbnailUrl || '';
+    if (immediateUrl) {
+      const isVideo = isVideoAsset(immediateUrl);
+      setMapType(isVideo ? 'video' : 'image');
+      setImageFile(immediateUrl);
+      if (isVideo) {
+        if (scene.mapWidth && scene.mapHeight) {
+          setVideoSize({ width: scene.mapWidth, height: scene.mapHeight });
+        } else {
+          getVideoNaturalDimensions(immediateUrl).then(vDims => {
+            if (vDims.width > 0 && vDims.height > 0) {
+              setVideoSize({ width: vDims.width, height: vDims.height });
             }
-          }
-        } else {
-          console.warn('[CampaignBuilder] Could not resolve map URL for scene:', scene.sceneTitle);
-        }
-      } catch (err) {
-        console.warn('[CampaignBuilder] Error resolving scene map URL:', err);
-        fullResUrl = scene.mapUrl || scene.mapThumbnailUrl || '';
-        if (fullResUrl) {
-          const isVideo = isVideoAsset(fullResUrl);
-          setMapType(isVideo ? 'video' : 'image');
-          setImageFile(fullResUrl);
-        } else {
-          toast.error('Failed to load scene map image.');
+          });
         }
       }
     } else {
-      console.warn('[CampaignBuilder] Scene is missing mapUrl and thumbnail, skipping image load');
-      toast.error('Scene does not have a map image asset.');
+      console.warn('[CampaignBuilder] Scene is missing mapUrl and thumbnail');
+    }
+
+    let fullResUrl = immediateUrl;
+    if (scene.mapUrl || scene.mapThumbnailUrl || scene.sceneTitle) {
+      try {
+        const resolvedMapUrl = await resolveMapSource(scene, uploadedMaps);
+        const bestUrl = resolvedMapUrl || scene.mapUrl || scene.mapThumbnailUrl || '';
+        if (bestUrl && bestUrl !== immediateUrl) {
+          fullResUrl = bestUrl;
+          const isVideo = isVideoAsset(bestUrl) || isVideoAsset(scene.mapUrl);
+          setMapType(isVideo ? 'video' : 'image');
+          setImageFile(bestUrl);
+        }
+      } catch (err) {
+        console.warn('[CampaignBuilder] Background resolveMapSource completed with warning:', err);
+      }
     }
 
     // 2. Load Tokens

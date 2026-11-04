@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import {
+  Loader2,
   Upload,
   BookOpen,
   Sparkles,
@@ -262,7 +263,10 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
   const tokenCount = resolvedResumeData.tokenCount;
   const wallCount = resolvedResumeData.wallCount;
 
+  const [isResumingPrimaryScene, setIsResumingPrimaryScene] = useState<boolean>(false);
+
   const handleResumePrimaryScene = () => {
+    setIsResumingPrimaryScene(true);
     onLoadSceneFromCampaign(displayScene, displayCampaignId, displayChapterId);
   };
 
@@ -445,10 +449,20 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
                 type="button"
                 id="btn-resume-adventure-primary"
                 onClick={handleResumePrimaryScene}
-                className="w-full py-3 px-3 sm:px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-emerald-950/60 font-mono text-xs flex items-center justify-center gap-2 cursor-pointer truncate"
+                disabled={isResumingPrimaryScene}
+                className="w-full py-3 px-3 sm:px-4 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-80 text-white font-bold rounded-xl transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-emerald-950/60 font-mono text-xs flex items-center justify-center gap-2 cursor-pointer truncate"
               >
-                <Play className="w-4 h-4 fill-white text-white shrink-0" />
-                <span>Continue Session</span>
+                {isResumingPrimaryScene ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-white shrink-0" />
+                    <span>Loading Scene...</span>
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-4 h-4 fill-white text-white shrink-0" />
+                    <span>Continue Session</span>
+                  </>
+                )}
               </button>
 
               <button
