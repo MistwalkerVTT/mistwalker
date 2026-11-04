@@ -845,7 +845,9 @@ export async function publishActiveSession(sessionData: ActiveSessionData): Prom
     let safeMapUrl = sessionData.mapUrl;
     if (safeMapUrl && safeMapUrl.startsWith('blob:')) {
       const uploaded = await uploadBlobUrlToServer(safeMapUrl, sessionData.sceneTitle || sessionData.sceneId || 'map');
-      safeMapUrl = !uploaded.startsWith('blob:') ? uploaded : (sessionData.mapThumbnailUrl || '');
+      safeMapUrl = (!uploaded.startsWith('blob:') && uploaded)
+        ? uploaded
+        : (sessionData.sceneId ? `local:scene_${sessionData.sceneId}` : '');
     }
     const docRef = doc(db, 'activeSession', sessionDocId);
     const payload = cleanForFirestore({
@@ -1529,12 +1531,9 @@ export async function resolveMapSource(
     return scene.mapUrl;
   }
 
-  // 7. Last resort fallback to scene mapThumbnailUrl
-  if (scene.mapThumbnailUrl) {
-    return scene.mapThumbnailUrl;
-  }
-
-  if (scene.mapUrl && !scene.mapUrl.startsWith('blob:') && !scene.mapUrl.startsWith('local:')) {
+  // 7. Last resort: NEVER return mapThumbnailUrl as the full battlemap source!
+  // Doing so causes callers to replace the battlemap with a low-res pixelated thumbnail.
+  if (scene.mapUrl && !scene.mapUrl.startsWith('blob:') && !scene.mapUrl.startsWith('local:') && !scene.mapUrl.startsWith('data:')) {
     return scene.mapUrl;
   }
   return '';

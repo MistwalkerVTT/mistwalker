@@ -3425,8 +3425,12 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
                         <h3 className="text-sm font-bold font-mono text-zinc-100 flex items-center gap-2">
                           Adventure Chapter PDF & Document Digest
                         </h3>
-                        <p className="text-[11px] text-zinc-400">
+                        <p className="text-[11px] text-zinc-400 leading-relaxed">
                           Upload official or homebrew PDF adventure modules. Gemini AI digests the narrative, associates scenes, and indexes all numbered room zones with read-aloud boxed text.
+                        </p>
+                        <p className="text-[11px] text-amber-300/90 font-medium flex items-center gap-1.5 pt-0.5">
+                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0"></span>
+                          <span><strong>Note:</strong> Works significantly better when uploading <strong>individual chapters</strong> rather than an entire multi-chapter source book.</span>
                         </p>
                       </div>
                     </div>
@@ -3445,7 +3449,7 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
                             type="button"
                             onClick={() => pdfInputRef.current?.click()}
                             disabled={isDigestingPdf}
-                            className="px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-mono font-medium flex items-center gap-1.5 transition-all"
+                            className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-md shadow-blue-950/40 border border-blue-400/40 text-xs font-mono font-bold flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50 whitespace-nowrap cursor-pointer"
                           >
                             <RefreshCw className={`w-3.5 h-3.5 ${isDigestingPdf ? 'animate-spin' : ''}`} />
                             Re-Digest PDF

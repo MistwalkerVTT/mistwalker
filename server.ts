@@ -335,10 +335,8 @@ async function startServer() {
             const isBetaDoc = Boolean(d.id.startsWith('beta_') || data.isBeta);
             if (isBetaServer ? !isBetaDoc : isBetaDoc) return;
             if (data.url && (data.url.endsWith(filename) || path.basename(data.url) === filename)) {
-              if (data.url && typeof data.url === 'string' && data.url.startsWith('data:image')) {
+              if (data.url && typeof data.url === 'string' && data.url.startsWith('data:image') && data.url.length > 100000) {
                 foundDataUrl = data.url;
-              } else if (data.thumbnailUrl && typeof data.thumbnailUrl === 'string' && data.thumbnailUrl.startsWith('data:image')) {
-                foundDataUrl = data.thumbnailUrl;
               }
             }
           });
@@ -375,11 +373,8 @@ async function startServer() {
                   if (ch.scenes && Array.isArray(ch.scenes)) {
                     for (const sc of ch.scenes) {
                       if (sc.mapUrl && (sc.mapUrl.endsWith(filename) || path.basename(sc.mapUrl) === filename)) {
-                        if (sc.mapUrl && typeof sc.mapUrl === 'string' && sc.mapUrl.startsWith('data:image')) {
+                        if (sc.mapUrl && typeof sc.mapUrl === 'string' && sc.mapUrl.startsWith('data:image') && sc.mapUrl.length > 100000) {
                           foundDataUrl = sc.mapUrl;
-                          break;
-                        } else if (sc.mapThumbnailUrl && typeof sc.mapThumbnailUrl === 'string' && sc.mapThumbnailUrl.startsWith('data:image')) {
-                          foundDataUrl = sc.mapThumbnailUrl;
                           break;
                         }
                       }
@@ -420,6 +415,8 @@ async function startServer() {
 
   app.use('/uploads', express.static(uploadsDir, {
     setHeaders: (res, filePath) => {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Accept-Ranges', 'bytes');
       const ext = path.extname(filePath).toLowerCase();
       if (ext === '.jfif' || ext === '.jpg' || ext === '.jpeg') {
         res.setHeader('Content-Type', 'image/jpeg');

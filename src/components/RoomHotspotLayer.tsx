@@ -91,8 +91,8 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
         // Convert percentage bounds to actual pixel positions on the map (with safe fallback)
         const boundsX = typeof anno.bounds?.x === 'number' && !isNaN(anno.bounds.x) ? anno.bounds.x : 50;
         const boundsY = typeof anno.bounds?.y === 'number' && !isNaN(anno.bounds.y) ? anno.bounds.y : 50;
-        const boundsW = typeof anno.bounds?.width === 'number' && !isNaN(anno.bounds.width) ? anno.bounds.width : 20;
-        const boundsH = typeof anno.bounds?.height === 'number' && !isNaN(anno.bounds.height) ? anno.bounds.height : 14;
+        const boundsW = typeof anno.bounds?.width === 'number' && !isNaN(anno.bounds.width) ? anno.bounds.width : 16;
+        const boundsH = typeof anno.bounds?.height === 'number' && !isNaN(anno.bounds.height) ? anno.bounds.height : 11;
 
         const pixelX = (boundsX / 100) * mapW;
         const pixelY = (boundsY / 100) * mapH;
@@ -172,18 +172,18 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
         if (isDescriptiveBadge(anno)) {
           const glyph = LABEL_GLYPHS[anno.icon || 'stairs-up'] || '🏷️';
           const fullLabel = `${glyph}  ${anno.label}`;
-          // Zoom-stabilized adaptive scaling: significantly larger initial pill box with robust visibility
+          // Zoom-stabilized adaptive scaling: well-balanced, high-visibility label pill box
           const zoomStabilizer = Math.max(0.85, Math.min(2.4, 1 / Math.sqrt(Math.max(0.2, stageScale))));
-          const fontSize = Math.max(16, Math.round(22 * zoomStabilizer));
-          const paddingX = Math.round(20 * zoomStabilizer);
-          const charW = fontSize * 0.64;
-          const pillW = Math.max(100 * zoomStabilizer, fullLabel.length * charW + paddingX * 2);
-          const pillH = Math.max(44 * zoomStabilizer, Math.round(fontSize * 2.0));
-          const pillRadius = Math.max(6, Math.round(10 * zoomStabilizer));
-          const strokeWidth = isHovered ? 3.5 : 2.5;
-          const shadowBlur = isHovered ? 16 : 8;
-          const dotOffset = Math.round(10 * zoomStabilizer);
-          const dotRadius = Math.max(3.5, 5 * zoomStabilizer);
+          const fontSize = Math.max(13, Math.round(18 * zoomStabilizer));
+          const paddingX = Math.round(16 * zoomStabilizer);
+          const charW = fontSize * 0.63;
+          const pillW = Math.max(80 * zoomStabilizer, fullLabel.length * charW + paddingX * 2);
+          const pillH = Math.max(35 * zoomStabilizer, Math.round(fontSize * 1.95));
+          const pillRadius = Math.max(5, Math.round(8 * zoomStabilizer));
+          const strokeWidth = isHovered ? 2.8 : 2.0;
+          const shadowBlur = isHovered ? 12 : 6;
+          const dotOffset = Math.round(8 * zoomStabilizer);
+          const dotRadius = Math.max(3, 4 * zoomStabilizer);
 
           return (
             <Group
@@ -283,16 +283,16 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
           ? `${hazardGlyph} ${(anno.roomNumber || anno.hazardType || 'HAZARD').toUpperCase()}`
           : (anno.roomNumber || displayLabel.substring(0, 5)).toUpperCase();
 
-        // Zoom-stabilized adaptive scaling: significantly larger initial room badge box
+        // Zoom-stabilized adaptive scaling: well-balanced, high-visibility room badge box
         const zoomStabilizer = Math.max(0.85, Math.min(2.4, 1 / Math.sqrt(Math.max(0.2, stageScale))));
-        const fontSize = Math.max(16, Math.round(22 * zoomStabilizer));
-        const badgePadding = Math.round(18 * zoomStabilizer);
-        const charWidth = fontSize * 0.68;
-        const badgeW = Math.max(64 * zoomStabilizer, Math.round(badgeText.length * charWidth + badgePadding * 2));
-        const badgeH = Math.max(44 * zoomStabilizer, Math.round(fontSize * 2.0));
-        const roomStrokeW = isHovered ? 3.5 : 2.5;
-        const roomShadowBlur = isHovered ? 16 : 8;
-        const roomCornerR = Math.max(6, Math.round(10 * zoomStabilizer));
+        const fontSize = Math.max(13, Math.round(18 * zoomStabilizer));
+        const badgePadding = Math.round(14 * zoomStabilizer);
+        const charWidth = fontSize * 0.67;
+        const badgeW = Math.max(52 * zoomStabilizer, Math.round(badgeText.length * charWidth + badgePadding * 2));
+        const badgeH = Math.max(35 * zoomStabilizer, Math.round(fontSize * 1.95));
+        const roomStrokeW = isHovered ? 2.8 : 2.0;
+        const roomShadowBlur = isHovered ? 12 : 6;
+        const roomCornerR = Math.max(5, Math.round(8 * zoomStabilizer));
 
         return (
           <Group key={anno.id} id={`hotspot-${anno.id}`}>

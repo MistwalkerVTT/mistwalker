@@ -135,8 +135,8 @@ export const RoomLabelEditorModal: React.FC<RoomLabelEditorModalProps> = ({
       bounds: {
         x: pctX,
         y: pctY,
-        width: initialAnnotation?.bounds?.width || 20,
-        height: initialAnnotation?.bounds?.height || 10
+        width: initialAnnotation?.bounds?.width || 16,
+        height: initialAnnotation?.bounds?.height || 8
       },
       boxedText: initialAnnotation?.boxedText || '',
       dmNotes: dmNotes.trim(),
@@ -250,10 +250,10 @@ export const RoomLabelEditorModal: React.FC<RoomLabelEditorModalProps> = ({
                   boxShadow: `0 0 16px ${selectedColor}50`
                 }}
               >
-                <span className="text-xl">{activeGlyph}</span>
-                <span className="text-white font-sans tracking-wide text-base">{labelText || 'Label Text'}</span>
+                <span className="text-lg">{activeGlyph}</span>
+                <span className="text-white font-sans tracking-wide text-sm">{labelText || 'Label Text'}</span>
                 {visibleToPlayers && (
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 border border-black ml-1.5 shrink-0" title="Visible to players" />
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 border border-black ml-1 shrink-0" title="Visible to players" />
                 )}
               </div>
             </div>

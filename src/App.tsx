@@ -2849,8 +2849,16 @@ export default function App() {
           const data = await upRes.json();
           if (data?.url && !data.url.startsWith('blob:')) {
             console.log('[App] Converted local blob map to server URL:', data.url);
-            setImageFile(data.url);
+            // CRITICAL: Do NOT call setImageFile(data.url) if imageFile is already a working local blob!
+            // Changing imageFile drops the in-memory canvas texture and forces an unnecessary network refetch.
+            // Only update activeSceneInfo, mapsDataRef, and broadcast for player views:
             setActiveSceneInfo(prev => prev ? { ...prev, mapUrl: data.url } : prev);
+            if (mapsDataRef.current[activeMapIdRef.current]) {
+              mapsDataRef.current[activeMapIdRef.current].imageFile = data.url;
+            }
+            if (socketRef.current?.connected) {
+              socketRef.current.emit('SYNC_IMAGE', data.url);
+            }
           }
         }
       } catch (err) {
@@ -4058,8 +4066,13 @@ export default function App() {
     if (!fullResUrl && (scene.mapUrl || scene.mapThumbnailUrl || scene.sceneTitle)) {
       try {
         const resolvedMapUrl = await resolveMapSource(scene, uploadedMaps);
-        const bestUrl = resolvedMapUrl || scene.mapUrl || scene.mapThumbnailUrl || '';
-        if (bestUrl && bestUrl !== effectiveMapUrl && !bestUrl.startsWith('local:')) {
+        const bestUrl = resolvedMapUrl || scene.mapUrl || '';
+        const isThumbnail = Boolean(
+          (scene.mapThumbnailUrl && bestUrl === scene.mapThumbnailUrl) ||
+          (bestUrl.startsWith('data:') && bestUrl.length < 150000)
+        );
+        // CRITICAL: Never replace effectiveMapUrl with a thumbnail or data URL!
+        if (bestUrl && bestUrl !== effectiveMapUrl && !bestUrl.startsWith('local:') && !isThumbnail) {
           fullResUrl = bestUrl;
           const isVideo = isVideoAsset(bestUrl) || isVideoAsset(scene.mapUrl);
           setMapType(isVideo ? 'video' : 'image');
