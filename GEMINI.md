@@ -1,34 +1,23 @@
-# MistWalker Project Guidelines & Dual-Domain Deployment Rule
+# MistWalker Project Guidelines & Production Architecture
 
-## Dual-Domain Architecture (Stable vs. Enterprise Beta)
+## Production Architecture (Stable v1.0.0)
 
-MistWalker operates on **two distinct, isolated live cloud services and domains**:
+MistWalker operates as a single-target, high-reliability live production cloud service:
 
-1. **Production (Stable v1.0.0)**
-   - **Branch**: `v1-stable`
-   - **Live URL**: `https://mistwalker.onrender.com/`
-   - **Render Service ID**: `srv-db93bu3bc2fs73cn795g`
-   - **Audience**: Active DMs and players currently using MistWalker for their live campaigns.
+- **Branch**: `v1-stable`
+- **Live URL**: `https://mistwalker.onrender.com/`
+- **Render Service ID**: `srv-db93bu3bc2fs73cn795g`
+- **Audience**: Active DMs and players currently using MistWalker for their live campaigns.
 
-2. **Enterprise Beta (Multi-Tenant Commercial Multi-DM)**
-   - **Branch**: `enterprise-multi-dm`
-   - **Live URL**: `https://mistwalker-beta.onrender.com/`
-   - **Render Service ID**: `srv-dbhqc7afngtc73cau1i0`
-   - **Audience**: Commercial development, multi-DM testing, room codes, lobbies, and user accounts.
+> [!NOTE]
+> The Enterprise Beta multi-tenant edition (`enterprise-multi-dm`) and its cloud service (`srv-dbhqc7afngtc73cau1i0`) have been decommissioned and archived. All history is permanently preserved in the Git tag `archive/enterprise-beta-snapshot` and `docs/archive/PENDING_ENTERPRISE_PATCHES_ARCHIVE.md`.
 
 ---
 
-## Deployment & Patch Policy (Auto-Push to Enterprise is PAUSED)
+## Production Deployment Workflow
 
-- **Automatic pushing of stable updates into enterprise mode is PAUSED.**
-- **Stable Deployment Workflow**:
-  1. Make fixes/features on `v1-stable`.
-  2. Test compilation (`npm run build`).
-  3. Commit to `v1-stable` and push to `origin/v1-stable`.
-  4. Deploy to Production only: `node scripts/deploy.js --prod`.
-  5. Verify live production endpoint is healthy (HTTP 200).
-- **Tracking Stable Changes for Enterprise**:
-  - Every change made to `v1-stable` MUST be logged in `PENDING_ENTERPRISE_PATCHES.md`.
-  - Record the commit hash, date, affected files, and a concise summary.
-- **Enterprise Release Patches**:
-  - Pending stable updates will be batched and merged into `enterprise-multi-dm` only when explicitly requested by the user.
+1. **Active Branch**: All work is performed on `v1-stable`.
+2. **Build Verification**: Compile with `npm run build` (via `cmd.exe /c "npm run build"`) to verify zero TypeScript or bundling errors.
+3. **Commit & Push**: Commit changes to `v1-stable` and push to `origin/v1-stable`.
+4. **Deploy to Render**: Deploy directly to Production: `node scripts/deploy.js --prod`.
+5. **Live Health Check**: Confirm `https://mistwalker.onrender.com/` returns HTTP 200.

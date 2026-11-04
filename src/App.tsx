@@ -73,6 +73,10 @@ import { JB2A_REGISTRY, findJb2aAsset } from './effects/db/jb2aRegistry';
 import { getAuraVideoUrl } from './effects/db/tokenFxMap';
 import { MainCampaignBar } from './components/MainCampaignBar';
 import { DashboardHomeHub } from './components/DashboardHomeHub';
+import { AVAILABLE_TOKENS, type AvailableTokenItem, CONDITIONS, DND_CONDITIONS } from './data/defaultTokens';
+import { getImageTransform } from './lib/canvasTransforms';
+import { GifImage } from './components/canvas/GifImage';
+import { useTacticalGrid } from './hooks/useTacticalGrid';
 
 const MapGenerator = React.lazy(() => import('./components/MapGenerator'));
 const SettingsModal = React.lazy(() => import('./components/SettingsModal').then(m => ({ default: m.SettingsModal })));
@@ -291,130 +295,6 @@ interface SyncState {
   animatedEnabled?: boolean;
 }
 
-const GifImage = ({ src, ...props }: any) => {
-  const imageRef = useRef<any>(null);
-  const [image, setImage] = useState<HTMLImageElement | HTMLCanvasElement | null>(null);
-  const canvas = useMemo(() => {
-    const c = document.createElement('canvas');
-    c.width = Math.max(1, Math.round(props.width || 64));
-    c.height = Math.max(1, Math.round(props.height || 64));
-    return c;
-  }, []);
-  const animatorRef = useRef<any>(null);
-  
-  useEffect(() => {
-    if (!src) return;
-    
-    const giflerFn = (window as any).gifler;
-    let objectUrl: string | null = null;
-    let isMounted = true;
-    
-    const fallbackToStatic = () => {
-      if (!isMounted) return;
-      const img = new Image();
-      // Remove crossOrigin to allow loading even if CORS is not supported (will be tainted but Konva can still render it)
-      img.onload = () => {
-        if (isMounted && img.naturalWidth > 0 && img.naturalHeight > 0) {
-          setImage(img);
-        }
-      };
-      img.onerror = () => {
-        if (isMounted) console.warn(`Failed to load image: ${src}`);
-      };
-      img.src = src;
-    };
-
-    if (giflerFn) {
-      fetch(src, { mode: 'cors' })
-        .then(response => {
-          if (!response.ok) throw new Error('Network response was not ok');
-          return response.arrayBuffer();
-        })
-        .then(buffer => {
-          if (!isMounted) return;
-          const header = new Uint8Array(buffer.slice(0, 6));
-          const headerStr = String.fromCharCode(...header);
-          
-          if (headerStr === 'GIF87a' || headerStr === 'GIF89a') {
-            const blob = new Blob([buffer], { type: 'image/gif' });
-            objectUrl = URL.createObjectURL(blob);
-            giflerFn(objectUrl).get((animator: any) => {
-              if (!isMounted) return;
-              animatorRef.current = animator;
-
-              // Ensure canvas dimensions are strictly non-zero before starting
-              const targetW = Math.max(1, animator.width || props.width || 64);
-              const targetH = Math.max(1, animator.height || props.height || 64);
-              canvas.width = targetW;
-              canvas.height = targetH;
-
-              // Guard frame rendering against 0-dimension buffers
-              animator.onDrawFrame = (ctx: CanvasRenderingContext2D, frame: any) => {
-                if (
-                  frame &&
-                  frame.buffer &&
-                  frame.buffer.width > 0 &&
-                  frame.buffer.height > 0 &&
-                  ctx.canvas &&
-                  ctx.canvas.width > 0 &&
-                  ctx.canvas.height > 0
-                ) {
-                  try {
-                    ctx.drawImage(frame.buffer, frame.x || 0, frame.y || 0);
-                  } catch (e) {
-                    // Ignore 0-dimension frame draw attempt
-                  }
-                }
-              };
-
-              animator.animateInCanvas(canvas, false);
-              animator.onDraw = () => {
-                if (imageRef.current && isMounted) {
-                  const layer = imageRef.current.getLayer();
-                  if (layer) layer.batchDraw();
-                }
-              };
-
-              if (canvas.width > 0 && canvas.height > 0) {
-                setImage(canvas);
-              }
-            });
-          } else {
-            fallbackToStatic();
-          }
-        })
-        .catch(() => {
-          fallbackToStatic();
-        });
-    } else {
-      fallbackToStatic();
-    }
-
-    return () => {
-      isMounted = false;
-      if (animatorRef.current) {
-        try {
-          animatorRef.current.stop();
-        } catch (e) {
-          // ignore
-        }
-        animatorRef.current = null;
-      }
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl);
-      }
-    };
-  }, [src, canvas, props.width, props.height]);
-
-  if (!image) return null;
-  const imgW = (image as any).width || (image as any).naturalWidth;
-  const imgH = (image as any).height || (image as any).naturalHeight;
-  if (!imgW || !imgH || imgW <= 0 || imgH <= 0) return null;
-  if (props.width !== undefined && props.width <= 0) return null;
-  if (props.height !== undefined && props.height <= 0) return null;
-
-  return <KonvaImage ref={imageRef} image={image} {...props} />;
-};
 
 const TokenImage = React.memo(({
   token,
@@ -1125,80 +1005,7 @@ const TokenImage = React.memo(({
 
 const VOICES = NARRATION_VOICES;
 
-export interface AvailableTokenItem {
-  name: string;
-  url: string;
-  category: 'character' | 'monster' | 'ally';
-  size?: number;
-}
-
-const AVAILABLE_TOKENS: AvailableTokenItem[] = [
-  // Characters & Heroes
-  { name: 'Varrak', url: 'https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/Varrak.png/:/rs=w:1440,h:1440', category: 'character', size: 1 },
-  { name: 'Brannoc', url: 'https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/Brannoc.png/:/rs=w:1440,h:1440', category: 'character', size: 1 },
-  { name: 'Aziza', url: 'https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/Aziza.png/:/rs=w:1440,h:1440', category: 'character', size: 1 },
-  { name: 'Noctua', url: 'https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/Noctua.png/:/rs=w:1440,h:1440', category: 'character', size: 1 },
-  { name: 'Aggie', url: 'https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/Aggie.png/:/rs=w:1440,h:1440', category: 'character', size: 1 },
-  { name: 'Burmi', url: 'https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/Burmi.png/:/rs=w:1440,h:1440', category: 'character', size: 1 },
-  { name: 'Rowan', url: 'https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/Rowan.png/:/rs=w:1440,h:1440', category: 'character', size: 1 },
-  { name: 'Stavros', url: 'https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/DwarfStavros.jpg/:/rs=w:1440,h:1440', category: 'character', size: 1 },
-  { name: 'Mayo', url: 'https://i.ibb.co/nNm5TBg2/Mayo.gif', category: 'character', size: 1 },
-
-  // Monsters & Foes
-  { name: 'Goblin', url: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?auto=format&fit=crop&w=300&q=80', category: 'monster', size: 1 },
-  { name: 'Skeleton', url: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&w=300&q=80', category: 'monster', size: 1 },
-  { name: 'Orc Warrior', url: 'https://images.unsplash.com/photo-1563089145-599997674d42?auto=format&fit=crop&w=300&q=80', category: 'monster', size: 1 },
-  { name: 'Young Red Dragon', url: 'https://images.unsplash.com/photo-1577493340887-b7bdef030977?auto=format&fit=crop&w=300&q=80', category: 'monster', size: 2 },
-  { name: 'Beholder', url: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=300&q=80', category: 'monster', size: 2 },
-  { name: 'Mimic', url: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=300&q=80', category: 'monster', size: 1 },
-  { name: 'Dire Wolf', url: 'https://images.unsplash.com/photo-1564865878688-9a244444042a?auto=format&fit=crop&w=300&q=80', category: 'monster', size: 2 },
-  { name: 'Zombie', url: 'https://images.unsplash.com/photo-1509248961158-e54f6934749c?auto=format&fit=crop&w=300&q=80', category: 'monster', size: 1 },
-  { name: 'Mushu', url: 'https://i.ibb.co/tPQBm3DZ/Mushu.gif', category: 'monster', size: 1 },
-  { name: 'Spiritual Weapon', url: 'https://i.ibb.co/b5hZS9HG/Spirit-Weapon.gif', category: 'ally', size: 1 },
-];
-
-const CONDITIONS = [
-  { name: 'Poisoned', url: 'https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/poisoned.png/:/rs=w:1440,h:1440' },
-  { name: 'Prone', url: 'https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/prone.png/:/rs=w:1440,h:1440' },
-  { name: 'Unconscious', url: 'https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/unconcious.png/:/rs=w:1440,h:1440' },
-  { name: 'Grappled', url: 'https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/grappled.png/:/rs=w:1440,h:1440' },
-  { name: 'Paralyzed', url: 'https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/Paralyzed.png/:/rs=w:1440,h:1440' },
-  { name: 'Frightened', url: 'https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/Frightened.png/:/rs=w:1440,h:1440' },
-  { name: 'Petrified', url: 'https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/petrified.png/:/rs=w:1440,h:1440' },
-  { name: 'Deafened', url: 'https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/Deafened.png/:/rs=w:1440,h:1440' },
-  { name: 'Charmed', url: 'https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/Charmed.png/:/rs=w:1440,h:1440' },
-  { name: 'Bloodied', url: 'https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/Bloodied.png/:/rs=w:1440,h:1440' },
-];
-
-const DND_CONDITIONS = [
-  'Blinded',
-  'Charmed',
-  'Deafened',
-  'Exhaustion',
-  'Frightened',
-  'Grappled',
-  'Incapacitated',
-  'Invisible',
-  'Paralyzed',
-  'Petrified',
-  'Poisoned',
-  'Prone',
-  'Restrained',
-  'Stunned',
-  'Unconscious',
-  'Bloodied'
-];
-
-
-
-const getImageTransform = (width: number, height: number, rotation: number) => {
-  switch (rotation % 360) {
-    case 90: return { x: height, y: 0, rotation: 90 };
-    case 180: return { x: width, y: height, rotation: 180 };
-    case 270: return { x: 0, y: width, rotation: 270 };
-    default: return { x: 0, y: 0, rotation: 0 };
-  }
-};
+export type { AvailableTokenItem };
 
 const loadDmBackupState = () => {
   if (typeof window === 'undefined') return null;
@@ -1533,9 +1340,26 @@ export default function App() {
   const [aiDescribeError, setAiDescribeError] = useState<string | null>(null);
   const [isAiDescribingLoading, setIsAiDescribingLoading] = useState(false);
 
-  // Interactive Grid Box Calibration State
-  const [gridCalibrateRect, setGridCalibrateRect] = useState<{ startX: number; startY: number; currentX: number; currentY: number } | null>(null);
-  const [isCalibratingGrid, setIsCalibratingGrid] = useState<boolean>(false);
+  const {
+    gridSize,
+    setGridSize,
+    gridOffsetX,
+    setGridOffsetX,
+    gridOffsetY,
+    setGridOffsetY,
+    gridOffsetRef,
+    gridVisible,
+    setGridVisible,
+    gridOpacity,
+    setGridOpacity,
+    gridCalibrateRect,
+    setGridCalibrateRect,
+    isCalibratingGrid,
+    setIsCalibratingGrid,
+    startGridCalibration,
+    updateGridCalibration,
+    finishGridCalibration,
+  } = useTacticalGrid();
 
   const [auraColor, setAuraColor] = useState<string>('rgba(59, 130, 246, 0.4)');
   const [measureStart, setMeasureStart] = useState<{ x: number, y: number } | null>(null);
@@ -1561,13 +1385,6 @@ export default function App() {
   const stageDragRafIdRef = useRef<number | null>(null);
   const wheelRafIdRef = useRef<number | null>(null);
   const pendingWheelStateRef = useRef<{ scale: number; pos: { x: number; y: number } } | null>(null);
-  const [gridVisible, setGridVisible] = useState<boolean>(true);
-  const [gridOpacity, setGridOpacity] = useState<number>(0.3);
-  const [gridSize, setGridSize] = useState<number>(50);
-  const [gridOffsetX, setGridOffsetX] = useState<number>(0);
-  const [gridOffsetY, setGridOffsetY] = useState<number>(0);
-  const gridOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  gridOffsetRef.current = { x: gridOffsetX, y: gridOffsetY };
   const [mapRotation, setMapRotation] = useState<number>(0);
 
 
@@ -8087,8 +7904,7 @@ export default function App() {
       setIsAiDescribing(true);
       setAiDescribeRect({ x: point.x, y: point.y, w: 0, h: 0 });
     } else if (tool === 'grid_calibrate') {
-      setIsCalibratingGrid(true);
-      setGridCalibrateRect({ startX: point.x, startY: point.y, currentX: point.x, currentY: point.y });
+      startGridCalibration(point);
     } else if (tool === 'measure') {
       setIsMeasuring(true);
       setMeasureStart(point);
@@ -8179,11 +7995,7 @@ export default function App() {
         h: point.y - aiDescribeRect.y
       });
     } else if (tool === 'grid_calibrate' && isCalibratingGrid && gridCalibrateRect) {
-      setGridCalibrateRect({
-        ...gridCalibrateRect,
-        currentX: point.x,
-        currentY: point.y
-      });
+      updateGridCalibration(point);
     } else if (tool === 'measure' && isMeasuring) {
       setMeasureEnd(point);
     }
@@ -8340,30 +8152,11 @@ export default function App() {
       return; // Handled async
     }
     if (tool === 'grid_calibrate' && isCalibratingGrid && gridCalibrateRect) {
-      setIsCalibratingGrid(false);
-      const minX = Math.min(gridCalibrateRect.startX, gridCalibrateRect.currentX);
-      const maxX = Math.max(gridCalibrateRect.startX, gridCalibrateRect.currentX);
-      const minY = Math.min(gridCalibrateRect.startY, gridCalibrateRect.currentY);
-      const maxY = Math.max(gridCalibrateRect.startY, gridCalibrateRect.currentY);
-      const boxW = Math.round(maxX - minX);
-      const boxH = Math.round(maxY - minY);
-      setGridCalibrateRect(null);
-
-      // Require at least a 10px box to calibrate
-      if (boxW >= 10 && boxH >= 10) {
-        const measuredSize = Math.max(10, Math.min(500, Math.round(((boxW + boxH) / 2) * 10) / 10));
-        // Calculate offset so the grid line snaps exactly to the box's top-left corner
-        const newOffsetX = Math.round(((minX % measuredSize) + measuredSize) % measuredSize);
-        const newOffsetY = Math.round(((minY % measuredSize) + measuredSize) % measuredSize);
-
-        setGridSize(measuredSize);
-        setGridOffsetX(newOffsetX);
-        setGridOffsetY(newOffsetY);
-        setGridVisible(true);
+      const res = finishGridCalibration();
+      if (res) {
         setTool('pan');
-
         toast.success(
-          `Grid snapped to measured box: ${measuredSize}px (Offset: ${newOffsetX}, ${newOffsetY})`,
+          `Grid snapped to measured box: ${res.measuredSize}px (Offset: ${res.newOffsetX}, ${res.newOffsetY})`,
           { icon: '📐' }
         );
       } else {
