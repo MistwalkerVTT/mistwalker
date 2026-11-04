@@ -1932,12 +1932,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                 </button>
                 <button
                   id="subtab-room-zones"
-                  onClick={() => {
-                    setLightingSubTab('zones');
-                    if (setCampaignMode && campaignMode !== 'creator') {
-                      setCampaignMode('creator');
-                    }
-                  }}
+                  onClick={() => setLightingSubTab('zones')}
                   className={`py-1.5 px-1 rounded-lg text-[10px] font-bold font-mono transition-all flex items-center justify-center gap-1 cursor-pointer ${
                     lightingSubTab === 'zones'
                       ? 'bg-amber-500 text-zinc-950 shadow-sm'

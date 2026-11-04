@@ -8840,7 +8840,7 @@ export default function App() {
   const handleModeChange = useCallback((newMode: CampaignMode) => {
     setCampaignMode(newMode);
     if (newMode === 'creator') {
-      setTool('wall');
+      setTool(curr => (curr === 'select' || curr === 'hand' ? 'wall' : curr));
       toast.info('Switched to Creator Mode: Draw wall lines and doors', {
         icon: '🔨'
       });
