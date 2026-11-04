@@ -15,7 +15,7 @@
 ## Pending Changes Queue for Future Enterprise Patch
 
 ### [2026-11-04] feat(maps): integrate mbround18 community vtt pre-built maps repository
-- **Commit**: `[PENDING]`
+- **Commit**: `a44cc25`
 - **Files Changed**:
   - `src/data/vttMapRepository.ts`
   - `src/components/VttMapRepositoryModal.tsx`
