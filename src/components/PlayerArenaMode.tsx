@@ -1515,34 +1515,23 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
   }, [selectedMap.id, selectedMap.arenaTitle, selectedMap.name]);
 
   const dynamicArenaDims = useMemo(() => {
-    // Original preset battlemaps have meticulously designed 22x14 (1320x840) tactical layouts
-    const isOriginalPreset = ['forest-ruins', 'subterranean-maze', 'skeleton-crypt', 'lavapit'].includes(selectedMap.id) || !selectedMap.isCustomUploaded;
-    if (isOriginalPreset && !selectedMap.isCustomUploaded) {
-      const width = selectedMap.mapWidth || DEFAULT_ARENA_WIDTH;
-      const height = selectedMap.mapHeight || DEFAULT_ARENA_HEIGHT;
-      const cols = selectedMap.gridCols || 22;
-      const rows = selectedMap.gridRows || 14;
-      const gridSize = selectedMap.gridSize || DEFAULT_ARENA_GRID_SIZE;
-      return {
-        width,
-        height,
-        cols,
-        rows,
-        gridSize,
-        aspect: width / Math.max(1, height),
-        rawWidth: width,
-        rawHeight: height
-      };
-    }
+    const naturalW = bgImage?.naturalWidth || (bgImage as any)?.width || 0;
+    const naturalH = bgImage?.naturalHeight || (bgImage as any)?.height || 0;
+    const mapW = selectedMap.mapWidth || 0;
+    const mapH = selectedMap.mapHeight || 0;
 
-    const rawW = selectedMap.mapWidth || bgImage?.naturalWidth || (bgImage as any)?.width || DEFAULT_ARENA_WIDTH;
-    const rawH = selectedMap.mapHeight || bgImage?.naturalHeight || (bgImage as any)?.height || DEFAULT_ARENA_HEIGHT;
+    // Use natural image dimensions as the absolute source of truth for zero distortion,
+    // preserving organic aspect ratio, or configured map dimensions while loading / for sub-1000px thumbnails
+    const width = naturalW > 0
+      ? ((naturalW < 1000 && mapW > naturalW) ? mapW : naturalW)
+      : (mapW > 0 ? mapW : DEFAULT_ARENA_WIDTH);
+    const height = naturalH > 0
+      ? ((naturalH < 1000 && mapH > naturalH) ? mapH : naturalH)
+      : (mapH > 0 ? mapH : DEFAULT_ARENA_HEIGHT);
+
     const gridSize = selectedMap.gridSize || DEFAULT_ARENA_GRID_SIZE;
-
-    const cols = selectedMap.gridCols || Math.max(8, Math.round(rawW / gridSize));
-    const rows = selectedMap.gridRows || Math.max(6, Math.round(rawH / gridSize));
-    const width = cols * gridSize;
-    const height = rows * gridSize;
+    const cols = Math.max(8, Math.round(width / gridSize));
+    const rows = Math.max(6, Math.round(height / gridSize));
 
     return {
       width,
@@ -1551,8 +1540,8 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       rows,
       gridSize,
       aspect: width / Math.max(1, height),
-      rawWidth: rawW,
-      rawHeight: rawH
+      rawWidth: width,
+      rawHeight: height
     };
   }, [selectedMap, bgImage]);
 

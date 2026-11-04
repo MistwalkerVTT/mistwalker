@@ -111,6 +111,7 @@ export const ArenaManagerPanel: React.FC<ArenaManagerPanelProps> = ({
   const [createArenaDesc, setCreateArenaDesc] = useState<string>('');
   const [createArenaWallPreset, setCreateArenaWallPreset] = useState<'none' | 'pillars' | 'divide' | 'barricades'>('pillars');
   const [createArenaAssetId, setCreateArenaAssetId] = useState<string>('');
+  const [mapNaturalDims, setMapNaturalDims] = useState<Record<string, { width: number; height: number }>>({});
 
   const fileUploadRef = useRef<HTMLInputElement | null>(null);
 
@@ -208,8 +209,9 @@ export const ArenaManagerPanel: React.FC<ArenaManagerPanelProps> = ({
       return;
     }
     const existingWalls = (config.mapWalls?.[mapItem.id] || []).map((w) => normalizeArenaWallSegment(w));
-    const mWidth = mapItem.mapWidth || ARENA_WIDTH;
-    const mHeight = mapItem.mapHeight || ARENA_HEIGHT;
+    const natural = mapNaturalDims[mapItem.id];
+    const mWidth = natural?.width || mapItem.mapWidth || ARENA_WIDTH;
+    const mHeight = natural?.height || mapItem.mapHeight || ARENA_HEIGHT;
     const arenaScene: Scene = {
       sceneId: mapItem.id,
       sceneTitle: `Arena: ${mapItem.name}`,
@@ -985,8 +987,8 @@ export const ArenaManagerPanel: React.FC<ArenaManagerPanelProps> = ({
                   <span className="text-emerald-400 font-medium">{currentMapWalls.length} walls/doors</span>
                   <span>•</span>
                   <span>
-                    {selectedMap.gridCols || Math.max(8, Math.round((selectedMap.mapWidth || ARENA_WIDTH) / (selectedMap.gridSize || ARENA_GRID_SIZE)))}×
-                    {selectedMap.gridRows || Math.max(6, Math.round((selectedMap.mapHeight || ARENA_HEIGHT) / (selectedMap.gridSize || ARENA_GRID_SIZE)))} Tactical Grid ({selectedMap.mapWidth || ARENA_WIDTH}×{selectedMap.mapHeight || ARENA_HEIGHT})
+                    {Math.max(8, Math.round((mapNaturalDims[selectedMap.id]?.width || selectedMap.mapWidth || ARENA_WIDTH) / (selectedMap.gridSize || ARENA_GRID_SIZE)))}×
+                    {Math.max(6, Math.round((mapNaturalDims[selectedMap.id]?.height || selectedMap.mapHeight || ARENA_HEIGHT) / (selectedMap.gridSize || ARENA_GRID_SIZE)))} Tactical Grid ({mapNaturalDims[selectedMap.id]?.width || selectedMap.mapWidth || ARENA_WIDTH}×{mapNaturalDims[selectedMap.id]?.height || selectedMap.mapHeight || ARENA_HEIGHT})
                   </span>
                 </div>
               </div>
@@ -1054,11 +1056,12 @@ export const ArenaManagerPanel: React.FC<ArenaManagerPanelProps> = ({
 
             {/* Arena Map Preview & Spawn Zones (Organic Aspect Ratio) */}
             {(() => {
-              const prevW = selectedMap.mapWidth || (selectedMap.gridCols ? selectedMap.gridCols * ARENA_GRID_SIZE : ARENA_WIDTH);
-              const prevH = selectedMap.mapHeight || (selectedMap.gridRows ? selectedMap.gridRows * ARENA_GRID_SIZE : ARENA_HEIGHT);
+              const natural = mapNaturalDims[selectedMap.id];
+              const prevW = natural?.width || selectedMap.mapWidth || (selectedMap.gridCols ? selectedMap.gridCols * ARENA_GRID_SIZE : ARENA_WIDTH);
+              const prevH = natural?.height || selectedMap.mapHeight || (selectedMap.gridRows ? selectedMap.gridRows * ARENA_GRID_SIZE : ARENA_HEIGHT);
               const prevGSize = selectedMap.gridSize || ARENA_GRID_SIZE;
-              const prevCols = selectedMap.gridCols || Math.max(8, Math.round(prevW / prevGSize));
-              const prevRows = selectedMap.gridRows || Math.max(6, Math.round(prevH / prevGSize));
+              const prevCols = Math.max(8, Math.round(prevW / prevGSize));
+              const prevRows = Math.max(6, Math.round(prevH / prevGSize));
               const goldSpawnTopRow = Math.max(1, Math.floor(prevRows * 0.15));
               const goldSpawnHeightRows = Math.max(2, Math.floor(prevRows * 0.7));
               const crimsonSpawnCol = Math.max(4, prevCols - 4);
@@ -1076,7 +1079,16 @@ export const ArenaManagerPanel: React.FC<ArenaManagerPanelProps> = ({
                     <img
                       src={selectedMap.url}
                       alt={selectedMap.name}
-                      className="absolute inset-0 w-full h-full object-contain pointer-events-none"
+                      onLoad={(e) => {
+                        const img = e.currentTarget;
+                        if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+                          setMapNaturalDims((prev) => ({
+                            ...prev,
+                            [selectedMap.id]: { width: img.naturalWidth, height: img.naturalHeight }
+                          }));
+                        }
+                      }}
+                      className="absolute inset-0 w-full h-full object-fill pointer-events-none"
                     />
 
                     <svg

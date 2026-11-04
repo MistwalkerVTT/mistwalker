@@ -172,12 +172,18 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
         if (isDescriptiveBadge(anno)) {
           const glyph = LABEL_GLYPHS[anno.icon || 'stairs-up'] || '🏷️';
           const fullLabel = `${glyph}  ${anno.label}`;
-          const fontSize = Math.max(10, Math.min(18, 11.5 / stageScale));
-          const paddingX = 10 / stageScale;
+          // Badges scale down smoothly when scrolling outward (zooming out)
+          const scaleFactor = Math.min(1.0, Math.max(0.35, stageScale));
+          const fontSize = Math.max(9, Math.round(13 * scaleFactor));
+          const paddingX = Math.round(8 * scaleFactor);
           const charW = fontSize * 0.65;
-          const pillW = Math.max(70 / stageScale, fullLabel.length * charW + paddingX * 2);
-          const pillH = Math.max(22 / stageScale, fontSize * 1.85);
-          const pillRadius = 6 / stageScale;
+          const pillW = Math.max(48 * scaleFactor, fullLabel.length * charW + paddingX * 2);
+          const pillH = Math.max(18 * scaleFactor, fontSize * 1.85);
+          const pillRadius = Math.max(3, Math.round(5 * scaleFactor));
+          const strokeWidth = isHovered ? 2 : 1.2;
+          const shadowBlur = isHovered ? 10 : 4;
+          const dotOffset = Math.round(6 * scaleFactor);
+          const dotRadius = Math.max(1.8, 2.5 * scaleFactor);
 
           return (
             <Group
@@ -230,10 +236,10 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
                 height={pillH}
                 fill={isHovered ? 'rgba(24, 24, 27, 0.98)' : 'rgba(15, 23, 42, 0.92)'}
                 stroke={isHovered ? '#ffffff' : baseColor}
-                strokeWidth={(isHovered ? 2 : 1.2) / stageScale}
+                strokeWidth={strokeWidth}
                 cornerRadius={pillRadius}
                 shadowColor={isHovered ? baseColor : 'black'}
-                shadowBlur={isHovered ? 12 / stageScale : 6 / stageScale}
+                shadowBlur={shadowBlur}
                 shadowOpacity={0.85}
               />
 
@@ -255,12 +261,12 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
               {/* Status Indicator Dot for DM View (Green = Visible to players, Gray = DM only) */}
               {!isPlayerView && (
                 <Circle
-                  x={(pillW / 2) - (6 / stageScale)}
-                  y={-(pillH / 2) + (6 / stageScale)}
-                  radius={2.5 / stageScale}
+                  x={(pillW / 2) - dotOffset}
+                  y={-(pillH / 2) + dotOffset}
+                  radius={dotRadius}
                   fill={anno.visibleToPlayers ? '#10b981' : '#71717a'}
                   stroke="#000000"
-                  strokeWidth={0.5 / stageScale}
+                  strokeWidth={0.5}
                 />
               )}
             </Group>
@@ -277,10 +283,14 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
           ? `${hazardGlyph} ${(anno.roomNumber || anno.hazardType || 'HAZARD').toUpperCase()}`
           : (anno.roomNumber || displayLabel.substring(0, 4)).toUpperCase();
 
-        const fontSize = Math.max(10, Math.min(18, 11 / stageScale));
-        const badgePadding = 8 / stageScale;
-        const badgeW = Math.max(28 / stageScale, badgeText.length * (fontSize * 0.6) + badgePadding * 2);
-        const badgeH = fontSize * 1.5;
+        const scaleFactor = Math.min(1.0, Math.max(0.35, stageScale));
+        const fontSize = Math.max(8, Math.round(11 * scaleFactor));
+        const badgePadding = Math.round(6 * scaleFactor);
+        const badgeW = Math.max(20 * scaleFactor, badgeText.length * (fontSize * 0.6) + badgePadding * 2);
+        const badgeH = Math.round(fontSize * 1.6);
+        const roomStrokeW = isHovered ? 2 : 1.2;
+        const roomShadowBlur = isHovered ? 10 : 4;
+        const roomCornerR = Math.max(2, Math.round(4 * scaleFactor));
 
         return (
           <Group key={anno.id} id={`hotspot-${anno.id}`}>
@@ -295,11 +305,11 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
                       ? (isHovered ? 'rgba(239, 68, 68, 0.38)' : 'rgba(239, 68, 68, 0.16)')
                       : 'rgba(245, 158, 11, 0.28)'}
                     stroke={anno.color || (anno.isHazard || anno.type === 'hazard' ? '#ef4444' : '#fbbf24')}
-                    strokeWidth={(isHovered ? 3 : 2) / stageScale}
+                    strokeWidth={isHovered ? 3 : 1.5}
                     shadowColor={anno.color || '#ef4444'}
-                    shadowBlur={(isHovered ? 14 : 6) / stageScale}
+                    shadowBlur={isHovered ? 10 : 4}
                     shadowOpacity={0.9}
-                    dash={[8 / stageScale, 4 / stageScale]}
+                    dash={[8, 4]}
                     listening={false}
                   />
                   <Line
@@ -307,7 +317,7 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
                     closed={true}
                     fill="transparent"
                     stroke="#ffffff"
-                    strokeWidth={1.5 / stageScale}
+                    strokeWidth={1.5}
                     opacity={isHovered ? 0.9 : 0.4}
                     listening={false}
                   />
@@ -323,12 +333,12 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
                       ? (isHovered ? 'rgba(239, 68, 68, 0.38)' : 'rgba(239, 68, 68, 0.16)')
                       : 'rgba(245, 158, 11, 0.28)'}
                     stroke={anno.color || (anno.isHazard || anno.type === 'hazard' ? '#ef4444' : '#fbbf24')}
-                    strokeWidth={(isHovered ? 3 : 2) / stageScale}
+                    strokeWidth={isHovered ? 3 : 1.5}
                     shadowColor={anno.color || '#ef4444'}
-                    shadowBlur={(isHovered ? 14 : 6) / stageScale}
+                    shadowBlur={isHovered ? 10 : 4}
                     shadowOpacity={0.9}
-                    dash={[8 / stageScale, 4 / stageScale]}
-                    cornerRadius={4 / stageScale}
+                    dash={[8, 4]}
+                    cornerRadius={roomCornerR}
                     listening={false}
                   />
                   <Rect
@@ -338,9 +348,9 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
                     height={pixelH}
                     fill="transparent"
                     stroke="#ffffff"
-                    strokeWidth={1.5 / stageScale}
+                    strokeWidth={1.5}
                     opacity={isHovered ? 0.9 : 0.4}
-                    cornerRadius={4 / stageScale}
+                    cornerRadius={roomCornerR}
                     listening={false}
                   />
                 </Group>
@@ -376,10 +386,10 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
                 height={badgeH}
                 fill={isHovered ? '#f59e0b' : 'rgba(24, 24, 27, 0.95)'}
                 stroke={isHovered ? '#ffffff' : baseColor}
-                strokeWidth={(isHovered ? 2 : 1.2) / stageScale}
-                cornerRadius={4 / stageScale}
+                strokeWidth={roomStrokeW}
+                cornerRadius={roomCornerR}
                 shadowColor={isHovered ? '#f59e0b' : 'black'}
-                shadowBlur={isHovered ? 12 / stageScale : 4 / stageScale}
+                shadowBlur={roomShadowBlur}
                 shadowOpacity={isHovered ? 0.95 : 0.8}
               />
               <Text

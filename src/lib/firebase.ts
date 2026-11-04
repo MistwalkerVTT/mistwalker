@@ -1349,12 +1349,7 @@ export async function resolveMapSource(
     }
   }
 
-  // 1. FIRST: Check if scene.mapUrl is already a server or HTTP URL (instant return, zero latency)
-  if (scene.mapUrl && (scene.mapUrl.startsWith('/') || scene.mapUrl.startsWith('http')) && !scene.mapUrl.startsWith('blob:')) {
-    return scene.mapUrl;
-  }
-
-  // 2. SECOND: Check matched asset in uploadedAssets library for an accessible server or HTTP URL
+  // 1. FIRST: Check matched asset in uploadedAssets library for an authoritative persistent URL
   if (uploadedAssetsList && uploadedAssetsList.length > 0) {
     const matched = uploadedAssetsList.find(a =>
       (a.thumbnailUrl && scene.mapThumbnailUrl && a.thumbnailUrl === scene.mapThumbnailUrl && a.url && !a.url.startsWith('blob:')) ||
@@ -1367,11 +1362,13 @@ export async function resolveMapSource(
       ))
     );
     if (matched && matched.url && (matched.url.startsWith('/') || matched.url.startsWith('http')) && !matched.url.startsWith('blob:')) {
-      const isAccessible = await testMediaAccessible(matched.url, 1200);
-      if (isAccessible) {
-        return matched.url;
-      }
+      return matched.url;
     }
+  }
+
+  // 2. SECOND: Check if scene.mapUrl is already a persistent server or HTTP URL
+  if (scene.mapUrl && (scene.mapUrl.startsWith('/') || scene.mapUrl.startsWith('http')) && !scene.mapUrl.startsWith('blob:')) {
+    return scene.mapUrl;
   }
 
   // 3. THIRD: Check client IndexedDB for full-resolution cached version (and auto-upload any blob: to server!)
