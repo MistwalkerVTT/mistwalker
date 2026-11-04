@@ -57,6 +57,16 @@ export default defineConfig(({mode}) => {
               if (id.includes('@google/genai')) {
                 return 'vendor-genai';
               }
+            } else {
+              if (id.includes('src/components/PlayerView') || id.includes('src\\components\\PlayerView')) {
+                return 'app-player-view';
+              }
+              if (id.includes('src/components/PlayerArenaMode') || id.includes('src\\components\\PlayerArenaMode')) {
+                return 'app-player-arena';
+              }
+              if (id.includes('src/components/CampaignBuilderModal') || id.includes('src\\components\\CampaignBuilderModal')) {
+                return 'app-campaign-builder';
+              }
             }
           }
         }

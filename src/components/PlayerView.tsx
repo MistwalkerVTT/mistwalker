@@ -874,6 +874,7 @@ const PlayerToken = React.memo(({
               image={img}
               width={tokenPx}
               height={tokenPx}
+              perfectDrawEnabled={false}
             />
           ) : (
             <>
@@ -8237,6 +8238,7 @@ export default function PlayerView() {
               image={videoElement}
               width={targetMapW}
               height={targetMapH}
+              perfectDrawEnabled={false}
               {...getImageTransform(targetMapW, targetMapH, mapRotation)}
             />
           ) : image ? (
@@ -8244,6 +8246,7 @@ export default function PlayerView() {
               image={image}
               width={targetMapW}
               height={targetMapH}
+              perfectDrawEnabled={false}
               {...getImageTransform(targetMapW, targetMapH, mapRotation)}
             />
           ) : null}

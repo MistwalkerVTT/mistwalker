@@ -121,6 +121,8 @@ import { PRESET_BATTLEMAPS, PresetBattlemap } from '../data/presetBattlemaps';
 import { VTT_COMMUNITY_MAPS, VttRepositoryMap } from '../data/vttMapRepository';
 import { VttMapRepositoryModal } from './VttMapRepositoryModal';
 import { DiceFlyoutPanel } from './sidebar/DiceFlyoutPanel';
+import { CombatFlyoutPanel } from './sidebar/CombatFlyoutPanel';
+import { AiFlyoutPanel } from './sidebar/AiFlyoutPanel';
 import { ParsedUniversalVtt } from '../services/universalVttService';
 import { toast } from 'sonner';
 import { HelpDrawer } from './HelpDrawer';
@@ -3071,189 +3073,23 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
             </div>
           )}
           {activeGroup === 'combat' && (
-            <div className="p-3.5 flex flex-col gap-3 min-w-[260px]">
-              {/* Header */}
-              <div
-                onMouseDown={pinnedGroup ? handleDragStart : undefined}
-                className={`flex items-center justify-between border-b border-zinc-800 pb-2.5 ${pinnedGroup ? 'cursor-grab active:cursor-grabbing select-none' : ''}`}
-              >
-                <div className="flex items-center gap-2">
-                  <Swords className="w-4 h-4 text-amber-400" />
-                  <span className="text-xs font-bold font-mono text-zinc-200 uppercase tracking-wider">Combat & Measure</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => setPinnedGroup(pinnedGroup === 'combat' ? null : 'combat')}
-                    className={`p-1 rounded-md transition-colors ${pinnedGroup === 'combat' ? 'text-amber-400 bg-amber-500/20' : 'text-zinc-500 hover:text-zinc-300'}`}
-                    title={pinnedGroup === 'combat' ? 'Unpin Menu' : 'Pin Menu Open (Allows moving)'}
-                  >
-                    <Pin className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={closeFlyout}
-                    className="p-1 rounded-md text-zinc-500 hover:text-zinc-300 transition-colors"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Initiative & Combat Tracking */}
-              <div className="flex flex-col gap-2">
-                <span className="text-[10px] uppercase font-bold font-mono text-zinc-400">Initiative & Tracking</span>
-                
-                {/* Roll for Initiative Button */}
-                <button
-                  id="btn-roll-initiative-flyout"
-                  type="button"
-                  onClick={() => {
-                    if (onPromptRollInitiative) {
-                      onPromptRollInitiative();
-                    }
-                  }}
-                  className="w-full py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-between border transition-all bg-gradient-to-r from-amber-600/30 to-amber-500/20 hover:from-amber-500/40 hover:to-amber-500/30 border-amber-500/50 text-amber-200 hover:text-white shadow-md shadow-amber-950/30 cursor-pointer active:scale-[0.98]"
-                  title="Prompt all tokens on map to roll initiative"
-                >
-                  <span className="flex items-center gap-2">
-                    <Dices className="w-4 h-4 text-amber-400 animate-pulse" />
-                    <span>Roll for Initiative</span>
-                  </span>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full font-mono font-bold bg-amber-500 text-black">
-                    PROMPT
-                  </span>
-                </button>
-
-                {/* Combat Tracker Toggle */}
-                <button
-                  id="btn-toggle-combat-tracker-flyout"
-                  onClick={() => setShowCombatTracker(!showCombatTracker)}
-                  className={`w-full py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-between border transition-all ${
-                    showCombatTracker
-                      ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 shadow-md shadow-amber-950/40'
-                      : 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700'
-                  }`}
-                >
-                  <span className="flex items-center gap-2">
-                    <Swords className="w-4 h-4 text-amber-400" />
-                    Combat Tracker
-                  </span>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold ${showCombatTracker ? 'bg-amber-500 text-black' : 'bg-zinc-900 text-zinc-400'}`}>
-                    {showCombatTracker ? 'ACTIVE' : 'OFF'}
-                  </span>
-                </button>
-              </div>
-
-              {/* Auto-Apply Monster Damage Toggle */}
-              <div className="flex flex-col gap-1.5 pt-2 border-t border-zinc-800/80">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] uppercase font-bold font-mono text-zinc-400">Target Damage Rule</span>
-                  <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-bold ${autoApplyMonsterDamage ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' : 'bg-zinc-800 text-zinc-400 border border-zinc-700'}`}>
-                    {autoApplyMonsterDamage ? 'AUTO DAMAGE' : 'MANUAL HP'}
-                  </span>
-                </div>
-                <button
-                  id="btn-toggle-auto-monster-damage"
-                  type="button"
-                  onClick={() => onToggleAutoApplyMonsterDamage?.(!autoApplyMonsterDamage)}
-                  className={`w-full py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-between border transition-all cursor-pointer ${
-                    autoApplyMonsterDamage
-                      ? 'bg-rose-500/15 border-rose-500/50 text-rose-200 shadow-sm'
-                      : 'bg-zinc-800/80 border-zinc-700 text-zinc-300 hover:bg-zinc-800'
-                  }`}
-                  title={autoApplyMonsterDamage ? "Monsters automatically take damage when targeted by players" : "DM manually manages monster HP"}
-                >
-                  <span className="flex items-center gap-2">
-                    <HeartCrack className={`w-4 h-4 ${autoApplyMonsterDamage ? 'text-rose-400' : 'text-zinc-500'}`} />
-                    <span>Auto Monster Damage</span>
-                  </span>
-                  <div className={`w-8 h-4 rounded-full transition-colors relative flex items-center px-0.5 ${autoApplyMonsterDamage ? 'bg-rose-500' : 'bg-zinc-700'}`}>
-                    <div className={`w-3 h-3 rounded-full bg-white transition-transform ${autoApplyMonsterDamage ? 'translate-x-4' : 'translate-x-0'}`} />
-                  </div>
-                </button>
-                <p className="text-[10px] text-zinc-400/90 leading-tight">
-                  {autoApplyMonsterDamage
-                    ? "Player spells & attacks automatically subtract damage from monster HP."
-                    : "Monsters will NOT take auto damage. Rolls are broadcast for the DM to apply manually."}
-                </p>
-              </div>
-
-              {/* Critical Hits & Screen Shake FX */}
-              <div className="flex flex-col gap-2 pt-2 border-t border-zinc-800">
-                <span className="text-[10px] uppercase font-bold font-mono text-zinc-400">Critical Hits & FX</span>
-                
-                {/* Critical Hits Table Reference Modal Trigger */}
-                <button
-                  id="btn-open-critical-hits-table"
-                  type="button"
-                  onClick={() => {
-                    if (onOpenCriticalHitsModal) {
-                      onOpenCriticalHitsModal();
-                    }
-                  }}
-                  className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-red-600/25 via-rose-600/20 to-amber-600/20 hover:from-red-600/35 hover:to-amber-600/30 border border-red-500/50 hover:border-red-400 text-red-200 hover:text-white text-xs font-bold transition-all flex items-center justify-between shadow-md shadow-red-950/30 cursor-pointer active:scale-[0.98]"
-                  title="Open Critical Hits Revisited Reference Tables (Damage Types, Injuries, Insanity)"
-                >
-                  <span className="flex items-center gap-2">
-                    <Skull className="w-4 h-4 text-red-400 animate-pulse" />
-                    <span>Critical Hits Table</span>
-                  </span>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full font-mono font-bold bg-red-500/30 text-red-300 border border-red-500/40">
-                    d20 CRIT
-                  </span>
-                </button>
-
-                {/* Critical Screen Shake */}
-                <button
-                  id="btn-trigger-shake-flyout"
-                  onClick={triggerShake}
-                  className="w-full py-2 px-3 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-300 text-xs font-bold transition-all flex items-center justify-between cursor-pointer"
-                  title="Trigger screen rumble effect across all screens"
-                >
-                  <span className="flex items-center gap-2">
-                    <Zap className="w-4 h-4 text-red-400" />
-                    Critical Hit Screen Shake
-                  </span>
-                  <span className="text-[10px] text-red-400/80 font-mono">SLAM</span>
-                </button>
-              </div>
-
-              {/* AoE Measurement Shapes */}
-              <div className="flex flex-col gap-2 pt-2 border-t border-zinc-800">
-                <span className="text-[10px] uppercase font-bold font-mono text-zinc-400">Measure Distance & AoE</span>
-                <div className="grid grid-cols-1 gap-1.5">
-                  {[
-                    { type: 'line', label: 'Distance Ruler', icon: Ruler },
-                    { type: 'circle', label: 'Radius AoE (Circle)', icon: CircleIcon },
-                    { type: 'cone', label: 'Spell Cone (15/60ft)', icon: Wind },
-                    { type: 'square', label: 'Cube AoE (Square)', icon: SquareIcon },
-                    { type: 'rectangle', label: 'Wall AoE (Rectangle)', icon: SquareIcon }
-                  ].map((m) => {
-                    const Icon = m.icon;
-                    const isCurrent = tool === 'measure' && measureType === m.type;
-                    return (
-                      <button
-                        key={m.type}
-                        onClick={() => {
-                          setTool('measure');
-                          setMeasureType(m.type as any);
-                        }}
-                        className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-all border ${
-                          isCurrent
-                            ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 font-bold shadow-sm'
-                            : 'bg-zinc-800/60 border-zinc-700/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
-                        }`}
-                      >
-                        <span className="flex items-center gap-2.5">
-                          <Icon className="w-4 h-4 text-amber-400" />
-                          {m.label}
-                        </span>
-                        {isCurrent && <span className="w-2 h-2 rounded-full bg-amber-400" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
+            <CombatFlyoutPanel
+              pinnedGroup={pinnedGroup}
+              setPinnedGroup={setPinnedGroup}
+              closeFlyout={closeFlyout}
+              handleDragStart={handleDragStart}
+              onPromptRollInitiative={onPromptRollInitiative}
+              showCombatTracker={showCombatTracker}
+              setShowCombatTracker={setShowCombatTracker}
+              autoApplyMonsterDamage={autoApplyMonsterDamage}
+              onToggleAutoApplyMonsterDamage={onToggleAutoApplyMonsterDamage}
+              onOpenCriticalHitsModal={onOpenCriticalHitsModal}
+              triggerShake={triggerShake}
+              tool={tool}
+              setTool={setTool}
+              measureType={measureType}
+              setMeasureType={setMeasureType}
+            />
           )}
 
           {activeGroup === 'fx' && (
@@ -4782,209 +4618,28 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
           )}
 
           {activeGroup === 'ai' && (
-            <div className="p-3.5 flex flex-col gap-3 min-w-[280px]">
-              {/* Header */}
-              <div
-                onMouseDown={pinnedGroup ? handleDragStart : undefined}
-                className={`flex items-center justify-between border-b border-zinc-800 pb-2.5 ${pinnedGroup ? 'cursor-grab active:cursor-grabbing select-none' : ''}`}
-              >
-                <div className="flex items-center gap-2">
-                  <Wand2 className="w-4 h-4 text-fuchsia-400" />
-                  <span className="text-xs font-bold font-mono text-zinc-200 uppercase tracking-wider">AI Dungeon Master</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => setPinnedGroup(pinnedGroup === 'ai' ? null : 'ai')}
-                    className={`p-1 rounded-md transition-colors ${pinnedGroup === 'ai' ? 'text-fuchsia-400 bg-fuchsia-500/20' : 'text-zinc-500 hover:text-zinc-300'}`}
-                    title={pinnedGroup === 'ai' ? 'Unpin Menu' : 'Pin Menu Open (Allows moving)'}
-                  >
-                    <Pin className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={closeFlyout}
-                    className="p-1 rounded-md text-zinc-500 hover:text-zinc-300 transition-colors"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Gemini API Key - Load / Configure for Cinematic Map Generator */}
-              <div className="flex flex-col gap-1.5 p-2.5 rounded-xl bg-zinc-900/90 border border-zinc-800 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-2 text-xs font-bold text-zinc-200">
-                    <Key className={`w-3.5 h-3.5 ${hasApiKey ? 'text-emerald-400' : 'text-amber-400'}`} />
-                    <span>Gemini API Key</span>
-                  </span>
-                  <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold ${
-                    hasApiKey 
-                      ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300' 
-                      : 'bg-amber-500/15 border border-amber-500/30 text-amber-300 animate-pulse'
-                  }`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${hasApiKey ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-                    {hasApiKey ? 'Active' : 'Key Needed'}
-                  </span>
-                </div>
-                
-                <p className="text-[10px] text-zinc-400 leading-tight">
-                  Powers the Cinematic Map Generator & D&D AI tools.
-                </p>
-
-                <button
-                  id="btn-ai-api-flyout"
-                  onClick={async () => {
-                    if ((window as any).aistudio?.openSelectKey) {
-                      await (window as any).aistudio.openSelectKey();
-                    }
-                    if (onOpenApiKeyModal) {
-                      onOpenApiKeyModal();
-                    }
-                  }}
-                  className={`w-full py-2 px-3 mt-0.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-sm ${
-                    hasApiKey
-                      ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700'
-                      : 'bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white shadow-amber-950/50'
-                  }`}
-                >
-                  <Key className="w-3.5 h-3.5" />
-                  <span>{hasApiKey ? 'Manage / Change Gemini Key' : 'Load Gemini API Key'}</span>
-                </button>
-              </div>
-
-              {/* AI DM Tools */}
-              <div className="flex flex-col gap-2 pt-1 border-t border-zinc-800">
-                {/* Premier D&D AI Chatbot Button */}
-                <button
-                  id="btn-dnd-chatbot-flyout"
-                  onClick={() => {
-                    if (setShowDndChatbot) setShowDndChatbot(true);
-                    setPinnedGroup(null);
-                  }}
-                  className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-amber-600/30 via-orange-600/20 to-red-600/30 hover:from-amber-600/40 hover:to-red-600/40 border border-amber-500/50 text-white text-xs font-bold flex items-center justify-between shadow-[0_0_15px_rgba(245,158,11,0.2)] transition-all group"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400 group-hover:scale-110 transition-transform">
-                      <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
-                    </div>
-                    <div className="flex flex-col text-left">
-                      <span className="leading-tight text-white font-bold">D&D AI Chatbot</span>
-                      <span className="text-[10px] text-amber-300/80 font-normal">Golden Vault & Vecna Expert</span>
-                    </div>
-                  </div>
-                  <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-[10px] text-amber-300 font-mono uppercase tracking-wider font-semibold">
-                    Open
-                  </span>
-                </button>
-
-                <button
-                  id="btn-cinematic-map-flyout"
-                  onClick={() => setShowCinematicMapGenerator(true)}
-                  className="w-full py-2 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 text-xs font-medium flex items-center gap-2.5 transition-all"
-                >
-                  <Wand2 className="w-4 h-4 text-amber-400" />
-                  AI Battlemap & Auto-Wall Generator
-                </button>
-
-                <button
-                  id="btn-ai-describe-flyout"
-                  onClick={() => setTool('ai-describe')}
-                  className={`w-full py-2 px-3 rounded-xl border text-xs font-medium flex items-center gap-2.5 transition-all ${
-                    tool === 'ai-describe'
-                      ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-300 font-bold'
-                      : 'bg-zinc-800 hover:bg-zinc-700 border-zinc-700 text-zinc-200'
-                  }`}
-                >
-                  <Scan className="w-4 h-4 text-indigo-400" />
-                  DM Vision (Drag Area on Map)
-                </button>
-              </div>
-
-              {/* AI Voice & Narrator */}
-              <div className="flex flex-col gap-2 pt-2 border-t border-zinc-800">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] uppercase font-bold font-mono text-zinc-400">AI Voice & Script Narrator</span>
-                  {onOpenApiKeyModal && (
-                    <button
-                      onClick={onOpenApiKeyModal}
-                      className="text-[9px] font-mono text-fuchsia-400 hover:text-fuchsia-300 flex items-center gap-1 hover:underline cursor-pointer"
-                      title="Configure ElevenLabs & Gemini API Keys"
-                    >
-                      <span>Voice Engine Setup</span>
-                      <Key className="w-2.5 h-2.5" />
-                    </button>
-                  )}
-                </div>
-                <div className="grid grid-cols-2 gap-1.5 max-h-[190px] overflow-y-auto pr-0.5 custom-scrollbar">
-                  {((voices && voices.length > 0) ? voices : NARRATION_VOICES).map((voice: any) => {
-                    const voiceId = voice.id || voice.name;
-                    const isSelected = selectedAIVoice === voiceId || selectedAIVoice === voice.name || selectedAIVoice === voice.geminiVoice;
-                    return (
-                      <button
-                        key={voiceId}
-                        onClick={() => setSelectedAIVoice(voice.id || voice.name)}
-                        className={`p-2 rounded-xl border text-left transition-all ${
-                          isSelected
-                            ? 'bg-fuchsia-500/20 border-fuchsia-500 text-fuchsia-300 ring-1 ring-fuchsia-500/40'
-                            : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-300'
-                        }`}
-                        title={voice.description || voice.label}
-                      >
-                        <div className="text-[11px] font-bold leading-tight truncate">{voice.name}</div>
-                        <div className="text-[9px] opacity-70 leading-tight truncate mt-0.5">
-                          {voice.description || voice.label || voice.geminiVoice}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <textarea
-                  value={aiVoicePrompt}
-                  onChange={(e) => setAIVoicePrompt(e.target.value)}
-                  placeholder="Enter narration prompt or type dialogue..."
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-xs text-zinc-200 focus:outline-none focus:border-fuchsia-500/50 min-h-[60px]"
-                />
-
-                <div className="flex gap-2">
-                  <button
-                    id="btn-gen-script-flyout"
-                    onClick={handleGenerateAIScript}
-                    disabled={isGeneratingScript || !aiVoicePrompt.trim()}
-                    className="flex-1 py-1.5 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 text-zinc-200 rounded-xl text-[10px] font-bold transition-all flex items-center justify-center gap-1.5"
-                  >
-                    {isGeneratingScript ? (
-                      <div className="w-3 h-3 border-2 border-zinc-400 border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <Wand2 className="w-3 h-3 text-fuchsia-400" />
-                    )}
-                    Generate Script
-                  </button>
-
-                  <button
-                    id="btn-speak-voice-flyout"
-                    onClick={handleSpeakAIVoice}
-                    disabled={!isPlayingAudio && (!aiVoicePrompt.trim() && !aiVoiceScript.trim())}
-                    className={`flex-1 py-1.5 text-white rounded-xl text-[10px] font-bold transition-all flex items-center justify-center gap-1.5 shadow-md ${
-                      isPlayingAudio
-                        ? 'bg-rose-600 hover:bg-rose-500 shadow-rose-950 animate-pulse'
-                        : 'bg-fuchsia-600 hover:bg-fuchsia-500 shadow-fuchsia-950 disabled:opacity-40'
-                    }`}
-                  >
-                    {isPlayingAudio ? (
-                      <>
-                        <VolumeX className="w-3.5 h-3.5" />
-                        Stop Narration
-                      </>
-                    ) : (
-                      <>
-                        <Volume2 className="w-3.5 h-3.5" />
-                        Speak Now
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            </div>
+            <AiFlyoutPanel
+              pinnedGroup={pinnedGroup}
+              setPinnedGroup={setPinnedGroup}
+              closeFlyout={closeFlyout}
+              handleDragStart={handleDragStart}
+              hasApiKey={hasApiKey}
+              onOpenApiKeyModal={onOpenApiKeyModal}
+              setShowDndChatbot={setShowDndChatbot}
+              setShowCinematicMapGenerator={setShowCinematicMapGenerator}
+              tool={tool}
+              setTool={setTool}
+              voices={voices}
+              selectedAIVoice={selectedAIVoice}
+              setSelectedAIVoice={setSelectedAIVoice}
+              aiVoicePrompt={aiVoicePrompt}
+              setAIVoicePrompt={setAIVoicePrompt}
+              handleGenerateAIScript={handleGenerateAIScript}
+              isGeneratingScript={isGeneratingScript}
+              handleSpeakAIVoice={handleSpeakAIVoice}
+              isPlayingAudio={isPlayingAudio}
+              aiVoiceScript={aiVoiceScript}
+            />
           )}
 
           {/* Help & Support Flyout */}
