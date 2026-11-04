@@ -14,6 +14,17 @@
 
 ## Pending Changes Queue for Future Enterprise Patch
 
+### [2026-11-04] fix(tactical): fix rooms subtab glitch caused by mode-change wall tool loop
+- **Commit**: `d939b51`
+- **Files Changed**:
+  - `src/App.tsx`
+  - `src/components/LeftSidebar.tsx`
+- **Summary**:
+  - **Decoupled Rooms Subtab from Mode Change**: Removed the extraneous `setCampaignMode('creator')` trigger from the `ROOMS` subtab button in `LeftSidebar.tsx`. Previously, clicking the `ROOMS` tab while in Run Campaign mode triggered `handleModeChange('creator')`, which forced `setTool('wall')`. In turn, an active `useEffect` observing `tool === 'wall'` immediately snapped the subtab back to `WALLS` (`lighting`), requiring a second click to view rooms.
+  - **Protected Active Creator Tools in Mode Change**: Updated `handleModeChange` in `src/App.tsx` to only default to `'wall'` if the previous tool was `'select'` or `'hand'`, preventing unintended clobbering of room polygon or badge tools.
+
+---
+
 ### [2026-11-04] perf: eliminate scene loading lag with optimistic mounting and non-blocking asset resolver
 - **Commit**: `d8fbfe5`
 - **Files Changed**:
