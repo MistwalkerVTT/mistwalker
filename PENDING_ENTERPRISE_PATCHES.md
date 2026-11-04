@@ -14,6 +14,22 @@
 
 ## Pending Changes Queue for Future Enterprise Patch
 
+### [2026-11-04] feat(maps): integrate mbround18 community vtt pre-built maps repository
+- **Commit**: `[PENDING]`
+- **Files Changed**:
+  - `src/data/vttMapRepository.ts`
+  - `src/components/VttMapRepositoryModal.tsx`
+  - `src/services/universalVttService.ts`
+  - `src/components/LeftSidebar.tsx`
+  - `src/App.tsx`
+- **Summary**:
+  - Integrated 64 curated pre-built Universal VTT (`.dd2vtt`) battlemaps from `mbround18/vtt-maps` covering Dungeons, Taverns, Travel, Spires, Forests, Encounters, and Towns.
+  - Implemented `fetchAndParseRemoteUniversalVtt` in `universalVttService.ts` with streaming download progress.
+  - Built interactive `VttMapRepositoryModal` with category filtering, search, size badges, and one-click loading.
+  - Added repository browser launcher directly to the Map Library tab in `LeftSidebar.tsx` and automated full extraction of walls, doors, dynamic lighting, and calibrated grid onto the board and Firebase sync.
+
+---
+
 ### [2026-11-03] refactor(campaign): remove complex adventure pdf importer in favor of standard upload digest
 - **Commit**: `dc95195`
 - **Files Changed**:

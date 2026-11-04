@@ -118,6 +118,9 @@ import { Ally } from '../types/ally';
 import { DEFAULT_ALLIES } from '../data/defaultAllies';
 
 import { PRESET_BATTLEMAPS, PresetBattlemap } from '../data/presetBattlemaps';
+import { VTT_COMMUNITY_MAPS, VttRepositoryMap } from '../data/vttMapRepository';
+import { VttMapRepositoryModal } from './VttMapRepositoryModal';
+import { ParsedUniversalVtt } from '../services/universalVttService';
 import { toast } from 'sonner';
 import { HelpDrawer } from './HelpDrawer';
 import { EffectsDrawer, Jb2aAssetDefinition } from '../effects';
@@ -265,6 +268,7 @@ interface LeftSidebarProps {
   currentMapImage?: string;
   onExportUniversalVtt?: () => void;
   onImportUniversalVtt?: (file: File) => void;
+  onLoadParsedCommunityMap?: (parsed: ParsedUniversalVtt, meta: VttRepositoryMap) => Promise<void> | void;
   onOpenBugReport?: () => void;
   onOpenBugManager?: () => void;
   onOpenSettings?: (tab?: 'cobalt' | 'ai' | 'danger') => void;
@@ -448,6 +452,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   currentMapImage,
   onExportUniversalVtt,
   onImportUniversalVtt,
+  onLoadParsedCommunityMap,
   onOpenBugReport,
   onOpenBugManager,
   onOpenSettings
@@ -510,12 +515,14 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   const [scaleFeedback, setScaleFeedback] = useState<string | null>(null);
   const [editingFeatureId, setEditingFeatureId] = useState<string | null>(null);
   const [showPresetMapsGallery, setShowPresetMapsGallery] = useState<boolean>(false);
+  const [showCommunityMapsModal, setShowCommunityMapsModal] = useState<boolean>(false);
   const [confirmDeleteMapId, setConfirmDeleteMapId] = useState<string | null>(null);
   const [mapsTab, setMapsTab] = useState<'session' | 'library'>('session');
   const [openMapsSections, setOpenMapsSections] = useState<Record<string, boolean>>({
     campaign: false,
     slots: false,
     presets: false,
+    community: true,
     firebase: true,
     actions: false,
   });
@@ -1725,6 +1732,48 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                             ))}
                           </div>
                         )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Community VTT Maps Repository Section Dropdown (Collapsible) */}
+                  <div className="border border-zinc-800 rounded-xl bg-zinc-950/60 overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => toggleMapsSection('community')}
+                      className="w-full py-2 px-3 bg-zinc-900/90 hover:bg-zinc-850 text-left flex items-center justify-between transition-colors cursor-pointer group"
+                    >
+                      <div className="flex items-center gap-2">
+                        <FolderOpen className="w-4 h-4 text-purple-400" />
+                        <span className="text-xs font-bold font-mono text-zinc-200 uppercase tracking-wider group-hover:text-purple-300">
+                          Pre-Built VTT Repository
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[9px] font-mono text-purple-300 font-bold px-1.5 py-0.5 rounded bg-purple-500/20 border border-purple-500/30">
+                          {VTT_COMMUNITY_MAPS.length} Maps
+                        </span>
+                        {openMapsSections.community ? (
+                          <ChevronUp className="w-4 h-4 text-zinc-400 group-hover:text-white" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 text-zinc-400 group-hover:text-white" />
+                        )}
+                      </div>
+                    </button>
+
+                    {openMapsSections.community && (
+                      <div className="p-2.5 space-y-2 border-t border-zinc-800/80 bg-zinc-950/80 animate-in fade-in duration-150">
+                        <p className="text-[10px] text-zinc-400 leading-tight">
+                          Pre-calibrated maps with Line of Sight walls, doors, & dynamic lighting.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setShowCommunityMapsModal(true)}
+                          className="w-full py-2 px-3 bg-gradient-to-r from-purple-600/30 via-indigo-600/20 to-purple-600/30 hover:from-purple-600/40 hover:to-indigo-600/40 border border-purple-500/50 rounded-xl text-purple-200 hover:text-white text-xs font-bold font-mono flex items-center justify-center gap-2 transition-all shadow-[0_0_12px_rgba(168,85,247,0.15)] cursor-pointer"
+                        >
+                          <FolderOpen className="w-3.5 h-3.5 text-purple-400" />
+                          <span>Browse Repository ({VTT_COMMUNITY_MAPS.length})</span>
+                        </button>
                       </div>
                     )}
                   </div>
@@ -5060,6 +5109,16 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
           </div>
         </div>
       )}
+      {/* Pre-Built VTT Map Repository Modal */}
+      <VttMapRepositoryModal
+        isOpen={showCommunityMapsModal}
+        onClose={() => setShowCommunityMapsModal(false)}
+        onLoadParsedMap={async (parsed, meta) => {
+          if (onLoadParsedCommunityMap) {
+            await onLoadParsedCommunityMap(parsed, meta);
+          }
+        }}
+      />
     </div>
   );
 });

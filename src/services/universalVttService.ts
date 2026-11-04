@@ -404,3 +404,56 @@ export function downloadUniversalVttFile(blob: Blob, filename = 'battlemap.dd2vt
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+/**
+ * Downloads a remote Universal VTT (.dd2vtt / .uvtt) file over HTTPS
+ * with optional download progress callback and parses it into ParsedUniversalVtt.
+ */
+export async function fetchAndParseRemoteUniversalVtt(
+  url: string,
+  filename?: string,
+  onProgress?: (progressPercent: number, loadedBytes: number, totalBytes: number) => void
+): Promise<ParsedUniversalVtt> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to download map from remote repository: HTTP ${response.status} ${response.statusText}`);
+  }
+
+  const contentLengthHeader = response.headers.get('content-length');
+  const totalBytes = contentLengthHeader ? parseInt(contentLengthHeader, 10) : 0;
+
+  let text = '';
+  if (response.body && totalBytes > 0 && onProgress) {
+    const reader = response.body.getReader();
+    let loadedBytes = 0;
+    const chunks: Uint8Array[] = [];
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        chunks.push(value);
+        loadedBytes += value.length;
+        const pct = Math.min(100, Math.round((loadedBytes / totalBytes) * 100));
+        onProgress(pct, loadedBytes, totalBytes);
+      }
+    }
+
+    const totalBuffer = new Uint8Array(loadedBytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+      totalBuffer.set(chunk, offset);
+      offset += chunk.length;
+    }
+    const decoder = new TextDecoder('utf-8');
+    text = decoder.decode(totalBuffer);
+  } else {
+    text = await response.text();
+    if (onProgress) onProgress(100, text.length, text.length);
+  }
+
+  const derivedName = filename || url.substring(url.lastIndexOf('/') + 1) || 'repository-map.dd2vtt';
+  const file = new File([text], derivedName, { type: 'application/json' });
+  return parseUniversalVtt(file);
+}
+

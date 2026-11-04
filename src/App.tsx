@@ -1931,6 +1931,74 @@ export default function App() {
     }
   }, [activeMapId]);
 
+  // Handler for loaded pre-parsed Community Repository Universal VTT maps
+  const handleLoadParsedCommunityMap = useCallback(async (parsed: any, meta: any) => {
+    setIsReadingFile(true);
+    setUploadError(null);
+    toast.info(`Configuring "${meta.name}" onto canvas...`);
+    try {
+      const localPreviewUrl = URL.createObjectURL(parsed.imageFile);
+      setUnsavedSceneBackup(null);
+      setUnsavedSceneBackupWasCrash(false);
+      isSceneSavedRef.current = false;
+      setMapType('image');
+      setImageFile(localPreviewUrl);
+      setReveals([]);
+      setStageScale(1);
+      setStagePos({ x: 0, y: 0 });
+      setActiveSceneInfo(null);
+
+      // Apply Grid Size
+      setGridSize(parsed.gridSize);
+      setGridVisible(true);
+
+      // Apply Walls and Doors
+      setWalls(parsed.walls);
+      setSelectedWallId(null);
+      setWallDrawStart(null);
+
+      // Apply Lights / Torches
+      if (parsed.animatedFeatures && parsed.animatedFeatures.length > 0) {
+        setBoardAnimatedFeatures(parsed.animatedFeatures);
+        setBoardAnimatedEnabled(true);
+      }
+
+      // Dynamic lighting
+      setVisionConfig(prev => ({
+        ...prev,
+        enabled: true,
+        ambientLight: false
+      }));
+
+      // Upload extracted map image file to Firebase for cloud persistence and player view sync
+      try {
+        const asset = await uploadAndRegisterAsset(parsed.imageFile, 'map', {
+          customName: meta.name
+        });
+        if (asset.url && !asset.url.startsWith('local:')) {
+          setImageFile(asset.url);
+        }
+        lastSlotSwitchTimeRef.current = Date.now();
+        if (mapsDataRef.current[activeMapId]) {
+          mapsDataRef.current[activeMapId].imageFile = asset.url || localPreviewUrl;
+          mapsDataRef.current[activeMapId].gridSize = parsed.gridSize;
+        }
+      } catch (uploadErr) {
+        console.warn('[Community VTT] Notice during Firebase cloud registration:', uploadErr);
+      }
+
+      toast.success(
+        `Loaded "${meta.name}"! ${parsed.gridCols}×${parsed.gridRows} grid (${parsed.gridSize}px), ${parsed.metadata.wallCount} walls, ${parsed.metadata.doorCount} doors, and ${parsed.metadata.lightCount} lights applied!`,
+        { duration: 6000 }
+      );
+    } catch (err: any) {
+      console.error('[Community VTT] Error applying map:', err);
+      toast.error(`Failed to apply map: ${err.message || 'Unknown error'}`);
+    } finally {
+      setIsReadingFile(false);
+    }
+  }, [activeMapId]);
+
   // HTML5 Drag and Drop handler for tokens and battlemap files dropped onto the board
   const handleDropOnStage = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -10088,6 +10156,7 @@ export default function App() {
           currentMapImage={imageFile}
           onExportUniversalVtt={handleExportUniversalVtt}
           onImportUniversalVtt={handleUniversalVttImport}
+          onLoadParsedCommunityMap={handleLoadParsedCommunityMap}
           onOpenBugReport={() => setIsBugReportModalOpen(true)}
           onOpenBugManager={() => setIsBugManagerModalOpen(true)}
           onOpenHandoutsJournal={() => {
