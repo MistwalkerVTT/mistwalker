@@ -14,6 +14,20 @@
 
 ## Pending Changes Queue for Future Enterprise Patch
 
+### [2026-11-04] perf: eliminate scene loading lag with optimistic mounting and non-blocking asset resolver
+- **Commit**: `d8fbfe5`
+- **Files Changed**:
+  - `src/App.tsx`
+  - `src/components/DashboardHomeHub.tsx`
+  - `src/lib/firebase.ts`
+- **Summary**:
+  - **Optimistic Scene Mounting**: In `handleLoadSceneFromCampaign` (`src/App.tsx`), immediately mounted the scene with `immediateUrl = scene.mapUrl || scene.mapThumbnailUrl` so the dashboard unmounts in 0ms and renders the tactical battlemap without waiting on blocking network probes.
+  - **Zero-Latency Asset Resolution**: In `resolveMapSource` (`src/lib/firebase.ts`), eliminated the blocking 1200ms `testMediaAccessible` probe on relative `/uploads/...` and HTTP URLs, allowing valid server-hosted battlemaps to return immediately.
+  - **Non-Blocking Background Cache Upload**: In `resolveMapSource`, when local IndexedDB assets or blobs are found, they are returned directly to the DM view while `uploadBlobUrlToServer` runs in the background, preventing 15-30 second network stalls on large (e.g. 50MP) maps like Tomb of Valin Sarnaster.
+  - **Active Click Feedback**: Added `isResumingPrimaryScene` state with an animated `<Loader2>` spinner and disabled state on the "Continue Session" button in `DashboardHomeHub.tsx`.
+
+---
+
 ### [2026-11-04] feat(maps): integrate mbround18 community vtt pre-built maps repository
 - **Commit**: `a44cc25`
 - **Files Changed**:
