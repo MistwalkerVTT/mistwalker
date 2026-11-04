@@ -1356,6 +1356,8 @@ export default function App() {
     setGridCalibrateRect,
     isCalibratingGrid,
     setIsCalibratingGrid,
+    calibrateSquareRatio,
+    setCalibrateSquareRatio,
     startGridCalibration,
     updateGridCalibration,
     finishGridCalibration,
@@ -7995,7 +7997,7 @@ export default function App() {
         h: point.y - aiDescribeRect.y
       });
     } else if (tool === 'grid_calibrate' && isCalibratingGrid && gridCalibrateRect) {
-      updateGridCalibration(point);
+      updateGridCalibration(point, Boolean(e?.evt?.shiftKey));
     } else if (tool === 'measure' && isMeasuring) {
       setMeasureEnd(point);
     }
@@ -9806,6 +9808,8 @@ export default function App() {
           setGridOffsetX={setGridOffsetX}
           gridOffsetY={gridOffsetY}
           setGridOffsetY={setGridOffsetY}
+          calibrateSquareRatio={calibrateSquareRatio}
+          setCalibrateSquareRatio={setCalibrateSquareRatio}
           sidebarMode={sidebarMode}
           setSidebarMode={setSidebarMode}
           tool={tool}
@@ -10607,6 +10611,10 @@ export default function App() {
                     const width = Math.abs(gridCalibrateRect.currentX - gridCalibrateRect.startX);
                     const height = Math.abs(gridCalibrateRect.currentY - gridCalibrateRect.startY);
                     const avgPx = Math.round(((width + height) / 2) * 10) / 10;
+                    const isSquare = Math.abs(Math.round(width) - Math.round(height)) <= 1;
+                    const labelText = isSquare
+                      ? `Square: ${Math.round(width)}px (1:1)`
+                      : `Snap: ${Math.round(width)}×${Math.round(height)} (${avgPx}px)`;
                     return (
                       <Group>
                         <Rect
@@ -10643,7 +10651,7 @@ export default function App() {
                             y={0}
                             width={160 / stageScale}
                             height={22 / stageScale}
-                            text={`Snap: ${Math.round(width)}×${Math.round(height)} (${avgPx}px)`}
+                            text={labelText}
                             fill="#67e8f9"
                             fontSize={11 / stageScale}
                             fontStyle="bold"

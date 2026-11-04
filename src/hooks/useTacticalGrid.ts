@@ -31,6 +31,25 @@ export function useTacticalGrid(initialSize: number = 50) {
   // Interactive Grid Box Calibration State
   const [gridCalibrateRect, setGridCalibrateRect] = useState<GridCalibrateRect | null>(null);
   const [isCalibratingGrid, setIsCalibratingGrid] = useState<boolean>(false);
+  const [calibrateSquareRatio, setCalibrateSquareRatioState] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('mistwalker_grid_calibrate_1x1') !== 'false';
+    } catch {
+      return true;
+    }
+  });
+
+  const setCalibrateSquareRatio = useCallback((action: boolean | ((prev: boolean) => boolean)) => {
+    setCalibrateSquareRatioState(prev => {
+      const next = typeof action === 'function' ? action(prev) : action;
+      try {
+        localStorage.setItem('mistwalker_grid_calibrate_1x1', String(next));
+      } catch {
+        // ignore storage errors
+      }
+      return next;
+    });
+  }, []);
 
   const startGridCalibration = useCallback((point: { x: number; y: number }) => {
     setIsCalibratingGrid(true);
@@ -42,16 +61,29 @@ export function useTacticalGrid(initialSize: number = 50) {
     });
   }, []);
 
-  const updateGridCalibration = useCallback((point: { x: number; y: number }) => {
+  const updateGridCalibration = useCallback((point: { x: number; y: number }, invertRatio: boolean = false) => {
     setGridCalibrateRect(prev => {
       if (!prev) return null;
+      let targetX = point.x;
+      let targetY = point.y;
+
+      const shouldConstrain = invertRatio ? !calibrateSquareRatio : calibrateSquareRatio;
+
+      if (shouldConstrain) {
+        const dx = targetX - prev.startX;
+        const dy = targetY - prev.startY;
+        const side = Math.max(Math.abs(dx), Math.abs(dy));
+        targetX = prev.startX + (dx >= 0 ? side : -side);
+        targetY = prev.startY + (dy >= 0 ? side : -side);
+      }
+
       return {
         ...prev,
-        currentX: point.x,
-        currentY: point.y,
+        currentX: targetX,
+        currentY: targetY,
       };
     });
-  }, []);
+  }, [calibrateSquareRatio]);
 
   const finishGridCalibration = useCallback((): CalibrationResult | null => {
     setIsCalibratingGrid(false);
@@ -113,6 +145,8 @@ export function useTacticalGrid(initialSize: number = 50) {
     setGridCalibrateRect,
     isCalibratingGrid,
     setIsCalibratingGrid,
+    calibrateSquareRatio,
+    setCalibrateSquareRatio,
     startGridCalibration,
     updateGridCalibration,
     finishGridCalibration,

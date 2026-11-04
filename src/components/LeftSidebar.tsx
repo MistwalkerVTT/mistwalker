@@ -153,6 +153,8 @@ interface LeftSidebarProps {
   setGridOffsetX: React.Dispatch<React.SetStateAction<number>>;
   gridOffsetY: number;
   setGridOffsetY: React.Dispatch<React.SetStateAction<number>>;
+  calibrateSquareRatio?: boolean;
+  setCalibrateSquareRatio?: (val: boolean) => void;
   sidebarMode: 'user' | 'ai';
   setSidebarMode: (mode: 'user' | 'ai') => void;
   tool: string;
@@ -340,6 +342,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   setGridOffsetX,
   gridOffsetY,
   setGridOffsetY,
+  calibrateSquareRatio = true,
+  setCalibrateSquareRatio,
   tool,
   setTool,
   brushSize,
@@ -2690,7 +2694,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                     </div>
 
                     {/* Interactive Grid Calibration Box Trace Tool */}
-                    <div className="flex flex-col gap-1.5 bg-gradient-to-r from-cyan-950/40 to-zinc-950/60 p-2.5 rounded-xl border border-cyan-800/40">
+                    <div className="flex flex-col gap-2 bg-gradient-to-r from-cyan-950/40 to-zinc-950/60 p-2.5 rounded-xl border border-cyan-800/40">
                       <div className="flex items-center justify-between text-xs font-mono">
                         <span className="text-cyan-300 font-bold flex items-center gap-1.5">
                           <Scan className="w-3.5 h-3.5 text-cyan-400" />
@@ -2703,6 +2707,31 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                       <p className="text-[11px] text-zinc-400 leading-tight">
                         Trace an existing tile or grid square on the map image. The grid size and alignment will instantly measure and snap to that exact box.
                       </p>
+
+                      {/* 1:1 Aspect Ratio Lock Toggle */}
+                      {setCalibrateSquareRatio && (
+                        <div className="flex items-center justify-between py-1.5 px-2 rounded-lg bg-zinc-950/70 border border-zinc-800/90 text-xs">
+                          <label className="flex items-center gap-2 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={calibrateSquareRatio}
+                              onChange={(e) => setCalibrateSquareRatio(e.target.checked)}
+                              className="w-3.5 h-3.5 rounded bg-zinc-900 border-zinc-700 text-cyan-500 focus:ring-0 cursor-pointer accent-cyan-500"
+                            />
+                            <span className="text-[11px] font-mono text-zinc-300">Lock 1:1 Ratio (Square)</span>
+                          </label>
+                          <span
+                            className={`text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded ${
+                              calibrateSquareRatio
+                                ? 'text-cyan-300 bg-cyan-950/90 border border-cyan-800/60 shadow-[0_0_6px_rgba(6,182,212,0.2)]'
+                                : 'text-zinc-500 bg-zinc-900/80 border border-zinc-800'
+                            }`}
+                          >
+                            {calibrateSquareRatio ? '1:1 LOCKED' : 'FREEFORM'}
+                          </span>
+                        </div>
+                      )}
+
                       <button
                         onClick={() => {
                           if (tool === 'grid_calibrate') {
@@ -2924,12 +2953,12 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                                   className="p-2.5 rounded-xl bg-zinc-950/70 border border-amber-500/20 hover:border-amber-400 hover:bg-zinc-900/80 transition-all flex items-center justify-between gap-2 cursor-pointer group shadow-xs"
                                 >
                                   <div className="flex items-center gap-2 min-w-0">
-                                    <span className="w-6 h-6 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-bold font-mono flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                                    <span className="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-bold font-mono flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform shadow-xs">
                                       {anno.roomNumber || idx + 1}
                                     </span>
                                     <div className="min-w-0">
                                       <div className="flex items-center gap-1.5">
-                                        <span className="text-xs font-bold text-zinc-200 group-hover:text-amber-200 truncate block">
+                                        <span className="text-sm font-bold text-zinc-100 group-hover:text-amber-300 truncate block">
                                           {roomTitle}
                                         </span>
                                       </div>
@@ -2986,7 +3015,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                                 >
                                   <div className="flex items-center gap-2 min-w-0">
                                     <span
-                                      className="w-6 h-6 rounded-lg border text-[11px] font-bold flex items-center justify-center shrink-0 shadow-sm"
+                                      className="w-7 h-7 rounded-lg border text-sm font-bold flex items-center justify-center shrink-0 shadow-sm"
                                       style={{
                                         backgroundColor: `${anno.color || '#0ea5e9'}25`,
                                         borderColor: anno.color || '#0ea5e9',
@@ -2997,7 +3026,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                                     </span>
                                     <div className="min-w-0">
                                       <div className="flex items-center gap-1.5">
-                                        <span className="text-xs font-bold text-zinc-200 group-hover:text-sky-200 truncate block">
+                                        <span className="text-sm font-bold text-zinc-100 group-hover:text-sky-300 truncate block">
                                           {anno.label || anno.roomName || 'Badge'}
                                         </span>
                                         <span
