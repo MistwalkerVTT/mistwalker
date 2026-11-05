@@ -73,17 +73,47 @@ export function rollAdvancedDice(notation: string): AdvancedRollResult {
   const diceResults: DieResult[] = [];
   const flatRolls: number[] = [];
 
-  // Extract individual dice rolls from the rolls tree
+  // Extract individual dice rolls from the rolls tree with accurate die sides
   try {
     const rollsData = (roll as any).rolls || [];
-    const traverseRolls = (node: any) => {
+    // Retrieve expressions array from roll symbols (StandardDice has .sides and .qty)
+    const exprSym = Object.getOwnPropertySymbols(roll).find(s => s.toString().includes('expressions'));
+    const expressions: any[] = exprSym ? (roll as any)[exprSym] : [];
+
+    // Parse dice terms from notation as fallback queue: e.g. "2d8 + 1d6 + 4" -> [8, 6]
+    const termMatches = [...cleanNotation.matchAll(/(\d*)d(\d+)/gi)];
+    let termIdx = 0;
+
+    const traverseRolls = (node: any, idx?: number) => {
       if (!node) return;
       if (Array.isArray(node)) {
-        node.forEach(traverseRolls);
+        node.forEach((item, i) => traverseRolls(item, i));
       } else if (node.rolls && Array.isArray(node.rolls)) {
-        const sides = node.die?.sides || 20;
+        // Determine sides:
+        // 1. Try node.die?.sides if exposed
+        // 2. Try matching expression at same index in expressions list
+        // 3. Try sequential notation term match
+        let sides: number | undefined = node.die?.sides;
+        if (!sides && typeof idx === 'number' && expressions[idx]?.sides) {
+          sides = expressions[idx].sides;
+        }
+        if (!sides && termIdx < termMatches.length) {
+          sides = parseInt(termMatches[termIdx][2], 10);
+        }
+        termIdx++;
+
+        if (!sides || isNaN(sides)) {
+          sides = 20;
+        }
+
         node.rolls.forEach((r: any) => {
-          const val = typeof r.value === 'number' ? r.value : (typeof r === 'number' ? r : 0);
+          const val = typeof r.value === 'number'
+            ? r.value
+            : typeof r.initialValue === 'number'
+            ? r.initialValue
+            : typeof r === 'number'
+            ? r
+            : 0;
           if (val > 0) {
             flatRolls.push(val);
             diceResults.push({
@@ -99,10 +129,16 @@ export function rollAdvancedDice(notation: string): AdvancedRollResult {
     };
     traverseRolls(rollsData);
   } catch {
-    // If AST traversal fails, provide fallback
+    // If AST traversal fails, provide fallback using notation
     if (flatRolls.length === 0) {
+      const firstTerm = cleanNotation.match(/(\d*)d(\d+)/i);
+      const fallbackSides = firstTerm ? parseInt(firstTerm[2], 10) : 20;
       flatRolls.push(roll.total);
-      diceResults.push({ sides: 20, result: Math.min(20, Math.max(1, roll.total)), type: 'd20' });
+      diceResults.push({
+        sides: fallbackSides,
+        result: Math.min(fallbackSides, Math.max(1, roll.total)),
+        type: `d${fallbackSides}`
+      });
     }
   }
 

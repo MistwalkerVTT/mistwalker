@@ -6036,6 +6036,8 @@ export default function PlayerView() {
           const evaluated = evaluateDiceFormula(formula, isCrit);
           calculatedDeltaHp = action.isHeal ? evaluated.total : -evaluated.total;
 
+          const formulaMatch = formula.match(/(\d*)d(\d+)/i);
+          const fallbackSides = formulaMatch ? parseInt(formulaMatch[2], 10) : (action.isHeal ? 8 : 6);
           const dmgDiceEvent: DdbDiceRollEvent = {
             id: `dmg-${Date.now()}`,
             characterId: String(hudCharacterData?.id || caster.id || ''),
@@ -6045,7 +6047,7 @@ export default function PlayerView() {
             rollType: action.isHeal ? 'heal' : 'damage',
             formula: `${formula} → ${evaluated.breakdown}`,
             diceNotation: formula,
-            dice: evaluated.dice.length > 0 ? evaluated.dice : [{ sides: action.isHeal ? 8 : 20, result: Math.abs(calculatedDeltaHp), type: action.isHeal ? 'd8' : 'd20' }],
+            dice: evaluated.dice.length > 0 ? evaluated.dice : [{ sides: fallbackSides, result: Math.abs(calculatedDeltaHp), type: `d${fallbackSides}` }],
             modifier: evaluated.bonus,
             total: Math.abs(calculatedDeltaHp),
             isCritical: isCrit,
@@ -6070,6 +6072,9 @@ export default function PlayerView() {
         const diceResults = evaluated.dice;
         calculatedDeltaHp = action.isHeal ? rolledTotal : -rolledTotal;
 
+        const autoFormulaMatch = formula.match(/(\d*)d(\d+)/i);
+        const autoFallbackSides = autoFormulaMatch ? parseInt(autoFormulaMatch[2], 10) : (action.isHeal ? 8 : 6);
+
         const diceEvent: DdbDiceRollEvent = {
           id: `roll-${Date.now()}`,
           characterId: String(hudCharacterData?.id || caster.id || ''),
@@ -6079,7 +6084,7 @@ export default function PlayerView() {
           rollType: action.isHeal ? 'heal' : 'damage',
           formula: `${formula} → ${evaluated.breakdown}`,
           diceNotation: formula,
-          dice: diceResults.length > 0 ? diceResults : [{ sides: action.isHeal ? 8 : 20, result: Math.abs(calculatedDeltaHp), type: action.isHeal ? 'd8' : 'd20' }],
+          dice: diceResults.length > 0 ? diceResults : [{ sides: autoFallbackSides, result: Math.abs(calculatedDeltaHp), type: `d${autoFallbackSides}` }],
           modifier: evaluated.bonus,
           total: Math.abs(calculatedDeltaHp),
           isCritical: false,

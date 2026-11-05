@@ -198,6 +198,8 @@ export const CombatDicePromptModal: React.FC<CombatDicePromptModalProps> = ({
     } else {
       // Damage phase manual submit
       const damageTotal = Math.max(0, rawInputValue);
+      const termMatch = effectiveDamageFormula.match(/(\d*)d(\d+)/i);
+      const manualSides = termMatch ? parseInt(termMatch[2], 10) : (isHeal ? 8 : 6);
       const diceEvent: DdbDiceRollEvent = {
         id: `manual-dmg-${Date.now()}`,
         characterName: actor.name,
@@ -205,7 +207,7 @@ export const CombatDicePromptModal: React.FC<CombatDicePromptModalProps> = ({
         rollType: isHeal ? 'heal' : 'damage',
         formula: `${effectiveDamageFormula} = ${damageTotal}`,
         diceNotation: effectiveDamageFormula,
-        dice: [{ sides: 8, result: damageTotal, type: 'manual' }],
+        dice: [{ sides: manualSides, result: damageTotal, type: `d${manualSides}` }],
         modifier: 0,
         total: damageTotal,
         isCritical: Boolean(isCrit),
