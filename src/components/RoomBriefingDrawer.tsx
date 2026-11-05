@@ -208,6 +208,18 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
     });
   }, [activeRoom, manualMonsters, chapterPdfDigest?.rooms, allAvailableMonsters, hiddenMonsterNames]);
 
+  // Preload token images into browser cache so tokens render instantly with zero lag
+  useEffect(() => {
+    if (!isOpen || currentRoomMonsters.length === 0) return;
+    currentRoomMonsters.forEach(({ monster }) => {
+      const url = monster?.avatarUrl || (monster as any)?.url;
+      if (url && typeof url === 'string' && url.startsWith('http')) {
+        const img = new Image();
+        img.src = url;
+      }
+    });
+  }, [isOpen, currentRoomMonsters]);
+
   // Close monster dropdown on outside click or Escape key
   useEffect(() => {
     if (!showMonsterSelect) return;
@@ -1541,7 +1553,7 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
                     for (let i = 0; i < count; i++) {
                       onSpawnMonsterToken?.({
                         name: count > 1 ? `${m.name} ${i + 1}` : m.name,
-                        avatarUrl: m.avatarUrl || 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=150',
+                        avatarUrl: m.avatarUrl || (m as any).url || '/uploads/file-1792077381663-439615846.png',
                         hp: m.hp || 10,
                         ac: m.ac || 10,
                         size: sizeToNumber(m.size),
@@ -1558,7 +1570,7 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
                   for (let i = 0; i < count; i++) {
                     onSpawnMonsterToken?.({
                       name: count > 1 ? `${m.name} ${i + 1}` : m.name,
-                      avatarUrl: m.avatarUrl || 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=150',
+                      avatarUrl: m.avatarUrl || (m as any).url || '/uploads/file-1792077381663-439615846.png',
                       hp: m.hp || 10,
                       ac: m.ac || 10,
                       size: sizeToNumber(m.size),

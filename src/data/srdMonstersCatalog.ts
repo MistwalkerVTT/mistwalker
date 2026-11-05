@@ -1631,6 +1631,39 @@ export function resolveMonster(
     if (found) break;
   }
 
+  // 2b. Semantic Fallback Match: Check adventure-specific and construct/boss aliases
+  // e.g. "Canopic Golem" -> "Stone Golem", "Valin Sarnaster" -> "Mummy Lord"
+  if (!found) {
+    const SEMANTIC_BASE_ALIASES: Record<string, string> = {
+      'canopic golem': 'Stone Golem',
+      'crystal golem': 'Stone Golem',
+      'bone golem': 'Stone Golem',
+      'canopic guardian': 'Stone Golem',
+      'sand golem': 'Clay Golem',
+      'valin sarnaster': 'Mummy Lord',
+      'savras cultist': 'Cultist',
+      'tomb guardian': 'Shield Guardian',
+      'mummy warrior': 'Mummy',
+      'spectral guardian': 'Specter'
+    };
+
+    for (const cName of matchCandidates) {
+      const lowerCandidate = cName.toLowerCase().trim();
+      const mappedTargetName = SEMANTIC_BASE_ALIASES[lowerCandidate];
+      if (mappedTargetName) {
+        const baseMonster = allAvailable.find(m => isExactMonsterMatch(mappedTargetName, m.name));
+        if (baseMonster) {
+          found = {
+            ...baseMonster,
+            monsterId: `semantic_${lowerCandidate.replace(/[^a-z0-9]/g, '_')}_${baseMonster.monsterId}`,
+            name: cName
+          };
+          break;
+        }
+      }
+    }
+  }
+
   if (found) {
     // If original name had a unique alias (like "Guerthel (Wraith)"), preserve that specific display name
     const finalName = parenMatch ? candidate : found.name;

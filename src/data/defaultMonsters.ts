@@ -1,5 +1,6 @@
 import { Monster } from '../types/monster';
 import { SRD_MONSTERS } from './srdMonstersCatalog';
+import { DNDBEYOND_COMPENDIUM_MONSTERS } from './dndbeyondMonstersCatalog';
 
 export const DEFAULT_MONSTERS: Monster[] = [
   {
@@ -248,5 +249,6 @@ export const DEFAULT_MONSTERS: Monster[] = [
     source: 'Monster Manual / Compendium',
     createdAt: Date.now()
   },
-  ...SRD_MONSTERS
+  ...SRD_MONSTERS,
+  ...DNDBEYOND_COMPENDIUM_MONSTERS
 ];
