@@ -29,7 +29,8 @@ import {
   Flame,
   Undo2,
   CircleDot,
-  Plus
+  Plus,
+  Loader2
 } from 'lucide-react';
 import { Stage, Layer, Image as KonvaImage, Rect, Circle, Line, Text, Group, Wedge } from 'react-konva';
 import Konva from 'konva';
@@ -143,7 +144,7 @@ import {
   subscribeToAllies,
   saveCharacter
 } from './lib/firebase';
-import { getImageNaturalDimensions, getVideoNaturalDimensions, isVideoAsset, getLocalAsset } from './lib/storageCache';
+import { getImageNaturalDimensions, getVideoNaturalDimensions, isVideoAsset, getLocalAsset, getMemoryAssetSync } from './lib/storageCache';
 import { io } from 'socket.io-client';
 import {
   Combatant,
@@ -3322,10 +3323,19 @@ export default function App() {
     // 1. Immediate optimistic map display: pre-resolve potentially dead blobs, locals, or thumbnails first
     const targetSlot = (targetView || activeMapIdRef.current) as 'DM1' | 'DM2' | 'DM3';
     let fullResUrl = '';
-    const isPotentiallyDeadOrLocal = !scene.mapUrl ||
+
+    // Check in-memory sync cache first (0ms instantaneous lookup)
+    const memCached = getMemoryAssetSync(`scene_${scene.sceneId}`) ||
+      (scene.mapUrl ? getMemoryAssetSync(scene.mapUrl.replace('local:', '')) : null) ||
+      (scene.sceneTitle ? getMemoryAssetSync(scene.sceneTitle) : null);
+    if (memCached && memCached !== scene.mapThumbnailUrl) {
+      fullResUrl = memCached;
+    }
+
+    const isPotentiallyDeadOrLocal = !fullResUrl && (!scene.mapUrl ||
       scene.mapUrl.startsWith('blob:') ||
       scene.mapUrl.startsWith('local:') ||
-      Boolean(scene.mapThumbnailUrl && scene.mapUrl === scene.mapThumbnailUrl);
+      Boolean(scene.mapThumbnailUrl && scene.mapUrl === scene.mapThumbnailUrl));
 
     if (isPotentiallyDeadOrLocal) {
       // Resolve authoritative map source first so we never flash a dead blob or pixelated thumbnail
@@ -3336,8 +3346,15 @@ export default function App() {
       }
     }
 
-    const effectiveMapUrl = fullResUrl || scene.mapUrl || scene.mapThumbnailUrl || '';
-    if (effectiveMapUrl && !effectiveMapUrl.startsWith('local:')) {
+    // STRICT: Never fall back to scene.mapThumbnailUrl as full battlemap!
+    const candidateUrl = fullResUrl || scene.mapUrl || '';
+    const isThumbnail = Boolean(
+      (scene.mapThumbnailUrl && candidateUrl === scene.mapThumbnailUrl) ||
+      (candidateUrl.startsWith('data:') && candidateUrl.length < 150000)
+    );
+    const effectiveMapUrl = (!isThumbnail && !candidateUrl.startsWith('local:')) ? candidateUrl : '';
+
+    if (effectiveMapUrl) {
       const isVideo = isVideoAsset(effectiveMapUrl) || isVideoAsset(scene.mapUrl);
       setMapType(isVideo ? 'video' : 'image');
       setImageFile(effectiveMapUrl);
@@ -3353,20 +3370,20 @@ export default function App() {
         }
       }
     } else {
-      console.warn('[CampaignBuilder] Scene is missing mapUrl and thumbnail');
+      console.warn('[CampaignBuilder] Scene full-res map not immediately available; awaiting resolution...');
     }
 
     // If not already resolved via isPotentiallyDeadOrLocal, run background resolution check
-    if (!fullResUrl && (scene.mapUrl || scene.mapThumbnailUrl || scene.sceneTitle)) {
+    if (!fullResUrl && (scene.mapUrl || scene.sceneTitle || scene.sceneId)) {
       try {
         const resolvedMapUrl = await resolveMapSource(scene, uploadedMaps);
         const bestUrl = resolvedMapUrl || scene.mapUrl || '';
-        const isThumbnail = Boolean(
+        const isBestThumb = Boolean(
           (scene.mapThumbnailUrl && bestUrl === scene.mapThumbnailUrl) ||
           (bestUrl.startsWith('data:') && bestUrl.length < 150000)
         );
         // CRITICAL: Never replace effectiveMapUrl with a thumbnail or data URL!
-        if (bestUrl && bestUrl !== effectiveMapUrl && !bestUrl.startsWith('local:') && !isThumbnail) {
+        if (bestUrl && bestUrl !== effectiveMapUrl && !bestUrl.startsWith('local:') && !isBestThumb) {
           fullResUrl = bestUrl;
           const isVideo = isVideoAsset(bestUrl) || isVideoAsset(scene.mapUrl);
           setMapType(isVideo ? 'video' : 'image');
@@ -9577,6 +9594,14 @@ export default function App() {
               accept="image/*,video/*,.m4v"
               onChange={handleRelinkMapImage}
             />
+            {imageStatus === 'loading' && imageFile && mapType === 'image' && (
+              <div className="absolute inset-0 z-20 pointer-events-none flex flex-col items-center justify-center bg-zinc-950/60 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="flex items-center gap-3 px-5 py-3 rounded-2xl bg-zinc-900/90 border border-amber-500/30 shadow-2xl text-amber-200 font-mono text-xs">
+                  <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
+                  <span>Loading Battlemap...</span>
+                </div>
+              </div>
+            )}
             <Stage
               width={Math.max(100, (dimensions.width || (typeof window !== 'undefined' ? window.innerWidth : 1920)) - 64)}
               height={Math.max(100, dimensions.height || (typeof window !== 'undefined' ? window.innerHeight : 1080))}

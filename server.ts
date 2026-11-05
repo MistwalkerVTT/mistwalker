@@ -281,9 +281,10 @@ async function startServer() {
     const filename = req.params.filename;
     const filePath = path.join(uploadsDir, filename);
 
-    // Set CORS and byte-range headers for video streaming
+    // Set CORS, byte-range, and browser disk cache headers for high-performance asset loading
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Cache-Control', 'public, max-age=2592000, immutable');
 
     // Explicit MIME types to ensure .jfif and all images are served as proper image types (never application/octet-stream)
     const ext = path.extname(filename).toLowerCase();
@@ -307,7 +308,7 @@ async function startServer() {
     }
 
     if (fs.existsSync(filePath)) {
-      return res.sendFile(filePath);
+      return res.sendFile(filePath, { maxAge: '30d', immutable: true });
     }
 
     const isVideo = /\.(mp4|webm|m4v|mov|ogv)$/i.test(filename);
@@ -400,7 +401,7 @@ async function startServer() {
             if (matches) {
               fs.writeFileSync(filePath, Buffer.from(matches[2], 'base64'));
               console.log(`[Server] Successfully recovered missing image upload /uploads/${filename} from Firestore!`);
-              return res.sendFile(filePath);
+              return res.sendFile(filePath, { maxAge: '30d', immutable: true });
             }
           }
         }
@@ -414,9 +415,12 @@ async function startServer() {
   });
 
   app.use('/uploads', express.static(uploadsDir, {
+    maxAge: '30d',
+    immutable: true,
     setHeaders: (res, filePath) => {
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Accept-Ranges', 'bytes');
+      res.setHeader('Cache-Control', 'public, max-age=2592000, immutable');
       const ext = path.extname(filePath).toLowerCase();
       if (ext === '.jfif' || ext === '.jpg' || ext === '.jpeg') {
         res.setHeader('Content-Type', 'image/jpeg');

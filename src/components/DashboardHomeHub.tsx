@@ -23,7 +23,7 @@ import {
   Music,
   Swords
 } from 'lucide-react';
-import { Campaign, Scene, ActiveSessionData } from '../lib/firebase';
+import { Campaign, Scene, ActiveSessionData, prewarmSceneMap } from '../lib/firebase';
 import { DEMO_GV_CAMPAIGN, DEMO_GV_SCENE, DEMO_GV_CHAPTER } from '../data/demoCampaignGv';
 
 interface DashboardHomeHubProps {
@@ -267,6 +267,14 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
 
   const [isResumingPrimaryScene, setIsResumingPrimaryScene] = useState<boolean>(false);
 
+  // Pre-warm the active session battlemap into browser cache & GPU decode pipeline
+  // while the user is on the Dashboard, guaranteeing instantaneous (0ms) launch.
+  React.useEffect(() => {
+    if (displayScene && !resolvedResumeData.isLoading) {
+      prewarmSceneMap(displayScene, []);
+    }
+  }, [displayScene, resolvedResumeData.isLoading]);
+
   const handleResumePrimaryScene = () => {
     setIsResumingPrimaryScene(true);
     onLoadSceneFromCampaign(displayScene, displayCampaignId, displayChapterId);
@@ -450,6 +458,9 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
               <button
                 type="button"
                 id="btn-resume-adventure-primary"
+                onMouseEnter={() => {
+                  if (displayScene) prewarmSceneMap(displayScene, []);
+                }}
                 onClick={handleResumePrimaryScene}
                 disabled={isResumingPrimaryScene}
                 className="w-full py-3 px-3 sm:px-4 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-80 text-white font-bold rounded-xl transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-emerald-950/60 font-mono text-xs flex items-center justify-center gap-2 cursor-pointer truncate"

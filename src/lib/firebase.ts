@@ -28,6 +28,8 @@ import {
   saveLocalAsset, 
   getLocalAsset, 
   deleteLocalAsset,
+  getMemoryAssetSync,
+  setMemoryAssetCache,
   createThumbnailDataUrl, 
   getImageNaturalDimensions,
   getVideoNaturalDimensions,
@@ -1419,7 +1421,88 @@ export async function resolveMapSource(
     }
   }
 
-  // 1. Verify if scene.mapUrl is an active, valid blob URL in the current window session
+  // 1. In-Memory Cache Check (0ms Synchronous Lookups)
+  const memScene = getMemoryAssetSync(`scene_${scene.sceneId}`);
+  if (memScene && memScene !== scene.mapThumbnailUrl) return memScene;
+
+  if (scene.mapUrl) {
+    const assetKey = scene.mapUrl.startsWith('local:') ? scene.mapUrl.replace('local:', '') : scene.mapUrl;
+    const memUrl = getMemoryAssetSync(assetKey);
+    if (memUrl && memUrl !== scene.mapThumbnailUrl) return memUrl;
+    const filename = scene.mapUrl.split('/').pop()?.split('?')[0];
+    if (filename) {
+      const memFile = getMemoryAssetSync(filename);
+      if (memFile && memFile !== scene.mapThumbnailUrl) return memFile;
+    }
+  }
+
+  if (scene.sceneTitle) {
+    const memTitle = getMemoryAssetSync(scene.sceneTitle);
+    if (memTitle && memTitle !== scene.mapThumbnailUrl) return memTitle;
+  }
+
+  // 2. Client IndexedDB Full-Resolution Local-First Cache (2-5ms)
+  // Check local IndexedDB FIRST before any remote HTTP/HEAD network calls!
+  try {
+    const cachedScene = await getLocalAsset(`scene_${scene.sceneId}`);
+    if (cachedScene && cachedScene !== scene.mapThumbnailUrl) {
+      console.log(`[resolveMapSource] Restored full-res map from IndexedDB for scene "${scene.sceneTitle}"`);
+      uploadBlobUrlToServer(cachedScene, scene.sceneTitle || scene.sceneId).catch(console.warn);
+      return cachedScene;
+    }
+  } catch (e) {}
+
+  if (scene.mapUrl) {
+    try {
+      const assetKey = scene.mapUrl.startsWith('local:') ? scene.mapUrl.replace('local:', '') : scene.mapUrl;
+      const cachedByUrl = await getLocalAsset(assetKey);
+      if (cachedByUrl && cachedByUrl !== scene.mapThumbnailUrl) {
+        uploadBlobUrlToServer(cachedByUrl, scene.sceneTitle || scene.sceneId).catch(console.warn);
+        return cachedByUrl;
+      }
+      const filename = scene.mapUrl.split('/').pop()?.split('?')[0];
+      if (filename) {
+        const cachedByFilename = await getLocalAsset(filename);
+        if (cachedByFilename && cachedByFilename !== scene.mapThumbnailUrl) {
+          uploadBlobUrlToServer(cachedByFilename, filename).catch(console.warn);
+          return cachedByFilename;
+        }
+      }
+    } catch (e) {}
+  }
+
+  if (scene.sceneTitle) {
+    try {
+      const cachedByTitle = await getLocalAsset(scene.sceneTitle);
+      if (cachedByTitle && cachedByTitle !== scene.mapThumbnailUrl) {
+        uploadBlobUrlToServer(cachedByTitle, scene.sceneTitle).catch(console.warn);
+        return cachedByTitle;
+      }
+    } catch (e) {}
+  }
+
+  // Check matched asset's IndexedDB cache
+  if (uploadedAssetsList && uploadedAssetsList.length > 0) {
+    const matched = uploadedAssetsList.find(a =>
+      (a.thumbnailUrl && scene.mapThumbnailUrl && a.thumbnailUrl === scene.mapThumbnailUrl) ||
+      (a.assetId && (a.assetId === scene.sceneId || (scene.mapUrl && scene.mapUrl.includes(a.assetId)))) ||
+      (a.url && scene.mapUrl && a.url === scene.mapUrl) ||
+      (a.name && scene.sceneTitle && (a.name.toLowerCase().includes(scene.sceneTitle.toLowerCase()) || scene.sceneTitle.toLowerCase().includes(a.name.toLowerCase())))
+    );
+    if (matched) {
+      try {
+        const cachedAsset = (matched.assetId ? await getLocalAsset(matched.assetId) : null) ||
+                            (matched.url ? await getLocalAsset(matched.url) : null) ||
+                            (matched.name ? await getLocalAsset(matched.name) : null);
+        if (cachedAsset && cachedAsset !== scene.mapThumbnailUrl) {
+          uploadBlobUrlToServer(cachedAsset, matched.name || matched.assetId).catch(console.warn);
+          return cachedAsset;
+        }
+      } catch (e) {}
+    }
+  }
+
+  // 3. Verify if scene.mapUrl is an active, valid blob URL in the current window session
   if (scene.mapUrl && scene.mapUrl.startsWith('blob:')) {
     try {
       const probe = await fetch(scene.mapUrl);
@@ -1432,7 +1515,7 @@ export async function resolveMapSource(
     }
   }
 
-  // 2. Check matched asset in uploadedAssets library for an authoritative persistent URL
+  // 4. Check matched asset in uploadedAssets library for an authoritative persistent URL
   if (uploadedAssetsList && uploadedAssetsList.length > 0) {
     const matched = uploadedAssetsList.find(a =>
       (a.thumbnailUrl && scene.mapThumbnailUrl && a.thumbnailUrl === scene.mapThumbnailUrl && a.url && !a.url.startsWith('blob:')) ||
@@ -1455,66 +1538,6 @@ export async function resolveMapSource(
     }
   }
 
-  // 3. PRIORITY: Check client IndexedDB for full-resolution cached version (and auto-upload to server)
-  try {
-    const cachedScene = await getLocalAsset(`scene_${scene.sceneId}`);
-    if (cachedScene) {
-      console.log(`[resolveMapSource] Restored full-res map from IndexedDB for scene "${scene.sceneTitle}"`);
-      uploadBlobUrlToServer(cachedScene, scene.sceneTitle || scene.sceneId).catch(console.warn);
-      return cachedScene;
-    }
-  } catch (e) {}
-
-  if (scene.mapUrl) {
-    try {
-      const assetKey = scene.mapUrl.startsWith('local:') ? scene.mapUrl.replace('local:', '') : scene.mapUrl;
-      const cachedByUrl = await getLocalAsset(assetKey);
-      if (cachedByUrl) {
-        uploadBlobUrlToServer(cachedByUrl, scene.sceneTitle || scene.sceneId).catch(console.warn);
-        return cachedByUrl;
-      }
-      const filename = scene.mapUrl.split('/').pop()?.split('?')[0];
-      if (filename) {
-        const cachedByFilename = await getLocalAsset(filename);
-        if (cachedByFilename) {
-          uploadBlobUrlToServer(cachedByFilename, filename).catch(console.warn);
-          return cachedByFilename;
-        }
-      }
-    } catch (e) {}
-  }
-
-  if (scene.sceneTitle) {
-    try {
-      const cachedByTitle = await getLocalAsset(scene.sceneTitle);
-      if (cachedByTitle) {
-        uploadBlobUrlToServer(cachedByTitle, scene.sceneTitle).catch(console.warn);
-        return cachedByTitle;
-      }
-    } catch (e) {}
-  }
-
-  // 4. Check matched asset's IndexedDB cache
-  if (uploadedAssetsList && uploadedAssetsList.length > 0) {
-    const matched = uploadedAssetsList.find(a =>
-      (a.thumbnailUrl && scene.mapThumbnailUrl && a.thumbnailUrl === scene.mapThumbnailUrl) ||
-      (a.assetId && (a.assetId === scene.sceneId || (scene.mapUrl && scene.mapUrl.includes(a.assetId)))) ||
-      (a.url && scene.mapUrl && a.url === scene.mapUrl) ||
-      (a.name && scene.sceneTitle && (a.name.toLowerCase().includes(scene.sceneTitle.toLowerCase()) || scene.sceneTitle.toLowerCase().includes(a.name.toLowerCase())))
-    );
-    if (matched) {
-      try {
-        const cachedAsset = await getLocalAsset(matched.assetId) ||
-                            (matched.url ? await getLocalAsset(matched.url) : null) ||
-                            (matched.name ? await getLocalAsset(matched.name) : null);
-        if (cachedAsset) {
-          uploadBlobUrlToServer(cachedAsset, matched.name || matched.assetId).catch(console.warn);
-          return cachedAsset;
-        }
-      } catch (e) {}
-    }
-  }
-
   // 5. Check if scene.mapUrl is a persistent server URL and verify reachability
   if (scene.mapUrl && scene.mapUrl.startsWith('/uploads/')) {
     try {
@@ -1533,10 +1556,39 @@ export async function resolveMapSource(
 
   // 7. Last resort: NEVER return mapThumbnailUrl as the full battlemap source!
   // Doing so causes callers to replace the battlemap with a low-res pixelated thumbnail.
-  if (scene.mapUrl && !scene.mapUrl.startsWith('blob:') && !scene.mapUrl.startsWith('local:') && !scene.mapUrl.startsWith('data:')) {
+  if (scene.mapUrl && !scene.mapUrl.startsWith('blob:') && !scene.mapUrl.startsWith('local:') && !scene.mapUrl.startsWith('data:') && scene.mapUrl !== scene.mapThumbnailUrl) {
     return scene.mapUrl;
   }
   return '';
+}
+
+/**
+ * Pre-warms the full-resolution battlemap into browser cache & GPU decode pipeline
+ * Resolves map asset in memory and executes background Image decode so switching to the scene is instantaneous (0ms)
+ */
+export async function prewarmSceneMap(
+  scene: Scene | null | undefined,
+  uploadedAssetsList: UploadedAsset[] = []
+): Promise<string | null> {
+  if (!scene) return null;
+  try {
+    const url = await resolveMapSource(scene, uploadedAssetsList);
+    if (url && typeof window !== 'undefined') {
+      const isVideo = isVideoAsset(url) || url.endsWith('.mp4') || url.endsWith('.webm') || url.endsWith('.m4v');
+      if (!isVideo) {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.src = url;
+        if (typeof img.decode === 'function') {
+          img.decode().catch(() => {});
+        }
+      }
+      return url;
+    }
+  } catch (err) {
+    console.warn('[prewarmSceneMap] Failed to prewarm map:', err);
+  }
+  return null;
 }
 
 /**

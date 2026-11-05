@@ -23,6 +23,9 @@ function openDB(): Promise<IDBDatabase> {
 
 const knownVideoUrls = new Set<string>();
 
+// High-speed in-memory active blob and data URL cache for 0ms synchronous retrieval
+const activeMemoryUrlCache = new Map<string, string>();
+
 export function registerVideoUrl(url: string | null | undefined) {
   if (url && typeof url === 'string') {
     knownVideoUrls.add(url);
@@ -30,12 +33,37 @@ export function registerVideoUrl(url: string | null | undefined) {
 }
 
 /**
- * Save large asset (dataUrl or Blob) to IndexedDB
+ * Synchronous in-memory lookup for pre-warmed or previously loaded assets (0ms)
+ */
+export function getMemoryAssetSync(id: string | null | undefined): string | null {
+  if (!id) return null;
+  return activeMemoryUrlCache.get(id) || null;
+}
+
+/**
+ * Cache an active asset URL in memory for instant synchronous lookup
+ */
+export function setMemoryAssetCache(id: string | null | undefined, url: string | null | undefined): void {
+  if (!id || !url) return;
+  activeMemoryUrlCache.set(id, url);
+}
+
+/**
+ * Save large asset (dataUrl or Blob) to IndexedDB and in-memory cache
  */
 export async function saveLocalAsset(id: string, data: string | Blob): Promise<void> {
   try {
     if ((data instanceof Blob && data.type && data.type.startsWith('video/')) || (typeof data === 'string' && data.startsWith('data:video/'))) {
       registerVideoUrl(id);
+    }
+    if (typeof data === 'string') {
+      activeMemoryUrlCache.set(id, data);
+    } else if (data instanceof Blob && typeof URL !== 'undefined' && URL.createObjectURL) {
+      const blobUrl = URL.createObjectURL(data);
+      activeMemoryUrlCache.set(id, blobUrl);
+      if (data.type && data.type.startsWith('video/')) {
+        registerVideoUrl(blobUrl);
+      }
     }
     const db = await openDB();
     return new Promise((resolve, reject) => {
@@ -51,9 +79,13 @@ export async function saveLocalAsset(id: string, data: string | Blob): Promise<v
 }
 
 /**
- * Retrieve local asset from IndexedDB
+ * Retrieve local asset from memory cache (0ms) or IndexedDB (2-5ms)
  */
 export async function getLocalAsset(id: string): Promise<string | null> {
+  if (!id) return null;
+  const inMemory = activeMemoryUrlCache.get(id);
+  if (inMemory) return inMemory;
+
   try {
     const db = await openDB();
     return new Promise((resolve, reject) => {
@@ -65,6 +97,7 @@ export async function getLocalAsset(id: string): Promise<string | null> {
         if (!res) return resolve(null);
         if (typeof res === 'string') {
           if (res.startsWith('data:video/')) registerVideoUrl(res);
+          activeMemoryUrlCache.set(id, res);
           resolve(res);
         } else if (res instanceof Blob) {
           const blobUrl = URL.createObjectURL(res);
@@ -72,6 +105,7 @@ export async function getLocalAsset(id: string): Promise<string | null> {
             registerVideoUrl(blobUrl);
             registerVideoUrl(id);
           }
+          activeMemoryUrlCache.set(id, blobUrl);
           resolve(blobUrl);
         } else {
           resolve(null);
@@ -86,11 +120,16 @@ export async function getLocalAsset(id: string): Promise<string | null> {
 }
 
 /**
- * Remove local asset from IndexedDB
+ * Remove local asset from memory cache and IndexedDB
  */
 export async function deleteLocalAsset(id: string): Promise<void> {
   try {
     knownVideoUrls.delete(id);
+    const existing = activeMemoryUrlCache.get(id);
+    if (existing && existing.startsWith('blob:') && typeof URL !== 'undefined' && URL.revokeObjectURL) {
+      try { URL.revokeObjectURL(existing); } catch (_) {}
+    }
+    activeMemoryUrlCache.delete(id);
     const db = await openDB();
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readwrite');
