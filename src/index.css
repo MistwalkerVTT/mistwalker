@@ -177,3 +177,105 @@ html, body {
 .animate-token-halo {
   animation: token-halo-glow 2.6s ease-in-out infinite;
 }
+
+/* Battle Arena Video Game Feel FX */
+@keyframes arena-fct-float {
+  0% {
+    opacity: 0;
+    transform: translate3d(-50%, 0, 0) scale(0.6);
+  }
+  15% {
+    opacity: 1;
+    transform: translate3d(-50%, -22px, 0) scale(1.15);
+  }
+  30% {
+    transform: translate3d(-50%, -32px, 0) scale(1);
+  }
+  75% {
+    opacity: 1;
+    transform: translate3d(-50%, -55px, 0) scale(0.95);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(-50%, -75px, 0) scale(0.8);
+  }
+}
+
+.animate-arena-fct {
+  animation: arena-fct-float 1.25s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;
+}
+
+@keyframes shake-light {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  20% { transform: translate3d(-3px, 2px, 0); }
+  40% { transform: translate3d(3px, -2px, 0); }
+  60% { transform: translate3d(-2px, -2px, 0); }
+  80% { transform: translate3d(2px, 2px, 0); }
+}
+
+.animate-shake-light {
+  animation: shake-light 0.2s ease-in-out both;
+}
+
+@keyframes shake-medium {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  15% { transform: translate3d(-6px, 4px, 0); }
+  30% { transform: translate3d(6px, -5px, 0); }
+  50% { transform: translate3d(-5px, 3px, 0); }
+  70% { transform: translate3d(4px, -3px, 0); }
+  85% { transform: translate3d(-2px, 2px, 0); }
+}
+
+.animate-shake-medium {
+  animation: shake-medium 0.35s ease-in-out both;
+}
+
+@keyframes shake-heavy {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  10% { transform: translate3d(-12px, 8px, 0) rotate(-1deg); }
+  25% { transform: translate3d(10px, -8px, 0) rotate(1deg); }
+  40% { transform: translate3d(-8px, 6px, 0) rotate(-0.5deg); }
+  60% { transform: translate3d(7px, -5px, 0) rotate(0.5deg); }
+  80% { transform: translate3d(-4px, 3px, 0); }
+}
+
+.animate-shake-heavy {
+  animation: shake-heavy 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+@keyframes vignette-pulse {
+  0% { opacity: 0; }
+  25% { opacity: 0.9; }
+  100% { opacity: 0; }
+}
+
+.animate-vignette-pulse {
+  animation: vignette-pulse 0.7s ease-out forwards;
+}
+
+@keyframes turn-banner-swoop {
+  0% {
+    opacity: 0;
+    transform: translate3d(-50%, -40px, 0) scale(0.85);
+  }
+  20% {
+    opacity: 1;
+    transform: translate3d(-50%, 0, 0) scale(1.05);
+  }
+  30% {
+    transform: translate3d(-50%, 0, 0) scale(1);
+  }
+  85% {
+    opacity: 1;
+    transform: translate3d(-50%, 0, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(-50%, -20px, 0) scale(0.9);
+  }
+}
+
+.animate-turn-banner-swoop {
+  animation: turn-banner-swoop 1.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+

@@ -89,6 +89,19 @@ import {
   useTokenFlightAnimation
 } from './TokenFlightElevation';
 import {
+  ArenaFloatingCombatText,
+  FloatingCombatTextItem,
+  ArenaScreenEffects,
+  ScreenShakeTrigger,
+  ArenaTargetHealthBar,
+  TargetCombatantInfo,
+  ArenaTurnBanner,
+  ArenaMatchIntroModal,
+  ArenaVictoryDefeatModal,
+  CombatantStatSummary,
+  ArenaDynamicVisionLayer
+} from './arena';
+import {
   ArenaConfig,
   loadArenaConfig,
   subscribeToArenaConfig,
@@ -1483,6 +1496,82 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
   const [aiTacticalBanner, setAiTacticalBanner] = useState<string | null>(null);
   const [aiPathPreviewPx, setAiPathPreviewPx] = useState<Array<{ x: number; y: number }>>([]);
 
+  // Video Game Feel States (FCT, Screen Shake, Turn Splash, Boss Target HUD, Intro & Post-match)
+  const [floatingCombatTexts, setFloatingCombatTexts] = useState<FloatingCombatTextItem[]>([]);
+  const [screenShake, setScreenShake] = useState<ScreenShakeTrigger | null>(null);
+  const [flashVignette, setFlashVignette] = useState<'crit' | 'danger' | null>(null);
+  const [inspectedTargetCombatant, setInspectedTargetCombatant] = useState<TargetCombatantInfo | null>(null);
+  const [turnBannerKey, setTurnBannerKey] = useState<string>('init');
+  const [showIntroModal, setShowIntroModal] = useState<boolean>(false);
+  const [combatStatsMap, setCombatStatsMap] = useState<Record<string, { damageDealt: number; damageTaken: number; healingDealt: number; kills: number }>>({});
+  const [selectedHeroFovId, setSelectedHeroFovId] = useState<string | null>(null);
+
+  const trackCombatStat = useCallback((actorId: string, type: 'damageDealt' | 'damageTaken' | 'healingDealt' | 'kills', amount: number = 1) => {
+    setCombatStatsMap((prev) => {
+      const current = prev[actorId] || { damageDealt: 0, damageTaken: 0, healingDealt: 0, kills: 0 };
+      return {
+        ...prev,
+        [actorId]: {
+          ...current,
+          [type]: current[type] + amount
+        }
+      };
+    });
+  }, []);
+
+  const triggerScreenShake = useCallback((intensity: 'light' | 'medium' | 'heavy' = 'medium', durationMs: number = 350) => {
+    setScreenShake({ intensity, durationMs });
+    window.setTimeout(() => {
+      setScreenShake(null);
+    }, durationMs);
+  }, []);
+
+  const triggerVignette = useCallback((type: 'crit' | 'danger') => {
+    setFlashVignette(type);
+    window.setTimeout(() => {
+      setFlashVignette(null);
+    }, 700);
+  }, []);
+
+  const spawnFloatingText = useCallback(
+    (
+      combatantId: string,
+      worldX: number,
+      worldY: number,
+      text: string,
+      type: 'damage' | 'crit' | 'heal' | 'miss' | 'condition'
+    ) => {
+      const now = Date.now();
+      setFloatingCombatTexts((prev) => {
+        // Find existing recent numbers for this combatant to stagger them
+        const recentOnUnit = prev.filter(
+          (item) => item.combatantId === combatantId && now - item.createdAt < 750
+        );
+        const staggerCount = recentOnUnit.length;
+        const jitterX = (Math.random() - 0.5) * 24;
+        const verticalStagger = -(staggerCount * 22);
+
+        const newItem: FloatingCombatTextItem = {
+          id: `fct_${now}_${Math.random().toString(36).slice(2, 6)}`,
+          combatantId,
+          worldX,
+          worldY,
+          text,
+          type,
+          createdAt: now,
+          jitterX,
+          verticalStagger
+        };
+        return [...prev, newItem];
+      });
+    },
+    []
+  );
+
+  const handleExpireFloatingText = useCallback((id: string) => {
+    setFloatingCombatTexts((prev) => prev.filter((item) => item.id !== id));
+  }, []);
+
   // Viewport Pan & Zoom + Mobile Detection
   const [dimensions, setDimensions] = useState({
     width: typeof window !== 'undefined' ? (window.visualViewport?.width || window.innerWidth) : 1600,
@@ -2199,6 +2288,8 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
     setRound(1);
     setWinnerTeam(null);
     setActiveTargetingAction(null);
+    setCombatStatsMap({});
+    setShowIntroModal(true);
     setCombatLogs([
       {
         id: `init_log_${Date.now()}`,
@@ -2259,6 +2350,14 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         setRound((r) => r + 1);
       }
       setTurnIndex(nextIdx);
+      setTurnBannerKey(`turn_${prev[nextIdx]?.id}_${Date.now()}`);
+
+      // Play subtle turn stinger sound for game pacing
+      if (prev[nextIdx]?.team === 'gold') {
+        soundCatalog.play('magic_chime', 0.65);
+      } else {
+        soundCatalog.play('shadow_step', 0.55);
+      }
 
       return prev.map((c, idx) =>
         idx === nextIdx
@@ -3226,6 +3325,15 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
 
         soundCatalog.play('radiant_heal', 0.85);
 
+        // Video Game Combat Text: Healing
+        spawnFloatingText(
+          target.id,
+          target.x + ((target.size || 1) * arenaGridSize) / 2,
+          target.y + ((target.size || 1) * arenaGridSize) / 2,
+          `+${healRoll.total} HP`,
+          'heal'
+        );
+
         if (target.currentHp >= target.maxHp && totalHealedAmount === 0 && !isMultiAllyHeal) {
           toast.info(`💚 ${target.name} is already at full health (${target.maxHp}/${target.maxHp} HP)!`);
         } else {
@@ -3476,6 +3584,15 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             saveSummaries.push(
               `${t.name}: ${saveAbil} Save ${saveTotal} (${saved ? 'SAVED' : 'FAILED'}) → ${dmgTaken} ${action.damageType || ''} dmg`
             );
+
+            // Floating Combat Text for each affected target
+            const tCenterX = t.x + ((t.size || 1) * arenaGridSize) / 2;
+            const tCenterY = t.y + ((t.size || 1) * arenaGridSize) / 2;
+            if (dmgTaken > 0) {
+              spawnFloatingText(t.id, tCenterX, tCenterY, `-${dmgTaken} (${saved ? 'SAVED' : 'FAIL'})`, 'damage');
+            } else {
+              spawnFloatingText(t.id, tCenterX, tCenterY, 'SAVED (0 DMG)', 'miss');
+            }
           } else {
             if (!saved) {
               const cond =
@@ -3491,12 +3608,23 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                   ? 'Banished'
                   : 'Affected';
               conditionMap.set(t.id, cond);
+
+              const tCenterX = t.x + ((t.size || 1) * arenaGridSize) / 2;
+              const tCenterY = t.y + ((t.size || 1) * arenaGridSize) / 2;
+              spawnFloatingText(t.id, tCenterX, tCenterY, `${cond.toUpperCase()}!`, 'condition');
             }
             saveSummaries.push(
               `${t.name}: ${saveAbil} Save ${saveTotal} vs DC ${dc} (${saved ? 'SAVED' : 'FAILED!'})`
             );
           }
         });
+
+        // Trigger screen shake on big AoE explosions (e.g. Fireball)
+        if (aoeRadiusFt >= 15 || targetsToProcess.length > 2) {
+          triggerScreenShake('heavy', 400);
+        } else if (dmgRoll && dmgRoll.total >= 15) {
+          triggerScreenShake('medium', 250);
+        }
 
         setCombatants((prev) =>
           prev.map((c) => {
@@ -3642,6 +3770,15 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           `Rolled ${attackTotal} (${rollFormula}) vs AC ${target.ac}`
         );
         soundCatalog.play('shield_clash', 0.65);
+
+        // Video Game Combat Text: Miss
+        spawnFloatingText(
+          target.id,
+          target.x + ((target.size || 1) * arenaGridSize) / 2,
+          target.y + ((target.size || 1) * arenaGridSize) / 2,
+          `MISS (AC ${target.ac})`,
+          'miss'
+        );
         return true;
       }
 
@@ -3651,6 +3788,28 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       const dmgMult =
         actor.team === 'crimson' && actor.isAI ? arenaConfig.monsterDamageMultiplier || 1 : 1;
       const finalDamage = Math.max(1, Math.round(dmgRoll.total * dmgMult));
+
+      // Video Game Tactile FX: Spawn Floating Damage & Screen Shake
+      const targetCenterX = target.x + ((target.size || 1) * arenaGridSize) / 2;
+      const targetCenterY = target.y + ((target.size || 1) * arenaGridSize) / 2;
+
+      spawnFloatingText(
+        target.id,
+        targetCenterX,
+        targetCenterY,
+        isCrit ? `💥 CRIT! -${finalDamage}` : `-${finalDamage}`,
+        isCrit ? 'crit' : 'damage'
+      );
+
+      if (isCrit) {
+        triggerScreenShake('heavy', 450);
+        triggerVignette('crit');
+        soundCatalog.play('thunder_boom', 0.85);
+      } else if (finalDamage >= 18) {
+        triggerScreenShake('medium', 300);
+      } else {
+        triggerScreenShake('light', 180);
+      }
 
       // Trigger 3D physics roll with all the spell/weapon damage dice so the exact dice count and dice types tumble independently!
       const damageDelayMs = onTrigger3dDice ? 1350 : 0;
@@ -3673,6 +3832,13 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           });
         }
       }, damageDelayMs);
+
+      // Track combat damage stats
+      trackCombatStat(actor.id, 'damageDealt', finalDamage);
+      trackCombatStat(target.id, 'damageTaken', finalDamage);
+      if (target.currentHp - finalDamage <= 0) {
+        trackCombatStat(actor.id, 'kills', 1);
+      }
 
       setCombatants((prev) =>
         prev.map((c) => {
@@ -5134,57 +5300,61 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       )}
 
       {/* Konva 1-Inch Gridded Arena Stage */}
-      <div className="flex-1 relative">
-        <Stage
-          width={dimensions.width}
-          height={dimensions.height - topBarHeight}
-          scaleX={stageScale}
-          scaleY={stageScale}
-          x={stagePos.x}
-          y={stagePos.y}
-          draggable={!activeTargetingAction}
-          onDragEnd={(e) => {
-            if (e.target === e.target.getStage()) {
-              setStagePos({ x: e.target.x(), y: e.target.y() });
-            }
-          }}
-          onTouchMove={(e) => {
-            const touches = e.evt.touches;
-            if (touches && touches.length === 2) {
-              e.evt.preventDefault();
-              const dx = touches[0].clientX - touches[1].clientX;
-              const dy = touches[0].clientY - touches[1].clientY;
-              const dist = Math.hypot(dx, dy);
-              if (pinchDistRef.current !== null && pinchDistRef.current > 0) {
-                const ratio = dist / pinchDistRef.current;
-                setStageScale((prev) => Math.max(0.22, Math.min(2.2, prev * ratio)));
-              }
-              pinchDistRef.current = dist;
-            }
-          }}
-          onTouchEnd={() => {
-            pinchDistRef.current = null;
-          }}
-          onWheel={(e) => {
-            e.evt.preventDefault();
-            const scaleBy = 1.08;
-            const oldScale = stageScale;
-            const nextScale = Math.max(
-              0.22,
-              Math.min(2.2, e.evt.deltaY < 0 ? oldScale * scaleBy : oldScale / scaleBy)
-            );
-            setStageScale(nextScale);
-          }}
-          onMouseMove={(e) => {
-            if (!activeTargetingAction) return;
-            const stage = e.target.getStage();
-            const ptr = stage?.getPointerPosition();
-            if (!ptr) return;
-            const worldX = (ptr.x - stagePos.x) / stageScale;
-            const worldY = (ptr.y - stagePos.y) / stageScale;
-            setAimCurrent({ x: worldX, y: worldY });
-          }}
+      <div className="flex-1 relative overflow-hidden">
+        <ArenaScreenEffects
+          shakeTrigger={screenShake}
+          flashVignette={flashVignette}
         >
+          <Stage
+            width={dimensions.width}
+            height={dimensions.height - topBarHeight}
+            scaleX={stageScale}
+            scaleY={stageScale}
+            x={stagePos.x}
+            y={stagePos.y}
+            draggable={!activeTargetingAction}
+            onDragEnd={(e) => {
+              if (e.target === e.target.getStage()) {
+                setStagePos({ x: e.target.x(), y: e.target.y() });
+              }
+            }}
+            onTouchMove={(e) => {
+              const touches = e.evt.touches;
+              if (touches && touches.length === 2) {
+                e.evt.preventDefault();
+                const dx = touches[0].clientX - touches[1].clientX;
+                const dy = touches[0].clientY - touches[1].clientY;
+                const dist = Math.hypot(dx, dy);
+                if (pinchDistRef.current !== null && pinchDistRef.current > 0) {
+                  const ratio = dist / pinchDistRef.current;
+                  setStageScale((prev) => Math.max(0.22, Math.min(2.2, prev * ratio)));
+                }
+                pinchDistRef.current = dist;
+              }
+            }}
+            onTouchEnd={() => {
+              pinchDistRef.current = null;
+            }}
+            onWheel={(e) => {
+              e.evt.preventDefault();
+              const scaleBy = 1.08;
+              const oldScale = stageScale;
+              const nextScale = Math.max(
+                0.22,
+                Math.min(2.2, e.evt.deltaY < 0 ? oldScale * scaleBy : oldScale / scaleBy)
+              );
+              setStageScale(nextScale);
+            }}
+            onMouseMove={(e) => {
+              if (!activeTargetingAction) return;
+              const stage = e.target.getStage();
+              const ptr = stage?.getPointerPosition();
+              if (!ptr) return;
+              const worldX = (ptr.x - stagePos.x) / stageScale;
+              const worldY = (ptr.y - stagePos.y) / stageScale;
+              setAimCurrent({ x: worldX, y: worldY });
+            }}
+          >
           {/* Arena Map Floor */}
           <Layer
             listening={Boolean(activeTargetingAction)}
@@ -5362,7 +5532,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             </Layer>
           )}
 
-          {/* DM Tactical Arena Walls, Cover & Interactive Doorways Layer */}
+          {/* Dynamic Interactive Doorways Layer (Solid walls are hidden to players for realistic battlemap immersion) */}
           {activeMapWalls.length > 0 && (
             <Layer>
               {activeMapWalls.map((wall) => {
@@ -5374,65 +5544,56 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                 const pts = wall.points && wall.points.length >= 4 ? wall.points : [wx1, wy1, wx2, wy2];
                 const wType = wall.type || wall.wallType || 'solid';
                 const isDoor = wType === 'door' || wType === 'secret_door' || wType === 'secret';
-                const isWindow = wType === 'window' || wType === 'terrain';
+                
+                // Solid walls and windows are drawn on the map graphic, so their vector lines are hidden from player view
+                if (!isDoor) return null;
+
                 const isOpen = Boolean(wall.isOpen || wall.doorState === 'open');
-                const strokeColor = isDoor
-                  ? isOpen
-                    ? '#10b981'
-                    : '#f59e0b'
-                  : isWindow
-                  ? '#38bdf8'
-                  : '#f43f5e';
+                const strokeColor = isOpen ? '#10b981' : '#f59e0b';
                 const midX = (pts[0] + pts[pts.length - 2]) / 2;
                 const midY = (pts[1] + pts[pts.length - 1]) / 2;
 
                 return (
                   <Group
                     key={wall.id}
-                    listening={isDoor}
+                    listening={true}
                     onClick={(e) => {
-                      if (isDoor) {
-                        e.cancelBubble = true;
-                        handleToggleArenaDoor(wall.id);
-                      }
+                      e.cancelBubble = true;
+                      handleToggleArenaDoor(wall.id);
                     }}
                     onTap={(e) => {
-                      if (isDoor) {
-                        e.cancelBubble = true;
-                        handleToggleArenaDoor(wall.id);
-                      }
+                      e.cancelBubble = true;
+                      handleToggleArenaDoor(wall.id);
                     }}
                   >
                     <Line
                       points={pts}
                       stroke={strokeColor}
-                      strokeWidth={isDoor ? 9 : isWindow ? 6 : 8}
-                      dash={isDoor && isOpen ? [10, 10] : isWindow ? [8, 6] : undefined}
+                      strokeWidth={8}
+                      dash={isOpen ? [10, 10] : undefined}
                       lineCap="round"
                       lineJoin="round"
                       shadowColor="#000000"
-                      shadowBlur={8}
-                      shadowOpacity={0.75}
-                      opacity={isDoor && isOpen ? 0.55 : 0.92}
+                      shadowBlur={6}
+                      shadowOpacity={0.7}
+                      opacity={isOpen ? 0.6 : 0.95}
                     />
-                    {isDoor && (
-                      <Group x={midX} y={midY}>
-                        <Circle
-                          radius={13}
-                          fill="#09090b"
-                          stroke={strokeColor}
-                          strokeWidth={2.5}
-                        />
-                        <Text
-                          x={-9}
-                          y={-6}
-                          width={18}
-                          align="center"
-                          text={isOpen ? '🔓' : '🚪'}
-                          fontSize={11}
-                        />
-                      </Group>
-                    )}
+                    <Group x={midX} y={midY}>
+                      <Circle
+                        radius={13}
+                        fill="#09090b"
+                        stroke={strokeColor}
+                        strokeWidth={2}
+                      />
+                      <Text
+                        x={-9}
+                        y={-6}
+                        width={18}
+                        align="center"
+                        text={isOpen ? '🔓' : '🚪'}
+                        fontSize={11}
+                      />
+                    </Group>
                   </Group>
                 );
               })}
@@ -5554,6 +5715,21 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                     setActiveTokenMenu({ id: clicked.id, x: clientX, y: clientY });
                   }}
                   onClickToken={(clicked) => {
+                    // Select hero for dynamic Field of View vision cone/circle
+                    setSelectedHeroFovId(clicked.id);
+                    setInspectedTargetCombatant({
+                      id: clicked.id,
+                      name: clicked.name,
+                      avatar: clicked.avatarUrl,
+                      team: clicked.team,
+                      currentHp: clicked.currentHp,
+                      maxHp: clicked.maxHp,
+                      tempHp: clicked.tempHp,
+                      ac: clicked.ac,
+                      classOrCr: clicked.classOrCr,
+                      conditions: clicked.conditions,
+                    });
+
                     if (!activeCombatant || activeCombatant.isAI) return;
                     if (activeTargetingAction) {
                       executeCombatAction(activeCombatant, clicked, activeTargetingAction);
@@ -5579,6 +5755,18 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             </Layer>
           )}
 
+          {/* Dynamic Field of View & Line-of-Sight Occlusion Layer */}
+          <ArenaDynamicVisionLayer
+            arenaWidth={arenaWidth}
+            arenaHeight={arenaHeight}
+            walls={activeMapWalls}
+            gridSize={arenaGridSize}
+            selectedToken={
+              combatants.find((c) => c.id === (selectedHeroFovId || activeCombatant?.id)) || null
+            }
+            enabled={arenaConfig.enforceWalls}
+          />
+
           {/* Dynamic JB2A Aiming Reticle Layer (Targeting preview while aiming) */}
           {activeEquippedAsset && aimOrigin && aimCurrent && (
             <Layer listening={false}>
@@ -5591,7 +5779,34 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
               />
             </Layer>
           )}
-        </Stage>
+          </Stage>
+        </ArenaScreenEffects>
+
+        {/* Video Game Top Target Health Bar */}
+        <ArenaTargetHealthBar
+          target={inspectedTargetCombatant}
+          onDeselect={() => setInspectedTargetCombatant(null)}
+        />
+
+        {/* Video Game Animated Turn Change Banner */}
+        {activeCombatant && (
+          <ArenaTurnBanner
+            actorName={activeCombatant.name}
+            round={round}
+            team={activeCombatant.team}
+            avatar={activeCombatant.avatarUrl}
+            turnKey={turnBannerKey}
+          />
+        )}
+
+        {/* Video Game Floating Combat Text Overlay (World Space Projection) */}
+        <ArenaFloatingCombatText
+          items={floatingCombatTexts}
+          stagePos={stagePos}
+          stageScale={stageScale}
+          arenaGridSize={arenaGridSize}
+          onItemExpired={handleExpireFloatingText}
+        />
 
         {/* JB2A Animated Spells & Weapon FX Overlay */}
         <DomEffectOverlay
@@ -5853,6 +6068,17 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
               `Rolled ${result.total} (d20: ${result.d20} + ${pendingManualDicePrompt.hitBonus}) vs AC ${target.ac}`
             );
             toast.error(`${actor.name}'s ${action.name} missed ${target.name} (${result.total} vs AC ${target.ac})`);
+            soundCatalog.play('shield_clash', 0.65);
+
+            // Floating Combat Text: Miss
+            spawnFloatingText(
+              target.id,
+              target.x + ((target.size || 1) * arenaGridSize) / 2,
+              target.y + ((target.size || 1) * arenaGridSize) / 2,
+              `MISS (AC ${target.ac})`,
+              'miss'
+            );
+
             setPendingManualDicePrompt(null);
             return;
           }
@@ -5900,6 +6126,14 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
               `healed ${target.name} with ${action.name} for +${healAmount} HP!`,
               result.breakdown
             );
+            soundCatalog.play('radiant_heal', 0.85);
+            spawnFloatingText(
+              target.id,
+              target.x + ((target.size || 1) * arenaGridSize) / 2,
+              target.y + ((target.size || 1) * arenaGridSize) / 2,
+              `+${healAmount} HP`,
+              'heal'
+            );
             toast.success(`💚 Restored +${healAmount} HP to ${target.name}!`);
           } else {
             const dmgAmount = result.damageTotal;
@@ -5920,6 +6154,27 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
               `Damage: ${result.breakdown}`,
               result.isCrit
             );
+
+            // Tactile hit feedback
+            const targetCenterX = target.x + ((target.size || 1) * arenaGridSize) / 2;
+            const targetCenterY = target.y + ((target.size || 1) * arenaGridSize) / 2;
+            spawnFloatingText(
+              target.id,
+              targetCenterX,
+              targetCenterY,
+              result.isCrit ? `💥 CRIT! -${dmgAmount}` : `-${dmgAmount}`,
+              result.isCrit ? 'crit' : 'damage'
+            );
+            if (result.isCrit) {
+              triggerScreenShake('heavy', 450);
+              triggerVignette('crit');
+              soundCatalog.play('thunder_boom', 0.85);
+            } else if (dmgAmount >= 18) {
+              triggerScreenShake('medium', 300);
+            } else {
+              triggerScreenShake('light', 180);
+            }
+
             toast.success(`⚔️ ${actor.name} dealt ${dmgAmount} damage to ${target.name}!`);
           }
 
@@ -6413,43 +6668,37 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         onClose={() => setInspectedRule(null)}
       />
 
-      {/* Victory / Defeat Modal */}
-      {winnerTeam && (
-        <div className="fixed inset-0 z-[260] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-zinc-950 border border-amber-500/50 rounded-3xl p-8 max-w-md w-full text-center space-y-5 shadow-2xl">
-            <div className="w-16 h-16 rounded-2xl bg-amber-500/20 border border-amber-400/50 flex items-center justify-center mx-auto text-amber-400">
-              <Trophy className="w-9 h-9" />
-            </div>
-            <div>
-              <span className="text-xs font-mono uppercase tracking-widest text-amber-400 font-bold">
-                Arena Match Complete ({round} Rounds)
-              </span>
-              <h2 className="text-2xl font-extrabold text-white font-mono mt-1">
-                {winnerTeam === 'gold' ? '🏆 Team Gold Wins!' : '💀 Team Crimson Wins!'}
-              </h2>
-              <p className="text-xs text-zinc-400 mt-1">
-                All opposing combatants have been defeated in the Arena.
-              </p>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-3 pt-2">
-              <button
-                type="button"
-                onClick={handleStartArenaMatch}
-                className="flex-1 py-3 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-mono font-bold text-xs cursor-pointer"
-              >
-                Instant Rematch
-              </button>
-              <button
-                type="button"
-                onClick={() => setPhase('lobby')}
-                className="flex-1 py-3 px-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-mono font-bold text-xs cursor-pointer"
-              >
-                Arena Lobby
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Arena Match Start "VS" Intro Modal */}
+      <ArenaMatchIntroModal
+        isOpen={showIntroModal}
+        onFinish={() => setShowIntroModal(false)}
+        goldTeam={combatants.filter((c) => c.team === 'gold')}
+        crimsonTeam={combatants.filter((c) => c.team === 'crimson')}
+        matchModeLabel={matchMode.toUpperCase()}
+      />
+
+      {/* Arcade Style Victory / Defeat Post-Match Modal with MVP & Stats */}
+      <ArenaVictoryDefeatModal
+        isOpen={Boolean(winnerTeam)}
+        winnerTeam={winnerTeam}
+        rounds={round}
+        stats={combatants.map((c) => {
+          const s = combatStatsMap[c.id] || { damageDealt: 0, damageTaken: 0, healingDealt: 0, kills: 0 };
+          return {
+            id: c.id,
+            name: c.name,
+            avatarUrl: c.avatarUrl,
+            team: c.team,
+            damageDealt: s.damageDealt,
+            damageTaken: s.damageTaken,
+            healingDealt: s.healingDealt,
+            kills: s.kills,
+            survived: c.currentHp > 0
+          };
+        })}
+        onRematch={handleStartArenaMatch}
+        onLobby={() => setPhase('lobby')}
+      />
 
       {/* Save Arena Modal */}
       {renderSaveArenaModal()}
