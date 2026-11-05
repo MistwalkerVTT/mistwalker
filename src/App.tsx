@@ -359,6 +359,7 @@ export default function App() {
 
   // MistWalker always loads directly onto the Home Screen Hub on app launch/refresh (imageFile = null)
   const [imageFile, setImageFile] = useState<string | null>(null);
+  const [mapType, setMapType] = useState<'image' | 'video'>('image');
 
   // Universal Undo/Redo Reactive State
   const [canUndoState, setCanUndoState] = useState<boolean>(false);
@@ -371,7 +372,12 @@ export default function App() {
     });
     return () => unsub();
   }, []);
-  const [mapType, setMapType] = useState<'image' | 'video'>('image');
+
+  const [imgWithCors, statusWithCors] = useImage(mapType === 'image' ? (imageFile || '') : '', 'anonymous');
+  const [imgNoCors, statusNoCors] = useImage(statusWithCors === 'failed' && mapType === 'image' ? (imageFile || '') : '');
+  const image = statusWithCors === 'loaded' ? imgWithCors : (statusNoCors === 'loaded' ? imgNoCors : (imgWithCors || imgNoCors));
+  const imageStatus = statusWithCors === 'loaded' ? 'loaded' : (statusNoCors === 'loaded' ? 'loaded' : (statusWithCors === 'failed' && statusNoCors === 'failed' ? 'failed' : 'loading'));
+
   const [mapLoadingState, setMapLoadingState] = useState<MapLoadingState>({
     isLoading: false,
     sceneTitle: '',
@@ -380,52 +386,6 @@ export default function App() {
     slotName: 'DM1'
   });
 
-  // Synchronize Map Loading Spin Dial with battlemap image loading & GPU decode pipeline
-  useEffect(() => {
-    if (mapLoadingState.isLoading) {
-      if (mapType === 'image' && imageStatus === 'loaded') {
-        const timer = setTimeout(() => {
-          setMapLoadingState(prev => ({ ...prev, isLoading: false, phase: 'ready' }));
-        }, 120);
-        return () => clearTimeout(timer);
-      } else if (mapType === 'video' && videoElement) {
-        const timer = setTimeout(() => {
-          setMapLoadingState(prev => ({ ...prev, isLoading: false, phase: 'ready' }));
-        }, 200);
-        return () => clearTimeout(timer);
-      } else if (imageStatus === 'failed') {
-        setMapLoadingState(prev => ({ ...prev, isLoading: false }));
-      }
-    }
-  }, [mapLoadingState.isLoading, imageStatus, mapType, videoElement]);
-
-  // Safety fallback: auto-clear map loading overlay after 8 seconds
-  useEffect(() => {
-    if (mapLoadingState.isLoading) {
-      const safetyTimeout = setTimeout(() => {
-        setMapLoadingState(prev => ({ ...prev, isLoading: false }));
-      }, 8000);
-      return () => clearTimeout(safetyTimeout);
-    }
-  }, [mapLoadingState.isLoading]);
-
-  // If a battlemap starts loading outside handleLoadSceneFromCampaign (e.g. initial hydration or slot change)
-  useEffect(() => {
-    if (imageStatus === 'loading' && imageFile && mapType === 'image' && !mapLoadingState.isLoading) {
-      setMapLoadingState({
-        isLoading: true,
-        sceneTitle: activeSceneInfo?.sceneTitle || 'Battlemap',
-        campaignTitle: activeSceneInfo?.sceneTitle ? 'Campaign Scene' : 'Battlemap Sector',
-        phase: 'decoding',
-        slotName: activeMapId
-      });
-    }
-  }, [imageStatus, imageFile, mapType, mapLoadingState.isLoading, activeSceneInfo, activeMapId]);
-
-  const [imgWithCors, statusWithCors] = useImage(mapType === 'image' ? (imageFile || '') : '', 'anonymous');
-  const [imgNoCors, statusNoCors] = useImage(statusWithCors === 'failed' && mapType === 'image' ? (imageFile || '') : '');
-  const image = statusWithCors === 'loaded' ? imgWithCors : (statusNoCors === 'loaded' ? imgNoCors : (imgWithCors || imgNoCors));
-  const imageStatus = statusWithCors === 'loaded' ? 'loaded' : (statusNoCors === 'loaded' ? 'loaded' : (statusWithCors === 'failed' && statusNoCors === 'failed' ? 'failed' : 'loading'));
   const broadcastState = useCallback((_force?: boolean) => {
     if (socketRef.current?.connected && imageFile && (activeMapIdRef.current === liveMapIdRef.current)) {
       socketRef.current.emit('SYNC_IMAGE', imageFile);
@@ -1349,6 +1309,48 @@ export default function App() {
   const [customAuraColorInput, setCustomAuraColorInput] = useState<string>('rgba(234, 179, 8, 0.4)');
   const [customAuraOpacityInput, setCustomAuraOpacityInput] = useState<number>(0.35);
   const [customAuraNameInput, setCustomAuraNameInput] = useState<string>('');
+
+  // Synchronize Map Loading Spin Dial with battlemap image loading & GPU decode pipeline
+  useEffect(() => {
+    if (mapLoadingState.isLoading) {
+      if (mapType === 'image' && imageStatus === 'loaded') {
+        const timer = setTimeout(() => {
+          setMapLoadingState(prev => ({ ...prev, isLoading: false, phase: 'ready' }));
+        }, 120);
+        return () => clearTimeout(timer);
+      } else if (mapType === 'video' && videoElement) {
+        const timer = setTimeout(() => {
+          setMapLoadingState(prev => ({ ...prev, isLoading: false, phase: 'ready' }));
+        }, 200);
+        return () => clearTimeout(timer);
+      } else if (imageStatus === 'failed') {
+        setMapLoadingState(prev => ({ ...prev, isLoading: false }));
+      }
+    }
+  }, [mapLoadingState.isLoading, imageStatus, mapType, videoElement]);
+
+  // Safety fallback: auto-clear map loading overlay after 8 seconds
+  useEffect(() => {
+    if (mapLoadingState.isLoading) {
+      const safetyTimeout = setTimeout(() => {
+        setMapLoadingState(prev => ({ ...prev, isLoading: false }));
+      }, 8000);
+      return () => clearTimeout(safetyTimeout);
+    }
+  }, [mapLoadingState.isLoading]);
+
+  // If a battlemap starts loading outside handleLoadSceneFromCampaign (e.g. initial hydration or slot change)
+  useEffect(() => {
+    if (imageStatus === 'loading' && imageFile && mapType === 'image' && !mapLoadingState.isLoading) {
+      setMapLoadingState({
+        isLoading: true,
+        sceneTitle: activeSceneInfo?.sceneTitle || 'Battlemap',
+        campaignTitle: activeSceneInfo?.sceneTitle ? 'Campaign Scene' : 'Battlemap Sector',
+        phase: 'decoding',
+        slotName: activeMapId
+      });
+    }
+  }, [imageStatus, imageFile, mapType, mapLoadingState.isLoading, activeSceneInfo, activeMapId]);
 
   // Environmental Animated FX & Weather State on Main Board (Uploaded & Generated Maps)
   const [boardAnimatedFeatures, setBoardAnimatedFeatures] = useState<AnimatedFeature[]>([]);
