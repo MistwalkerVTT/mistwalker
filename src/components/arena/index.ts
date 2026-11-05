@@ -5,3 +5,4 @@ export * from './ArenaTurnBanner';
 export * from './ArenaMatchIntroModal';
 export * from './ArenaVictoryDefeatModal';
 export * from './ArenaDynamicVisionLayer';
+export * from './ArenaLoadingScreen';

@@ -99,7 +99,8 @@ import {
   ArenaMatchIntroModal,
   ArenaVictoryDefeatModal,
   CombatantStatSummary,
-  ArenaDynamicVisionLayer
+  ArenaDynamicVisionLayer,
+  ArenaLoadingScreen
 } from './arena';
 import {
   ArenaConfig,
@@ -1505,6 +1506,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
   const [showIntroModal, setShowIntroModal] = useState<boolean>(false);
   const [combatStatsMap, setCombatStatsMap] = useState<Record<string, { damageDealt: number; damageTaken: number; healingDealt: number; kills: number }>>({});
   const [selectedHeroFovId, setSelectedHeroFovId] = useState<string | null>(null);
+  const [isArenaLoading, setIsArenaLoading] = useState<boolean>(true);
 
   const trackCombatStat = useCallback((actorId: string, type: 'damageDealt' | 'damageTaken' | 'healingDealt' | 'kills', amount: number = 1) => {
     setCombatStatsMap((prev) => {
@@ -6702,6 +6704,13 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
 
       {/* Save Arena Modal */}
       {renderSaveArenaModal()}
+
+      {/* Arcade Style Battle Arena Colosseum Loading Screen */}
+      <ArenaLoadingScreen
+        isLoading={isArenaLoading}
+        arenaTitle={arenaName || selectedMap?.name || 'Grand Colosseum'}
+        onFinish={() => setIsArenaLoading(false)}
+      />
     </div>
   );
 };

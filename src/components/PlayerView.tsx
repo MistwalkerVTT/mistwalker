@@ -8030,17 +8030,19 @@ export default function PlayerView() {
       )}
 
 
-      {/* Tactical Map Loading Spin Dial */}
-      <MapLoadingSpinDial
-        variant="player"
-        loadingState={{
-          isLoading: Boolean(imageStatus === 'loading' && !image && imageFile && !isVideo),
-          sceneTitle: activeSceneInfo?.sceneTitle || 'Battlemap',
-          campaignTitle: 'Synchronizing with DM...',
-          phase: 'streaming',
-          slotName: 'Player Station'
-        }}
-      />
+      {/* Tactical Map Loading Spin Dial (Strictly for DM live scenes when Player View is syncing with DM, suppressed when Battle Arena is open) */}
+      {!showArenaMode && (
+        <MapLoadingSpinDial
+          variant="player"
+          loadingState={{
+            isLoading: Boolean(imageStatus === 'loading' && !image && imageFile && !isVideo),
+            sceneTitle: activeSceneInfo?.sceneTitle || 'Battlemap',
+            campaignTitle: 'Synchronizing with DM...',
+            phase: 'streaming',
+            slotName: 'Player Station'
+          }}
+        />
+      )}
 
       {/* Failed Image Load State */}
       {imageStatus === 'failed' && !image && imageFile && !isVideo && (
