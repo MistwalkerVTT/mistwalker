@@ -3816,7 +3816,13 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       // Trigger 3D physics roll with all the spell/weapon damage dice so the exact dice count and dice types tumble independently!
       const damageDelayMs = onTrigger3dDice ? 1350 : 0;
       window.setTimeout(() => {
-        if (onTrigger3dDice && dmgRoll.dice.length > 0) {
+        if (onTrigger3dDice) {
+          const formulaMatch = atkDamageFormula.match(/(\d*)d(\d+)/i);
+          const fallbackSides = formulaMatch ? parseInt(formulaMatch[2], 10) : 8;
+          const effectiveDice = dmgRoll.dice && dmgRoll.dice.length > 0
+            ? dmgRoll.dice
+            : [{ sides: fallbackSides, result: Math.max(1, Math.min(fallbackSides, finalDamage)), type: `d${fallbackSides}` }];
+
           onTrigger3dDice({
             id: `arena-hit-dmg-${Date.now()}`,
             characterName: actor.name,
@@ -3824,7 +3830,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             rollType: 'damage',
             formula: `${atkDamageFormula} → ${dmgRoll.breakdown}`,
             diceNotation: atkDamageFormula,
-            dice: dmgRoll.dice,
+            dice: effectiveDice,
             modifier: dmgRoll.bonus,
             total: finalDamage,
             isCritical: isCrit,

@@ -40,9 +40,18 @@ export function isValidDiceNotation(notation: string): boolean {
  */
 export function sanitizeDiceFormula(input: string): string {
   if (!input) return '1d20';
-  return String(input)
-    .split(/→|=/)[0]
-    .replace(/\([^)]*\)/g, ' ')
+  let str = String(input).split(/→|=/)[0].trim();
+
+  // If input contains parenthesized dice formula e.g. "7 (1d8 + 3)" or "18 (4d8)", extract the dice formula
+  const parenDiceMatch = str.match(/\(([^)]*\d+d\d+[^)]*)\)/i);
+  if (parenDiceMatch) {
+    str = parenDiceMatch[1];
+  } else {
+    // Strip parenthetical non-dice notes like '(slashing)' or '(fire)'
+    str = str.replace(/\([^)]*\)/g, ' ');
+  }
+
+  return str
     .replace(/\b\d+(?:st|nd|rd|th)\b/gi, ' ')
     .replace(/\[[^\]]*\]/g, ' ')
     .replace(/damage|healing|slashing|piercing|bludgeoning|fire|cold|lightning|radiant|necrotic|poison|acid|force|psychic|thunder/gi, ' ')

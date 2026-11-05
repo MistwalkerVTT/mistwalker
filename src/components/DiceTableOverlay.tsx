@@ -128,7 +128,7 @@ export const DiceTableOverlay: React.FC<Props> = ({
         if (sides === 8) return 'd8';
         if (sides === 6) return 'd6';
         if (sides === 4) return 'd4';
-        return 'd20';
+        return isHealOrDamageOnly ? 'd8' : 'd20';
       };
 
       const requests: DieRollRequest[] = [];
@@ -145,10 +145,10 @@ export const DiceTableOverlay: React.FC<Props> = ({
         }
       } else {
         // Fallback for roll without explicit dice array
-        const notation = rollData.diceNotation || rollData.formula || '1d20';
+        const notation = rollData.diceNotation || rollData.formula || (isHealOrDamageOnly ? '1d8' : '1d20');
         const match = notation.match(/([0-9]*)d([0-9]+)/i);
         const count = match && match[1] ? Math.max(1, Math.min(10, parseInt(match[1], 10))) : 1;
-        const sides = match ? parseInt(match[2], 10) : 20;
+        const sides = match ? parseInt(match[2], 10) : (isHealOrDamageOnly ? 8 : 20);
         const dieType = resolveType(undefined, sides);
         const total = rollData.total ?? sides;
 

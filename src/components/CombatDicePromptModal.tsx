@@ -306,8 +306,8 @@ export const CombatDicePromptModal: React.FC<CombatDicePromptModalProps> = ({
         advantageMode
       });
     } else {
-      // In-game 3D roll for damage or heal
-      const evaluated = evaluateDiceFormula(effectiveDamageFormula, Boolean(isCrit));
+      // In-game 3D roll for damage or heal (effectiveDamageFormula already reflects critical hit dice doubling if isCrit is true)
+      const evaluated = evaluateDiceFormula(effectiveDamageFormula, false);
       const damageTotal = Math.max(0, evaluated.total);
 
       const diceEvent: DdbDiceRollEvent = {
