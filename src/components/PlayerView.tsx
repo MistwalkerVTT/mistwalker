@@ -74,6 +74,7 @@ import { getImageTransform } from '../lib/canvasTransforms';
 import { DND_CONDITIONS } from '../data/defaultTokens';
 import { AnimatedFeaturesKonvaImage, AnimatedFeature, WeatherEffectType } from './AnimatedMapOverlay';
 import { DiceTableOverlay } from './DiceTableOverlay';
+import { MapLoadingSpinDial } from './MapLoadingSpinDial';
 import { PlayerDiceRollerModal } from './PlayerDiceRollerModal';
 import { DdbDiceRollEvent } from '../types/dice';
 import { DICE_COLOR_PRESETS, DiceColorPreset } from '../graphics/dice/diceTextures';
@@ -8029,17 +8030,17 @@ export default function PlayerView() {
       )}
 
 
-      {/* Loading Overlay */}
-      {imageStatus === 'loading' && !image && imageFile && !isVideo && (
-        <div className="absolute inset-0 z-40 flex items-center justify-center bg-zinc-950/80 backdrop-blur-sm pointer-events-none">
-          <div className="flex flex-col items-center gap-3 text-zinc-400">
-            <Loader2 className="w-8 h-8 animate-spin text-emerald-400" />
-            <span className="text-sm font-mono tracking-wider text-zinc-300">
-              Mounting Full-Resolution Battlemap...
-            </span>
-          </div>
-        </div>
-      )}
+      {/* Tactical Map Loading Spin Dial */}
+      <MapLoadingSpinDial
+        variant="player"
+        loadingState={{
+          isLoading: Boolean(imageStatus === 'loading' && !image && imageFile && !isVideo),
+          sceneTitle: activeSceneInfo?.sceneTitle || 'Battlemap',
+          campaignTitle: 'Synchronizing with DM...',
+          phase: 'streaming',
+          slotName: 'Player Station'
+        }}
+      />
 
       {/* Failed Image Load State */}
       {imageStatus === 'failed' && !image && imageFile && !isVideo && (

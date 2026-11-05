@@ -74,6 +74,7 @@ import { JB2A_REGISTRY, findJb2aAsset } from './effects/db/jb2aRegistry';
 import { getAuraVideoUrl } from './effects/db/tokenFxMap';
 import { MainCampaignBar } from './components/MainCampaignBar';
 import { DashboardHomeHub } from './components/DashboardHomeHub';
+import { MapLoadingSpinDial, MapLoadingState } from './components/MapLoadingSpinDial';
 import { AVAILABLE_TOKENS, type AvailableTokenItem, CONDITIONS, DND_CONDITIONS } from './data/defaultTokens';
 import { getImageTransform } from './lib/canvasTransforms';
 import { GifImage } from './components/canvas/GifImage';
@@ -371,6 +372,56 @@ export default function App() {
     return () => unsub();
   }, []);
   const [mapType, setMapType] = useState<'image' | 'video'>('image');
+  const [mapLoadingState, setMapLoadingState] = useState<MapLoadingState>({
+    isLoading: false,
+    sceneTitle: '',
+    campaignTitle: '',
+    phase: 'resolving',
+    slotName: 'DM1'
+  });
+
+  // Synchronize Map Loading Spin Dial with battlemap image loading & GPU decode pipeline
+  useEffect(() => {
+    if (mapLoadingState.isLoading) {
+      if (mapType === 'image' && imageStatus === 'loaded') {
+        const timer = setTimeout(() => {
+          setMapLoadingState(prev => ({ ...prev, isLoading: false, phase: 'ready' }));
+        }, 120);
+        return () => clearTimeout(timer);
+      } else if (mapType === 'video' && videoElement) {
+        const timer = setTimeout(() => {
+          setMapLoadingState(prev => ({ ...prev, isLoading: false, phase: 'ready' }));
+        }, 200);
+        return () => clearTimeout(timer);
+      } else if (imageStatus === 'failed') {
+        setMapLoadingState(prev => ({ ...prev, isLoading: false }));
+      }
+    }
+  }, [mapLoadingState.isLoading, imageStatus, mapType, videoElement]);
+
+  // Safety fallback: auto-clear map loading overlay after 8 seconds
+  useEffect(() => {
+    if (mapLoadingState.isLoading) {
+      const safetyTimeout = setTimeout(() => {
+        setMapLoadingState(prev => ({ ...prev, isLoading: false }));
+      }, 8000);
+      return () => clearTimeout(safetyTimeout);
+    }
+  }, [mapLoadingState.isLoading]);
+
+  // If a battlemap starts loading outside handleLoadSceneFromCampaign (e.g. initial hydration or slot change)
+  useEffect(() => {
+    if (imageStatus === 'loading' && imageFile && mapType === 'image' && !mapLoadingState.isLoading) {
+      setMapLoadingState({
+        isLoading: true,
+        sceneTitle: activeSceneInfo?.sceneTitle || 'Battlemap',
+        campaignTitle: activeSceneInfo?.sceneTitle ? 'Campaign Scene' : 'Battlemap Sector',
+        phase: 'decoding',
+        slotName: activeMapId
+      });
+    }
+  }, [imageStatus, imageFile, mapType, mapLoadingState.isLoading, activeSceneInfo, activeMapId]);
+
   const [imgWithCors, statusWithCors] = useImage(mapType === 'image' ? (imageFile || '') : '', 'anonymous');
   const [imgNoCors, statusNoCors] = useImage(statusWithCors === 'failed' && mapType === 'image' ? (imageFile || '') : '');
   const image = statusWithCors === 'loaded' ? imgWithCors : (statusNoCors === 'loaded' ? imgNoCors : (imgWithCors || imgNoCors));
@@ -3324,6 +3375,14 @@ export default function App() {
     const targetSlot = (targetView || activeMapIdRef.current) as 'DM1' | 'DM2' | 'DM3';
     let fullResUrl = '';
 
+    setMapLoadingState({
+      isLoading: true,
+      sceneTitle: scene.sceneTitle || 'Battlemap',
+      campaignTitle: campaignId !== '__arena__' ? (chapterId ? `Chapter: ${chapterId}` : 'Campaign Scene') : 'Battle Arena',
+      phase: 'resolving',
+      slotName: targetSlot
+    });
+
     // Check in-memory sync cache first (0ms instantaneous lookup)
     const memCached = getMemoryAssetSync(`scene_${scene.sceneId}`) ||
       (scene.mapUrl ? getMemoryAssetSync(scene.mapUrl.replace('local:', '')) : null) ||
@@ -3355,6 +3414,7 @@ export default function App() {
     const effectiveMapUrl = (!isThumbnail && !candidateUrl.startsWith('local:')) ? candidateUrl : '';
 
     if (effectiveMapUrl) {
+      setMapLoadingState(prev => ({ ...prev, phase: 'decoding' }));
       const isVideo = isVideoAsset(effectiveMapUrl) || isVideoAsset(scene.mapUrl);
       setMapType(isVideo ? 'video' : 'image');
       setImageFile(effectiveMapUrl);
@@ -3375,6 +3435,7 @@ export default function App() {
 
     // If not already resolved via isPotentiallyDeadOrLocal, run background resolution check
     if (!fullResUrl && (scene.mapUrl || scene.sceneTitle || scene.sceneId)) {
+      setMapLoadingState(prev => ({ ...prev, phase: 'streaming' }));
       try {
         const resolvedMapUrl = await resolveMapSource(scene, uploadedMaps);
         const bestUrl = resolvedMapUrl || scene.mapUrl || '';
@@ -9594,14 +9655,7 @@ export default function App() {
               accept="image/*,video/*,.m4v"
               onChange={handleRelinkMapImage}
             />
-            {imageStatus === 'loading' && imageFile && mapType === 'image' && (
-              <div className="absolute inset-0 z-20 pointer-events-none flex flex-col items-center justify-center bg-zinc-950/60 backdrop-blur-sm animate-in fade-in duration-200">
-                <div className="flex items-center gap-3 px-5 py-3 rounded-2xl bg-zinc-900/90 border border-amber-500/30 shadow-2xl text-amber-200 font-mono text-xs">
-                  <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
-                  <span>Loading Battlemap...</span>
-                </div>
-              </div>
-            )}
+
             <Stage
               width={Math.max(100, (dimensions.width || (typeof window !== 'undefined' ? window.innerWidth : 1920)) - 64)}
               height={Math.max(100, dimensions.height || (typeof window !== 'undefined' ? window.innerHeight : 1080))}
@@ -13442,6 +13496,12 @@ export default function App() {
         onDuplicateFeature={handleDuplicateFeature}
         onStartStampingFeature={handleStartStampingFeature}
         gridSize={gridSize}
+      />
+
+      <MapLoadingSpinDial
+        loadingState={mapLoadingState}
+        variant="dm"
+        onCancel={() => setMapLoadingState(prev => ({ ...prev, isLoading: false }))}
       />
 
       </main>
