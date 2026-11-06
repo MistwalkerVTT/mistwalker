@@ -75,6 +75,7 @@ import { DND_CONDITIONS } from '../data/defaultTokens';
 import { AnimatedFeaturesKonvaImage, AnimatedFeature, WeatherEffectType } from './AnimatedMapOverlay';
 import { DiceTableOverlay } from './DiceTableOverlay';
 import { MapLoadingSpinDial } from './MapLoadingSpinDial';
+import { ArenaLoadingScreen } from './arena';
 import { PlayerDiceRollerModal } from './PlayerDiceRollerModal';
 import { DdbDiceRollEvent } from '../types/dice';
 import { DICE_COLOR_PRESETS, DiceColorPreset } from '../graphics/dice/diceTextures';
@@ -8035,14 +8036,14 @@ export default function PlayerView() {
       )}
 
 
-      {/* Tactical Map Loading Spin Dial (Strictly for DM live scenes when Player View is syncing with DM, suppressed when Battle Arena is open) */}
+      {/* Generic Map Loading Spin Dial for Player View (strictly for DM live scenes when Player View is syncing with DM, suppressed when Battle Arena is open) */}
       {!showArenaMode && (
         <MapLoadingSpinDial
           variant="player"
           loadingState={{
             isLoading: Boolean(imageStatus === 'loading' && !image && imageFile && !isVideo),
-            sceneTitle: activeSceneInfo?.sceneTitle || 'Battlemap',
-            campaignTitle: 'Synchronizing with DM...',
+            sceneTitle: 'Loading Tabletop...',
+            campaignTitle: 'Synchronizing with Dungeon Master...',
             phase: 'streaming',
             slotName: 'Player Station'
           }}
@@ -9769,7 +9770,7 @@ export default function PlayerView() {
 
       {/* Stand-Alone Player Battle Arena & Turn-Based Colosseum */}
       {showArenaMode && (
-        <React.Suspense fallback={null}>
+        <React.Suspense fallback={<ArenaLoadingScreen isLoading={true} arenaTitle="Battle Arena" />}>
           <PlayerArenaMode
             isOpen={showArenaMode}
             onExitArena={() => setShowArenaMode(false)}

@@ -15,11 +15,18 @@ export interface MapLoadingSpinDialProps {
   onCancel?: () => void;
 }
 
-const PHASE_LABELS: Record<string, string> = {
+const DM_PHASE_LABELS: Record<string, string> = {
   resolving: 'Resolving Sector Coordinates...',
   streaming: 'Streaming High-Resolution Textures...',
   decoding: 'Mounting GPU Canvas & Calibrating...',
   ready: 'Battlemap Ready'
+};
+
+const PLAYER_PHASE_LABELS: Record<string, string> = {
+  resolving: 'Connecting to Tabletop...',
+  streaming: 'Loading Map & Tokens...',
+  decoding: 'Preparing Player Station...',
+  ready: 'Tabletop Ready'
 };
 
 export const MapLoadingSpinDial: React.FC<MapLoadingSpinDialProps> = ({
@@ -50,7 +57,18 @@ export const MapLoadingSpinDial: React.FC<MapLoadingSpinDialProps> = ({
   const ringSecondaryStroke = isDm ? '#d97706' : '#059669';
   const ringGlowColor = isDm ? 'rgba(245, 158, 11, 0.45)' : 'rgba(16, 185, 129, 0.45)';
 
-  const activePhaseText = PHASE_LABELS[phase] || 'Loading Battlemap...';
+  const phaseLabels = isDm ? DM_PHASE_LABELS : PLAYER_PHASE_LABELS;
+  const activePhaseText = phaseLabels[phase] || (isDm ? 'Loading Battlemap...' : 'Loading Tabletop...');
+
+  const badgeText = isDm
+    ? (slotName ? `Tactical Sector • ${slotName}` : 'Tactical Sector')
+    : 'MistWalker • Player Tabletop';
+
+  const headingText = isDm
+    ? (sceneTitle || 'Battlemap')
+    : (sceneTitle || 'Loading Tabletop...');
+
+  const subText = campaignTitle || (isDm ? undefined : 'Synchronizing with Dungeon Master...');
 
   return (
     <div
@@ -177,21 +195,25 @@ export const MapLoadingSpinDial: React.FC<MapLoadingSpinDialProps> = ({
         {/* Scene & Sector Context */}
         <div className="space-y-1.5 mb-4">
           <div className="flex items-center justify-center gap-1.5">
-            <MapPin className={`w-3.5 h-3.5 ${isDm ? 'text-amber-400' : 'text-emerald-400'}`} />
+            {isDm ? (
+              <MapPin className="w-3.5 h-3.5 text-amber-400" />
+            ) : (
+              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+            )}
             <span className={`text-[11px] font-mono uppercase tracking-widest font-bold ${
               isDm ? 'text-amber-400' : 'text-emerald-400'
             }`}>
-              {slotName ? `Tactical Sector • ${slotName}` : 'Tactical Sector'}
+              {badgeText}
             </span>
           </div>
 
           <h2 className="text-lg sm:text-2xl font-extrabold text-zinc-100 font-mono tracking-tight drop-shadow truncate max-w-xs sm:max-w-sm">
-            {sceneTitle || 'Battlemap'}
+            {headingText}
           </h2>
 
-          {campaignTitle && (
+          {subText && (
             <p className="text-xs text-zinc-400 font-sans truncate max-w-xs">
-              {campaignTitle}
+              {subText}
             </p>
           )}
         </div>
