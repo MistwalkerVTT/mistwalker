@@ -101,7 +101,6 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
   const [selectedSpellLevel, setSelectedSpellLevel] = useState<number | 'all'>('all');
   const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
   const [isMinimizedWhileAiming, setIsMinimizedWhileAiming] = useState<boolean>(false);
-  const [hoveredAction, setHoveredAction] = useState<MonsterActionItem | null>(null);
 
   // Auto-minimize the action tray while aiming on the battlemap (matching PlayerHeroDock)
   useEffect(() => {
@@ -894,8 +893,6 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                   <div
                     key={action.id || idx}
                     onClick={() => onSelectAction(action)}
-                    onMouseEnter={() => setHoveredAction(action)}
-                    onMouseLeave={() => setHoveredAction(null)}
                     onContextMenu={(e) => {
                       e.preventDefault();
                       if (onInspectRule) onInspectRule(action.name, action.type || 'action');
@@ -906,7 +903,9 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                         : 'border-zinc-800/90 hover:border-red-500/50 bg-zinc-900/80 hover:bg-zinc-900'
                     }`}
                     title={
-                      isMulti
+                      action.description
+                        ? `${action.name}: ${action.description}`
+                        : isMulti
                         ? `Click to aim ${action.name} sequence on the battlemap`
                         : `Click to aim ${action.name} on a target token`
                     }
@@ -1107,26 +1106,6 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                   </div>
                 );
               })}
-            </div>
-          )}
-
-          {/* Description Preview Tooltip Footer */}
-          {hoveredAction && (
-            <div className="relative px-3 py-1.5 pr-8 rounded-xl bg-zinc-900 border border-zinc-800 text-[11px] text-zinc-300 leading-snug animate-in fade-in duration-150">
-              <span className="font-bold text-red-300 mr-1.5">{hoveredAction.name}:</span>
-              <span>{hoveredAction.description}</span>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setHoveredAction(null);
-                }}
-                className="absolute top-1.5 right-1.5 p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
-                title="Close description"
-                aria-label="Close description"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
             </div>
           )}
         </div>
