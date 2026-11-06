@@ -1811,23 +1811,22 @@ export async function saveMonster(monster: Monster): Promise<Monster> {
     }
   }
 
-  if (typeof avatarUrl === 'string' && avatarUrl.startsWith('data:') && avatarUrl.length > 50000) {
+  if (typeof avatarUrl === 'string' && avatarUrl.startsWith('data:') && !avatarUrl.startsWith('data:image/svg+xml') && avatarUrl.length > 45000) {
     try {
       await saveLocalAsset(`avatar_${monsterId}`, avatarUrl);
-      const res = await fetch('/api/upload-base64', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ base64: avatarUrl, filename: `avatar_${monsterId}`, type: 'token' })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data?.url) avatarUrl = data.url;
-      } else {
-        const thumb = await createThumbnailDataUrl(avatarUrl, 160, 0.6);
-        avatarUrl = thumb || `local:avatar_${monsterId}`;
+      // Compress to a crisp 256x256 JPEG data URI (~15-25KB) so the rendered token is stored
+      // permanently inside the Firestore monsters document and never 404s across container restarts
+      const compactThumb = await createThumbnailDataUrl(avatarUrl, 256, 0.85);
+      if (compactThumb && compactThumb.length > 100 && compactThumb.length < 90000) {
+        avatarUrl = compactThumb;
+      } else if (avatarUrl.length > 140000) {
+        const smallerThumb = await createThumbnailDataUrl(avatarUrl, 192, 0.72);
+        if (smallerThumb && smallerThumb.length > 100) {
+          avatarUrl = smallerThumb;
+        }
       }
     } catch {
-      avatarUrl = `local:avatar_${monsterId}`;
+      // keep existing avatarUrl if under document threshold
     }
   }
 

@@ -107,6 +107,11 @@ import {
 } from './services/arenaConfigService';
 import { DEFAULT_MONSTERS } from './data/defaultMonsters';
 import { repairMonsterToken } from './data/srdMonstersCatalog';
+import {
+  needsMonsterTokenRender,
+  findDefaultCompendiumMonster,
+  ensureMonsterTokenRenderedAndSaved
+} from './services/monsterTokenRenderer';
 import { DEFAULT_CHARACTERS, getCharacterTokenUrl, getCharacterTokenDisplayName, resolveTokenCharacterStats, isDdbMatch } from './data/defaultCharacters';
 import { resolveCharacterCampaign } from './data/ddbCampaignRegistry';
 import { DEFAULT_ALLIES } from './data/defaultAllies';
@@ -932,12 +937,25 @@ export default function App() {
 
       const remoteList = Array.isArray(remoteMonsters) ? remoteMonsters : [];
       // Clean up any stale/orphaned ephemeral server upload tokens stored in Firestore
-      // so authoritative compendium and semantic fallbacks can supply live permanent images
+      // and automatically render & save permanent tokens for monsters lacking a default token
       const sanitizedRemoteList = remoteList.map(m => {
-        if (m.avatarUrl && typeof m.avatarUrl === 'string' && m.avatarUrl.startsWith('/uploads/token_')) {
-          const defMatch = DEFAULT_MONSTERS.find(d => d.name.toLowerCase() === m.name.toLowerCase());
-          if (defMatch?.avatarUrl && !defMatch.avatarUrl.startsWith('/uploads/token_')) {
-            return { ...m, avatarUrl: defMatch.avatarUrl, size: defMatch.size || m.size };
+        if (needsMonsterTokenRender(m)) {
+          const defMatch = findDefaultCompendiumMonster(m.name);
+          if (defMatch?.avatarUrl && !needsMonsterTokenRender(defMatch)) {
+            const healed = { ...m, avatarUrl: defMatch.avatarUrl, size: defMatch.size || m.size };
+            ensureMonsterTokenRenderedAndSaved(m).catch(() => {});
+            return healed;
+          } else {
+            // No default token exists -> render one and save it to Firestore
+            ensureMonsterTokenRenderedAndSaved(m, (saved) => {
+              setCompendiumMonsters(prev =>
+                prev.map(item =>
+                  item.monsterId === saved.monsterId || item.name.toLowerCase() === saved.name.toLowerCase()
+                    ? { ...item, avatarUrl: saved.avatarUrl }
+                    : item
+                )
+              );
+            }).catch(() => {});
           }
         }
         return m;
@@ -3288,6 +3306,38 @@ export default function App() {
         } : {})
       };
       const repaired = repairMonsterToken(rawToken, compendiumMonsters) as Token;
+      if (needsMonsterTokenRender({ name: repaired.name, avatarUrl: repaired.url })) {
+        const baseMonster: Monster = tokenData.customMonsterData || {
+          monsterId: `monster_${repaired.name.replace(/\s+\d+$/, '').trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
+          name: repaired.name.replace(/\s+\d+$/, '').trim(),
+          size: repaired.size >= 4 ? 'Gargantuan' : repaired.size === 3 ? 'Huge' : repaired.size === 2 ? 'Large' : 'Medium',
+          type: 'Creature',
+          alignment: 'Unaligned',
+          ac: repaired.ac || 13,
+          hp: repaired.hp || 35,
+          hpFormula: '',
+          speed: '30 ft.',
+          initiativeBonus: 1,
+          str: 14,
+          dex: 12,
+          con: 14,
+          int: 10,
+          wis: 11,
+          cha: 10,
+          challenge: '1',
+          proficiencyBonus: 2,
+          avatarUrl: repaired.url,
+          actions: [],
+          source: 'Encounter Notes'
+        };
+        ensureMonsterTokenRenderedAndSaved(baseMonster, (saved) => {
+          if (saved.avatarUrl) {
+            setTokens(curr => curr.map(t =>
+              t.id === repaired.id ? { ...t, url: saved.avatarUrl!, avatarUrl: saved.avatarUrl! } : t
+            ));
+          }
+        }).catch(() => {});
+      }
       return [...prev, repaired];
     });
   }, [getMapDimensions, gridSize, compendiumMonsters]);

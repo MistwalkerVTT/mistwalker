@@ -41,6 +41,11 @@ import { updateRoomAnnotation } from '../lib/updateRoomAnnotation';
 import { saveMonster, uploadAndRegisterAsset } from '../lib/firebase';
 import { resolveMonster, isExactMonsterMatch, isNonCreatureStatOrItem, SRD_MONSTERS } from '../data/srdMonstersCatalog';
 import { extractAndResolveRoomMonsters } from '../services/roomMonsterExtractor';
+import {
+  needsMonsterTokenRender,
+  ensureMonsterTokenRenderedAndSaved,
+  generateClientProceduralTokenDataUrl
+} from '../services/monsterTokenRenderer';
 import { ChapterFlowPanel } from './ChapterFlowPanel';
 import { toast } from 'sonner';
 import { NARRATION_VOICES, audioNarration, useAudioNarration } from '../services/audioNarrationService';
@@ -212,6 +217,13 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
   useEffect(() => {
     if (!isOpen || currentRoomMonsters.length === 0) return;
     currentRoomMonsters.forEach(({ monster }) => {
+      if (!monster) return;
+      if (needsMonsterTokenRender(monster)) {
+        ensureMonsterTokenRenderedAndSaved(monster).catch((err) => {
+          console.warn(`[RoomBriefingDrawer] Auto-render token warning for ${monster.name}:`, err);
+        });
+        return;
+      }
       const url = monster?.avatarUrl || (monster as any)?.url;
       if (url && typeof url === 'string' && url.startsWith('http')) {
         const img = new Image();
@@ -1950,6 +1962,14 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
                                   src={m.avatarUrl}
                                   alt={m.name}
                                   className="w-10 h-10 rounded-full border border-zinc-700/80 object-cover shrink-0 shadow-sm"
+                                  onError={(e) => {
+                                    const imgEl = e.currentTarget;
+                                    if (!imgEl.dataset.fallbackApplied) {
+                                      imgEl.dataset.fallbackApplied = 'true';
+                                      imgEl.src = generateClientProceduralTokenDataUrl(m.name, m.type);
+                                      ensureMonsterTokenRenderedAndSaved({ ...m, avatarUrl: '' }).catch(() => {});
+                                    }
+                                  }}
                                 />
                               ) : (
                                 <div className="w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700/80 flex items-center justify-center text-zinc-300 font-bold font-mono text-xs shrink-0 shadow-sm">

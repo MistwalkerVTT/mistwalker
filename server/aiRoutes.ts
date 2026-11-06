@@ -3197,7 +3197,7 @@ You MUST respond with ONLY a valid JSON object strictly matching this interface:
 });
 
 /**
- * Helper to download an image from a URL and save it locally on the server
+ * Helper to download an image from a URL and return a persistent data URI (or write to uploads as secondary cache)
  */
 async function downloadAndSaveMonsterImage(imageUrl: string, prefix: string = 'token'): Promise<string | null> {
   try {
@@ -3208,25 +3208,38 @@ async function downloadAndSaveMonsterImage(imageUrl: string, prefix: string = 't
       }
     });
     if (!res.ok) return null;
-    const contentType = res.headers.get('content-type') || '';
+    const contentType = (res.headers.get('content-type') || '').toLowerCase();
     if (!contentType.includes('image')) return null;
 
-    let ext = '.png';
-    if (contentType.includes('jpeg') || contentType.includes('jpg')) ext = '.jpg';
-    else if (contentType.includes('webp')) ext = '.webp';
+    let mime = 'image/jpeg';
+    let ext = '.jpg';
+    if (contentType.includes('png')) { mime = 'image/png'; ext = '.png'; }
+    else if (contentType.includes('webp')) { mime = 'image/webp'; ext = '.webp'; }
+    else if (contentType.includes('svg')) { mime = 'image/svg+xml'; ext = '.svg'; }
 
     const arrayBuffer = await res.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     if (buffer.length < 500) return null;
 
-    const uploadsDir = path.resolve(process.cwd(), 'uploads');
-    if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+    try {
+      const uploadsDir = path.resolve(process.cwd(), 'uploads');
+      if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+      const cleanPrefix = prefix.replace(/[^a-zA-Z0-9_\-]/g, '_');
+      const filename = `${cleanPrefix}_${Date.now()}_${Math.round(Math.random() * 1e6)}${ext}`;
+      fs.writeFileSync(path.join(uploadsDir, filename), buffer);
+    } catch {
+      // ignore local disk cache write errors
+    }
 
-    const cleanPrefix = prefix.replace(/[^a-zA-Z0-9_\-]/g, '_');
-    const filename = `${cleanPrefix}_${Date.now()}_${Math.round(Math.random() * 1e6)}${ext}`;
-    const filePath = path.join(uploadsDir, filename);
-    fs.writeFileSync(filePath, buffer);
-    return `/uploads/${filename}`;
+    // Return permanent self-contained base64 data URI when compact enough for Firestore,
+    // or the original https URL if it is an official public CDN image
+    if (buffer.length <= 140000) {
+      return `data:${mime};base64,${buffer.toString('base64')}`;
+    }
+    if (imageUrl.startsWith('https://') && !imageUrl.includes('/compendium-images/veor/')) {
+      return imageUrl;
+    }
+    return `data:${mime};base64,${buffer.toString('base64')}`;
   } catch (err: any) {
     console.warn(`[downloadAndSaveMonsterImage] Failed for ${imageUrl}:`, err.message);
     return null;
@@ -3262,35 +3275,250 @@ async function fetchDndBeyondMonsterImage(dndBeyondUrl: string): Promise<string 
 }
 
 /**
- * Fallback to generate an official circular RPG battle token portrait via Imagen 3
+ * Generates an ornate circular RPG battle token SVG data URI tailored to the monster's name and creature type
  */
-async function generateMonsterTokenImage(ai: GoogleGenAI, monsterName: string, creatureType?: string): Promise<string | null> {
-  try {
-    const prompt = `A top-down circular RPG tabletop battle token portrait of a ${monsterName} (${creatureType || 'creature'}), detailed fantasy character art, dramatic lighting, centered, isolated on dark background, fantasy tabletop RPG token portrait`;
-    const imagenRes = await (ai.models as any).generateImages({
-      model: "imagen-3.0-generate-002",
-      prompt,
-      config: {
-        numberOfImages: 1,
-        aspectRatio: "1:1",
-        outputMimeType: "image/png"
-      }
-    });
-    const imgBytes = imagenRes.generatedImages?.[0]?.image?.imageBytes;
-    if (imgBytes) {
-      const buffer = Buffer.from(imgBytes, 'base64');
-      const uploadsDir = path.resolve(process.cwd(), 'uploads');
-      if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-      const cleanSlug = monsterName.toLowerCase().replace(/[^a-z0-9]/g, '_');
-      const filename = `token_${cleanSlug}_${Date.now()}_${Math.round(Math.random() * 1e6)}.png`;
-      fs.writeFileSync(path.join(uploadsDir, filename), buffer);
-      return `/uploads/${filename}`;
-    }
-  } catch (err: any) {
-    console.warn(`[generateMonsterTokenImage] Imagen generation failed for ${monsterName}:`, err?.message || err);
+function generateProceduralMonsterTokenSvg(monsterName: string, creatureType?: string): string {
+  const cleanName = (monsterName || 'Monster').replace(/[<>&"']/g, '').trim();
+  const lowerName = cleanName.toLowerCase();
+  const lowerType = (creatureType || 'creature').toLowerCase();
+
+  let primary = '#d97706';
+  let secondary = '#78350f';
+  let glow = '#fbbf24';
+  let bgDark = '#1c1208';
+  let crestPaths = '';
+
+  if (lowerName.includes('canopic') || lowerName.includes('golem') || lowerType.includes('construct')) {
+    primary = '#eab308';
+    secondary = '#0284c7';
+    glow = '#38bdf8';
+    bgDark = '#0c1926';
+    crestPaths = `
+      <polygon points="128,44 176,86 164,168 92,168 80,86" fill="#1e293b" stroke="${primary}" stroke-width="3.5"/>
+      <polygon points="104,48 92,86 114,76" fill="${primary}" opacity="0.85"/>
+      <polygon points="152,48 164,86 142,76" fill="${primary}" opacity="0.85"/>
+      <circle cx="110" cy="104" r="8" fill="${glow}" filter="url(#tokGlow)"/>
+      <circle cx="146" cy="104" r="8" fill="${glow}" filter="url(#tokGlow)"/>
+      <path d="M112,134 L144,134 M104,148 L152,148 M128,74 L128,156" stroke="${primary}" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="128" cy="68" r="6" fill="${glow}"/>
+    `;
+  } else if (lowerName.includes('mummy') || lowerName.includes('skeleton') || lowerName.includes('zombie') || lowerName.includes('wraith') || lowerType.includes('undead')) {
+    primary = '#a855f7';
+    secondary = '#3b0764';
+    glow = '#4ade80';
+    bgDark = '#0f0718';
+    crestPaths = `
+      <path d="M88,104 C88,68 168,68 168,104 C168,128 152,140 148,162 L108,162 C104,140 88,128 88,104 Z" fill="#1f1629" stroke="${primary}" stroke-width="3.5"/>
+      <circle cx="112" cy="108" r="9" fill="${glow}" filter="url(#tokGlow)"/>
+      <circle cx="144" cy="108" r="9" fill="${glow}" filter="url(#tokGlow)"/>
+      <polygon points="128,120 121,134 135,134" fill="${glow}" opacity="0.8"/>
+      <path d="M114,148 L142,148 M120,142 L120,156 M128,142 L128,156 M136,142 L136,156" stroke="${primary}" stroke-width="2.5"/>
+    `;
+  } else if (lowerName.includes('dao') || lowerName.includes('genie') || lowerName.includes('elemental') || lowerType.includes('elemental')) {
+    primary = '#f59e0b';
+    secondary = '#92400e';
+    glow = '#fde047';
+    bgDark = '#1c1008';
+    crestPaths = `
+      <polygon points="128,42 178,106 128,172 78,106" fill="#291809" stroke="${primary}" stroke-width="3.5"/>
+      <polygon points="128,62 158,106 128,150 98,106" fill="none" stroke="${glow}" stroke-width="2"/>
+      <circle cx="114" cy="100" r="6" fill="${glow}" filter="url(#tokGlow)"/>
+      <circle cx="142" cy="100" r="6" fill="${glow}" filter="url(#tokGlow)"/>
+      <path d="M108,126 Q128,140 148,126" fill="none" stroke="${glow}" stroke-width="3"/>
+    `;
+  } else if (lowerType.includes('fiend') || lowerName.includes('impaler') || lowerName.includes('demon') || lowerName.includes('devil')) {
+    primary = '#ef4444';
+    secondary = '#7f1d1d';
+    glow = '#fca5a5';
+    bgDark = '#1a0606';
+    crestPaths = `
+      <path d="M76,54 C84,92 98,104 98,126 C98,154 158,154 158,126 C158,104 172,92 180,54 C160,72 146,84 128,84 C110,84 96,72 76,54 Z" fill="#280909" stroke="${primary}" stroke-width="3.5"/>
+      <polygon points="106,106 122,114 110,120" fill="${glow}" filter="url(#tokGlow)"/>
+      <polygon points="150,106 134,114 146,120" fill="${glow}" filter="url(#tokGlow)"/>
+      <path d="M112,138 L120,146 L128,138 L136,146 L144,138" fill="none" stroke="${glow}" stroke-width="2.5"/>
+    `;
+  } else if (lowerName.includes('portrait') || lowerName.includes('painting')) {
+    primary = '#eab308';
+    secondary = '#713f12';
+    glow = '#f43f5e';
+    bgDark = '#170d12';
+    crestPaths = `
+      <rect x="82" y="52" width="92" height="114" rx="8" fill="#1e1324" stroke="${primary}" stroke-width="5"/>
+      <rect x="92" y="62" width="72" height="94" rx="4" fill="none" stroke="${glow}" stroke-width="1.5" opacity="0.7"/>
+      <circle cx="128" cy="96" r="18" fill="#331e38" stroke="${primary}" stroke-width="2"/>
+      <circle cx="121" cy="94" r="3.5" fill="${glow}" filter="url(#tokGlow)"/>
+      <circle cx="135" cy="94" r="3.5" fill="${glow}" filter="url(#tokGlow)"/>
+      <path d="M104,144 C104,122 152,122 152,144" fill="#331e38" stroke="${primary}" stroke-width="2"/>
+    `;
+  } else {
+    crestPaths = `
+      <path d="M128,48 L172,82 L158,154 L98,154 L84,82 Z" fill="#1f1916" stroke="${primary}" stroke-width="3.5"/>
+      <circle cx="112" cy="102" r="7" fill="${glow}" filter="url(#tokGlow)"/>
+      <circle cx="144" cy="102" r="7" fill="${glow}" filter="url(#tokGlow)"/>
+      <path d="M108,132 Q128,118 148,132" fill="none" stroke="${glow}" stroke-width="3"/>
+    `;
   }
-  return null;
+
+  const label = cleanName.length > 18 ? cleanName.slice(0, 16) + '..' : cleanName;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+    <defs>
+      <radialGradient id="tokBg" cx="50%" cy="45%" r="55%">
+        <stop offset="0%" stop-color="${secondary}" stop-opacity="0.9"/>
+        <stop offset="70%" stop-color="${bgDark}" stop-opacity="1"/>
+        <stop offset="100%" stop-color="#050507" stop-opacity="1"/>
+      </radialGradient>
+      <linearGradient id="tokRim" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="${glow}"/>
+        <stop offset="50%" stop-color="${primary}"/>
+        <stop offset="100%" stop-color="${secondary}"/>
+      </linearGradient>
+      <filter id="tokGlow">
+        <feGaussianBlur stdDeviation="3" result="b"/>
+        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+    <circle cx="128" cy="128" r="122" fill="url(#tokBg)" stroke="url(#tokRim)" stroke-width="8"/>
+    <circle cx="128" cy="128" r="110" fill="none" stroke="${glow}" stroke-width="1.5" stroke-dasharray="6,4" opacity="0.5"/>
+    ${crestPaths}
+    <rect x="28" y="182" width="200" height="32" rx="16" fill="#09090b" fill-opacity="0.92" stroke="url(#tokRim)" stroke-width="2.5"/>
+    <text x="128" y="203" text-anchor="middle" fill="#f8fafc" font-family="Cinzel, Georgia, serif" font-weight="bold" font-size="14" letter-spacing="0.5">${label}</text>
+  </svg>`;
+  return `data:image/svg+xml;base64,${Buffer.from(svg, 'utf8').toString('base64')}`;
 }
+
+/**
+ * Generates an official circular RPG battle token portrait as a persistent Data URI
+ * (Cascade: Gemini Flash Image -> Imagen 3 -> Pollinations FLUX 256x256 JPEG -> Bespoke SVG Token)
+ */
+async function generateMonsterTokenImage(
+  ai: GoogleGenAI | null,
+  monsterName: string,
+  creatureType?: string,
+  description?: string
+): Promise<string> {
+  const cleanName = (monsterName || 'Monster').trim();
+  const typeLabel = creatureType || 'fantasy creature';
+  const descSnippet = description ? `, ${description.slice(0, 120)}` : '';
+  const prompt = `Circular tabletop RPG VTT battle token portrait of ${cleanName} (${typeLabel}${descSnippet}), official D&D dark fantasy monster illustration, dramatic lighting, ornate metallic circular token frame, centered head and torso portrait, isolated on dark background, high detail`;
+
+  // 1. Try Pollinations FLUX at 256x256 JPEG first for compact (~15-25KB) Firestore-ready high-res raster art
+  try {
+    const seed = Math.abs(cleanName.split('').reduce((a, c) => ((a << 5) - a) + c.charCodeAt(0), 0)) % 999999;
+    const fluxUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?model=flux&width=256&height=256&nologo=true&seed=${seed}`;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 9000);
+    const fluxRes = await fetch(fluxUrl, { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (fluxRes.ok) {
+      const ct = (fluxRes.headers.get('content-type') || 'image/jpeg').toLowerCase();
+      if (ct.includes('image')) {
+        const buf = Buffer.from(await fluxRes.arrayBuffer());
+        if (buf.length > 1500 && buf.length < 150000) {
+          return `data:image/jpeg;base64,${buf.toString('base64')}`;
+        }
+      }
+    }
+  } catch (fluxErr: any) {
+    console.warn(`[generateMonsterTokenImage] FLUX 256x256 attempt notice for ${cleanName}:`, fluxErr?.message || fluxErr);
+  }
+
+  // 2. Try Gemini / Imagen 3 if AI client is available
+  if (ai) {
+    try {
+      const imagenRes = await (ai.models as any).generateImages({
+        model: "imagen-3.0-generate-002",
+        prompt,
+        config: {
+          numberOfImages: 1,
+          aspectRatio: "1:1",
+          outputMimeType: "image/jpeg"
+        }
+      });
+      const imgBytes = imagenRes.generatedImages?.[0]?.image?.imageBytes;
+      if (imgBytes) {
+        return `data:image/jpeg;base64,${imgBytes}`;
+      }
+    } catch (err: any) {
+      console.warn(`[generateMonsterTokenImage] Imagen generation notice for ${cleanName}:`, err?.message || err);
+    }
+
+    try {
+      const flashRes = await ai.models.generateContent({
+        model: "gemini-3.1-flash-image",
+        contents: prompt,
+        config: {
+          imageConfig: { aspectRatio: "1:1" }
+        }
+      });
+      const parts = flashRes.candidates?.[0]?.content?.parts || [];
+      for (const part of parts) {
+        if (part.inlineData?.data) {
+          const mime = part.inlineData.mimeType || "image/png";
+          return `data:${mime};base64,${part.inlineData.data}`;
+        }
+      }
+    } catch (flashErr: any) {
+      console.warn(`[generateMonsterTokenImage] gemini-3.1-flash-image notice for ${cleanName}:`, flashErr?.message || flashErr);
+    }
+  }
+
+  // 3. Guaranteed bespoke illustrated SVG token fallback
+  return generateProceduralMonsterTokenSvg(cleanName, creatureType);
+}
+
+/**
+ * POST /api/ai/render-monster-token
+ * Renders a permanent circular RPG battle token Data URI for a monster that has no default token
+ */
+aiRouter.post("/render-monster-token", async (req, res) => {
+  const { monsterName, creatureType, description, dndBeyondUrl, directArtworkUrl } = req.body || {};
+  if (!monsterName || typeof monsterName !== 'string' || !monsterName.trim()) {
+    return res.status(400).json({ error: "Missing monsterName in request body" });
+  }
+
+  const cleanName = monsterName.trim().replace(/^[\d\s]+x?\s*/i, '').replace(/^(a|an|the)\s+/i, '');
+  const cleanSlug = cleanName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+
+  try {
+    let ai: GoogleGenAI | null = null;
+    try {
+      ai = getAI();
+    } catch {
+      ai = null;
+    }
+
+    let avatarUrl: string | null = null;
+
+    if (dndBeyondUrl && typeof dndBeyondUrl === 'string' && dndBeyondUrl.startsWith('http')) {
+      const imgFromPage = await fetchDndBeyondMonsterImage(dndBeyondUrl);
+      if (imgFromPage) {
+        avatarUrl = await downloadAndSaveMonsterImage(imgFromPage, `token_${cleanSlug}`);
+      }
+    }
+
+    if (!avatarUrl && directArtworkUrl && typeof directArtworkUrl === 'string' && directArtworkUrl.startsWith('http')) {
+      avatarUrl = await downloadAndSaveMonsterImage(directArtworkUrl, `token_${cleanSlug}`);
+    }
+
+    if (!avatarUrl) {
+      avatarUrl = await generateMonsterTokenImage(ai, cleanName, creatureType, description);
+    }
+
+    return res.json({
+      success: true,
+      monsterName: cleanName,
+      avatarUrl
+    });
+  } catch (err: any) {
+    console.error(`[AI] render-monster-token error for "${cleanName}":`, err);
+    const fallbackSvg = generateProceduralMonsterTokenSvg(cleanName, creatureType);
+    return res.json({
+      success: true,
+      monsterName: cleanName,
+      avatarUrl: fallbackSvg
+    });
+  }
+});
 
 /**
  * POST /api/ai/search-and-ingest-monster

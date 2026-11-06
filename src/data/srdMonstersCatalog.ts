@@ -1507,7 +1507,7 @@ export function isNonCreatureStatOrItem(rawInput: string | any): boolean {
   if (words.every(w => NON_CREATURE_STAT_OR_ITEM_WORDS.has(w))) return true;
   if (
     words.some(w =>
-      /^(strength|dexterity|constitution|intelligence|wisdom|charisma|perception|investigation|acrobatics|athletics|arcana|deception|history|insight|intimidation|medicine|nature|performance|persuasion|religion|stealth|survival|sleight|check|checks|saving|throw|throws|longsword|longswords|shortsword|shortswords|greatsword|greatswords|dagger|daggers|mace|maces|handaxe|battleaxe|greataxe|warhammer|quarterstaff|crossbow|shortbow|longbow|scimitar|rapier|halberd|glaive|spear|javelin|trident|flail|morningstar|club|maul|whip|sling|potion|potions|scroll|scrolls|gp|sp|cp|ep|pp|feet|ft|hours?|minutes?|rounds?|turns?|days?|points?|damage)$/i.test(w)
+      /^(strength|dexterity|constitution|intelligence|wisdom|charisma|perception|investigation|acrobatics|athletics|arcana|deception|history|insight|intimidation|medicine|nature|performance|persuasion|religion|stealth|survival|sleight|check|checks|saving|throw|throws|longsword|longswords|shortsword|shortswords|greatsword|greatswords|dagger|daggers|mace|maces|handaxe|battleaxe|greataxe|warhammer|quarterstaff|crossbow|shortbow|longbow|scimitar|rapier|halberd|glaive|spear|javelin|trident|flail|morningstar|club|maul|whip|sling|potion|potions|scroll|scrolls|gp|sp|cp|ep|pp|feet|ft|hours?|minutes?|rounds?|turns?|days?|points?|damage|inanimate|dummy|dummies|mannequin|mannequins)$/i.test(w)
     )
   ) {
     return true;
@@ -1533,10 +1533,16 @@ export function resolveMonster(
       rawInput.isRoomCustom === true ||
       rawInput.source === 'Custom Compendium' ||
       rawInput.source === 'Room Zone Custom';
+    const rawAvatar = String(rawInput.avatarUrl || rawInput.url || '');
+    const hasBrokenOrFallbackAvatar =
+      !rawAvatar ||
+      rawAvatar.startsWith('/uploads/token_') ||
+      rawAvatar.startsWith('/uploads/avatar_') ||
+      rawAvatar.includes('media.dndbeyond.com/compendium-images/veor/') ||
+      (rawAvatar === GENERIC_FALLBACK_AVATAR && !isTrulyGuardType(rawInput.name));
     const isStaleFallback =
-      !isExplicitlyCustomized &&
-      (rawInput.source === 'Encounter Notes' ||
-        (rawInput.avatarUrl === GENERIC_FALLBACK_AVATAR && !isTrulyGuardType(rawInput.name)));
+      (!isExplicitlyCustomized && rawInput.source === 'Encounter Notes') ||
+      hasBrokenOrFallbackAvatar;
     if (!isStaleFallback) {
       return { monster: rawInput as Monster, count };
     }
@@ -1605,13 +1611,25 @@ export function resolveMonster(
     ? candidateWords[candidateWords.length - 1]
     : null;
 
-  // Prefer custom monsters first, then entries with local /uploads/ avatars over external compendium URLs when duplicates exist
+  const hasValidAvatar = (m: Monster): number => {
+    const u = String(m.avatarUrl || (m as any).url || '');
+    if (!u) return 0;
+    if (u === GENERIC_FALLBACK_AVATAR && !isTrulyGuardType(m.name)) return 0;
+    if (u.startsWith('/uploads/token_') || u.startsWith('/uploads/avatar_')) return 0;
+    if (u.includes('media.dndbeyond.com/compendium-images/veor/')) return 0;
+    return 1;
+  };
+
+  // Prefer entries with valid avatars first, then custom/rendered monsters, then curated local uploads
   const allAvailable = [...compendium, ...SRD_MONSTERS].sort((a, b) => {
-    const aCustom = a.isCustom || a.isRoomCustom || a.source === 'Custom Compendium' || a.source === 'Room Zone Custom' ? 1 : 0;
-    const bCustom = b.isCustom || b.isRoomCustom || b.source === 'Custom Compendium' || b.source === 'Room Zone Custom' ? 1 : 0;
+    const aValid = hasValidAvatar(a);
+    const bValid = hasValidAvatar(b);
+    if (aValid !== bValid) return bValid - aValid;
+    const aCustom = a.isCustom || a.isRoomCustom || a.source === 'Custom Compendium' || a.source === 'Room Zone Custom' || a.source === 'AI Rendered Compendium' ? 1 : 0;
+    const bCustom = b.isCustom || b.isRoomCustom || b.source === 'Custom Compendium' || b.source === 'Room Zone Custom' || b.source === 'AI Rendered Compendium' ? 1 : 0;
     if (aCustom !== bCustom) return bCustom - aCustom;
-    const aLocal = a.avatarUrl?.startsWith('/uploads/') && a.avatarUrl !== GENERIC_FALLBACK_AVATAR ? 1 : 0;
-    const bLocal = b.avatarUrl?.startsWith('/uploads/') && b.avatarUrl !== GENERIC_FALLBACK_AVATAR ? 1 : 0;
+    const aLocal = (a.avatarUrl?.startsWith('data:image/') || (a.avatarUrl?.startsWith('/uploads/file-') && a.avatarUrl !== GENERIC_FALLBACK_AVATAR)) ? 1 : 0;
+    const bLocal = (b.avatarUrl?.startsWith('data:image/') || (b.avatarUrl?.startsWith('/uploads/file-') && b.avatarUrl !== GENERIC_FALLBACK_AVATAR)) ? 1 : 0;
     return bLocal - aLocal;
   });
 
@@ -1653,10 +1671,12 @@ export function resolveMonster(
       if (mappedTargetName) {
         const baseMonster = allAvailable.find(m => isExactMonsterMatch(mappedTargetName, m.name));
         if (baseMonster) {
+          const isDirectNpcAlias = lowerCandidate === 'valin sarnaster';
           found = {
             ...baseMonster,
-            monsterId: `semantic_${lowerCandidate.replace(/[^a-z0-9]/g, '_')}_${baseMonster.monsterId}`,
-            name: cName
+            monsterId: `monster_${lowerCandidate.replace(/[^a-z0-9]/g, '_')}`,
+            name: cName,
+            avatarUrl: isDirectNpcAlias ? baseMonster.avatarUrl : GENERIC_FALLBACK_AVATAR
           };
           break;
         }
