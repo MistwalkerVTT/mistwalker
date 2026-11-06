@@ -123,6 +123,12 @@ import {
   SceneToken,
   Campaign
 } from '../lib/firebase';
+import {
+  generateAdaptiveEncounter,
+  evaluatePartyCombatProfile,
+  ScaledEncounterResult,
+  ScaledMonsterEntry
+} from '../services/arenaScalingService';
 
 export type ArenaMatchMode =
   | '1v1'
@@ -988,61 +994,38 @@ function parseMonsterCr(crString?: string): number {
 }
 
 /**
- * Generates a balanced random monster encounter scaled to the number of Player Heroes and Difficulty Tier
+ * Generates an intelligently balanced random monster encounter scaled to the exact Player Heroes chosen and Difficulty Tier
  */
 export function generateScaledRandomEncounter(
   playerCount: number,
   difficulty: ArenaDifficulty,
-  monsterPool: Monster[]
-): Monster[] {
-  const safeCount = Math.max(1, Math.min(6, playerCount));
-  const multiplier = difficulty === 'deadly' ? 1.65 : difficulty === 'hard' ? 1.25 : 0.9;
-  const targetTotalCr = Math.max(0.5, safeCount * 2.2 * multiplier);
-
+  monsterPool: Monster[],
+  heroes?: Character[]
+): ScaledMonsterEntry[] {
   const pool = monsterPool.length > 0 ? monsterPool : DEFAULT_MONSTERS;
-  const picked: Monster[] = [];
-  let accumulatedCr = 0;
 
-  // Decide between a Boss + Minions or a Squad encounter
-  const rollType = Math.random();
-  const maxEnemies = Math.min(5, safeCount + (difficulty === 'deadly' ? 2 : 1));
-
-  if (rollType < 0.45) {
-    // Boss / Leader + 1-2 Minions
-    const bossTargetCr = targetTotalCr * 0.7;
-    const bossCandidates = pool.filter((m) => {
-      const cr = parseMonsterCr(m.challenge);
-      return cr >= bossTargetCr * 0.5 && cr <= bossTargetCr * 1.45;
-    });
-    const boss =
-      bossCandidates.length > 0
-        ? bossCandidates[Math.floor(Math.random() * bossCandidates.length)]
-        : pool[Math.floor(Math.random() * pool.length)];
-    if (boss) {
-      picked.push(boss);
-      accumulatedCr += parseMonsterCr(boss.challenge);
-    }
+  if (heroes && heroes.length > 0) {
+    const result = generateAdaptiveEncounter(heroes, difficulty, pool);
+    return result.monsters;
   }
 
-  let attempts = 0;
-  while (accumulatedCr < targetTotalCr * 0.85 && picked.length < maxEnemies && attempts < 25) {
-    attempts++;
-    const remainingCr = Math.max(0.25, targetTotalCr - accumulatedCr);
-    const candidates = pool.filter((m) => {
-      const cr = parseMonsterCr(m.challenge);
-      return cr <= remainingCr * 1.35 && cr >= Math.min(0.25, remainingCr * 0.2);
-    });
-    const chosen =
-      candidates.length > 0
-        ? candidates[Math.floor(Math.random() * candidates.length)]
-        : pool[Math.floor(Math.random() * pool.length)];
-    if (chosen) {
-      picked.push(chosen);
-      accumulatedCr += Math.max(0.25, parseMonsterCr(chosen.challenge));
-    }
-  }
+  // Synthesize party profile matching playerCount
+  const mockParty: Character[] = Array.from({ length: Math.max(1, playerCount) }).map((_, i) => ({
+    id: `mock_hero_${i}`,
+    name: `Hero ${i + 1}`,
+    race: 'Adventurer',
+    classLevel: 'Adventurer 4',
+    alignment: 'Neutral Good',
+    avatarUrl: '',
+    ac: 15,
+    hp: 32,
+    maxHp: 32,
+    speed: '30 ft.',
+    stats: { str: 14, dex: 14, con: 14, int: 10, wis: 12, cha: 10 }
+  } as any));
 
-  return picked.length > 0 ? picked : [pool[0]];
+  const result = generateAdaptiveEncounter(mockParty, difficulty, pool);
+  return result.monsters;
 }
 
 // ============================================================================
@@ -1469,11 +1452,31 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
     heroPool.slice(2, 4).map((h) => h.id)
   );
   const [crimsonIsAI, setCrimsonIsAI] = useState<boolean>(true);
-  const [draftedMonsters, setDraftedMonsters] = useState<Monster[]>(() =>
-    arenaConfig.pinnedEncounterMonsters && arenaConfig.pinnedEncounterMonsters.length > 0
-      ? arenaConfig.pinnedEncounterMonsters
-      : generateScaledRandomEncounter(2, arenaConfig.defaultDifficulty || 'standard', DEFAULT_MONSTERS)
-  );
+
+  const selectedGoldHeroes = useMemo(() => {
+    return goldHeroIds
+      .map((id) => heroPool.find((h) => h.id === id))
+      .filter(Boolean) as Character[];
+  }, [goldHeroIds, heroPool]);
+
+  const currentPartyProfile = useMemo(() => {
+    return evaluatePartyCombatProfile(selectedGoldHeroes);
+  }, [selectedGoldHeroes]);
+
+  const [draftedMonsters, setDraftedMonsters] = useState<Monster[]>(() => {
+    if (arenaConfig.pinnedEncounterMonsters && arenaConfig.pinnedEncounterMonsters.length > 0) {
+      return arenaConfig.pinnedEncounterMonsters;
+    }
+    const initialHeroes = (claimedCharacterName
+      ? [heroPool.find((h) => h.name.toLowerCase() === claimedCharacterName.toLowerCase())].filter(Boolean)
+      : heroPool.slice(0, 2)) as Character[];
+    return generateScaledRandomEncounter(
+      Math.max(1, initialHeroes.length),
+      arenaConfig.defaultDifficulty || 'standard',
+      DEFAULT_MONSTERS,
+      initialHeroes
+    );
+  });
 
   // Sync DM Pinned Encounter Squad when DM updates it in Campaign Manager
   useEffect(() => {
@@ -2027,18 +2030,26 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
     );
   };
 
-  // Re-generate scaled random encounter when player count or difficulty changes in 'random_encounter' mode
+  // Re-generate adaptive scaled random encounter when gold heroes or difficulty changes in 'random_encounter' mode
   useEffect(() => {
     if (arenaConfig.lockDmEncounter && arenaConfig.pinnedEncounterMonsters?.length > 0) {
       setDraftedMonsters(arenaConfig.pinnedEncounterMonsters);
       return;
     }
     if (matchMode === 'random_encounter' && (!arenaConfig.pinnedEncounterMonsters || arenaConfig.pinnedEncounterMonsters.length === 0)) {
+      const selectedGoldHeroes = goldHeroIds
+        .map((id) => heroPool.find((h) => h.id === id))
+        .filter(Boolean) as Character[];
       setDraftedMonsters(
-        generateScaledRandomEncounter(Math.max(1, goldHeroIds.length), difficulty, monsterPool)
+        generateScaledRandomEncounter(
+          Math.max(1, selectedGoldHeroes.length),
+          difficulty,
+          monsterPool,
+          selectedGoldHeroes
+        )
       );
     }
-  }, [matchMode, goldHeroIds.length, difficulty, monsterPool, arenaConfig.lockDmEncounter, arenaConfig.pinnedEncounterMonsters]);
+  }, [matchMode, goldHeroIds, difficulty, monsterPool, heroPool, arenaConfig.lockDmEncounter, arenaConfig.pinnedEncounterMonsters]);
 
   // Adjust team slot counts automatically when switching between 1v1, 2v2, 3v3, 4v4, 5v5, and 6v6
   useEffect(() => {
@@ -2232,17 +2243,22 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       });
     } else {
       // vs_npcs or random_encounter
+      const selectedGoldHeroes = goldHeroIds
+        .map((id) => heroPool.find((h) => h.id === id))
+        .filter(Boolean) as Character[];
+
       const monstersToSpawn =
         arenaConfig.lockDmEncounter && arenaConfig.pinnedEncounterMonsters?.length > 0
           ? arenaConfig.pinnedEncounterMonsters
           : draftedMonsters.length > 0
           ? draftedMonsters
-          : generateScaledRandomEncounter(goldHeroes.length, difficulty, monsterPool);
+          : generateScaledRandomEncounter(goldHeroes.length, difficulty, monsterPool, selectedGoldHeroes);
 
       const hpMult = arenaConfig.monsterHpMultiplier || 1;
       const monsterSpawnRows = [3, 6, 9, 2, 5, 8, 11, 4, 7, 10];
 
       monstersToSpawn.forEach((mon, idx) => {
+        const calibrated = (mon as any).calibratedStats;
         const d20 = Math.floor(Math.random() * 20) + 1;
         const initBonus = mon.initiativeBonus ?? Math.floor(((mon.dex || 12) - 10) / 2);
         const startRow = monsterSpawnRows[idx % monsterSpawnRows.length] ?? Math.min(arenaRows - 3, Math.max(2, 2 + (idx % 5) * 2));
@@ -2251,7 +2267,13 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         const sizeSq = mon.size === 'Huge' || mon.size === 'Gargantuan' ? 3 : mon.size === 'Large' ? 2 : 1;
         const duplicateCount = monstersToSpawn.slice(0, idx).filter((m) => m.name === mon.name).length;
         const displayName = duplicateCount > 0 ? `${mon.name} #${duplicateCount + 1}` : mon.name;
-        const scaledHp = Math.max(1, Math.round((mon.hp || 45) * hpMult));
+        
+        const baseHpToScale = calibrated?.hp || mon.hp || 45;
+        const scaledHp = Math.max(1, Math.round(baseHpToScale * hpMult));
+        const scaledAc = calibrated?.ac || mon.ac || 14;
+        const crLabel = calibrated?.bossTitle
+          ? `${calibrated.bossTitle} • CR ${calibrated.scaledCr || mon.challenge?.split(' ')[0] || '1'}`
+          : `CR ${mon.challenge?.split(' ')[0] || '1'}`;
 
         roster.push({
           id: `arena_crimson_mon_${idx}_${Date.now()}`,
@@ -2260,8 +2282,8 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           isAI: true,
           avatarUrl: mon.avatarUrl || 'https://www.dndbeyond.com/avatars/thumbnails/30783/955/1000/1000/638062024584880857.png',
           raceOrType: `${mon.size} ${mon.type}`,
-          classOrCr: `CR ${mon.challenge?.split(' ')[0] || '1'}`,
-          ac: mon.ac || 14,
+          classOrCr: crLabel,
+          ac: scaledAc,
           currentHp: scaledHp,
           maxHp: scaledHp,
           tempHp: 0,
@@ -3519,7 +3541,8 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
 
       // 6. Saving Throw Spells (Fireball, Sacred Flame, Toll the Dead, Thunderwave, Shatter, Lightning Bolt, Sunbeam, Hold Person, etc.)
       if (action.saveDc && !action.isAttack) {
-        const dc = Number(action.saveDc) || 15;
+        const calibratedDc = (actor.sourceMonster as any)?.calibratedStats?.saveDc;
+        const dc = (actor.isAI && calibratedDc) ? calibratedDc : (Number(action.saveDc) || 15);
         const saveAbil = action.saveAbility || 'DEX';
         const isCantrip = (action.level ?? 0) === 0;
         const rule = lookupDndRuleDetails(action.name, 'spell');
@@ -3700,7 +3723,10 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       }
 
       // 8. Offensive Weapon or Spell Attack Roll
-      const rawHitBonus = parseInt(String(action.hitBonus || '+6').replace('+', ''), 10) || 6;
+      const calibratedAtk = (actor.sourceMonster as any)?.calibratedStats?.attackBonus;
+      const rawHitBonus = calibratedAtk !== undefined && actor.isAI
+        ? calibratedAtk
+        : parseInt(String(action.hitBonus || '+6').replace('+', ''), 10) || 6;
 
       // D&D 5e Close Combat Disadvantage: Ranged attacks have Disadvantage when a hostile enemy is within 5ft melee reach
       const isRanged =
@@ -3787,8 +3813,11 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       // Roll Damage (applying DM Monster Damage Multiplier for AI monsters)
       const atkDamageFormula = action.damageFormula || '1d10 + 4';
       const dmgRoll = rollDiceFormula(atkDamageFormula, isCrit);
+      const calibratedDmgMult = (actor.sourceMonster as any)?.calibratedStats?.damageMultiplier || 1;
       const dmgMult =
-        actor.team === 'crimson' && actor.isAI ? arenaConfig.monsterDamageMultiplier || 1 : 1;
+        actor.team === 'crimson' && actor.isAI
+          ? (arenaConfig.monsterDamageMultiplier || 1) * calibratedDmgMult
+          : 1;
       const finalDamage = Math.max(1, Math.round(dmgRoll.total * dmgMult));
 
       // Video Game Tactile FX: Spawn Floating Damage & Screen Shake
@@ -4894,9 +4923,10 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                           onClick={() =>
                             setDraftedMonsters(
                               generateScaledRandomEncounter(
-                                Math.max(1, goldHeroIds.length),
+                                Math.max(1, selectedGoldHeroes.length),
                                 difficulty,
-                                monsterPool
+                                monsterPool,
+                                selectedGoldHeroes
                               )
                             )
                           }
@@ -4915,40 +4945,98 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                     )}
                   </div>
 
+                  {/* Threat Assessment Gauge */}
+                  <div className="p-2.5 rounded-xl bg-zinc-950/80 border border-zinc-800/80 flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between text-[11px] font-mono">
+                      <div className="flex items-center gap-1.5 text-zinc-300">
+                        <Shield className="w-3.5 h-3.5 text-amber-400" />
+                        <span className="font-bold">Party APL {currentPartyProfile.averageLevel}</span>
+                        <span className="text-zinc-500">
+                          ({selectedGoldHeroes.length} {selectedGoldHeroes.length === 1 ? 'Hero' : 'Heroes'})
+                        </span>
+                      </div>
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold border uppercase ${
+                          difficulty === 'standard'
+                            ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                            : difficulty === 'hard'
+                            ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                            : 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                        }`}
+                      >
+                        {difficulty === 'standard'
+                          ? 'Balanced (3-5 Rnds)'
+                          : difficulty === 'hard'
+                          ? 'Hard Challenge'
+                          : 'Deadly Apex'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[10px] font-mono text-zinc-400">
+                      <span>Total Party HP: <strong className="text-zinc-200">{currentPartyProfile.totalPartyHp}</strong></span>
+                      <span>Avg AC: <strong className="text-zinc-200">{currentPartyProfile.averageAc}</strong></span>
+                      <span>Est DPR: <strong className="text-zinc-200">~{currentPartyProfile.estimatedPartyDpr}</strong></span>
+                    </div>
+                  </div>
+
                   {/* Active Drafted Monsters List */}
                   <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                    {draftedMonsters.map((mon, idx) => (
-                      <div
-                        key={`${mon.monsterId}_${idx}`}
-                        className="p-2.5 rounded-xl bg-zinc-950/90 border border-rose-500/30 flex items-center justify-between gap-2"
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-rose-950/60 border border-rose-500/40 flex items-center justify-center text-rose-300 font-mono font-bold text-[10px] shrink-0">
-                            CR
-                          </div>
-                          <div className="min-w-0">
-                            <div className="text-xs font-mono font-bold text-white truncate">
-                              {mon.name}
-                            </div>
-                            <div className="text-[10px] font-mono text-zinc-400 truncate">
-                              HP {mon.hp} • AC {mon.ac} • CR {mon.challenge?.split(' ')[0]}
-                            </div>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setDraftedMonsters((prev) =>
-                              prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev
-                            )
-                          }
-                          className="p-1.5 rounded-lg text-zinc-500 hover:text-rose-400 hover:bg-zinc-900 cursor-pointer shrink-0"
-                          title="Remove from encounter"
+                    {draftedMonsters.map((mon, idx) => {
+                      const calibrated = (mon as any).calibratedStats;
+                      const displayHp = calibrated?.hp ?? mon.hp;
+                      const displayAc = calibrated?.ac ?? mon.ac;
+                      const displayCr = calibrated?.scaledCr ?? mon.challenge?.split(' ')[0] ?? '1';
+                      const isBoss = calibrated?.isBoss;
+                      const bossTitle = calibrated?.bossTitle;
+
+                      return (
+                        <div
+                          key={`${mon.monsterId || mon.name}_${idx}`}
+                          className={`p-2.5 rounded-xl bg-zinc-950/90 border flex items-center justify-between gap-2 ${
+                            isBoss
+                              ? 'border-amber-500/60 shadow-[0_0_12px_rgba(245,158,11,0.15)]'
+                              : 'border-rose-500/30'
+                          }`}
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ))}
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div
+                              className={`w-8 h-8 sm:w-9 sm:h-9 rounded-lg border flex items-center justify-center font-mono font-bold text-[10px] shrink-0 ${
+                                isBoss
+                                  ? 'bg-amber-950/60 border-amber-500/60 text-amber-300'
+                                  : 'bg-rose-950/60 border-rose-500/40 text-rose-300'
+                              }`}
+                            >
+                              {isBoss ? <Crown className="w-4 h-4 text-amber-400" /> : 'CR'}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="text-xs font-mono font-bold text-white truncate flex items-center gap-1.5">
+                                <span>{mon.name}</span>
+                                {bossTitle && (
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-300 font-bold uppercase tracking-wider">
+                                    {bossTitle}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[10px] font-mono text-zinc-400 truncate">
+                                HP <span className="text-rose-300 font-bold">{displayHp}</span> • AC <span className="text-zinc-200 font-bold">{displayAc}</span> • CR <span className="text-amber-300 font-bold">{displayCr}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setDraftedMonsters((prev) =>
+                                prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev
+                              )
+                            }
+                            className="p-1.5 rounded-lg text-zinc-500 hover:text-rose-400 hover:bg-zinc-900 cursor-pointer shrink-0"
+                            title="Remove from encounter"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
 
                   {/* Quick Add Monster Dropdown */}
