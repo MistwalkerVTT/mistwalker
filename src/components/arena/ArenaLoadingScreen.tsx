@@ -14,6 +14,11 @@ export const ArenaLoadingScreen: React.FC<ArenaLoadingScreenProps> = ({
 }) => {
   const [progress, setProgress] = useState(15);
   const [flavorText, setFlavorText] = useState('Sharpening blades and tuning tactical grids...');
+  const onFinishRef = React.useRef(onFinish);
+
+  useEffect(() => {
+    onFinishRef.current = onFinish;
+  }, [onFinish]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -25,30 +30,34 @@ export const ArenaLoadingScreen: React.FC<ArenaLoadingScreenProps> = ({
     const t1 = setTimeout(() => {
       setProgress(55);
       setFlavorText('Summoning champions & configuring colosseum hazards...');
-    }, 400);
+    }, 300);
 
     const t2 = setTimeout(() => {
       setProgress(85);
       setFlavorText('Calibrating line-of-sight & tactical initiative...');
-    }, 900);
+    }, 700);
 
     const t3 = setTimeout(() => {
       setProgress(100);
       setFlavorText('Arena Ready. Enter the Colosseum!');
-      if (onFinish) onFinish();
-    }, 1400);
+      if (onFinishRef.current) onFinishRef.current();
+    }, 1100);
 
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);
       clearTimeout(t3);
     };
-  }, [isLoading, onFinish]);
+  }, [isLoading]);
 
   if (!isLoading) return null;
 
   return (
-    <div className="fixed inset-0 z-[280] flex items-center justify-center bg-black/95 backdrop-blur-xl select-none animate-in fade-in duration-200">
+    <div
+      onClick={() => onFinishRef.current?.()}
+      className="fixed inset-0 z-[280] flex items-center justify-center bg-black/95 backdrop-blur-xl select-none animate-in fade-in duration-200 cursor-pointer"
+      title="Click to enter immediately"
+    >
       {/* Background Arcade Amber/Crimson Glow */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-amber-950/40 via-zinc-950 to-black pointer-events-none" />
 

@@ -163,13 +163,13 @@ export function evaluatePartyCombatProfile(heroes: Character[]): PartyCombatProf
   const heroCount = Math.max(1, safeHeroes.length);
 
   const levels: number[] = [];
-  let totalHp = 0;
+  let totalPartyHp = 0;
   let totalAc = 0;
 
   for (const h of safeHeroes) {
     const lvl = extractHeroLevel(h);
     levels.push(lvl);
-    totalHp += h.maxHp || h.hp || 28;
+    totalPartyHp += h.maxHp || h.hp || 28;
     totalAc += h.ac || 15;
   }
 
@@ -177,7 +177,7 @@ export function evaluatePartyCombatProfile(heroes: Character[]): PartyCombatProf
     ? Math.max(1, Math.min(20, Math.round(levels.reduce((a, b) => a + b, 0) / levels.length)))
     : 3;
 
-  const averageHeroHp = Math.max(10, Math.round(totalHp / heroCount));
+  const averageHeroHp = Math.max(10, Math.round(totalPartyHp / heroCount));
   const averageHeroAc = Math.max(11, Math.round(totalAc / heroCount));
 
   // Estimate party DPR (Damage Per Round) based on level tier and count

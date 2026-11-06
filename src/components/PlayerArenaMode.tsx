@@ -1509,7 +1509,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
   const [showIntroModal, setShowIntroModal] = useState<boolean>(false);
   const [combatStatsMap, setCombatStatsMap] = useState<Record<string, { damageDealt: number; damageTaken: number; healingDealt: number; kills: number }>>({});
   const [selectedHeroFovId, setSelectedHeroFovId] = useState<string | null>(null);
-  const [isArenaLoading, setIsArenaLoading] = useState<boolean>(true);
+  const [isArenaLoading, setIsArenaLoading] = useState<boolean>(false);
 
   const trackCombatStat = useCallback((actorId: string, type: 'damageDealt' | 'damageTaken' | 'healingDealt' | 'kills', amount: number = 1) => {
     setCombatStatsMap((prev) => {
@@ -4950,7 +4950,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                     <div className="flex items-center justify-between text-[11px] font-mono">
                       <div className="flex items-center gap-1.5 text-zinc-300">
                         <Shield className="w-3.5 h-3.5 text-amber-400" />
-                        <span className="font-bold">Party APL {currentPartyProfile.averageLevel}</span>
+                        <span className="font-bold">Party APL {currentPartyProfile?.averagePartyLevel || 1}</span>
                         <span className="text-zinc-500">
                           ({selectedGoldHeroes.length} {selectedGoldHeroes.length === 1 ? 'Hero' : 'Heroes'})
                         </span>
@@ -4973,18 +4973,19 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                     </div>
 
                     <div className="flex items-center justify-between text-[10px] font-mono text-zinc-400">
-                      <span>Total Party HP: <strong className="text-zinc-200">{currentPartyProfile.totalPartyHp}</strong></span>
-                      <span>Avg AC: <strong className="text-zinc-200">{currentPartyProfile.averageAc}</strong></span>
-                      <span>Est DPR: <strong className="text-zinc-200">~{currentPartyProfile.estimatedPartyDpr}</strong></span>
+                      <span>Total Party HP: <strong className="text-zinc-200">{currentPartyProfile?.totalPartyHp || 0}</strong></span>
+                      <span>Avg AC: <strong className="text-zinc-200">{currentPartyProfile?.averageHeroAc || 15}</strong></span>
+                      <span>Est DPR: <strong className="text-zinc-200">~{currentPartyProfile?.estimatedPartyDpr || 10}</strong></span>
                     </div>
                   </div>
 
                   {/* Active Drafted Monsters List */}
                   <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                     {draftedMonsters.map((mon, idx) => {
+                      if (!mon) return null;
                       const calibrated = (mon as any).calibratedStats;
-                      const displayHp = calibrated?.hp ?? mon.hp;
-                      const displayAc = calibrated?.ac ?? mon.ac;
+                      const displayHp = calibrated?.hp ?? mon.hp ?? 45;
+                      const displayAc = calibrated?.ac ?? mon.ac ?? 14;
                       const displayCr = calibrated?.scaledCr ?? mon.challenge?.split(' ')[0] ?? '1';
                       const isBoss = calibrated?.isBoss;
                       const bossTitle = calibrated?.bossTitle;
