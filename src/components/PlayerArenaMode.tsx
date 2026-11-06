@@ -5723,8 +5723,10 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                     setActiveTokenMenu({ id: clicked.id, x: clientX, y: clientY });
                   }}
                   onClickToken={(clicked) => {
-                    // Select hero for dynamic Field of View vision cone/circle
-                    setSelectedHeroFovId(clicked.id);
+                    // Only change Field of View vision if the clicked token is a player hero (never an AI monster!)
+                    if (!clicked.isAI) {
+                      setSelectedHeroFovId(clicked.id);
+                    }
                     setInspectedTargetCombatant({
                       id: clicked.id,
                       name: clicked.name,
@@ -5763,15 +5765,30 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             </Layer>
           )}
 
-          {/* Dynamic Field of View & Line-of-Sight Occlusion Layer */}
+          {/* Dynamic Field of View & Line-of-Sight Occlusion Layer (strictly from player hero POV, never AI on their turn) */}
           <ArenaDynamicVisionLayer
             arenaWidth={arenaWidth}
             arenaHeight={arenaHeight}
             walls={activeMapWalls}
             gridSize={arenaGridSize}
-            selectedToken={
-              combatants.find((c) => c.id === (selectedHeroFovId || activeCombatant?.id)) || null
-            }
+            selectedToken={(() => {
+              // Priority 1: User-selected player hero (never an AI combatant)
+              if (selectedHeroFovId) {
+                const manualHero = combatants.find((c) => c.id === selectedHeroFovId && !c.isAI && c.currentHp > 0);
+                if (manualHero) return manualHero;
+              }
+              // Priority 2: Active turn combatant ONLY if it is a player hero (never AI on their turn)
+              if (activeCombatant && !activeCombatant.isAI && activeCombatant.currentHp > 0) {
+                return activeCombatant;
+              }
+              // Priority 3: Fallback to the first living player hero (gold team / non-AI)
+              return (
+                combatants.find((c) => !c.isAI && c.currentHp > 0) ||
+                combatants.find((c) => c.team === 'gold' && c.currentHp > 0) ||
+                combatants.find((c) => !c.isAI) ||
+                null
+              );
+            })()}
             enabled={arenaConfig.enforceWalls}
           />
 
