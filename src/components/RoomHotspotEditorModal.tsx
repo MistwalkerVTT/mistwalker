@@ -205,7 +205,11 @@ Please respond in the following EXACT JSON format (and nothing else, no markdown
       dmNotes: dmNotes.trim(),
       pdfSection: pdfSection.trim() || undefined,
       pdfPage: pdfPage ? parseInt(pdfPage, 10) : undefined,
-      color: color || '#f59e0b'
+      color: color || '#f59e0b',
+      monsters: (currentAnno.monsters && currentAnno.monsters.length > 0)
+        ? currentAnno.monsters
+        : (digestMatchFound?.monsters || currentAnno.monsters),
+      hiddenMonsterNames: currentAnno.hiddenMonsterNames
     });
   };
 

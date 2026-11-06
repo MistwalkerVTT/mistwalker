@@ -161,6 +161,7 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
         dmNotes: cachedLastActive.dmNotes || '',
         tokens: cachedLastActive.tokens || [],
         walls: cachedLastActive.walls || [],
+        roomAnnotations: cachedLastActive.roomAnnotations || [],
         gridSize: cachedLastActive.gridSize || 50,
         reveals: cachedLastActive.reveals || [],
         polygonReveals: cachedLastActive.polygonReveals || [],

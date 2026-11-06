@@ -194,12 +194,14 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 
 import { WallSegment, VisionConfig, RoomAnnotation, ChapterPdfDigest, RevealPoint, TokenMonsterState, normalizeRoomAnnotation, normalizeRoomAnnotations, isDescriptiveBadge } from '../types';
 import type { HandoutItem } from '../types/handout';
+import { DEMO_GV_CAMPAIGN } from '../data/demoCampaignGv';
 
 // Data Interfaces as specified in User Requirements
 export interface SceneToken {
   id: string;
   name: string;
   avatarUrl: string;
+  url?: string;
   x: number;
   y: number;
   hp?: number;
@@ -208,6 +210,8 @@ export interface SceneToken {
   tempHp?: number;
   ac?: number;
   size?: number;
+  conditions?: string[];
+  hidden?: boolean;
   isCondition?: boolean;
   visionRadius?: number;
   visionAngle?: number;
@@ -223,8 +227,64 @@ export interface SceneToken {
   auraName?: string;
   auraPulse?: boolean;
   auras?: any[];
+  elevation?: number;
+  isFlying?: boolean;
+  haloActive?: boolean;
+  spiritualWeapon?: any;
+  allyId?: string;
   speed?: number;
+  monsterId?: string;
+  customMonsterData?: any;
   monsterState?: TokenMonsterState;
+}
+
+/**
+ * Serializes any runtime canvas Token into a complete SceneToken preserving all monster,
+ * combat, customMonsterData, condition, and aura metadata.
+ */
+export function serializeTokenForScene(t: any): SceneToken {
+  const avatarUrl = t.url || t.avatarUrl || t.customMonsterData?.avatarUrl || '';
+  const tok: SceneToken = {
+    id: t.id,
+    name: t.name || 'Token',
+    avatarUrl,
+    url: avatarUrl,
+    x: Math.round(t.x || 0),
+    y: Math.round(t.y || 0),
+    size: typeof t.size === 'number' ? t.size : 1
+  };
+  if (typeof t.hp === 'number' && !isNaN(t.hp)) tok.hp = t.hp;
+  if (typeof t.maxHp === 'number' && !isNaN(t.maxHp)) tok.maxHp = t.maxHp;
+  if (typeof t.currentHp === 'number' && !isNaN(t.currentHp)) tok.currentHp = t.currentHp;
+  if (typeof t.tempHp === 'number' && !isNaN(t.tempHp)) tok.tempHp = t.tempHp;
+  if (typeof t.ac === 'number' && !isNaN(t.ac)) tok.ac = t.ac;
+  if (Array.isArray(t.conditions) && t.conditions.length > 0) tok.conditions = t.conditions;
+  if (typeof t.hidden === 'boolean') tok.hidden = t.hidden;
+  if (typeof t.isCondition === 'boolean') tok.isCondition = t.isCondition;
+  if (typeof t.visionRadius === 'number') tok.visionRadius = t.visionRadius;
+  if (typeof t.visionAngle === 'number') tok.visionAngle = t.visionAngle;
+  if (typeof t.isPlayer === 'boolean') tok.isPlayer = t.isPlayer;
+  if (typeof t.isMonster === 'boolean') tok.isMonster = t.isMonster;
+  if (t.category) tok.category = t.category;
+  if (typeof t.visionEnabled === 'boolean') tok.visionEnabled = t.visionEnabled;
+  if (t.characterId) tok.characterId = t.characterId;
+  if (t.ddbCharacterId !== undefined) tok.ddbCharacterId = t.ddbCharacterId;
+  if (typeof t.auraRadius === 'number') tok.auraRadius = t.auraRadius;
+  if (t.auraColor) tok.auraColor = t.auraColor;
+  if (typeof t.auraOpacity === 'number') tok.auraOpacity = t.auraOpacity;
+  if (t.auraName) tok.auraName = t.auraName;
+  if (typeof t.auraPulse === 'boolean') tok.auraPulse = t.auraPulse;
+  if (Array.isArray(t.auras)) tok.auras = t.auras;
+  if (typeof t.elevation === 'number' && !isNaN(t.elevation)) tok.elevation = t.elevation;
+  if (typeof t.isFlying === 'boolean') tok.isFlying = t.isFlying;
+  if (typeof t.haloActive === 'boolean') tok.haloActive = t.haloActive;
+  if (t.spiritualWeapon) tok.spiritualWeapon = t.spiritualWeapon;
+  if (t.allyId) tok.allyId = t.allyId;
+  if (typeof t.speed === 'number') tok.speed = t.speed;
+  if (t.monsterId) tok.monsterId = t.monsterId;
+  if (t.customMonsterData) tok.customMonsterData = t.customMonsterData;
+  if (t.monsterState) tok.monsterState = t.monsterState;
+  return tok;
 }
 
 export type { ScenePlayInstance } from '../types';
@@ -1067,17 +1127,25 @@ export async function saveSceneToCampaign(
   try {
     const docRef = doc(db, 'campaigns', campaignId);
     const snap = await getDoc(docRef);
-    if (!snap.exists()) {
-      throw new Error(`Campaign ${campaignId} not found`);
-    }
-    const camp = snap.data() as Campaign;
+    const camp: Campaign = snap.exists()
+      ? (snap.data() as Campaign)
+      : campaignId === DEMO_GV_CAMPAIGN.campaignId
+      ? { ...DEMO_GV_CAMPAIGN }
+      : {
+          campaignId,
+          campaignTitle: 'Saved Campaign',
+          description: '',
+          chapters: [],
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        };
     const sanitizedScene = await sanitizeSceneForStorage({
       ...scene,
       updatedAt: Date.now()
     });
     let foundChapter = false;
 
-    const updatedChapters = camp.chapters.map(ch => {
+    const updatedChapters = (camp.chapters || []).map(ch => {
       if (ch.chapterId === chapterId) {
         foundChapter = true;
         const sceneExists = ch.scenes.some(s => s.sceneId === sanitizedScene.sceneId);
@@ -1096,8 +1164,8 @@ export async function saveSceneToCampaign(
                 walls: (sanitizedScene.walls && sanitizedScene.walls.length > 0)
                   ? sanitizedScene.walls
                   : (s.walls || []),
-                // Critical safeguard: Never overwrite non-empty tokens with an empty array
-                tokens: (sanitizedScene.tokens && sanitizedScene.tokens.length > 0)
+                // Persist exact token array (allowing intentional removal or modification of monsters/tokens)
+                tokens: Array.isArray(sanitizedScene.tokens)
                   ? sanitizedScene.tokens
                   : (s.tokens || []),
                 updatedAt: Date.now()

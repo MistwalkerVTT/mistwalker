@@ -1,6 +1,7 @@
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { db, cleanForFirestore, handleFirestoreError, OperationType, Campaign, IS_ENTERPRISE_BETA } from './firebase';
 import { RoomAnnotation } from '../types';
+import { DEMO_GV_CAMPAIGN } from '../data/demoCampaignGv';
 
 export interface UpdateRoomAnnotationParams {
   campaignId?: string;
@@ -80,8 +81,12 @@ export async function updateRoomAnnotation({
     try {
       const campRef = doc(db, 'campaigns', targetCampaignId);
       const campSnap = await getDoc(campRef);
-      if (campSnap.exists()) {
-        const campData = campSnap.data() as Campaign;
+      const campData: Campaign | null = campSnap.exists()
+        ? (campSnap.data() as Campaign)
+        : targetCampaignId === DEMO_GV_CAMPAIGN.campaignId
+        ? { ...DEMO_GV_CAMPAIGN }
+        : null;
+      if (campData) {
         let modified = false;
 
         const updatedChapters = (campData.chapters || []).map((ch) => {
@@ -97,7 +102,8 @@ export async function updateRoomAnnotation({
                 modified = true;
                 return {
                   ...sc,
-                  roomAnnotations: newAnnos
+                  roomAnnotations: newAnnos,
+                  updatedAt: now
                 };
               }
               return sc;
@@ -112,10 +118,22 @@ export async function updateRoomAnnotation({
         });
 
         if (modified) {
-          await updateDoc(campRef, {
-            chapters: cleanForFirestore(updatedChapters),
-            updatedAt: now
-          });
+          if (campSnap.exists()) {
+            await updateDoc(campRef, {
+              chapters: cleanForFirestore(updatedChapters),
+              updatedAt: now
+            });
+          } else {
+            await setDoc(
+              campRef,
+              cleanForFirestore({
+                ...campData,
+                chapters: updatedChapters,
+                updatedAt: now
+              }),
+              { merge: true }
+            );
+          }
         }
       }
     } catch (campErr) {

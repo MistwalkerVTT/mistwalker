@@ -41,6 +41,7 @@ import {
   Chapter,
   Scene,
   SceneToken,
+  serializeTokenForScene,
   getCampaignsList,
   saveCampaignDoc,
   deleteCampaignDoc,
@@ -330,13 +331,13 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
                   if (ch.chapterId !== DEMO_GV_CHAPTER.chapterId) return ch;
                   return {
                     ...ch,
-                    pdfDigest: DEMO_GV_PDF_DIGEST,
+                    pdfDigest: ch.pdfDigest || DEMO_GV_PDF_DIGEST,
                     scenes: ch.scenes.map(sc => {
                       if (sc.sceneId !== DEMO_GV_SCENE.sceneId) return sc;
                       return {
                         ...sc,
-                        roomAnnotations: DEMO_GV_ROOM_ZONES,
-                        tokens: DEMO_GV_TOKENS
+                        roomAnnotations: (sc.roomAnnotations && sc.roomAnnotations.length > 0) ? sc.roomAnnotations : DEMO_GV_ROOM_ZONES,
+                        tokens: Array.isArray(sc.tokens) ? sc.tokens : DEMO_GV_TOKENS
                       };
                     })
                   };
@@ -397,9 +398,13 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
         ? currentActiveDmNotes
         : (selectedScene.dmNotes || '');
       setEditedDmNotes(initialNotes);
-      setEditedSceneTokens(selectedScene.tokens || []);
+      setEditedSceneTokens(
+        isCurrentlyActiveScene && Array.isArray(currentTokens)
+          ? currentTokens.map(t => serializeTokenForScene(t))
+          : (selectedScene.tokens || [])
+      );
     }
-  }, [selectedScene, activeSceneInfo, currentActiveDmNotes]);
+  }, [selectedScene, activeSceneInfo, currentActiveDmNotes, currentTokens]);
 
   // Live Game Play Instance (Runtime Checkpoint) state
   const [playInstances, setPlayInstances] = useState<ScenePlayInstance[]>([]);
@@ -750,26 +755,7 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
 
     // 1. Tokens in exact positions (including monster tokens with full HP, AC, category, stats)
     const sourceTokens: SceneToken[] = (isActiveScene && currentTokens && currentTokens.length > 0)
-      ? currentTokens.map(t => {
-          const tok: SceneToken = {
-            id: t.id,
-            name: t.name || 'Token',
-            avatarUrl: t.url || t.avatarUrl || '',
-            x: Math.round(t.x || 0),
-            y: Math.round(t.y || 0),
-            size: typeof t.size === 'number' ? t.size : 1
-          };
-          if (typeof t.hp === 'number' && !isNaN(t.hp)) tok.hp = t.hp;
-          if (typeof t.ac === 'number' && !isNaN(t.ac)) tok.ac = t.ac;
-          if (typeof t.isCondition === 'boolean') tok.isCondition = t.isCondition;
-          if (typeof (t as any).isPlayer === 'boolean') tok.isPlayer = (t as any).isPlayer;
-          if (typeof (t as any).isMonster === 'boolean') (tok as any).isMonster = (t as any).isMonster;
-          if ((t as any).category) (tok as any).category = (t as any).category;
-          if (typeof (t as any).visionRadius === 'number') tok.visionRadius = (t as any).visionRadius;
-          if (typeof (t as any).visionAngle === 'number') tok.visionAngle = (t as any).visionAngle;
-          if (typeof (t as any).visionEnabled === 'boolean') (tok as any).visionEnabled = (t as any).visionEnabled;
-          return tok;
-        })
+      ? currentTokens.map(t => serializeTokenForScene(t))
       : (isSelectedScene && editedSceneTokens.length > 0)
       ? editedSceneTokens
       : (sceneToDuplicate.tokens || []);
@@ -1367,26 +1353,7 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
     setIsSaving(true);
 
     const tokensToSave: SceneToken[] = useCanvasTokens
-      ? currentTokens.map(t => {
-          const tok: SceneToken = {
-            id: t.id,
-            name: t.name || 'Token',
-            avatarUrl: t.url || t.avatarUrl || '',
-            x: Math.round(t.x || 0),
-            y: Math.round(t.y || 0),
-            size: typeof t.size === 'number' ? t.size : 1
-          };
-          if (typeof t.hp === 'number' && !isNaN(t.hp)) tok.hp = t.hp;
-          if (typeof t.ac === 'number' && !isNaN(t.ac)) tok.ac = t.ac;
-          if (typeof t.isCondition === 'boolean') tok.isCondition = t.isCondition;
-          if (typeof (t as any).isPlayer === 'boolean') tok.isPlayer = (t as any).isPlayer;
-          if (typeof (t as any).isMonster === 'boolean') (tok as any).isMonster = (t as any).isMonster;
-          if ((t as any).category) (tok as any).category = (t as any).category;
-          if (typeof (t as any).visionRadius === 'number') tok.visionRadius = (t as any).visionRadius;
-          if (typeof (t as any).visionAngle === 'number') tok.visionAngle = (t as any).visionAngle;
-          if (typeof (t as any).visionEnabled === 'boolean') (tok as any).visionEnabled = (t as any).visionEnabled;
-          return tok;
-        })
+      ? currentTokens.map(t => serializeTokenForScene(t))
       : editedSceneTokens;
 
     const matchedMap = internalSavedMaps.find(m => m.url === editedMapUrl);

@@ -19,6 +19,7 @@ import {
   Campaign,
   Scene,
   SceneToken,
+  serializeTokenForScene,
   saveSceneToCampaign,
   createCampaignWithScene,
   publishActiveSession
@@ -171,26 +172,7 @@ export const SaveToCampaignModal: React.FC<SaveToCampaignModalProps> = ({
     setIsSaving(true);
 
     try {
-      const sceneTokensToSave: SceneToken[] = currentTokens.map(t => {
-        const tokenObj: SceneToken = {
-          id: t.id,
-          name: t.name || 'Token',
-          avatarUrl: t.url || '',
-          x: Math.round(t.x || 0),
-          y: Math.round(t.y || 0),
-          size: t.size ?? 1
-        };
-        if (typeof t.hp === 'number' && !isNaN(t.hp)) tokenObj.hp = t.hp;
-        if (typeof t.ac === 'number' && !isNaN(t.ac)) tokenObj.ac = t.ac;
-        if (typeof t.isCondition === 'boolean') tokenObj.isCondition = t.isCondition;
-        if (typeof t.visionRadius === 'number') tokenObj.visionRadius = t.visionRadius;
-        if (typeof t.visionAngle === 'number') tokenObj.visionAngle = t.visionAngle;
-        if (typeof t.isPlayer === 'boolean') tokenObj.isPlayer = t.isPlayer;
-        if (typeof (t as any).isMonster === 'boolean') (tokenObj as any).isMonster = (t as any).isMonster;
-        if ((t as any).category) (tokenObj as any).category = (t as any).category;
-        if (typeof (t as any).visionEnabled === 'boolean') (tokenObj as any).visionEnabled = (t as any).visionEnabled;
-        return tokenObj;
-      });
+      const sceneTokensToSave: SceneToken[] = currentTokens.map(t => serializeTokenForScene(t));
 
       const targetSceneId = saveMode === 'update_current' && activeSceneInfo
         ? activeSceneInfo.sceneId

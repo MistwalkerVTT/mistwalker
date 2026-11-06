@@ -276,7 +276,8 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
     const updatedData: RoomAnnotation = {
       ...activeRoom,
       monsters: nextMonsters,
-      hiddenMonsterNames: nextHidden
+      hiddenMonsterNames: nextHidden,
+      updatedAt: Date.now()
     };
     setActiveRoom(updatedData);
     if (onUpdateRoom) {
@@ -549,8 +550,12 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
     }
   }, [initialTab, room?.id]);
 
-  // Synchronize internal state when room prop changes
+  // Synchronize internal state when room prop or drawer open state changes
   useEffect(() => {
+    if (!isOpen) {
+      currentRoomIdRef.current = null;
+      return;
+    }
     if (!room) {
       currentRoomIdRef.current = null;
       setActiveRoom(null);
@@ -577,12 +582,15 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
 
     // Check for matching room in chapterPdfDigest
     const matchedDigestRoom = matchRoomInDigest(roomNum, rName, room.label, chapterPdfDigest?.rooms);
+    const hasExplicitMonsterEdits =
+      (Array.isArray(room.monsters) && room.monsters.length > 0) ||
+      (Array.isArray(room.hiddenMonsterNames) && room.hiddenMonsterNames.length > 0);
 
     let effectiveNotes = room.dmNotes || '';
     let effectiveBoxedText = room.boxedText || '';
     let effectiveRoomName = rName;
     let effectivePdfSection = room.pdfSection || '';
-    let effectiveMonsters: any[] = (room.monsters && room.monsters.length > 0)
+    let effectiveMonsters: any[] = Array.isArray(room.monsters)
       ? room.monsters.filter((m: any) => !isNonCreatureStatOrItem(m))
       : [];
 
@@ -599,7 +607,7 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
       if (!effectivePdfSection) {
         effectivePdfSection = matchedDigestRoom.sceneTitle || (chapterPdfDigest?.chapterTitle ? `${chapterPdfDigest.chapterTitle} - Room ${matchedDigestRoom.roomNumber}` : `Room ${matchedDigestRoom.roomNumber}`);
       }
-      if (effectiveMonsters.length === 0 && matchedDigestRoom.monsters && matchedDigestRoom.monsters.length > 0) {
+      if (!hasExplicitMonsterEdits && effectiveMonsters.length === 0 && matchedDigestRoom.monsters && matchedDigestRoom.monsters.length > 0) {
         effectiveMonsters = matchedDigestRoom.monsters.filter((m: any) => !isNonCreatureStatOrItem(m));
       }
     } else {
@@ -610,7 +618,7 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
         if (!effectiveRoomName || effectiveRoomName === 'Zone' || effectiveRoomName.startsWith('Room ')) {
           effectiveRoomName = "Area V8";
         }
-        if (effectiveMonsters.length === 0) {
+        if (!hasExplicitMonsterEdits && effectiveMonsters.length === 0) {
           effectiveMonsters = ['9x Zombie'];
         }
       }
@@ -624,7 +632,8 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
       dmNotes: effectiveNotes,
       boxedText: effectiveBoxedText,
       pdfSection: effectivePdfSection,
-      monsters: effectiveMonsters
+      monsters: effectiveMonsters,
+      hiddenMonsterNames: room.hiddenMonsterNames || []
     };
 
     setActiveRoom(mergedRoom);
@@ -643,10 +652,10 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
       setEditHazardFallDepth(typeof room.fallDepthFt === 'number' ? room.fallDepthFt : '');
       setEditHazardDc(typeof room.saveDc === 'number' ? room.saveDc : '');
       setManualMonsters(effectiveMonsters);
-      setHiddenMonsterNames((room as any).hiddenMonsterNames || []);
+      setHiddenMonsterNames(room.hiddenMonsterNames || []);
       setSelectedPdfRoomNum(roomNum);
     }
-  }, [room?.id]);
+  }, [room?.id, isOpen]);
 
   if (!isOpen) return null;
 

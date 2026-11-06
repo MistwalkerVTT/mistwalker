@@ -123,6 +123,7 @@ import {
   Campaign,
   Scene,
   SceneToken,
+  serializeTokenForScene,
   ActiveSessionData,
   publishActiveSession,
   subscribeToActiveSession,
@@ -3404,7 +3405,8 @@ export default function App() {
   // Subscribe to Campaigns list in real-time
   useEffect(() => {
     const unsub = subscribeToCampaigns((list) => {
-      setCampaignsList(list);
+      const hasDemo = list.some(c => c.campaignId === DEMO_GV_CAMPAIGN.campaignId);
+      setCampaignsList(hasDemo ? list : [DEMO_GV_CAMPAIGN, ...list]);
       setIsHydratingScene(false);
     });
     return () => unsub();
@@ -3536,7 +3538,7 @@ export default function App() {
 
     // 2. Load Tokens
     let tokenSource = scene.tokens;
-    if (scene.sceneId === DEMO_GV_SCENE.sceneId && (!tokenSource || !tokenSource.some((t: any) => t.isMonster))) {
+    if (scene.sceneId === DEMO_GV_SCENE.sceneId && !Array.isArray(tokenSource)) {
       tokenSource = DEMO_GV_TOKENS;
     }
     let loadedTokens: any[] = [];
@@ -3552,8 +3554,8 @@ export default function App() {
           name: t.name,
           url: effectiveTokenAvatar,
           avatarUrl: effectiveTokenAvatar,
-          x: t.x || 300,
-          y: t.y || 300,
+          x: t.x ?? 300,
+          y: t.y ?? 300,
           size: t.size || (isCond ? 0.5 : 1),
           hp: t.hp,
           maxHp: t.maxHp ?? t.hp,
@@ -3572,7 +3574,11 @@ export default function App() {
         };
         return repairMonsterToken(rawTok, compendiumMonsters);
       });
+      tokensRef.current = loadedTokens;
       setTokens(loadedTokens);
+    } else {
+      tokensRef.current = [];
+      setTokens([]);
     }
 
     // 3. Grid & Fog configuration (restores full scene bundle with safe fallbacks)
@@ -3613,11 +3619,14 @@ export default function App() {
 
     // 5. Load Room Annotations, Polygon Zones & Map Labels (directly tied to the scene bundle)
     let annotationSource = scene.roomAnnotations;
-    if (scene.sceneId === DEMO_GV_SCENE.sceneId && (!annotationSource || annotationSource.length < DEMO_GV_ROOM_ZONES.length)) {
+    if (scene.sceneId === DEMO_GV_SCENE.sceneId && (!Array.isArray(annotationSource) || annotationSource.length === 0)) {
       annotationSource = DEMO_GV_ROOM_ZONES;
     }
+    let loadedAnnotations: RoomAnnotation[] = [];
     if (annotationSource && Array.isArray(annotationSource) && annotationSource.length > 0) {
       const mapped = normalizeRoomAnnotations(annotationSource, scene.sceneId, campaignId);
+      loadedAnnotations = mapped;
+      roomAnnotationsRef.current = mapped;
       setRoomAnnotations(mapped);
       if (mapsDataRef.current[targetSlot]) {
         mapsDataRef.current[targetSlot].roomAnnotations = mapped;
@@ -3628,23 +3637,27 @@ export default function App() {
         .then(zones => {
           if (zones && zones.length > 0) {
             const mapped = normalizeRoomAnnotations(zones, scene.sceneId, campaignId);
+            roomAnnotationsRef.current = mapped;
             setRoomAnnotations(mapped);
             if (mapsDataRef.current[targetSlot]) {
-        mapsDataRef.current[targetSlot].roomAnnotations = mapped;
-      }
+              mapsDataRef.current[targetSlot].roomAnnotations = mapped;
+            }
             // Auto-persist back onto the scene document so future loads find them directly on the scene
             saveSceneToCampaign(campaignId, chapterId, { ...scene, roomAnnotations: mapped }).catch(console.warn);
           } else {
+            roomAnnotationsRef.current = [];
             setRoomAnnotations([]);
             if (mapsDataRef.current[targetSlot]) {
-        mapsDataRef.current[targetSlot].roomAnnotations = [];
-      }
+              mapsDataRef.current[targetSlot].roomAnnotations = [];
+            }
           }
         })
         .catch(() => {
+          roomAnnotationsRef.current = [];
           setRoomAnnotations([]);
         });
     } else {
+      roomAnnotationsRef.current = [];
       setRoomAnnotations([]);
       if (mapsDataRef.current[targetSlot]) {
         mapsDataRef.current[targetSlot].roomAnnotations = [];
@@ -3721,7 +3734,7 @@ export default function App() {
       boardWeatherEffect: loadedWeather,
       walls: scene.walls || [],
       visionConfig: scene.visionConfig || visionConfig,
-      roomAnnotations: roomAnnotations,
+      roomAnnotations: loadedAnnotations,
       activeSceneInfo: {
         campaignId,
         chapterId,
@@ -3760,6 +3773,7 @@ export default function App() {
         wallsCount: (scene.walls || []).length,
         tokens: loadedTokens,
         walls: scene.walls || [],
+        roomAnnotations: loadedAnnotations,
         gridSize: scene.gridSize || 50,
         reveals: loadedReveals,
         polygonReveals: loadedPolygonReveals,
@@ -3915,42 +3929,8 @@ export default function App() {
 
     setIsQuickSaving(true);
     try {
-      const sceneTokensToSave: SceneToken[] = tokens.map(t => {
-        const tok: SceneToken = {
-          id: t.id,
-          name: t.name || 'Token',
-          avatarUrl: t.url || '',
-          x: Math.round(t.x || 0),
-          y: Math.round(t.y || 0),
-          size: t.size ?? 1
-        };
-        if (typeof t.hp === 'number' && !isNaN(t.hp)) tok.hp = t.hp;
-        if (typeof t.maxHp === 'number' && !isNaN(t.maxHp)) (tok as any).maxHp = t.maxHp;
-        if (typeof t.currentHp === 'number' && !isNaN(t.currentHp)) (tok as any).currentHp = t.currentHp;
-        if (typeof t.tempHp === 'number' && !isNaN(t.tempHp)) (tok as any).tempHp = t.tempHp;
-        if (typeof t.ac === 'number' && !isNaN(t.ac)) tok.ac = t.ac;
-        if (Array.isArray(t.conditions) && t.conditions.length > 0) (tok as any).conditions = t.conditions;
-        if (typeof t.hidden === 'boolean') (tok as any).hidden = t.hidden;
-        if (typeof t.isCondition === 'boolean') tok.isCondition = t.isCondition;
-        if (typeof (t as any).visionRadius === 'number') tok.visionRadius = (t as any).visionRadius;
-        if (typeof (t as any).visionAngle === 'number') tok.visionAngle = (t as any).visionAngle;
-        if (typeof (t as any).isPlayer === 'boolean') tok.isPlayer = (t as any).isPlayer;
-        if (typeof (t as any).isMonster === 'boolean') (tok as any).isMonster = (t as any).isMonster;
-        if ((t as any).category) (tok as any).category = (t as any).category;
-        if (typeof (t as any).visionEnabled === 'boolean') (tok as any).visionEnabled = (t as any).visionEnabled;
-        if (typeof (t as any).auraRadius === 'number') tok.auraRadius = (t as any).auraRadius;
-        if ((t as any).auraColor) tok.auraColor = (t as any).auraColor;
-        if (typeof (t as any).auraOpacity === 'number') tok.auraOpacity = (t as any).auraOpacity;
-        if ((t as any).auraName) tok.auraName = (t as any).auraName;
-        if (Array.isArray((t as any).auras)) tok.auras = (t as any).auras;
-        if (typeof t.elevation === 'number' && !isNaN(t.elevation)) (tok as any).elevation = t.elevation;
-        if (typeof t.isFlying === 'boolean') (tok as any).isFlying = t.isFlying;
-        if (typeof (t as any).haloActive === 'boolean') (tok as any).haloActive = (t as any).haloActive;
-        if ((t as any).spiritualWeapon) (tok as any).spiritualWeapon = (t as any).spiritualWeapon;
-        if ((t as any).allyId) (tok as any).allyId = (t as any).allyId;
-        if (typeof (t as any).speed === 'number') (tok as any).speed = (t as any).speed;
-        return tok;
-      });
+      const currentTokensList = tokensRef.current || tokens;
+      const sceneTokensToSave: SceneToken[] = currentTokensList.map(t => serializeTokenForScene(t));
 
       const currentDims = getMapDimensions();
       const targetMapUrl = (imageFile && !imageFile.startsWith('blob:') && !imageFile.startsWith('local:'))
@@ -3963,6 +3943,12 @@ export default function App() {
       const existingCamp = campaignsList.find(c => c.campaignId === activeSceneInfo.campaignId);
       const existingChap = existingCamp?.chapters?.find(ch => ch.chapterId === activeSceneInfo.chapterId);
       const existingScene = existingChap?.scenes?.find(s => s.sceneId === activeSceneInfo.sceneId);
+
+      const currentRoomAnnotations = (roomAnnotationsRef.current && roomAnnotationsRef.current.length > 0)
+        ? roomAnnotationsRef.current
+        : ((roomAnnotations && roomAnnotations.length > 0)
+            ? roomAnnotations
+            : (existingScene?.roomAnnotations || []));
 
       const updatedScene: Scene = {
         ...(existingScene || {}),
@@ -3987,12 +3973,37 @@ export default function App() {
         fogResetKey: fogResetKey || existingScene?.fogResetKey,
         walls: (walls && walls.length > 0) ? walls : (existingScene?.walls || []),
         visionConfig: visionConfig || existingScene?.visionConfig,
-        roomAnnotations: (roomAnnotations && roomAnnotations.length > 0) ? roomAnnotations : (existingScene?.roomAnnotations || []),
+        roomAnnotations: currentRoomAnnotations,
         boardAnimatedFeatures: boardAnimatedFeatures,
         boardAnimatedEnabled: boardAnimatedEnabled,
         boardWeatherEffect: boardWeatherEffect,
         updatedAt: Date.now()
       };
+
+      // Optimistically update in-memory campaigns list and active map slot
+      setCampaignsList(prev => prev.map(c => {
+        if (c.campaignId === activeSceneInfo.campaignId) {
+          return {
+            ...c,
+            chapters: c.chapters.map(ch => {
+              if (ch.chapterId === activeSceneInfo.chapterId) {
+                return {
+                  ...ch,
+                  scenes: ch.scenes.map(sc => sc.sceneId === activeSceneInfo.sceneId ? updatedScene : sc)
+                };
+              }
+              return ch;
+            })
+          };
+        }
+        return c;
+      }));
+
+      const curSlot = activeMapIdRef.current;
+      if (mapsDataRef.current[curSlot]) {
+        mapsDataRef.current[curSlot].tokens = currentTokensList;
+        mapsDataRef.current[curSlot].roomAnnotations = currentRoomAnnotations;
+      }
 
       await saveSceneToCampaign(
         activeSceneInfo.campaignId,
@@ -4048,7 +4059,7 @@ export default function App() {
           reveals: reveals,
           polygonReveals: polygonReveals,
           visionConfig: visionConfig,
-          roomAnnotations: roomAnnotations,
+          roomAnnotations: currentRoomAnnotations,
           boardAnimatedFeatures: boardAnimatedFeatures,
           boardAnimatedEnabled: boardAnimatedEnabled,
           boardWeatherEffect: boardWeatherEffect,
@@ -4062,7 +4073,7 @@ export default function App() {
       }
 
       const wallCount = walls.length;
-      const roomCount = roomAnnotations.length;
+      const roomCount = currentRoomAnnotations.length;
       isSceneSavedRef.current = true;
       try {
         const raw = localStorage.getItem('mistwalker_dm_state_backup_v1');
@@ -4095,6 +4106,7 @@ export default function App() {
           wallsCount: (walls || []).length,
           tokens: sceneTokensToSave,
           walls: walls || [],
+          roomAnnotations: currentRoomAnnotations,
           gridSize: gridSize || 50,
           reveals: reveals || [],
           polygonReveals: polygonReveals || [],
@@ -4122,11 +4134,33 @@ export default function App() {
       }
       localStorage.removeItem('mistwalker_crash_detected');
     } catch {}
+    setCampaignsList(prev => prev.map(c => {
+      if (c.campaignId === campaignId) {
+        return {
+          ...c,
+          chapters: c.chapters.map(ch => {
+            if (ch.chapterId === chapterId) {
+              const exists = ch.scenes.some(sc => sc.sceneId === scene.sceneId);
+              return {
+                ...ch,
+                scenes: exists
+                  ? ch.scenes.map(sc => sc.sceneId === scene.sceneId ? scene : sc)
+                  : [...ch.scenes, scene]
+              };
+            }
+            return ch;
+          })
+        };
+      }
+      return c;
+    }));
     setActiveSceneInfo({
       campaignId,
       chapterId,
       sceneId: scene.sceneId,
       sceneTitle: scene.sceneTitle,
+      mapUrl: scene.mapUrl,
+      mapThumbnailUrl: scene.mapThumbnailUrl,
       mapWidth: scene.mapWidth,
       mapHeight: scene.mapHeight
     });
@@ -4152,6 +4186,7 @@ export default function App() {
         wallsCount: scene.walls?.length || 0,
         tokens: scene.tokens || [],
         walls: scene.walls || [],
+        roomAnnotations: scene.roomAnnotations || roomAnnotationsRef.current || [],
         gridSize: scene.gridSize || 50,
         reveals: scene.reveals || [],
         polygonReveals: scene.polygonReveals || [],
@@ -6782,13 +6817,15 @@ export default function App() {
 
     try {
       // 1. Update local state immediately
+      const currentAnnos = roomAnnotationsRef.current || roomAnnotations;
       const nextAnnotations = normalizeRoomAnnotations(
-        roomAnnotations.some(z => z.id === zoneWithScene.id)
-          ? roomAnnotations.map(z => z.id === zoneWithScene.id ? zoneWithScene : z)
-          : [...roomAnnotations, zoneWithScene],
+        currentAnnos.some(z => z.id === zoneWithScene.id)
+          ? currentAnnos.map(z => z.id === zoneWithScene.id ? zoneWithScene : z)
+          : [...currentAnnos, zoneWithScene],
         scnId,
         campId
       );
+      roomAnnotationsRef.current = nextAnnotations;
       setRoomAnnotations(nextAnnotations);
 
       if (mapsDataRef.current[activeMapId]) {
@@ -6823,26 +6860,7 @@ export default function App() {
             mapWidth: currentActiveScene.mapWidth || currentDims.width,
             mapHeight: currentActiveScene.mapHeight || currentDims.height,
             dmNotes: activeDmNotes,
-            tokens: tokens.map(t => {
-              const tok: SceneToken = {
-                id: t.id,
-                name: t.name || 'Token',
-                avatarUrl: t.url || (t as any).avatarUrl || '',
-                x: Math.round(t.x || 0),
-                y: Math.round(t.y || 0),
-                size: typeof t.size === 'number' ? t.size : 1
-              };
-              if (typeof t.hp === 'number' && !isNaN(t.hp)) tok.hp = t.hp;
-              if (typeof t.ac === 'number' && !isNaN(t.ac)) tok.ac = t.ac;
-              if (typeof t.isCondition === 'boolean') tok.isCondition = t.isCondition;
-              if (typeof (t as any).isPlayer === 'boolean') tok.isPlayer = (t as any).isPlayer;
-              if (typeof (t as any).isMonster === 'boolean') (tok as any).isMonster = (t as any).isMonster;
-              if ((t as any).category) (tok as any).category = (t as any).category;
-              if (typeof (t as any).visionRadius === 'number') tok.visionRadius = (t as any).visionRadius;
-              if (typeof (t as any).visionAngle === 'number') tok.visionAngle = (t as any).visionAngle;
-              if (typeof (t as any).visionEnabled === 'boolean') (tok as any).visionEnabled = (t as any).visionEnabled;
-              return tok;
-            }),
+            tokens: (tokensRef.current || tokens).map(t => serializeTokenForScene(t)),
             gridSize: gridSize ?? existingScene?.gridSize ?? 50,
             gridOpacity: gridOpacity ?? existingScene?.gridOpacity ?? 0.25,
             gridVisible: gridVisible !== undefined ? gridVisible : (existingScene?.gridVisible ?? true),
@@ -6944,7 +6962,9 @@ export default function App() {
 
   const handleDeleteZone = async (zoneId: string) => {
     const campId = activeSceneInfo?.campaignId || 'default';
-    const nextAnnotations = roomAnnotations.filter(z => z.id !== zoneId);
+    const currentAnnos = roomAnnotationsRef.current || roomAnnotations;
+    const nextAnnotations = currentAnnos.filter(z => z.id !== zoneId);
+    roomAnnotationsRef.current = nextAnnotations;
     setRoomAnnotations(nextAnnotations);
 
     if (mapsDataRef.current[activeMapId]) {
@@ -6983,26 +7003,7 @@ export default function App() {
           mapWidth: activeSceneInfo.mapWidth || currentDims.width,
           mapHeight: activeSceneInfo.mapHeight || currentDims.height,
           dmNotes: activeDmNotes,
-          tokens: tokens.map(t => {
-            const tok: SceneToken = {
-              id: t.id,
-              name: t.name || 'Token',
-              avatarUrl: t.url || (t as any).avatarUrl || '',
-              x: Math.round(t.x || 0),
-              y: Math.round(t.y || 0),
-              size: typeof t.size === 'number' ? t.size : 1
-            };
-            if (typeof t.hp === 'number' && !isNaN(t.hp)) tok.hp = t.hp;
-            if (typeof t.ac === 'number' && !isNaN(t.ac)) tok.ac = t.ac;
-            if (typeof t.isCondition === 'boolean') tok.isCondition = t.isCondition;
-            if (typeof (t as any).isPlayer === 'boolean') tok.isPlayer = (t as any).isPlayer;
-            if (typeof (t as any).isMonster === 'boolean') (tok as any).isMonster = (t as any).isMonster;
-            if ((t as any).category) (tok as any).category = (t as any).category;
-            if (typeof (t as any).visionRadius === 'number') tok.visionRadius = (t as any).visionRadius;
-            if (typeof (t as any).visionAngle === 'number') tok.visionAngle = (t as any).visionAngle;
-            if (typeof (t as any).visionEnabled === 'boolean') (tok as any).visionEnabled = (t as any).visionEnabled;
-            return tok;
-          }),
+          tokens: (tokensRef.current || tokens).map(t => serializeTokenForScene(t)),
           gridSize: gridSize ?? existingScene?.gridSize ?? 50,
           gridOpacity: gridOpacity ?? existingScene?.gridOpacity ?? 0.25,
           gridVisible: gridVisible !== undefined ? gridVisible : (existingScene?.gridVisible ?? true),
@@ -7144,7 +7145,12 @@ export default function App() {
   };
 
   const handleUpdateRoomAnnotation = (updatedRoom: RoomAnnotation) => {
-    const nextAnnotations = roomAnnotations.map((a) => (a.id === updatedRoom.id ? updatedRoom : a));
+    const currentAnnos = roomAnnotationsRef.current || roomAnnotations;
+    const exists = currentAnnos.some((a) => a.id === updatedRoom.id);
+    const nextAnnotations = exists
+      ? currentAnnos.map((a) => (a.id === updatedRoom.id ? updatedRoom : a))
+      : [...currentAnnos, updatedRoom];
+    roomAnnotationsRef.current = nextAnnotations;
     setRoomAnnotations(nextAnnotations);
     setSelectedRoomAnnotation(updatedRoom);
     setSelectedZoneForSidePanel(updatedRoom);
@@ -7161,37 +7167,7 @@ export default function App() {
         ? imageFile
         : (activeSceneInfo.mapUrl || imageFile || '');
 
-      const sceneTokensToSave: SceneToken[] = tokens.map(t => {
-        const tok: SceneToken = {
-          id: t.id,
-          name: t.name || 'Token',
-          avatarUrl: t.url || '',
-          x: Math.round(t.x || 0),
-          y: Math.round(t.y || 0),
-          size: t.size ?? 1
-        };
-        if (typeof t.hp === 'number' && !isNaN(t.hp)) tok.hp = t.hp;
-        if (typeof t.ac === 'number' && !isNaN(t.ac)) tok.ac = t.ac;
-        if (typeof t.isCondition === 'boolean') tok.isCondition = t.isCondition;
-        if (typeof (t as any).isPlayer === 'boolean') tok.isPlayer = (t as any).isPlayer;
-        if (typeof (t as any).isMonster === 'boolean') (tok as any).isMonster = (t as any).isMonster;
-        if ((t as any).category) (tok as any).category = (t as any).category;
-        if (typeof (t as any).visionRadius === 'number') tok.visionRadius = (t as any).visionRadius;
-        if (typeof (t as any).visionAngle === 'number') tok.visionAngle = (t as any).visionAngle;
-        if (typeof (t as any).visionEnabled === 'boolean') (tok as any).visionEnabled = (t as any).visionEnabled;
-        if (typeof (t as any).auraRadius === 'number') tok.auraRadius = (t as any).auraRadius;
-        if ((t as any).auraColor) tok.auraColor = (t as any).auraColor;
-        if (typeof (t as any).auraOpacity === 'number') tok.auraOpacity = (t as any).auraOpacity;
-        if ((t as any).auraName) tok.auraName = (t as any).auraName;
-        if (Array.isArray((t as any).auras)) tok.auras = (t as any).auras;
-        if (typeof t.elevation === 'number' && !isNaN(t.elevation)) (tok as any).elevation = t.elevation;
-        if (typeof t.isFlying === 'boolean') (tok as any).isFlying = t.isFlying;
-        if (typeof (t as any).haloActive === 'boolean') (tok as any).haloActive = (t as any).haloActive;
-        if ((t as any).spiritualWeapon) (tok as any).spiritualWeapon = (t as any).spiritualWeapon;
-        if ((t as any).allyId) (tok as any).allyId = (t as any).allyId;
-        if (typeof (t as any).speed === 'number') (tok as any).speed = (t as any).speed;
-        return tok;
-      });
+      const sceneTokensToSave: SceneToken[] = (tokensRef.current || tokens).map(t => serializeTokenForScene(t));
 
       const camp = campaignsList.find(c => c.campaignId === activeSceneInfo.campaignId);
       const chap = camp?.chapters?.find(ch => ch.chapterId === activeSceneInfo.chapterId);
@@ -7249,6 +7225,35 @@ export default function App() {
         }
         return c;
       }));
+
+      try {
+        const safeMapUrl = (updatedScene.mapUrl && updatedScene.mapUrl.startsWith('blob:'))
+          ? `local:scene_${updatedScene.sceneId}`
+          : updatedScene.mapUrl;
+        const activeMeta = {
+          campaignId: activeSceneInfo.campaignId,
+          chapterId: activeSceneInfo.chapterId,
+          campaignTitle: camp?.campaignTitle || (activeSceneInfo.campaignId === '__arena__' ? 'Battle Arena' : 'Campaign'),
+          chapterTitle: chap?.chapterTitle || 'Chapter',
+          sceneId: updatedScene.sceneId,
+          sceneTitle: updatedScene.sceneTitle,
+          mapUrl: safeMapUrl,
+          mapThumbnailUrl: updatedScene.mapThumbnailUrl || (safeMapUrl && !safeMapUrl.startsWith('local:') ? safeMapUrl : undefined),
+          mapWidth: updatedScene.mapWidth,
+          mapHeight: updatedScene.mapHeight,
+          tokensCount: sceneTokensToSave.length,
+          wallsCount: (walls || []).length,
+          tokens: sceneTokensToSave,
+          walls: walls || [],
+          roomAnnotations: nextAnnotations,
+          gridSize: gridSize || 50,
+          reveals: reveals || [],
+          polygonReveals: polygonReveals || [],
+          timestamp: Date.now()
+        };
+        localStorage.setItem('mistwalker_last_active_scene', JSON.stringify(activeMeta));
+        localStorage.setItem('mistwalker_last_active_scene_meta', JSON.stringify(activeMeta));
+      } catch {}
 
       saveSceneToCampaign(activeSceneInfo.campaignId, activeSceneInfo.chapterId, updatedScene).catch(console.warn);
       if (activeMapIdRef.current === liveMapIdRef.current) {
@@ -10674,7 +10679,9 @@ export default function App() {
                     onMouseEnter={handleTokenHoverEnter}
                     onMouseLeave={handleTokenHoverLeave}
                     onClick={(e: any) => {
+                      if (e?.evt?.button && e.evt.button !== 0) return;
                       setActiveMenu(null);
+                      setActiveTokenMenu(null);
                       if (tool === 'spell_aim' || activeDmMonsterAction) {
                         if (handleDmTargetTokenRef.current) {
                           handleDmTargetTokenRef.current(token, activeDmMonsterAction || undefined);
@@ -10874,6 +10881,13 @@ export default function App() {
                       }
                     }}
                     onContextMenu={(e: any) => {
+                      setSelectedTokenIds([]);
+                      dmMultiattackQueueRef.current = null;
+                      setDmMultiattackQueue(null);
+                      setActiveDmMonsterAction(null);
+                      setActiveEquippedAsset(null);
+                      setAimOrigin(null);
+                      setAimCurrent(null);
                       setActiveTokenMenu({ id: token.id, x: e.evt.clientX, y: e.evt.clientY });
                     }}
                   />
@@ -11312,8 +11326,8 @@ export default function App() {
                 isMonsterToken(singleSelectedToken)
               );
 
-              // If single monster is selected, render the tactical DmMonsterDock
-              if (singleSelectedToken && isMonster) {
+              // If single monster is selected (via left-click, and not showing the right-click context menu), render the tactical DmMonsterDock
+              if (singleSelectedToken && isMonster && !activeTokenMenu) {
                 const dmMonsterHudData = memoizedDmMonsterHudData || buildDmMonsterHudData(singleSelectedToken, compendiumMonsters);
                 if (dmMonsterHudData) {
                   return (

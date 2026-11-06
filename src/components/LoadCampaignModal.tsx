@@ -84,7 +84,7 @@ export const LoadCampaignModal: React.FC<LoadCampaignModalProps> = ({
     setExpandedCampaigns(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  // Prepend Demo Campaign if not already present in database, and always ensure latest rooms & tokens
+  // Prepend Demo Campaign if not already present in database, preserving saved rooms & tokens when present
   const allCampaigns = useMemo(() => {
     if (campaigns.some(c => c.campaignId === DEMO_GV_CAMPAIGN.campaignId)) {
       return campaigns.map(c => {
@@ -95,13 +95,13 @@ export const LoadCampaignModal: React.FC<LoadCampaignModalProps> = ({
             if (ch.chapterId !== DEMO_GV_CHAPTER.chapterId) return ch;
             return {
               ...ch,
-              pdfDigest: DEMO_GV_PDF_DIGEST,
+              pdfDigest: ch.pdfDigest || DEMO_GV_PDF_DIGEST,
               scenes: ch.scenes.map(sc => {
                 if (sc.sceneId !== DEMO_GV_SCENE.sceneId) return sc;
                 return {
                   ...sc,
-                  roomAnnotations: DEMO_GV_ROOM_ZONES,
-                  tokens: DEMO_GV_TOKENS
+                  roomAnnotations: (sc.roomAnnotations && sc.roomAnnotations.length > 0) ? sc.roomAnnotations : DEMO_GV_ROOM_ZONES,
+                  tokens: Array.isArray(sc.tokens) ? sc.tokens : DEMO_GV_TOKENS
                 };
               })
             };

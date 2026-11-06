@@ -1,6 +1,6 @@
 import guildhouseMainLevelImg from '../assets/images/guildhouse_main_level.jpg';
 import guildhouse2ndFloorImg from '../assets/images/guildhouse_2nd_floor.jpg';
-import { Campaign, Scene, Chapter, SceneToken } from '../lib/firebase';
+import type { Campaign, Scene, Chapter, SceneToken } from '../lib/firebase';
 import { RoomAnnotation, WallSegment, ChapterPdfDigest } from '../types';
 import type { HandoutItem } from '../types/handout';
 

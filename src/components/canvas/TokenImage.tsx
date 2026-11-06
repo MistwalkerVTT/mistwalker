@@ -337,6 +337,7 @@ export const TokenImage = React.memo(({
       onClick={(e) => {
         if (isSpacePressed) return;
         e.cancelBubble = true;
+        if (e.evt?.button && e.evt.button !== 0) return;
         if (isAimingSpell) {
           if (onTargetToken) {
             const now = Date.now();
