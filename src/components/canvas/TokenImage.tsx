@@ -218,6 +218,12 @@ export const TokenImage = React.memo(({
         if (isSpacePressed) return;
         if (isAimingSpell) {
           e.cancelBubble = true;
+          if (e.evt?.button !== 2) {
+            touchStartPosRef.current = {
+              x: e.evt?.clientX ?? 0,
+              y: e.evt?.clientY ?? 0
+            };
+          }
           return;
         }
         if (e.evt?.button !== 2) {
@@ -228,6 +234,20 @@ export const TokenImage = React.memo(({
         if (isSpacePressed) return;
         if (e.evt?.button !== 2) {
           e.cancelBubble = true;
+          if (isAimingSpell && onTargetToken) {
+            const start = touchStartPosRef.current;
+            const dist = start
+              ? Math.hypot((e.evt?.clientX ?? start.x) - start.x, (e.evt?.clientY ?? start.y) - start.y)
+              : 0;
+            if (dist < 24) {
+              const now = Date.now();
+              if (now - lastTokenTapTimeRef.current > 200) {
+                lastTokenTapTimeRef.current = now;
+                onTargetToken(token);
+              }
+            }
+            return;
+          }
         }
       }}
       onTouchStart={(e) => {
@@ -287,7 +307,13 @@ export const TokenImage = React.memo(({
         if (isAimingSpell) {
           clearLongPress();
           if (!isSpacePressed) e.cancelBubble = true;
-          if (onTargetToken) onTargetToken(token);
+          if (onTargetToken) {
+            const now = Date.now();
+            if (now - lastTokenTapTimeRef.current > 200) {
+              lastTokenTapTimeRef.current = now;
+              onTargetToken(token);
+            }
+          }
           return;
         }
         const startPos = touchStartPosRef.current;
@@ -312,7 +338,13 @@ export const TokenImage = React.memo(({
         if (isSpacePressed) return;
         e.cancelBubble = true;
         if (isAimingSpell) {
-          if (onTargetToken) onTargetToken(token);
+          if (onTargetToken) {
+            const now = Date.now();
+            if (now - lastTokenTapTimeRef.current > 200) {
+              lastTokenTapTimeRef.current = now;
+              onTargetToken(token);
+            }
+          }
           return;
         }
         const now = Date.now();
@@ -327,7 +359,13 @@ export const TokenImage = React.memo(({
         if (isSpacePressed) return;
         e.cancelBubble = true;
         if (isAimingSpell) {
-          if (onTargetToken) onTargetToken(token);
+          if (onTargetToken) {
+            const now = Date.now();
+            if (now - lastTokenTapTimeRef.current > 200) {
+              lastTokenTapTimeRef.current = now;
+              onTargetToken(token);
+            }
+          }
           return;
         }
         const now = Date.now();
@@ -745,6 +783,8 @@ export const TokenImage = React.memo(({
     prevProps.isSpacePressed === nextProps.isSpacePressed &&
     prevProps.combatants === nextProps.combatants &&
     prevProps.characters === nextProps.characters &&
-    prevProps.stageScale === nextProps.stageScale
+    prevProps.stageScale === nextProps.stageScale &&
+    prevProps.isAimingAction === nextProps.isAimingAction &&
+    prevProps.onTargetToken === nextProps.onTargetToken
   );
 });

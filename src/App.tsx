@@ -189,7 +189,7 @@ import { AssignPolygonRoomModal } from './components/AssignPolygonRoomModal';
 import { ZoneDetailsSidePanel } from './components/ZoneDetailsSidePanel';
 import { RoomBriefingDrawer } from './components/RoomBriefingDrawer';
 import { DmMonsterDock } from './components/DmMonsterDock';
-import { buildDmMonsterHudData } from './services/monsterHudService';
+import { buildDmMonsterHudData, resolveMonsterActionJb2aAsset } from './services/monsterHudService';
 import { GridLayer } from './components/GridLayer';
 import {
   computeFlightLiftMetrics,
@@ -560,6 +560,19 @@ export default function App() {
   const [effects, setEffects] = useState<VttEffectInstance[]>([]);
   const [activeEquippedAsset, setActiveEquippedAsset] = useState<Jb2aAssetDefinition | null>(null);
   const [activeDmMonsterAction, setActiveDmMonsterAction] = useState<MonsterActionItem | null>(null);
+  const [dmMultiattackQueue, setDmMultiattackQueue] = useState<{
+    actions: MonsterActionItem[];
+    currentIndex: number;
+    parentName: string;
+  } | null>(null);
+  const dmMultiattackQueueRef = useRef<{
+    actions: MonsterActionItem[];
+    currentIndex: number;
+    parentName: string;
+  } | null>(null);
+  useEffect(() => {
+    dmMultiattackQueueRef.current = dmMultiattackQueue;
+  }, [dmMultiattackQueue]);
   const [isDmAutoRollEnabled, setIsDmAutoRollEnabled] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true;
     return localStorage.getItem('mistwalker_dm_autoroll') !== 'false';
@@ -568,6 +581,9 @@ export default function App() {
   const [aimOrigin, setAimOrigin] = useState<{ x: number; y: number } | null>(null);
   const [aimCurrent, setAimCurrent] = useState<{ x: number; y: number } | null>(null);
   const handleDmTargetTokenRef = useRef<((targetToken: Token, overrideAction?: MonsterActionItem) => void) | null>(null);
+  const handleTokenTargetCallback = useCallback((targetToken: Token) => {
+    handleDmTargetTokenRef.current?.(targetToken);
+  }, []);
 
   const [isSpacePressed, setIsSpacePressed] = useState<boolean>(false);
   const spacePanActiveRef = useRef<boolean>(false);
@@ -4192,6 +4208,45 @@ export default function App() {
   }, [socketRef.current]);
 
   const executeMonsterRoll = useCallback((token: Token, action: MonsterActionItem) => {
+    // Play JB2A visual & audio cue on the monster token
+    const matchedAsset = resolveMonsterActionJb2aAsset(action);
+    if (matchedAsset) {
+      const tokenRadius = ((token.size || 1) * gridSize) / 2;
+      const center = { x: token.x + tokenRadius, y: token.y + tokenRadius };
+      const newEffect: VttEffectInstance = {
+        id: `eff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        name: `${matchedAsset.name} (${token.name})`,
+        label: `${action.name} (${token.name})`,
+        assetKey: matchedAsset.id,
+        videoUrl: matchedAsset.webm,
+        loopVideoUrl: matchedAsset.loopWebm,
+        thumbUrl: matchedAsset.thumb,
+        paradigm: matchedAsset.paradigm === 'projectile' ? 'point' : matchedAsset.paradigm,
+        x: center.x,
+        y: center.y,
+        sizeFt: matchedAsset.defaultSizeFt || 5,
+        rotation: 0,
+        opacity: 1.0,
+        blendMode: matchedAsset.blendMode,
+        isPersistent: false,
+        loop: false,
+        attachedTokenId: token.id,
+        ownerId: token.id,
+        casterName: token.name,
+        castTime: Date.now(),
+        durationMs: 2800,
+        soundKey: matchedAsset.soundKey || 'sword-hit',
+        color: matchedAsset.color
+      };
+      setEffects(prev => [...prev, newEffect]);
+      soundCatalog.play(matchedAsset.soundKey || 'sword-hit');
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('EFFECT_SPAWN', newEffect);
+      }
+    } else {
+      soundCatalog.play('sword-hit');
+    }
+
     const diceResults: Array<{ sides: number; result: number; type: string }> = [];
     let d20Result = 0;
     let attackTotal = 0;
@@ -4308,7 +4363,7 @@ export default function App() {
       : `Damage: ${rolledDamage} ${action.damageType || ''}`;
 
     toast.success(`${token.name}: ${action.name}!`, { description: desc });
-  }, [activeMapId]);
+  }, [activeMapId, gridSize]);
 
   const findTargetTokenFromPoint = useCallback((
     point: { x: number; y: number },
@@ -4579,8 +4634,68 @@ export default function App() {
     toast.info(enabled ? '🎲 Auto Roll enabled for DM monster actions' : '🎲 Auto Roll disabled - manual roll prompts enabled');
   }, []);
 
+  const singleSelectedMonsterToken = useMemo(() => {
+    if (selectedTokenIds.length !== 1) return null;
+    const t = tokens.find(tk => tk.id === selectedTokenIds[0]);
+    if (!t || t.isCondition || t.allyId) return null;
+    const isMon = t.isMonster === true || t.category === 'monster' || t.isPlayer === false || isMonsterToken(t);
+    return isMon ? t : null;
+  }, [selectedTokenIds, tokens]);
+
+  const memoizedDmMonsterHudData = useMemo(() => {
+    if (!singleSelectedMonsterToken) return null;
+    return buildDmMonsterHudData(singleSelectedMonsterToken, compendiumMonsters);
+  }, [
+    singleSelectedMonsterToken?.id,
+    singleSelectedMonsterToken?.name,
+    singleSelectedMonsterToken?.url,
+    singleSelectedMonsterToken?.avatarUrl,
+    singleSelectedMonsterToken?.currentHp,
+    singleSelectedMonsterToken?.hp,
+    singleSelectedMonsterToken?.maxHp,
+    singleSelectedMonsterToken?.tempHp,
+    singleSelectedMonsterToken?.ac,
+    singleSelectedMonsterToken?.monsterState,
+    singleSelectedMonsterToken?.customMonsterData,
+    compendiumMonsters
+  ]);
+
+  const advanceOrClearDmMonsterTargeting = useCallback(() => {
+    const q = dmMultiattackQueueRef.current;
+    if (q && q.currentIndex + 1 < q.actions.length) {
+      const nextIdx = q.currentIndex + 1;
+      const nextAction = q.actions[nextIdx];
+      const nextQueue = { ...q, currentIndex: nextIdx };
+      dmMultiattackQueueRef.current = nextQueue;
+      setDmMultiattackQueue(nextQueue);
+      setActiveDmMonsterAction(nextAction);
+      const nextAsset = resolveMonsterActionJb2aAsset(nextAction);
+      if (nextAsset) {
+        setActiveEquippedAsset(nextAsset);
+        setTool('spell_aim');
+      }
+      toast.info(`⚔️ ${q.parentName} (${nextIdx + 1}/${q.actions.length}): Aiming ${nextAction.name}`, {
+        description: 'Click a target token on the battlemap for the next strike!'
+      });
+      return;
+    }
+    dmMultiattackQueueRef.current = null;
+    setDmMultiattackQueue(null);
+    setActiveDmMonsterAction(null);
+    setActiveEquippedAsset(null);
+    setAimOrigin(null);
+    setAimCurrent(null);
+    setTool('pan');
+  }, [setTool]);
+
   const handleSelectDmMonsterAction = useCallback((action: MonsterActionItem) => {
-    if (activeDmMonsterAction?.id === action.id) {
+    const isMulti = Boolean(action.isMultiattack || action.type === 'multiattack');
+    if (
+      activeDmMonsterAction?.id === action.id ||
+      (isMulti && dmMultiattackQueueRef.current && activeDmMonsterAction)
+    ) {
+      dmMultiattackQueueRef.current = null;
+      setDmMultiattackQueue(null);
       setActiveDmMonsterAction(null);
       setActiveEquippedAsset(null);
       setAimOrigin(null);
@@ -4592,22 +4707,50 @@ export default function App() {
     const singleToken = selectedTokenIds.length === 1 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
     if (!singleToken) return;
 
-    let matchedAsset: Jb2aAssetDefinition | undefined;
-    if (action.jb2aAssetId) {
-      matchedAsset = JB2A_REGISTRY.find(a => a.id === action.jb2aAssetId);
+    // Handle Multiattack routine expansion
+    if (isMulti) {
+      const hudData = memoizedDmMonsterHudData || buildDmMonsterHudData(singleToken, compendiumMonsters);
+      const availableAttacks = (hudData?.attacks || []).filter(a => !a.isMultiattack && a.type !== 'multiattack');
+      const expandedStrikes: MonsterActionItem[] = [];
+      if (action.multiattackActions && action.multiattackActions.length > 0) {
+        for (const sub of action.multiattackActions) {
+          const found = availableAttacks.find(
+            a => a.id === sub.actionId || a.name.toLowerCase() === sub.name.toLowerCase()
+          );
+          if (found) {
+            for (let c = 0; c < sub.count; c++) expandedStrikes.push(found);
+          }
+        }
+      }
+      if (expandedStrikes.length === 0 && availableAttacks.length > 0) {
+        expandedStrikes.push(availableAttacks[0], availableAttacks[0]);
+      }
+
+      if (expandedStrikes.length > 0) {
+        const firstStrike = expandedStrikes[0];
+        const queueObj = {
+          actions: expandedStrikes,
+          currentIndex: 0,
+          parentName: action.name
+        };
+        dmMultiattackQueueRef.current = queueObj;
+        setDmMultiattackQueue(queueObj);
+        setActiveDmMonsterAction(firstStrike);
+        const firstAsset = resolveMonsterActionJb2aAsset(firstStrike);
+        if (firstAsset) {
+          handleEquipAsset(firstAsset);
+        }
+        toast.info(`⚔️ ${action.name} (1/${expandedStrikes.length}): Aiming ${firstStrike.name}`, {
+          description: 'Click a target token on the battlemap for each strike!'
+        });
+        return;
+      }
     }
-    if (!matchedAsset) {
-      matchedAsset = findJb2aAsset(action.name);
-    }
-    if (!matchedAsset && action.damageType) {
-      if (action.damageType === 'fire') matchedAsset = findJb2aAsset('fire_bolt');
-      else if (action.damageType === 'cold') matchedAsset = findJb2aAsset('ray_of_frost');
-      else if (action.damageType === 'lightning') matchedAsset = findJb2aAsset('shocking_grasp') || findJb2aAsset('lightning_bolt');
-      else if (action.damageType === 'necrotic') matchedAsset = findJb2aAsset('chill_touch');
-      else if (action.damageType === 'radiant') matchedAsset = findJb2aAsset('sacred_flame');
-      else if (action.damageType === 'force') matchedAsset = findJb2aAsset('magic_missile') || findJb2aAsset('eldritch_blast');
-      else if (action.type === 'attack' || action.category === 'attacks') matchedAsset = findJb2aAsset('attack_slash');
-    }
+
+    dmMultiattackQueueRef.current = null;
+    setDmMultiattackQueue(null);
+
+    const matchedAsset = resolveMonsterActionJb2aAsset(action);
 
     // Only non-damaging pure self actions trigger immediately without targeting
     const isPureSelfBuff = Boolean(
@@ -4687,13 +4830,103 @@ export default function App() {
       };
       handleEquipAsset(fallbackAsset);
     }
-  }, [activeDmMonsterAction, selectedTokenIds, tokens, gridSize, executeMonsterRoll, handleEquipAsset]);
+  }, [activeDmMonsterAction, selectedTokenIds, tokens, gridSize, memoizedDmMonsterHudData, compendiumMonsters, handleEquipAsset, setTool]);
+
+  const findNearestHostileTargetForMonster = useCallback((monsterToken: Token, maxRangeFt: number): Token | null => {
+    const mRad = ((monsterToken.size || 1) * gridSize) / 2;
+    const mCenter = { x: monsterToken.x + mRad, y: monsterToken.y + mRad };
+    let nearest: Token | null = null;
+    let bestDistFt = Infinity;
+    for (const t of tokens) {
+      if (t.id === monsterToken.id || t.isCondition) continue;
+      const isPlayerOrAlly = Boolean(t.isPlayer || t.allyId || t.category === 'character' || t.category === 'ally' || !isMonsterToken(t));
+      if (!isPlayerOrAlly) continue;
+      const tRad = ((t.size || 1) * gridSize) / 2;
+      const tCenter = { x: t.x + tRad, y: t.y + tRad };
+      const centerDistPx = Math.hypot(tCenter.x - mCenter.x, tCenter.y - mCenter.y);
+      const edgeDistPx = Math.max(0, centerDistPx - mRad - tRad);
+      const edgeDistFt = Math.round((edgeDistPx / gridSize) * 5);
+      if (edgeDistFt <= maxRangeFt + 5 && edgeDistFt < bestDistFt) {
+        bestDistFt = edgeDistFt;
+        nearest = t;
+      }
+    }
+    return nearest;
+  }, [tokens, gridSize]);
 
   const handleQuickRollDmMonsterAction = useCallback((action: MonsterActionItem) => {
     const singleToken = selectedTokenIds.length === 1 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
     if (!singleToken) return;
+
+    const isMulti = Boolean(action.isMultiattack || action.type === 'multiattack');
+    if (isMulti) {
+      const hudData = memoizedDmMonsterHudData || buildDmMonsterHudData(singleToken, compendiumMonsters);
+      const availableAttacks = (hudData?.attacks || []).filter(a => !a.isMultiattack && a.type !== 'multiattack');
+      const expandedStrikes: MonsterActionItem[] = [];
+      if (action.multiattackActions && action.multiattackActions.length > 0) {
+        for (const sub of action.multiattackActions) {
+          const found = availableAttacks.find(
+            a => a.id === sub.actionId || a.name.toLowerCase() === sub.name.toLowerCase()
+          );
+          if (found) {
+            for (let c = 0; c < sub.count; c++) expandedStrikes.push(found);
+          }
+        }
+      }
+      if (expandedStrikes.length === 0 && availableAttacks.length > 0) {
+        expandedStrikes.push(availableAttacks[0], availableAttacks[0]);
+      }
+
+      if (expandedStrikes.length > 0) {
+        const firstStrike = expandedStrikes[0];
+        const maxReach = Math.max(...expandedStrikes.map(s => s.rangeFt || 5), 5);
+        const nearestTarget = findNearestHostileTargetForMonster(singleToken, maxReach);
+        if (nearestTarget && handleDmTargetTokenRef.current) {
+          const queueObj = {
+            actions: expandedStrikes,
+            currentIndex: 0,
+            parentName: action.name
+          };
+          dmMultiattackQueueRef.current = queueObj;
+          setDmMultiattackQueue(queueObj);
+          handleDmTargetTokenRef.current(nearestTarget, firstStrike);
+          return;
+        }
+        // If no target in immediate reach and Auto Roll is OFF, arm Multiattack on the map so DM can click targets
+        if (!isDmAutoRollEnabled) {
+          handleSelectDmMonsterAction(action);
+          return;
+        }
+        // Otherwise roll each strike in the Multiattack routine with animations & 3D dice
+        expandedStrikes.forEach((strike, idx) => {
+          setTimeout(() => {
+            executeMonsterRoll(singleToken, strike);
+          }, idx * 650);
+        });
+        return;
+      }
+    }
+
+    // For single attacks: if a hostile/player token is within reach, resolve against them (with directional JB2A FX + HP damage)!
+    const isOffensive = Boolean(action.hitBonus !== undefined || action.damageFormula !== undefined || action.saveDc !== undefined);
+    if (isOffensive && !action.isSelfAction && !action.isHeal) {
+      const nearestTarget = findNearestHostileTargetForMonster(singleToken, action.rangeFt || 5);
+      if (nearestTarget && handleDmTargetTokenRef.current) {
+        handleDmTargetTokenRef.current(nearestTarget, action);
+        return;
+      }
+      if (!isDmAutoRollEnabled) {
+        // When Auto Roll is OFF and no adjacent target was auto-found, open the CombatDicePromptModal or arm targeting
+        const anyPlayerToken = tokens.find(t => t.id !== singleToken.id && !t.isCondition && (t.isPlayer || !isMonsterToken(t)));
+        if (anyPlayerToken && handleDmTargetTokenRef.current) {
+          handleDmTargetTokenRef.current(anyPlayerToken, action);
+          return;
+        }
+      }
+    }
+
     executeMonsterRoll(singleToken, action);
-  }, [selectedTokenIds, tokens, executeMonsterRoll]);
+  }, [selectedTokenIds, tokens, memoizedDmMonsterHudData, compendiumMonsters, findNearestHostileTargetForMonster, isDmAutoRollEnabled, handleSelectDmMonsterAction, executeMonsterRoll]);
 
   const handleRollDmMonsterToHit = useCallback((action: MonsterActionItem) => {
     const singleToken = selectedTokenIds.length === 1 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
@@ -5067,26 +5300,23 @@ export default function App() {
     }
 
     // 2. Visual Animation & Sound
-    let matchedAsset = activeEquippedAsset;
+    let matchedAsset = resolveMonsterActionJb2aAsset(action) || activeEquippedAsset;
     if (!matchedAsset) {
-      if (action.jb2aAssetId) matchedAsset = JB2A_REGISTRY.find(a => a.id === action.jb2aAssetId);
-      if (!matchedAsset) matchedAsset = findJb2aAsset(action.name);
-      if (!matchedAsset && action.damageType) {
-        if (action.damageType === 'fire') matchedAsset = findJb2aAsset('fire_bolt');
-        else if (action.damageType === 'cold') matchedAsset = findJb2aAsset('ray_of_frost');
-        else if (action.damageType === 'lightning') matchedAsset = findJb2aAsset('shocking_grasp') || findJb2aAsset('lightning_bolt');
-        else if (action.damageType === 'necrotic') matchedAsset = findJb2aAsset('chill_touch');
-        else if (action.damageType === 'radiant') matchedAsset = findJb2aAsset('sacred_flame');
-        else if (action.damageType === 'force') matchedAsset = findJb2aAsset('magic_missile');
-        else if (action.type === 'attack' || action.category === 'attacks') matchedAsset = findJb2aAsset('attack_slash');
-      }
-      if (!matchedAsset) {
-        matchedAsset = findJb2aAsset('attack_slash') || JB2A_REGISTRY.find(a => a.id === 'attack_slash');
-      }
+      matchedAsset = findJb2aAsset('attack_slash') || JB2A_REGISTRY.find(a => a.id === 'attack_slash');
     }
 
     const isSelfTarget = targetToken.id === singleToken.id;
-    const isTrajectory = !isSelfTarget && (matchedAsset?.paradigm === 'projectile' || matchedAsset?.paradigm === 'ray' || distFt > 5);
+    const isTrajectory = !isSelfTarget && (
+      matchedAsset?.paradigm === 'projectile' ||
+      matchedAsset?.paradigm === 'ray' ||
+      Boolean(matchedAsset?.projectileWebm && distFt > 10)
+    );
+    const isDirectionalMeleeOrCone = !isSelfTarget && !isTrajectory && (
+      matchedAsset?.paradigm === 'cone' ||
+      matchedAsset?.paradigm === 'line' ||
+      matchedAsset?.shape === 'cone' ||
+      matchedAsset?.shape === 'line'
+    );
     const aimAngleDeg = Math.atan2(targetCenter.y - casterCenter.y, targetCenter.x - casterCenter.x) * (180 / Math.PI);
 
     if (matchedAsset) {
@@ -5106,7 +5336,7 @@ export default function App() {
         targetX: targetCenter.x,
         targetY: targetCenter.y,
         sizeFt: matchedAsset.defaultSizeFt || 5,
-        rotation: isTrajectory ? aimAngleDeg : 0,
+        rotation: (isTrajectory || isDirectionalMeleeOrCone) ? aimAngleDeg : 0,
         opacity: 1.0,
         blendMode: matchedAsset.blendMode,
         isPersistent: Boolean(matchedAsset.isPersistent),
@@ -5150,7 +5380,9 @@ export default function App() {
       const rawHit = typeof action.hitBonus === 'number'
         ? action.hitBonus
         : (parseInt(String(action.hitBonus || '+0').replace('+', ''), 10) || 0);
-      const atkFormula = action.damageFormula || (action.isHeal ? '1d8 + 3' : '1d8');
+      const atkFormula = action.damageFormula
+        ? (action.secondaryDamageFormula ? `${action.damageFormula} + ${action.secondaryDamageFormula}` : action.damageFormula)
+        : (action.isHeal ? '1d8 + 3' : '1d8');
 
       setPendingDmCombatRoll({
         actor: {
@@ -5176,7 +5408,7 @@ export default function App() {
         isAttack: isAttackAction
       });
 
-      // Clear targeting but keep token selected
+      // Clear active reticle while modal is open; handleResolveDmHit / handleResolveDmDamage will advance multiattack queue
       setActiveDmMonsterAction(null);
       setActiveEquippedAsset(null);
       setAimOrigin(null);
@@ -5214,7 +5446,7 @@ export default function App() {
       saveFailed = targetSaveRoll < action.saveDc;
     }
 
-    // C. Damage calculation
+    // C. Damage calculation (Primary + Secondary)
     let rolledDamage = 0;
     let damageBreakdown = '';
     if (action.damageFormula) {
@@ -5224,11 +5456,19 @@ export default function App() {
         const evalDmg = evaluateDiceFormula(action.damageFormula, isCrit);
         rolledDamage = evalDmg.total;
         damageBreakdown = evalDmg.breakdown;
+        diceResults.push(...evalDmg.dice.map(d => ({ sides: d.sides, result: d.result, type: d.type || `d${d.sides}` })));
+
+        if (action.secondaryDamageFormula) {
+          const evalSec = evaluateDiceFormula(action.secondaryDamageFormula, isCrit);
+          rolledDamage += evalSec.total;
+          damageBreakdown += ` + ${evalSec.breakdown} ${action.secondaryDamageType || ''}`.trim();
+          diceResults.push(...evalSec.dice.map(d => ({ sides: d.sides, result: d.result, type: d.type || `d${d.sides}` })));
+        }
+
         if (action.saveDc && !saveFailed) {
           // Half damage on save success
           rolledDamage = Math.floor(rolledDamage / 2);
         }
-        diceResults.push(...evalDmg.dice.map(d => ({ sides: d.sides, result: d.result, type: d.type || `d${d.sides}` })));
       }
     }
 
@@ -5372,13 +5612,9 @@ export default function App() {
       });
     }
 
-    // Clear targeting but keep token selected
-    setActiveDmMonsterAction(null);
-    setActiveEquippedAsset(null);
-    setAimOrigin(null);
-    setAimCurrent(null);
-    setTool('pan');
-  }, [activeDmMonsterAction, activeEquippedAsset, selectedTokenIds, tokens, gridSize, activeMapId, isDmAutoRollEnabled, compendiumCharacters, compendiumMonsters, combatTrackerCombatants, prepareTokensForSync]);
+    // Advance Multiattack queue or clear targeting while keeping token selected
+    advanceOrClearDmMonsterTargeting();
+  }, [activeDmMonsterAction, activeEquippedAsset, selectedTokenIds, tokens, gridSize, activeMapId, isDmAutoRollEnabled, compendiumCharacters, compendiumMonsters, combatTrackerCombatants, prepareTokensForSync, advanceOrClearDmMonsterTargeting]);
 
   useEffect(() => {
     handleDmTargetTokenRef.current = handleDmTargetToken;
@@ -5409,6 +5645,7 @@ export default function App() {
           : `${actor.name}'s ${action.name} missed ${target.name} (Rolled ${result.total} vs AC ${target.ac || 10}).`
       );
       setPendingDmCombatRoll(null);
+      advanceOrClearDmMonsterTargeting();
       return;
     }
 
@@ -5505,7 +5742,8 @@ export default function App() {
     );
 
     setPendingDmCombatRoll(null);
-  }, [pendingDmCombatRoll, tokens, activeMapId, compendiumMonsters, combatTrackerCombatants, prepareTokensForSync]);
+    advanceOrClearDmMonsterTargeting();
+  }, [pendingDmCombatRoll, tokens, activeMapId, compendiumMonsters, combatTrackerCombatants, prepareTokensForSync, advanceOrClearDmMonsterTargeting]);
 
   const handleEnableDmAutoRollAndContinue = useCallback(() => {
     if (!pendingDmCombatRoll) return;
@@ -7172,12 +7410,15 @@ export default function App() {
 
     // Right click handling
     if (e.evt.button === 2) {
-      if (tool === 'spell_aim') {
+      if (tool === 'spell_aim' || activeDmMonsterAction) {
+        dmMultiattackQueueRef.current = null;
+        setDmMultiattackQueue(null);
+        setActiveDmMonsterAction(null);
         setActiveEquippedAsset(null);
         setAimOrigin(null);
         setAimCurrent(null);
         setTool('pan');
-        toast.info('Spell aiming cancelled');
+        toast.info('Aiming cancelled');
         return;
       }
       if (wallEraseDragStart) {
@@ -10429,7 +10670,7 @@ export default function App() {
                     combatants={combatTrackerCombatants}
                     characters={compendiumCharacters}
                     isAimingAction={tool === 'spell_aim' || Boolean(activeDmMonsterAction)}
-                    onTargetToken={handleDmTargetToken}
+                    onTargetToken={handleTokenTargetCallback}
                     onMouseEnter={handleTokenHoverEnter}
                     onMouseLeave={handleTokenHoverLeave}
                     onClick={(e: any) => {
@@ -11073,7 +11314,7 @@ export default function App() {
 
               // If single monster is selected, render the tactical DmMonsterDock
               if (singleSelectedToken && isMonster) {
-                const dmMonsterHudData = buildDmMonsterHudData(singleSelectedToken, compendiumMonsters);
+                const dmMonsterHudData = memoizedDmMonsterHudData || buildDmMonsterHudData(singleSelectedToken, compendiumMonsters);
                 if (dmMonsterHudData) {
                   return (
                     <DmMonsterDock
@@ -11091,7 +11332,18 @@ export default function App() {
                       onInspectSpeed={handleInspectDmMonsterSpeed}
                       onTargetSelf={handleDmTargetSelf}
                       activeTargetingAction={activeDmMonsterAction}
+                      multiattackProgress={
+                        dmMultiattackQueue
+                          ? {
+                              current: dmMultiattackQueue.currentIndex + 1,
+                              total: dmMultiattackQueue.actions.length,
+                              parentName: dmMultiattackQueue.parentName
+                            }
+                          : null
+                      }
                       onCancelTargeting={() => {
+                        dmMultiattackQueueRef.current = null;
+                        setDmMultiattackQueue(null);
                         setActiveDmMonsterAction(null);
                         setActiveEquippedAsset(null);
                         setAimOrigin(null);
@@ -11100,6 +11352,8 @@ export default function App() {
                       }}
                       onDeselectToken={() => {
                         setSelectedTokenIds([]);
+                        dmMultiattackQueueRef.current = null;
+                        setDmMultiattackQueue(null);
                         setActiveDmMonsterAction(null);
                         setActiveEquippedAsset(null);
                         setAimOrigin(null);

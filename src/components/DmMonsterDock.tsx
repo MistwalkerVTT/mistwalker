@@ -61,6 +61,7 @@ interface DmMonsterDockProps {
   onInspectRule?: (ruleName: string, kind?: string) => void;
   isAutoRollDiceEnabled?: boolean;
   onToggleAutoRollDice?: (enabled: boolean) => void;
+  multiattackProgress?: { current: number; total: number; parentName: string } | null;
 }
 
 export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
@@ -93,12 +94,25 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
   onUpdateFlight,
   onInspectRule,
   isAutoRollDiceEnabled = true,
-  onToggleAutoRollDice
+  onToggleAutoRollDice,
+  multiattackProgress = null
 }) => {
   const [activeCategory, setActiveCategory] = useState<DmMonsterActionCategory>('attacks');
   const [selectedSpellLevel, setSelectedSpellLevel] = useState<number | 'all'>('all');
   const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
+  const [isMinimizedWhileAiming, setIsMinimizedWhileAiming] = useState<boolean>(false);
   const [hoveredAction, setHoveredAction] = useState<MonsterActionItem | null>(null);
+
+  // Auto-minimize the action tray while aiming on the battlemap (matching PlayerHeroDock)
+  useEffect(() => {
+    if (activeTargetingAction) {
+      setIsMinimizedWhileAiming(true);
+    } else {
+      setIsMinimizedWhileAiming(false);
+    }
+  }, [activeTargetingAction]);
+
+  const isTrayHidden = isCollapsed || isMinimizedWhileAiming;
 
   // Compute available categories with item counts
   const categoryCounts = useMemo(() => ({
@@ -176,9 +190,14 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
         <div className="px-4 py-2 bg-gradient-to-r from-red-950 via-zinc-950 to-red-950 border-b border-amber-500/70 shadow-[0_4px_20px_rgba(245,158,11,0.25)] flex flex-wrap items-center justify-between gap-3 text-xs text-amber-200 animate-in fade-in duration-150">
           <div className="flex items-center gap-2.5 flex-wrap min-w-0">
             <Crosshair className="w-4 h-4 text-amber-400 animate-pulse shrink-0" />
+            {multiattackProgress && (
+              <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-400/60 text-amber-200 text-[10px] font-extrabold uppercase tracking-wider shrink-0">
+                {multiattackProgress.parentName} ({multiattackProgress.current}/{multiattackProgress.total})
+              </span>
+            )}
             <span className="truncate">
               Aiming <strong className="text-white">{activeTargetingAction.name}</strong>
-              <span className="hidden sm:inline text-zinc-400"> — Click target on battlemap or click:</span>
+              <span className="hidden sm:inline text-zinc-400"> — Click target token on battlemap or:</span>
             </span>
 
             {/* Hit Roll Button */}
@@ -243,18 +262,30 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
             )}
           </div>
 
-          {/* Cancel Aiming */}
-          {onCancelTargeting && (
+          <div className="flex items-center gap-1.5 shrink-0">
             <button
               type="button"
-              onClick={onCancelTargeting}
-              className="px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700 text-[11px] font-bold transition-all flex items-center gap-1 shrink-0 cursor-pointer active:scale-95"
-              title="Cancel Aiming"
+              onClick={() => setIsMinimizedWhileAiming(prev => !prev)}
+              className="px-2.5 py-1 rounded-lg bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700 text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer active:scale-95"
+              title={isMinimizedWhileAiming ? 'Expand HUD while aiming' : 'Minimize HUD to see battlemap clearly'}
             >
-              <X className="w-3.5 h-3.5 text-zinc-400" />
-              <span>Cancel</span>
+              {isMinimizedWhileAiming ? <ChevronUp className="w-3.5 h-3.5 text-amber-400" /> : <ChevronDown className="w-3.5 h-3.5 text-amber-400" />}
+              <span>{isMinimizedWhileAiming ? 'Show HUD' : 'Minimize'}</span>
             </button>
-          )}
+
+            {/* Cancel Aiming */}
+            {onCancelTargeting && (
+              <button
+                type="button"
+                onClick={onCancelTargeting}
+                className="px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700 text-[11px] font-bold transition-all flex items-center gap-1 shrink-0 cursor-pointer active:scale-95"
+                title="Cancel Aiming"
+              >
+                <X className="w-3.5 h-3.5 text-zinc-400" />
+                <span>Cancel</span>
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -483,15 +514,21 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
         {/* Right: Collapse & Close */}
         <div className="flex items-center gap-1">
           <button
-            onClick={() => setIsCollapsed(prev => !prev)}
-            className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
-            title={isCollapsed ? 'Expand Dock' : 'Collapse Dock'}
+            onClick={() => {
+              if (activeTargetingAction) {
+                setIsMinimizedWhileAiming(prev => !prev);
+              } else {
+                setIsCollapsed(prev => !prev);
+              }
+            }}
+            className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
+            title={isTrayHidden ? 'Expand Dock' : 'Collapse Dock'}
           >
-            {isCollapsed ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            {isTrayHidden ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
           <button
             onClick={onDeselectToken}
-            className="p-1.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-zinc-800 transition-colors"
+            className="p-1.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-zinc-800 transition-colors cursor-pointer"
             title="Deselect Creature (Escape)"
           >
             <X className="w-4 h-4" />
@@ -500,7 +537,7 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
       </div>
 
       {/* Expandable Action & Ability Tray */}
-      {!isCollapsed && (
+      {!isTrayHidden && (
         <div className="p-3 space-y-3">
           {/* Ability Scores & Legendary Actions Sub-Bar */}
           <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 bg-zinc-900/60 rounded-xl border border-zinc-800/80 text-[11px]">
@@ -837,8 +874,11 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
             /* Action Cards Grid for Attacks, Actions, Bonus Actions, Spells, Reactions, Legendary */
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 max-h-[220px] overflow-y-auto pr-1 sidebar-scrollbar">
               {currentCategoryList.map((action, idx) => {
-                const isTargetingThis = activeTargetingAction?.id === action.id;
-                const formattedHit = (isMonsterAttackRoll(action) && action.hitBonus !== undefined)
+                const isMulti = Boolean(action.isMultiattack || action.type === 'multiattack');
+                const isTargetingThis =
+                  activeTargetingAction?.id === action.id ||
+                  Boolean(isMulti && multiattackProgress && activeTargetingAction);
+                const formattedHit = (!isMulti && isMonsterAttackRoll(action) && action.hitBonus !== undefined)
                   ? String(action.hitBonus).startsWith('+') || String(action.hitBonus).startsWith('-')
                     ? String(action.hitBonus)
                     : `+${action.hitBonus}`
@@ -868,45 +908,71 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                   >
                     {/* Top Row: Icon + Name + Badges + Inspect */}
                     <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
-                          <ActionIcon className="w-3.5 h-3.5 text-red-400 shrink-0" />
-                          <span className="text-xs font-bold text-zinc-100 group-hover:text-red-200 truncate">
-                            {action.name}
-                          </span>
-                          {onInspectRule && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onInspectRule(action.name, action.type || 'action');
-                              }}
-                              className="p-0.5 text-zinc-500 hover:text-zinc-200 transition-colors cursor-pointer"
-                              title="Inspect 5e rules & spell details"
-                            >
-                              <Info className="w-3 h-3" />
-                            </button>
-                          )}
-                          {action.level !== undefined && (
-                            <span className="px-1.5 py-0.2 rounded bg-blue-950 border border-blue-500/40 text-blue-300 text-[9px] font-bold shrink-0">
-                              {action.level === 0 ? 'Cantrip' : `Lvl ${action.level}`}
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        {action.jb2aIconUrl ? (
+                          <div className="w-7 h-7 rounded-lg overflow-hidden border border-red-500/40 bg-zinc-950 shrink-0 flex items-center justify-center shadow-inner">
+                            {action.jb2aIconUrl.endsWith('.webm') ? (
+                              <video
+                                src={action.jb2aIconUrl}
+                                autoPlay
+                                loop
+                                muted
+                                playsInline
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <img
+                                src={action.jb2aIconUrl}
+                                alt=""
+                                className="w-full h-full object-cover"
+                                loading="lazy"
+                              />
+                            )}
+                          </div>
+                        ) : (
+                          <div className="w-7 h-7 rounded-lg border border-red-500/30 bg-red-950/40 shrink-0 flex items-center justify-center">
+                            <ActionIcon className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-bold text-zinc-100 group-hover:text-red-200 truncate">
+                              {action.name}
                             </span>
-                          )}
-                          {action.legendaryCost && action.legendaryCost > 1 && (
-                            <span className="px-1.5 py-0.2 rounded bg-amber-950 border border-amber-500/40 text-amber-300 text-[9px] font-bold shrink-0">
-                              {action.legendaryCost} Actions
-                            </span>
-                          )}
-                        </div>
+                            {onInspectRule && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onInspectRule(action.name, action.type || 'action');
+                                }}
+                                className="p-0.5 text-zinc-500 hover:text-zinc-200 transition-colors cursor-pointer"
+                                title="Inspect 5e rules & spell details"
+                              >
+                                <Info className="w-3 h-3" />
+                              </button>
+                            )}
+                            {action.level !== undefined && (
+                              <span className="px-1.5 py-0.2 rounded bg-blue-950 border border-blue-500/40 text-blue-300 text-[9px] font-bold shrink-0">
+                                {action.level === 0 ? 'Cantrip' : `Lvl ${action.level}`}
+                              </span>
+                            )}
+                            {action.legendaryCost && action.legendaryCost > 1 && (
+                              <span className="px-1.5 py-0.2 rounded bg-amber-950 border border-amber-500/40 text-amber-300 text-[9px] font-bold shrink-0">
+                                {action.legendaryCost} Actions
+                              </span>
+                            )}
+                          </div>
 
-                        <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 mt-0.5 truncate">
-                          <span>{action.reachRange || (action.rangeFt ? (action.rangeFt === 0 ? 'Self' : `${action.rangeFt} ft.`) : (action.category === 'attacks' ? '5 ft.' : 'Action'))}</span>
-                          {action.damageType && (
-                            <>
-                              <span>•</span>
-                              <span className="capitalize">{action.damageType}</span>
-                            </>
-                          )}
+                          <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 mt-0.5 truncate">
+                            <span>{action.reachRange || (action.rangeFt ? (action.rangeFt === 0 ? 'Self' : `${action.rangeFt} ft.`) : (action.category === 'attacks' ? '5 ft.' : 'Action'))}</span>
+                            {action.damageType && (
+                              <>
+                                <span>•</span>
+                                <span className="capitalize">{action.damageType}</span>
+                              </>
+                            )}
+                          </div>
                         </div>
                       </div>
 
@@ -934,8 +1000,30 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                       )}
                     </div>
 
-                    {/* Middle: Hit, Save, Damage Badges */}
-                    <div className="flex items-center gap-1.5 font-mono text-[10px]">
+                    {/* Middle: Multiattack Sub-Strikes OR Hit, Save, Damage Badges */}
+                    <div className="flex flex-wrap items-center gap-1.5 font-mono text-[10px]">
+                      {isMulti && action.multiattackActions && action.multiattackActions.length > 0 ? (
+                        action.multiattackActions.map((sub, sIdx) => (
+                          <button
+                            key={sIdx}
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onSelectAction(action);
+                            }}
+                            className="flex items-center gap-1 px-2 py-0.5 rounded bg-amber-950/90 hover:bg-amber-900 border border-amber-500/50 hover:border-amber-400 text-amber-200 hover:text-white transition-all cursor-pointer active:scale-95 shadow-sm"
+                            title={`Click to aim Multiattack sequence (${sub.count}× ${sub.name})`}
+                          >
+                            <Swords className="w-2.5 h-2.5 text-amber-400" />
+                            <span className="font-bold text-[11px]">{sub.count}× {sub.name}</span>
+                          </button>
+                        ))
+                      ) : isMulti ? (
+                        <span className="px-2 py-0.5 rounded bg-amber-950/80 border border-amber-500/40 text-amber-300 text-[10px] font-bold">
+                          Multi-Strike Routine
+                        </span>
+                      ) : null}
+
                       {formattedHit && (
                         <button
                           type="button"
@@ -948,7 +1036,7 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                             }
                           }}
                           className="flex flex-col items-center px-2 py-0.5 rounded bg-emerald-950/90 hover:bg-emerald-900 border border-emerald-500/40 hover:border-emerald-400 text-emerald-300 hover:text-white transition-all cursor-pointer active:scale-95 shadow-sm group/hit shrink-0"
-                          title={`Click to Roll to Hit: 1d20 ${formattedHit}`}
+                          title={`Click to Roll to Hit: 1d20 ${formattedHit} (or click Aim to target a token)`}
                           aria-label={`Roll to Hit: 1d20 ${formattedHit}`}
                         >
                           <span className="text-[7px] uppercase text-emerald-400/80 group-hover/hit:text-emerald-200 leading-none">Hit</span>
@@ -961,12 +1049,11 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (onRollSaveDc) onRollSaveDc(action);
-                            else onQuickRollAction(action);
+                            onSelectAction(action);
                           }}
                           className="flex flex-col items-center px-2 py-0.5 rounded bg-amber-950/90 hover:bg-amber-900 border border-amber-500/40 hover:border-amber-400 text-amber-300 hover:text-white transition-all cursor-pointer active:scale-95 shadow-sm group/dc shrink-0"
-                          title={`Click to Roll ${action.saveAbility || ''} DC ${action.saveDc} Save Check`}
-                          aria-label={`Roll Save DC ${action.saveDc}`}
+                          title={`Click to Aim ${action.name} (${action.saveAbility || ''} DC ${action.saveDc}) on Battlemap`}
+                          aria-label={`Aim Save DC ${action.saveDc}`}
                         >
                           <span className="text-[7px] uppercase text-amber-400/80 group-hover/dc:text-amber-200 leading-none">
                             {action.saveAbility || 'Save'}
@@ -980,15 +1067,11 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (onRollDamage) {
-                              onRollDamage(action);
-                            } else {
-                              onQuickRollAction(action);
-                            }
+                            onSelectAction(action);
                           }}
                           className="flex flex-col items-center px-2 py-0.5 rounded bg-red-950/90 hover:bg-red-900 border border-red-500/40 hover:border-red-400 text-red-300 hover:text-white transition-all cursor-pointer active:scale-95 shadow-sm group/dmg shrink-0"
-                          title={`Click to Roll Damage: ${action.damageFormula} ${action.damageType || ''}`}
-                          aria-label={`Roll Damage: ${action.damageFormula}`}
+                          title={`Click to Aim & Deal Damage (${action.damageFormula} ${action.damageType || ''}) on Target Token`}
+                          aria-label={`Aim & Deal Damage: ${action.damageFormula}`}
                         >
                           <span className="text-[7px] uppercase text-red-400/80 group-hover/dmg:text-red-200 leading-none">Dmg</span>
                           <span className="font-bold text-xs">{action.damageFormula}</span>
@@ -1000,12 +1083,11 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (onRollDamage) onRollDamage(action);
-                            else onQuickRollAction(action);
+                            onSelectAction(action);
                           }}
                           className="flex flex-col items-center px-1.5 py-0.5 rounded bg-purple-950/90 hover:bg-purple-900 border border-purple-500/40 hover:border-purple-400 text-purple-300 hover:text-white transition-all cursor-pointer active:scale-95 shadow-sm group/dmg2 shrink-0"
-                          title={`Click to Roll Secondary Damage: +${action.secondaryDamageFormula} ${action.secondaryDamageType || ''}`}
-                          aria-label={`Roll Secondary Damage: +${action.secondaryDamageFormula}`}
+                          title={`Click to Aim & Deal Secondary Damage (+${action.secondaryDamageFormula} ${action.secondaryDamageType || ''})`}
+                          aria-label={`Aim Secondary Damage: +${action.secondaryDamageFormula}`}
                         >
                           <span className="text-[7px] uppercase text-purple-400/80 group-hover/dmg2:text-purple-200 leading-none">Plus</span>
                           <span className="font-bold text-xs">+{action.secondaryDamageFormula}</span>
@@ -1027,14 +1109,14 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                             ? 'bg-amber-500 text-zinc-950 shadow-[0_0_10px_rgba(245,158,11,0.5)] font-extrabold'
                             : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white'
                         }`}
-                        title="Aim & Click Target on Battlemap"
+                        title={isMulti ? 'Aim Multiattack Sequence on Battlemap' : 'Aim & Click Target on Battlemap'}
                       >
                         <Crosshair className={`w-3 h-3 ${isTargetingThis ? 'text-zinc-950 animate-pulse' : 'text-amber-400'}`} />
-                        <span>{isTargetingThis ? 'Aiming...' : 'Aim'}</span>
+                        <span>{isTargetingThis ? 'Aiming...' : (isMulti ? 'Aim Multiattack' : 'Aim')}</span>
                       </button>
 
                       {/* Quick Roll in 3D Dice */}
-                      {(action.hitBonus !== undefined || action.damageFormula !== undefined || action.saveDc !== undefined) && (
+                      {(isMulti || action.hitBonus !== undefined || action.damageFormula !== undefined || action.saveDc !== undefined) && (
                         <button
                           type="button"
                           onClick={(e) => {
@@ -1042,7 +1124,7 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                             onQuickRollAction(action);
                           }}
                           className="py-1 px-2.5 rounded-lg bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-700/60 text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer active:scale-95"
-                          title="Quick Roll Attack, Save DC, & Damage with 3D Physics Dice"
+                          title="Quick Roll Attack, Save DC, & Damage with Visual Animation & 3D Physics Dice"
                         >
                           <Dices className="w-3 h-3 text-red-400" />
                           <span>Roll</span>

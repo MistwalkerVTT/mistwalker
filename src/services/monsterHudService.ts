@@ -11,6 +11,127 @@ import {
 } from '../types/monsterHud';
 import { SRD_MONSTERS, resolveMonster } from '../data/srdMonstersCatalog';
 import { JB2A_REGISTRY, findJb2aAsset } from '../effects/db/jb2aRegistry';
+import { Jb2aAssetDefinition } from '../effects/types/effect';
+
+/**
+ * Resolves the best-matching JB2A visual and audio asset for any monster attack, natural weapon, breath weapon, or ability.
+ */
+export function resolveMonsterActionJb2aAsset(action: {
+  name?: string;
+  description?: string;
+  damageType?: string;
+  rangeFt?: number;
+  type?: string;
+  category?: string;
+  jb2aAssetId?: string;
+  isHeal?: boolean;
+}): Jb2aAssetDefinition | undefined {
+  if (action.jb2aAssetId) {
+    const direct = JB2A_REGISTRY.find(a => a.id === action.jb2aAssetId);
+    if (direct) return direct;
+  }
+
+  const name = (action.name || '').trim();
+  const lowerName = name.toLowerCase();
+  const lowerDesc = (action.description || '').toLowerCase();
+  const fullText = `${lowerName} ${lowerDesc}`;
+  const dmgType = (action.damageType || '').toLowerCase();
+  const rangeFt = action.rangeFt ?? 5;
+  const isRanged = rangeFt > 10 || /ranged\s+(?:weapon|spell)\s+attack/i.test(fullText);
+
+  if (action.isHeal) {
+    return findJb2aAsset('cure_wounds') || findJb2aAsset('healing_word');
+  }
+
+  // 1. Breath Weapons & Directional Cones / Lines
+  if (/breath|cone/i.test(fullText) && !/pinecone/i.test(fullText)) {
+    if (dmgType === 'cold' || /frost|ice|cold|freezing/i.test(fullText)) return findJb2aAsset('cone_of_cold');
+    if (dmgType === 'lightning' || /lightning|electric/i.test(fullText)) return findJb2aAsset('lightning_bolt');
+    if (dmgType === 'acid' || /acid|corrosive/i.test(fullText)) return findJb2aAsset('caustic_brew');
+    if (dmgType === 'poison' || /poison|toxic|gas/i.test(fullText)) return findJb2aAsset('cloudkill');
+    if (dmgType === 'necrotic' || /necrotic|shadow|withering/i.test(fullText)) return findJb2aAsset('arms_of_hadar');
+    if (dmgType === 'radiant' || /radiant|sun|light/i.test(fullText)) return findJb2aAsset('sunbeam');
+    return findJb2aAsset('hellish_rebuke') || findJb2aAsset('burning_hands');
+  }
+
+  // 2. Ranged Elemental / Force Projectiles (e.g., "Crystal Dart" 120 ft. Force, Spine, Ray, Bolt)
+  if (isRanged) {
+    if (dmgType === 'force' || /crystal\s+dart|arcane\s+bolt|force\s+bolt|eldritch/i.test(fullText)) {
+      return findJb2aAsset('magic_missile') || findJb2aAsset('eldritch_blast');
+    }
+    if (dmgType === 'fire' || /fire|flame|magma|lava|scorch/i.test(lowerName)) {
+      return findJb2aAsset('fire_bolt') || findJb2aAsset('scorching_ray');
+    }
+    if (dmgType === 'cold' || /frost|ice|chill/i.test(lowerName)) {
+      return findJb2aAsset('ray_of_frost');
+    }
+    if (dmgType === 'lightning' || /lightning|shock|spark/i.test(lowerName)) {
+      return findJb2aAsset('witch_bolt') || findJb2aAsset('chain_lightning');
+    }
+    if (dmgType === 'acid' || /acid|spit|slime/i.test(lowerName)) {
+      return findJb2aAsset('caustic_brew');
+    }
+    if (dmgType === 'necrotic' || /necrotic|death|shadow|withering/i.test(lowerName)) {
+      return findJb2aAsset('disintegrate') || findJb2aAsset('blight');
+    }
+    if (dmgType === 'radiant' || /radiant|sun|holy|light/i.test(lowerName)) {
+      return findJb2aAsset('guiding_bolt');
+    }
+  }
+
+  // 3. Natural Monster Weapons & Special Attacks
+  if (/\b(bite|fangs?|maw|jaws?|beak|mandibles?|chomp)\b/i.test(lowerName)) {
+    return findJb2aAsset('attack_bite');
+  }
+  if (/\b(claws?|talons?|rake|scratch|pincers?|hoof|hooves)\b/i.test(lowerName)) {
+    return findJb2aAsset('attack_claw');
+  }
+  if (/\b(slam|fist|punch|pummel|smash|crush|stomp|trample|tail|tentacles?|pseudopod|tendrils?|constrict|headbutt|ram|wing\s*attack)\b/i.test(lowerName)) {
+    if (dmgType === 'thunder') return findJb2aAsset('thunderwave') || findJb2aAsset('shatter');
+    if (dmgType === 'fire') return findJb2aAsset('attack_unarmed');
+    return findJb2aAsset('attack_unarmed');
+  }
+  if (/\b(gore|horns?|tusks?|sting|stinger|barbs?|quills?|spines?|needles?|spikes?|javelin|harpoon|pike|lance)\b/i.test(lowerName)) {
+    return isRanged ? (findJb2aAsset('attack_dagger') || findJb2aAsset('attack_bow')) : findJb2aAsset('attack_spear');
+  }
+  if (/\b(rock|boulder|stone|debris|hurl)\b/i.test(lowerName)) {
+    return findJb2aAsset('attack_hammer') || findJb2aAsset('earth_tremor');
+  }
+  if (/\b(roar|frightful\s+presence|screech|howl|wail|shriek|scream|bellow)\b/i.test(lowerName)) {
+    return findJb2aAsset('shatter') || findJb2aAsset('thunderwave');
+  }
+  if (/\b(gaze|eye\s+ray|eye\s+beam)\b/i.test(lowerName)) {
+    return findJb2aAsset('eldritch_blast') || findJb2aAsset('arcane_eye');
+  }
+  if (/\b(multiattack|flurry)\b/i.test(lowerName)) {
+    return findJb2aAsset('flurry_of_blows') || findJb2aAsset('attack_slash');
+  }
+
+  // 4. Direct Spell / Weapon Registry Lookup
+  const directMatch = findJb2aAsset(name);
+  if (directMatch) return directMatch;
+
+  // 5. Fallback by Damage Type
+  if (dmgType === 'fire') return isRanged ? findJb2aAsset('fire_bolt') : findJb2aAsset('burning_hands');
+  if (dmgType === 'cold') return findJb2aAsset('ray_of_frost');
+  if (dmgType === 'lightning') return findJb2aAsset('witch_bolt') || findJb2aAsset('lightning_bolt');
+  if (dmgType === 'necrotic') return findJb2aAsset('blight') || findJb2aAsset('toll_the_dead');
+  if (dmgType === 'radiant') return isRanged ? findJb2aAsset('guiding_bolt') : findJb2aAsset('divine_smite');
+  if (dmgType === 'force') return isRanged ? findJb2aAsset('magic_missile') : findJb2aAsset('attack_unarmed');
+  if (dmgType === 'thunder') return findJb2aAsset('thunderwave') || findJb2aAsset('shatter');
+  if (dmgType === 'acid') return findJb2aAsset('caustic_brew');
+  if (dmgType === 'poison') return findJb2aAsset('cloudkill');
+  if (dmgType === 'psychic') return findJb2aAsset('cutting_words');
+  if (dmgType === 'piercing') return isRanged ? findJb2aAsset('attack_bow') : findJb2aAsset('attack_spear');
+  if (dmgType === 'bludgeoning') return findJb2aAsset('attack_unarmed') || findJb2aAsset('attack_hammer');
+  if (dmgType === 'slashing') return findJb2aAsset('attack_slash');
+
+  if (action.type === 'attack' || action.category === 'attacks') {
+    return isRanged ? findJb2aAsset('attack_bow') : findJb2aAsset('attack_slash');
+  }
+
+  return undefined;
+}
 
 // Standard 5e monster spell definitions database for instant damage/save/range/JB2A resolution
 interface SpellProfile {
@@ -158,11 +279,13 @@ export function parseMonsterAction(
   raw: MonsterAction | MonsterTrait,
   category: DmMonsterActionCategory,
   spellStats?: { dc?: number; attackBonus?: number },
-  tokenState?: TokenMonsterState
+  tokenState?: TokenMonsterState,
+  index: number = 0
 ): MonsterActionItem {
   const name = raw.name.trim();
   const desc = raw.description || '';
   const fullText = `${name} ${desc}`;
+  const isMultiattack = /^multiattack\b/i.test(name);
 
   // 1. Detect Recharge Mechanic
   let recharge: string | undefined;
@@ -188,14 +311,18 @@ export function parseMonsterAction(
     saveAbility = ab;
   }
 
-  // 4. Detect Attack Hit Bonus
+  // 4. Detect Attack Hit Bonus (Ignore dummy attackBonus: 0 on Multiattack or non-attack actions)
   let hitBonus: string | number | undefined;
-  if ('attackBonus' in raw && raw.attackBonus !== undefined) {
-    hitBonus = raw.attackBonus >= 0 ? `+${raw.attackBonus}` : `${raw.attackBonus}`;
-  } else {
+  if (!isMultiattack) {
     const toHitMatch = desc.match(/([+-]\d+)\s*to\s*hit/i);
     if (toHitMatch) {
       hitBonus = toHitMatch[1];
+    } else if ('attackBonus' in raw && raw.attackBonus !== undefined) {
+      const hasRawDamage = Boolean('damage' in raw && raw.damage);
+      const isExplicitAttack = ('type' in raw && raw.type === 'attack') || /(?:melee|ranged)\s+(?:weapon|spell)\s+attack/i.test(desc);
+      if (raw.attackBonus !== 0 || hasRawDamage || isExplicitAttack) {
+        hitBonus = raw.attackBonus >= 0 ? `+${raw.attackBonus}` : `${raw.attackBonus}`;
+      }
     }
   }
 
@@ -278,7 +405,10 @@ export function parseMonsterAction(
   let rangeFt = extractRangeInFeet(reachRange, desc);
 
   if (!rangeFt && !reachRange) {
-    if (category === 'attacks' || hitBonus !== undefined) {
+    if (isMultiattack) {
+      reachRange = 'Multiattack Routine';
+      rangeFt = 5;
+    } else if (category === 'attacks' || hitBonus !== undefined) {
       if (/melee/i.test(desc) || /reach/i.test(desc)) {
         rangeFt = 5;
         reachRange = 'reach 5 ft.';
@@ -296,7 +426,7 @@ export function parseMonsterAction(
   const lowerName = name.toLowerCase();
   const lowerDesc = desc.toLowerCase();
   const isAoe = /cone|line|cube|sphere|radius|emanation|each creature|all creatures/i.test(desc);
-  const isOffensive = (hitBonus !== undefined) || (saveDc !== undefined) || (category === 'attacks') || (damageFormula !== undefined && !isHeal);
+  const isOffensive = isMultiattack || (hitBonus !== undefined) || (saveDc !== undefined) || (category === 'attacks') || (damageFormula !== undefined && !isHeal);
   const isSelfAction =
     !isOffensive &&
     !isAoe && (
@@ -315,18 +445,11 @@ export function parseMonsterAction(
       lowerDesc.includes('on itself')
     );
 
-  // JB2A Visual Asset Matching
-  const jb2aAsset = findJb2aAsset(name);
-  const jb2aAssetId = jb2aAsset?.id;
-
-  // Determine current recharge availability from state
-  const isRecharged = recharge && tokenState
-    ? tokenState.rechargeAvailable[name] ?? true
-    : true;
-
   // Determine action type
   let type: MonsterActionItem['type'] = 'action';
-  if ('type' in raw && raw.type) {
+  if (isMultiattack) {
+    type = 'multiattack';
+  } else if ('type' in raw && raw.type) {
     type = raw.type as any;
   } else if (category === 'traits') {
     type = 'trait';
@@ -338,8 +461,28 @@ export function parseMonsterAction(
     type = 'attack';
   }
 
+  // JB2A Visual Asset Matching
+  const jb2aAsset = resolveMonsterActionJb2aAsset({
+    name,
+    description: desc,
+    damageType,
+    rangeFt,
+    type,
+    category,
+    isHeal
+  });
+  const jb2aAssetId = jb2aAsset?.id;
+  const jb2aIconUrl = jb2aAsset?.thumb || jb2aAsset?.webm;
+
+  // Determine current recharge availability from state
+  const isRecharged = recharge && tokenState
+    ? tokenState.rechargeAvailable[name] ?? true
+    : true;
+
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'action';
+
   return {
-    id: `act_${name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${Math.random().toString(36).substr(2, 5)}`,
+    id: `act_${category}_${index}_${slug}`,
     name,
     category,
     type,
@@ -356,7 +499,9 @@ export function parseMonsterAction(
     recharge,
     isRecharged,
     legendaryCost,
+    isMultiattack,
     jb2aAssetId,
+    jb2aIconUrl,
     isSelfAction,
     isHeal
   };
@@ -397,13 +542,21 @@ export function extractMonsterSpells(
 
     const lower = cleanName.toLowerCase();
     const profile = COMMON_SPELLS_CATALOG[lower];
-    const jb2a = findJb2aAsset(cleanName);
+    const jb2a = resolveMonsterActionJb2aAsset({
+      name: cleanName,
+      damageType: profile?.damageType,
+      rangeFt: profile?.rangeFt,
+      type: 'spell',
+      category: 'spells',
+      isHeal: profile?.isHeal
+    }) || findJb2aAsset(cleanName);
 
     const level = levelOverride ?? profile?.level ?? 1;
     const rangeFt = profile?.rangeFt ?? (jb2a?.defaultSizeFt ? jb2a.defaultSizeFt * 3 : 60);
+    const slug = cleanName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
 
     spells.push({
-      id: `spell_${cleanName.toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
+      id: `spell_${spells.length}_${slug}`,
       name: cleanName.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' '),
       category: 'spells',
       type: 'spell',
@@ -417,6 +570,7 @@ export function extractMonsterSpells(
       damageFormula: profile?.damageFormula,
       damageType: profile?.damageType,
       jb2aAssetId: jb2a?.id,
+      jb2aIconUrl: jb2a?.thumb || jb2a?.webm,
       isSelfAction: profile?.isSelfAction ?? (rangeFt === 0),
       isHeal: profile?.isHeal ?? false,
       description: `${castingFrequency ? `Frequency: ${castingFrequency}. ` : ''}${cleanName} (Level ${level})`
@@ -558,29 +712,89 @@ export function buildDmMonsterHudData(
   const attacks: MonsterActionItem[] = [];
   const actions: MonsterActionItem[] = [];
 
-  for (const raw of rawActions) {
-    const parsed = parseMonsterAction(raw, 'actions', spellStats, state);
-    if (parsed.type === 'attack' || parsed.damageFormula || parsed.hitBonus !== undefined) {
-      attacks.push({ ...parsed, category: 'attacks' });
+  for (let i = 0; i < rawActions.length; i++) {
+    const raw = rawActions[i];
+    const parsed = parseMonsterAction(raw, 'actions', spellStats, state, i);
+    if (parsed.isMultiattack || parsed.type === 'multiattack' || parsed.type === 'attack' || parsed.damageFormula || parsed.hitBonus !== undefined) {
+      const slug = parsed.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'attack';
+      attacks.push({ ...parsed, id: `act_attacks_${i}_${slug}`, category: 'attacks' });
     } else {
       actions.push(parsed);
     }
   }
 
-  const bonusActions: MonsterActionItem[] = rawBonusActions.map(ba =>
-    parseMonsterAction(ba, 'bonus_actions', spellStats, state)
+  // Decompose Multiattack routine against the monster's actual parsed attack items
+  const singleStrikeAttacks = attacks.filter(a => !a.isMultiattack && a.type !== 'multiattack');
+  const wordToNum: Record<string, number> = {
+    one: 1, a: 1, an: 1, single: 1,
+    two: 2, twice: 2,
+    three: 3, thrice: 3,
+    four: 4, five: 5, six: 6
+  };
+
+  for (const atk of attacks) {
+    if ((atk.isMultiattack || atk.type === 'multiattack') && singleStrikeAttacks.length > 0) {
+      const descLower = (atk.description || '').toLowerCase();
+      const resolvedSubActions: { name: string; count: number; actionId?: string }[] = [];
+
+      for (const candidate of singleStrikeAttacks) {
+        const cName = candidate.name.toLowerCase().trim();
+        const escaped = cName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const stem = escaped.endsWith('s') ? escaped.slice(0, -1) : escaped;
+        const countRegex = new RegExp(`\\b(one|two|three|four|five|six|1|2|3|4|5|6|a|an)\\b(?:\\s+[a-z]+){0,4}?\\s+${stem}s?\\b`, 'i');
+        const twiceRegex = new RegExp(`${stem}s?\\s+(twice|thrice)`, 'i');
+        const m = descLower.match(countRegex);
+        const mTwice = descLower.match(twiceRegex);
+        if (m) {
+          const rawCnt = m[1].toLowerCase();
+          const count = wordToNum[rawCnt] ?? (parseInt(rawCnt, 10) || 1);
+          resolvedSubActions.push({ name: candidate.name, count, actionId: candidate.id });
+        } else if (mTwice) {
+          const count = wordToNum[mTwice[1].toLowerCase()] || 2;
+          resolvedSubActions.push({ name: candidate.name, count, actionId: candidate.id });
+        }
+      }
+
+      // If description uses generic phrasing like "makes two attacks" or "makes two melee attacks"
+      if (resolvedSubActions.length === 0) {
+        const genericMatch = descLower.match(/makes?\s+(two|three|four|five|2|3|4|5)\s+(?:melee\s+|ranged\s+)?attacks?/i);
+        const totalCount = genericMatch ? (wordToNum[genericMatch[1].toLowerCase()] ?? (parseInt(genericMatch[1], 10) || 2)) : 2;
+        const primaryAttack = singleStrikeAttacks[0];
+        resolvedSubActions.push({
+          name: primaryAttack.name,
+          count: totalCount,
+          actionId: primaryAttack.id
+        });
+      }
+
+      atk.multiattackActions = resolvedSubActions;
+      atk.multiattackRoutine = resolvedSubActions.flatMap(sub => Array(sub.count).fill(sub.name));
+      const summaryLabel = resolvedSubActions.map(sub => `${sub.count}× ${sub.name}`).join(' + ');
+      atk.reachRange = summaryLabel || 'Multiattack Routine';
+      const primarySub = singleStrikeAttacks.find(s => s.id === resolvedSubActions[0]?.actionId) || singleStrikeAttacks[0];
+      if (primarySub) {
+        atk.rangeFt = primarySub.rangeFt || 5;
+        if (!atk.jb2aIconUrl && primarySub.jb2aIconUrl) {
+          atk.jb2aIconUrl = primarySub.jb2aIconUrl;
+        }
+      }
+    }
+  }
+
+  const bonusActions: MonsterActionItem[] = rawBonusActions.map((ba, idx) =>
+    parseMonsterAction(ba, 'bonus_actions', spellStats, state, idx)
   );
 
-  const reactions: MonsterActionItem[] = rawReactions.map(rx =>
-    parseMonsterAction(rx, 'reactions', spellStats, state)
+  const reactions: MonsterActionItem[] = rawReactions.map((rx, idx) =>
+    parseMonsterAction(rx, 'reactions', spellStats, state, idx)
   );
 
-  const legendaryActions: MonsterActionItem[] = rawLegendaryActions.map(la =>
-    parseMonsterAction(la, 'legendary', spellStats, state)
+  const legendaryActions: MonsterActionItem[] = rawLegendaryActions.map((la, idx) =>
+    parseMonsterAction(la, 'legendary', spellStats, state, idx)
   );
 
-  const traitItems: MonsterActionItem[] = traits.map(tr =>
-    parseMonsterAction(tr, 'traits', spellStats, state)
+  const traitItems: MonsterActionItem[] = traits.map((tr, idx) =>
+    parseMonsterAction(tr, 'traits', spellStats, state, idx)
   );
 
   // Parse Legendary Actions description if present

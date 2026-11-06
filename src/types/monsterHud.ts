@@ -39,10 +39,13 @@ export interface MonsterActionItem {
   isRecharged?: boolean;      // current availability on this token instance
   legendaryCost?: number;     // action point cost (default 1)
   multiattackRoutine?: string[]; // individual parsed attack names
+  isMultiattack?: boolean;       // true if this is a Multiattack routine card
+  multiattackActions?: { name: string; count: number; actionId?: string }[]; // resolved constituent attacks
   level?: number;             // 0 = cantrip, 1-9 for spells
   school?: string;            // evocation, necromancy, etc.
   castingTime?: string;       // "1 Action", "1 Bonus Action", "1 Reaction"
   jb2aAssetId?: string;       // matched JB2A visual effect ID
+  jb2aIconUrl?: string;       // matched JB2A thumbnail / preview URL
   isSelfAction?: boolean;     // activates on monster itself without requiring map aim
   isHeal?: boolean;           // restores HP
 }
