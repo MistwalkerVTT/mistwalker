@@ -1754,8 +1754,10 @@ export function repairMonsterToken<T extends Record<string, any>>(
   if (!rawName) return token;
 
   const currentUrl = token.url || token.avatarUrl || '';
+  const isOrphanedUpload = currentUrl.startsWith('/uploads/token_');
   const needsRepair =
     !currentUrl ||
+    isOrphanedUpload ||
     (currentUrl === GENERIC_FALLBACK_AVATAR && !isTrulyGuardType(rawName)) ||
     currentUrl.includes('media.dndbeyond.com/compendium-images/veor/');
 

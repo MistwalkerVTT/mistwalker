@@ -59,9 +59,13 @@ export const TokenImage = React.memo(({
   onTargetToken,
   isAimingAction
 }: TokenImageProps) => {
-  const effectiveTokenUrl = token.url || token.avatarUrl || token.imageUrl || token.customMonsterData?.avatarUrl || '';
-  const isGif = Boolean(effectiveTokenUrl && effectiveTokenUrl.toLowerCase().endsWith('.gif'));
-  const [image] = useImage(isGif ? null : (effectiveTokenUrl || null));
+  const rawTokenUrl = token.url || token.avatarUrl || token.imageUrl || token.customMonsterData?.avatarUrl || '';
+  // Route external remote images through /api/token-proxy if CORS or canvas taints prevent direct loading
+  const effectiveTokenUrl = rawTokenUrl && rawTokenUrl.startsWith('http') && !rawTokenUrl.includes('/api/token-proxy')
+    ? `/api/token-proxy?url=${encodeURIComponent(rawTokenUrl)}`
+    : rawTokenUrl;
+  const isGif = Boolean(rawTokenUrl && rawTokenUrl.toLowerCase().endsWith('.gif'));
+  const [image] = useImage(isGif ? null : (effectiveTokenUrl || null), 'anonymous');
   const [isHovered, setIsHovered] = useState(false);
 
   const matchedCombatant = useMemo(() => {

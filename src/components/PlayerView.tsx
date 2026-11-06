@@ -380,8 +380,10 @@ const PlayerToken = React.memo(({
   }, [token.url, token.avatarUrl, token.name, token.id, characters, isMonster, isCondition]);
 
   const isGif = Boolean(resolvedUrl && resolvedUrl.toLowerCase().endsWith('.gif'));
-  // Load without CORS constraint (matching DM View TokenImage) so external avatars (D&D Beyond, wiki, etc.) never fail CORS
-  const [img] = useImage(!isGif && resolvedUrl ? resolvedUrl : '');
+  const proxiedUrl = resolvedUrl && resolvedUrl.startsWith('http') && !resolvedUrl.includes('/api/token-proxy')
+    ? `/api/token-proxy?url=${encodeURIComponent(resolvedUrl)}`
+    : resolvedUrl;
+  const [img] = useImage(!isGif && proxiedUrl ? proxiedUrl : '', 'anonymous');
 
   const tokenPx = gridSize * (token.size || 1);
   const radius = tokenPx / 2;

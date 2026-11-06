@@ -931,7 +931,18 @@ export default function App() {
       } catch (e) {}
 
       const remoteList = Array.isArray(remoteMonsters) ? remoteMonsters : [];
-      const combined = [...remoteList];
+      // Clean up any stale/orphaned ephemeral server upload tokens stored in Firestore
+      // so authoritative compendium and semantic fallbacks can supply live permanent images
+      const sanitizedRemoteList = remoteList.map(m => {
+        if (m.avatarUrl && typeof m.avatarUrl === 'string' && m.avatarUrl.startsWith('/uploads/token_')) {
+          const defMatch = DEFAULT_MONSTERS.find(d => d.name.toLowerCase() === m.name.toLowerCase());
+          if (defMatch?.avatarUrl && !defMatch.avatarUrl.startsWith('/uploads/token_')) {
+            return { ...m, avatarUrl: defMatch.avatarUrl, size: defMatch.size || m.size };
+          }
+        }
+        return m;
+      });
+      const combined = [...sanitizedRemoteList];
 
       for (const def of DEFAULT_MONSTERS) {
         if (!combined.some(m => m.monsterId === def.monsterId || m.name.toLowerCase() === def.name.toLowerCase())) {

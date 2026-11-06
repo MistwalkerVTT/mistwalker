@@ -273,6 +273,60 @@ async function startServer() {
     }
   });
 
+  // Token Avatar Proxy & Cache (solves third-party CORS / CDN canvas-tainting for D&D Beyond & external avatars)
+  const tokenCacheDir = path.resolve(process.cwd(), 'uploads', 'token_cache');
+  if (!fs.existsSync(tokenCacheDir)) {
+    fs.mkdirSync(tokenCacheDir, { recursive: true });
+  }
+
+  apiRouter.get("/token-proxy", async (req, res) => {
+    try {
+      const rawUrl = String(req.query.url || '').trim();
+      if (!rawUrl || !rawUrl.startsWith('http')) {
+        return res.status(400).send('Invalid or missing image url');
+      }
+
+      const cacheKey = rawUrl.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-180);
+      const localFilePath = path.join(tokenCacheDir, cacheKey);
+
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+
+      if (fs.existsSync(localFilePath)) {
+        const stat = fs.statSync(localFilePath);
+        res.setHeader('Content-Length', stat.size);
+        const lowerKey = cacheKey.toLowerCase();
+        res.setHeader('Content-Type', lowerKey.endsWith('.jpg') || lowerKey.endsWith('.jpeg') ? 'image/jpeg' : lowerKey.endsWith('.webp') ? 'image/webp' : 'image/png');
+        return fs.createReadStream(localFilePath).pipe(res);
+      }
+
+      const upstreamRes = await fetch(rawUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
+        }
+      });
+
+      if (!upstreamRes.ok) {
+        return res.status(upstreamRes.status).send('Upstream image error');
+      }
+
+      const contentType = upstreamRes.headers.get('content-type') || 'image/png';
+      const buffer = Buffer.from(await upstreamRes.arrayBuffer());
+
+      fs.writeFile(localFilePath, buffer, (err) => {
+        if (err) console.warn('[Token Proxy Cache] Write failed:', err.message);
+      });
+
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Content-Length', buffer.length);
+      res.send(buffer);
+    } catch (err: any) {
+      console.error('[Token Proxy Error]:', err.message);
+      res.status(500).send('Error proxying token image');
+    }
+  });
+
   // Mount API router
   app.use("/api", apiRouter);
 
