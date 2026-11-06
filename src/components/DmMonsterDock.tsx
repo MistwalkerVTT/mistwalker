@@ -290,46 +290,46 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
       )}
 
       {/* Top Vital Bar & Creature Identity */}
-      <div className="px-4 py-2.5 bg-gradient-to-r from-red-950/40 via-zinc-900/60 to-zinc-950/80 border-b border-red-500/20 flex flex-wrap items-center justify-between gap-3">
+      <div className="px-3 py-1.5 bg-gradient-to-r from-red-950/40 via-zinc-900/60 to-zinc-950/80 border-b border-red-500/20 flex flex-wrap items-center justify-between gap-2">
         {/* Left: Token Portrait + Name + Subtitle */}
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="relative w-11 h-11 rounded-xl overflow-hidden border-2 border-red-500/60 shadow-[0_0_12px_rgba(239,68,68,0.3)] bg-zinc-900 shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="relative w-8 h-8 rounded-lg overflow-hidden border border-red-500/60 shadow-[0_0_8px_rgba(239,68,68,0.25)] bg-zinc-900 shrink-0">
             {hudData.avatarUrl ? (
               <img src={hudData.avatarUrl} alt={hudData.name} className="w-full h-full object-cover" />
             ) : (
-              <div className="w-full h-full flex items-center justify-center font-bold text-red-400">
+              <div className="w-full h-full flex items-center justify-center font-bold text-xs text-red-400">
                 {hudData.name.charAt(0)}
               </div>
             )}
           </div>
 
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-sm text-zinc-100 truncate" title={hudData.name}>
+            <div className="flex items-center gap-1.5">
+              <span className="font-bold text-xs text-zinc-100 truncate" title={hudData.name}>
                 {hudData.name}
               </span>
-              <span className="px-1.5 py-0.5 rounded bg-red-950/80 border border-red-500/40 text-red-400 text-[10px] font-bold shrink-0">
+              <span className="px-1.5 py-0.2 rounded bg-red-950/80 border border-red-500/40 text-red-400 text-[9px] font-bold shrink-0">
                 CR {hudData.cr}
               </span>
             </div>
-            <div className="text-[11px] text-zinc-400 truncate">
+            <div className="text-[10px] text-zinc-400 truncate leading-tight">
               {hudData.size} {hudData.type} • {hudData.alignment}
             </div>
           </div>
         </div>
 
         {/* Center: HP Bar & Quick Modifiers */}
-        <div className="flex items-center gap-2.5 bg-zinc-900/80 px-3 py-1.5 rounded-xl border border-zinc-800">
-          <Heart className="w-4 h-4 text-red-400 shrink-0" />
-          <div className="flex flex-col min-w-[120px]">
-            <div className="flex justify-between items-center text-[10px] text-zinc-400 font-bold mb-0.5">
+        <div className="flex items-center gap-2 bg-zinc-900/80 px-2.5 py-1 rounded-xl border border-zinc-800">
+          <Heart className="w-3.5 h-3.5 text-red-400 shrink-0" />
+          <div className="flex flex-col min-w-[96px]">
+            <div className="flex justify-between items-center text-[9px] text-zinc-400 font-bold mb-0.5 leading-none">
               <span>HP</span>
               <span className="text-zinc-200">
                 {hudData.currentHp} / {hudData.maxHp}
                 {hudData.tempHp > 0 && <span className="text-blue-400"> (+{hudData.tempHp})</span>}
               </span>
             </div>
-            <div className="w-full h-2 bg-zinc-800 rounded-full overflow-hidden">
+            <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
               <div
                 className={`h-full transition-all duration-300 ${
                   hpPercent > 50 ? 'bg-red-500' : hpPercent > 20 ? 'bg-amber-500' : 'bg-rose-700'
@@ -343,28 +343,28 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
           <div className="flex items-center gap-1 pl-1 border-l border-zinc-800">
             <button
               onClick={() => onModifyHp(-5)}
-              className="px-1.5 py-0.5 rounded bg-red-950 hover:bg-red-900 text-red-300 text-[10px] font-bold border border-red-800/60"
+              className="px-1.5 py-0.5 rounded bg-red-950 hover:bg-red-900 text-red-300 text-[9px] font-bold border border-red-800/60 cursor-pointer"
               title="Deal 5 Damage"
             >
               -5
             </button>
             <button
               onClick={() => onModifyHp(-1)}
-              className="px-1.5 py-0.5 rounded bg-red-950 hover:bg-red-900 text-red-300 text-[10px] font-bold border border-red-800/60"
+              className="px-1.5 py-0.5 rounded bg-red-950 hover:bg-red-900 text-red-300 text-[9px] font-bold border border-red-800/60 cursor-pointer"
               title="Deal 1 Damage"
             >
               -1
             </button>
             <button
               onClick={() => onModifyHp(1)}
-              className="px-1.5 py-0.5 rounded bg-emerald-950 hover:bg-emerald-900 text-emerald-300 text-[10px] font-bold border border-emerald-800/60"
+              className="px-1.5 py-0.5 rounded bg-emerald-950 hover:bg-emerald-900 text-emerald-300 text-[9px] font-bold border border-emerald-800/60 cursor-pointer"
               title="Heal 1 HP"
             >
               +1
             </button>
             <button
               onClick={() => onModifyHp(5)}
-              className="px-1.5 py-0.5 rounded bg-emerald-950 hover:bg-emerald-900 text-emerald-300 text-[10px] font-bold border border-emerald-800/60"
+              className="px-1.5 py-0.5 rounded bg-emerald-950 hover:bg-emerald-900 text-emerald-300 text-[9px] font-bold border border-emerald-800/60 cursor-pointer"
               title="Heal 5 HP"
             >
               +5
@@ -373,15 +373,15 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
         </div>
 
         {/* Vital Statistics Badges - All Fully Clickable and Interactive */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 flex-wrap">
           {/* AC Badge */}
           <button
             type="button"
             onClick={() => onInspectAc ? onInspectAc() : onInspectRule?.('Armor Class', 'rule')}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 hover:border-amber-500/50 text-xs font-bold text-amber-300 transition-all cursor-pointer active:scale-95 shadow-sm"
+            className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 hover:border-amber-500/50 text-[11px] font-bold text-amber-300 transition-all cursor-pointer active:scale-95 shadow-sm"
             title={hudData.acNotes ? `${hudData.ac} AC (${hudData.acNotes}) - Click to inspect` : `${hudData.ac} AC - Click to inspect`}
           >
-            <Shield className="w-3.5 h-3.5 text-amber-400" />
+            <Shield className="w-3 h-3 text-amber-400" />
             <span>{hudData.ac} AC</span>
           </button>
 
@@ -389,10 +389,10 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
           <button
             type="button"
             onClick={() => onInspectSpeed ? onInspectSpeed() : onInspectRule?.('Speed', 'rule')}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 hover:border-blue-500/50 text-xs text-zinc-300 transition-all cursor-pointer active:scale-95 shadow-sm"
+            className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 hover:border-blue-500/50 text-[11px] text-zinc-300 transition-all cursor-pointer active:scale-95 shadow-sm"
             title={`Speed: ${hudData.speed} - Click to inspect`}
           >
-            <Footprints className="w-3.5 h-3.5 text-blue-400" />
+            <Footprints className="w-3 h-3 text-blue-400" />
             <span>{hudData.speed.split(',')[0]}</span>
           </button>
 
@@ -400,10 +400,10 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
           <button
             type="button"
             onClick={() => onRollPerception ? onRollPerception() : onInspectRule?.('Perception', 'skill')}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 hover:border-emerald-500/50 text-xs text-zinc-300 transition-all cursor-pointer active:scale-95 shadow-sm"
+            className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 hover:border-emerald-500/50 text-[11px] text-zinc-300 transition-all cursor-pointer active:scale-95 shadow-sm"
             title="Click to Roll Perception Check (1d20 + PP bonus)"
           >
-            <Eye className="w-3.5 h-3.5 text-emerald-400" />
+            <Eye className="w-3 h-3 text-emerald-400" />
             <span>PP {hudData.passivePerception}</span>
           </button>
 
@@ -411,11 +411,11 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
           <button
             type="button"
             onClick={() => onRollInitiative ? onRollInitiative() : null}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-zinc-900/90 hover:bg-amber-950/60 border border-zinc-800 hover:border-amber-500/60 text-xs text-zinc-300 font-bold transition-all cursor-pointer active:scale-95 shadow-sm group/init"
+            className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-zinc-900/90 hover:bg-amber-950/60 border border-zinc-800 hover:border-amber-500/60 text-[11px] text-zinc-300 font-bold transition-all cursor-pointer active:scale-95 shadow-sm group/init"
             title={`Click to Roll Initiative for ${hudData.name} (1d20 ${hudData.initiativeBonus >= 0 ? `+${hudData.initiativeBonus}` : hudData.initiativeBonus}) and set in Combat Tracker`}
           >
-            <Dices className="w-3.5 h-3.5 text-amber-400 group-hover/init:animate-pulse" />
-            <span className="text-[10px] text-zinc-400 uppercase">Init</span>
+            <Dices className="w-3 h-3 text-amber-400 group-hover/init:animate-pulse" />
+            <span className="text-[9px] text-zinc-400 uppercase">Init</span>
             <span className="text-amber-400 font-bold">
               {hudData.initiativeBonus >= 0 ? `+${hudData.initiativeBonus}` : hudData.initiativeBonus}
             </span>
@@ -423,7 +423,7 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
 
           {/* Flight & Altitude Controls */}
           {onUpdateFlight && (
-            <div className="flex items-center gap-1 px-2 py-1 rounded-xl bg-zinc-900/90 border border-sky-500/30 text-xs">
+            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-zinc-900/90 border border-sky-500/30 text-[10px]">
               <button
                 type="button"
                 onClick={() => {
@@ -431,7 +431,7 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                   const nextElev = nextFly && elevation === 0 ? 20 : (!nextFly ? 0 : elevation);
                   onUpdateFlight({ isFlying: nextFly, elevation: nextElev });
                 }}
-                className={`px-1.5 py-0.5 rounded font-bold text-[10px] transition-all cursor-pointer flex items-center gap-1 ${
+                className={`px-1.5 py-0.5 rounded font-bold text-[9px] transition-all cursor-pointer flex items-center gap-1 ${
                   isFlying
                     ? 'bg-sky-500/25 text-sky-300 border border-sky-400/60 shadow-[0_0_8px_rgba(56,189,248,0.35)]'
                     : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-700'
@@ -447,7 +447,7 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                   const nextElev = elevation - 5;
                   onUpdateFlight({ elevation: nextElev, isFlying: nextElev === 0 ? false : isFlying });
                 }}
-                className="px-1 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] font-bold cursor-pointer"
+                className="px-1 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[9px] font-bold cursor-pointer"
                 title="Lower Height (-5 ft)"
               >
                 -5
@@ -455,7 +455,7 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
               <button
                 type="button"
                 onClick={() => onUpdateFlight({ elevation: 0, isFlying: false })}
-                className={`px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer ${
+                className={`px-1 py-0.5 rounded text-[9px] font-bold cursor-pointer ${
                   elevation !== 0
                     ? 'bg-sky-950/80 text-sky-300 border border-sky-500/40'
                     : 'text-zinc-400 hover:text-zinc-200'
@@ -470,7 +470,7 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                   const nextElev = elevation + 5;
                   onUpdateFlight({ elevation: nextElev, isFlying: nextElev > 0 ? true : isFlying });
                 }}
-                className="px-1 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-sky-300 text-[10px] font-bold cursor-pointer"
+                className="px-1 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-sky-300 text-[9px] font-bold cursor-pointer"
                 title="Raise Height (+5 ft)"
               >
                 +5
@@ -485,7 +485,7 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
               onClick={() => onToggleAutoRollDice(!isAutoRollDiceEnabled)}
               role="switch"
               aria-checked={isAutoRollDiceEnabled}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-[11px] font-mono font-bold transition-all cursor-pointer active:scale-95 shadow-sm ${
+              className={`flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[10px] font-mono font-bold transition-all cursor-pointer active:scale-95 shadow-sm ${
                 isAutoRollDiceEnabled
                   ? 'bg-amber-950/80 hover:bg-amber-900 text-amber-300 border-amber-500/60 shadow-amber-950/50'
                   : 'bg-zinc-900/90 hover:bg-zinc-850 text-zinc-400 hover:text-zinc-200 border-zinc-800'
@@ -496,15 +496,15 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                   : 'Automatic Dice Rolling is OFF - attacks play visual animations and prompt for dice rolls (Click to turn ON)'
               }
             >
-              <Dices className={`w-3.5 h-3.5 ${isAutoRollDiceEnabled ? 'text-amber-400' : 'text-zinc-500'}`} />
+              <Dices className={`w-3 h-3 ${isAutoRollDiceEnabled ? 'text-amber-400' : 'text-zinc-500'}`} />
               <div
-                className={`w-6 h-3.5 rounded-full p-0.5 transition-colors flex items-center ${
+                className={`w-5 h-3 rounded-full p-0.5 transition-colors flex items-center ${
                   isAutoRollDiceEnabled ? 'bg-amber-500 justify-end' : 'bg-zinc-700 justify-start'
                 }`}
               >
-                <div className="w-2.5 h-2.5 rounded-full bg-white shadow-xs" />
+                <div className="w-2 h-2 rounded-full bg-white shadow-xs" />
               </div>
-              <span className="text-[10px] md:text-[11px] whitespace-nowrap">
+              <span className="text-[10px] whitespace-nowrap">
                 Auto Roll: {isAutoRollDiceEnabled ? 'ON' : 'OFF'}
               </span>
             </button>
@@ -512,7 +512,7 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
         </div>
 
         {/* Right: Collapse & Close */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5">
           <button
             onClick={() => {
               if (activeTargetingAction) {
@@ -521,28 +521,64 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                 setIsCollapsed(prev => !prev);
               }
             }}
-            className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
+            className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
             title={isTrayHidden ? 'Expand Dock' : 'Collapse Dock'}
           >
-            {isTrayHidden ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            {isTrayHidden ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
           </button>
           <button
             onClick={onDeselectToken}
-            className="p-1.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-zinc-800 transition-colors cursor-pointer"
+            className="p-1 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-zinc-800 transition-colors cursor-pointer"
             title="Deselect Creature (Escape)"
           >
-            <X className="w-4 h-4" />
+            <X className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
 
       {/* Expandable Action & Ability Tray */}
       {!isTrayHidden && (
-        <div className="p-3 space-y-3">
-          {/* Ability Scores & Legendary Actions Sub-Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 bg-zinc-900/60 rounded-xl border border-zinc-800/80 text-[11px]">
-            {/* Ability Scores Strip - Fully Interactive Buttons */}
-            <div className="flex items-center gap-2 overflow-x-auto sidebar-scrollbar py-0.5">
+        <div className="p-2 space-y-1.5">
+          {/* Combined Category Tabs (Left) + Ability Scores & Legendary Pips (Right) */}
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-1.5 border-b border-zinc-800/80">
+            {/* Category Tabs */}
+            <div className="flex items-center gap-1 overflow-x-auto sidebar-scrollbar">
+              {[
+                { id: 'attacks', label: 'Attacks', icon: Swords, count: categoryCounts.attacks },
+                { id: 'actions', label: 'Actions', icon: Activity, count: categoryCounts.actions },
+                { id: 'bonus_actions', label: 'Bonus', icon: Zap, count: categoryCounts.bonus_actions },
+                { id: 'spells', label: 'Spells', icon: Sparkles, count: categoryCounts.spells },
+                { id: 'reactions', label: 'Reactions', icon: Shield, count: categoryCounts.reactions },
+                { id: 'legendary', label: 'Legendary', icon: Crown, count: categoryCounts.legendary },
+                { id: 'traits', label: 'Traits & Defenses', icon: BookOpen, count: categoryCounts.traits }
+              ].map(tab => {
+                if (tab.count === 0 && tab.id !== 'attacks' && tab.id !== 'traits') return null;
+                const Icon = tab.icon;
+                const isActive = activeCategory === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveCategory(tab.id as DmMonsterActionCategory)}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all shrink-0 cursor-pointer ${
+                      isActive
+                        ? 'bg-red-500/20 text-red-300 border border-red-500/50 shadow-[0_0_10px_rgba(239,68,68,0.2)]'
+                        : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 border border-transparent'
+                    }`}
+                  >
+                    <Icon className="w-3 h-3" />
+                    <span>{tab.label}</span>
+                    {tab.count > 0 && (
+                      <span className="px-1.5 py-0.1 rounded-full text-[9px] bg-zinc-900 border border-zinc-700 text-zinc-300">
+                        {tab.count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Right: Compact Ability Scores Strip + Legendary Action Pips */}
+            <div className="flex items-center gap-1.5 overflow-x-auto sidebar-scrollbar">
               {[
                 { label: 'STR', val: hudData.str },
                 { label: 'DEX', val: hudData.dex },
@@ -559,96 +595,60 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                     e.preventDefault();
                     onRollSavingThrow?.(ab.label, ab.val);
                   }}
-                  className="flex items-baseline gap-1 px-2 py-1 rounded-lg bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 hover:border-amber-500/50 text-zinc-200 hover:text-white transition-all cursor-pointer active:scale-95 shadow-sm shrink-0 group/stat"
+                  className="flex items-baseline gap-0.5 px-1.5 py-0.5 rounded bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 hover:border-amber-500/50 text-zinc-200 hover:text-white transition-all cursor-pointer active:scale-95 shadow-xs shrink-0 group/stat text-[10px]"
                   title={`Click to Roll ${ab.label} Check (1d20 ${getModStr(ab.val)}) • Right-click for Saving Throw`}
                 >
-                  <span className="font-bold text-zinc-400 group-hover/stat:text-amber-400 text-[10px] transition-colors">{ab.label}</span>
+                  <span className="font-bold text-zinc-400 group-hover/stat:text-amber-400 text-[9px] transition-colors">{ab.label}</span>
                   <span className="font-bold text-zinc-100">{ab.val}</span>
-                  <span className="text-[10px] text-amber-400 font-bold">({getModStr(ab.val)})</span>
+                  <span className="text-[9px] text-amber-400 font-bold">({getModStr(ab.val)})</span>
                 </button>
               ))}
-            </div>
 
-            {/* Legendary Actions Points Tracker if monster has them */}
-            {hudData.legendaryActions.length > 0 && (
-              <div className="flex items-center gap-2 shrink-0 bg-zinc-950 px-2.5 py-1 rounded-lg border border-amber-500/30">
-                <Crown className="w-3.5 h-3.5 text-amber-400" />
-                <span className="text-[10px] font-bold uppercase text-amber-300">Legendary:</span>
-                <div className="flex items-center gap-1">
-                  {Array.from({ length: hudData.state.legendaryActionsMax }).map((_, i) => {
-                    const isUsed = i < hudData.state.legendaryActionsUsed;
-                    return (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() => onUseLegendaryAction(1)}
-                        className={`w-3.5 h-3.5 rounded-full border transition-all ${
-                          isUsed
-                            ? 'bg-zinc-800 border-zinc-700'
-                            : 'bg-amber-500 border-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.5)]'
-                        }`}
-                        title={isUsed ? 'Action Point Spent' : 'Action Point Ready (Click to spend)'}
-                      />
-                    );
-                  })}
+              {/* Legendary Actions Points Tracker if monster has them */}
+              {hudData.legendaryActions.length > 0 && (
+                <div className="flex items-center gap-1.5 shrink-0 bg-zinc-950 px-2 py-0.5 rounded border border-amber-500/30">
+                  <Crown className="w-3 h-3 text-amber-400" />
+                  <span className="text-[9px] font-bold uppercase text-amber-300">Leg:</span>
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: hudData.state.legendaryActionsMax }).map((_, i) => {
+                      const isUsed = i < hudData.state.legendaryActionsUsed;
+                      return (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => onUseLegendaryAction(1)}
+                          className={`w-3 h-3 rounded-full border transition-all cursor-pointer ${
+                            isUsed
+                              ? 'bg-zinc-800 border-zinc-700'
+                              : 'bg-amber-500 border-amber-400 shadow-[0_0_6px_rgba(245,158,11,0.5)]'
+                          }`}
+                          title={isUsed ? 'Action Point Spent' : 'Action Point Ready (Click to spend)'}
+                        />
+                      );
+                    })}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={onResetLegendaryActions}
+                    className="p-0.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-amber-300 transition-colors cursor-pointer"
+                    title="Reset Legendary Action Points"
+                  >
+                    <RotateCcw className="w-2.5 h-2.5" />
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={onResetLegendaryActions}
-                  className="p-1 rounded hover:bg-zinc-800 text-zinc-400 hover:text-amber-300 transition-colors ml-1"
-                  title="Reset Legendary Action Points"
-                >
-                  <RotateCcw className="w-3 h-3" />
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Category Tabs */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-zinc-800 sidebar-scrollbar">
-            {[
-              { id: 'attacks', label: 'Attacks', icon: Swords, count: categoryCounts.attacks },
-              { id: 'actions', label: 'Actions', icon: Activity, count: categoryCounts.actions },
-              { id: 'bonus_actions', label: 'Bonus Actions', icon: Zap, count: categoryCounts.bonus_actions },
-              { id: 'spells', label: 'Spells', icon: Sparkles, count: categoryCounts.spells },
-              { id: 'reactions', label: 'Reactions', icon: Shield, count: categoryCounts.reactions },
-              { id: 'legendary', label: 'Legendary', icon: Crown, count: categoryCounts.legendary },
-              { id: 'traits', label: 'Traits & Defenses', icon: BookOpen, count: categoryCounts.traits }
-            ].map(tab => {
-              if (tab.count === 0 && tab.id !== 'attacks' && tab.id !== 'traits') return null;
-              const Icon = tab.icon;
-              const isActive = activeCategory === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveCategory(tab.id as DmMonsterActionCategory)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
-                    isActive
-                      ? 'bg-red-500/20 text-red-300 border border-red-500/50 shadow-[0_0_12px_rgba(239,68,68,0.25)]'
-                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 border border-transparent'
-                  }`}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  <span>{tab.label}</span>
-                  {tab.count > 0 && (
-                    <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-zinc-900 border border-zinc-700 text-zinc-300">
-                      {tab.count}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+              )}
+            </div>
           </div>
 
           {/* Spell Filter & Slot Management Bar (Spells Tab Only) */}
           {activeCategory === 'spells' && (
-            <div className="space-y-2 pb-1">
+            <div className="space-y-1.5 pb-1">
               {/* Spell Slots tracker */}
               {Object.keys(hudData.spellSlots).length > 0 && (
-                <div className="flex items-center gap-3 bg-zinc-900/60 px-3 py-1.5 rounded-xl border border-zinc-800 text-[11px] overflow-x-auto sidebar-scrollbar">
-                  <span className="text-[10px] font-bold uppercase text-zinc-500 shrink-0">Spell Slots:</span>
+                <div className="flex items-center gap-2 bg-zinc-900/60 px-2.5 py-1 rounded-lg border border-zinc-800 text-[10px] overflow-x-auto sidebar-scrollbar">
+                  <span className="text-[9px] font-bold uppercase text-zinc-500 shrink-0">Spell Slots:</span>
                   {Object.values(hudData.spellSlots).map(slot => (
-                    <div key={slot.level} className="flex items-center gap-1.5 shrink-0 bg-zinc-950 px-2 py-0.5 rounded border border-zinc-800">
+                    <div key={slot.level} className="flex items-center gap-1 shrink-0 bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-800">
                       <span className="font-bold text-zinc-300">Lvl {slot.level}:</span>
                       <div className="flex items-center gap-1">
                         {Array.from({ length: slot.total }).map((_, i) => {
@@ -658,7 +658,7 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                               key={i}
                               type="button"
                               onClick={() => isUsed ? onRestoreSpellSlot(slot.level) : onConsumeSpellSlot(slot.level)}
-                              className={`w-3 h-3 rounded-sm border transition-all ${
+                              className={`w-2.5 h-2.5 rounded-xs border transition-all cursor-pointer ${
                                 isUsed
                                   ? 'bg-zinc-800 border-zinc-700'
                                   : 'bg-blue-500 border-blue-400 shadow-[0_0_6px_rgba(59,130,246,0.5)]'
@@ -675,10 +675,10 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
 
               {/* Spell Level Filter Pills */}
               {availableSpellLevels.length > 0 && (
-                <div className="flex items-center gap-1.5 overflow-x-auto sidebar-scrollbar">
+                <div className="flex items-center gap-1 overflow-x-auto sidebar-scrollbar">
                   <button
                     onClick={() => setSelectedSpellLevel('all')}
-                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase transition-all ${
+                    className={`px-2 py-0.5 rounded-md text-[9px] font-bold uppercase transition-all cursor-pointer ${
                       selectedSpellLevel === 'all'
                         ? 'bg-blue-500/20 text-blue-300 border border-blue-500/50'
                         : 'text-zinc-400 hover:bg-zinc-900'
@@ -690,7 +690,7 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                     <button
                       key={lvl}
                       onClick={() => setSelectedSpellLevel(lvl)}
-                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase transition-all ${
+                      className={`px-2 py-0.5 rounded-md text-[9px] font-bold uppercase transition-all cursor-pointer ${
                         selectedSpellLevel === lvl
                           ? 'bg-blue-500/20 text-blue-300 border border-blue-500/50'
                           : 'text-zinc-400 hover:bg-zinc-900'
@@ -706,74 +706,74 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
 
           {/* Traits & Defenses Special Overview Tab */}
           {activeCategory === 'traits' ? (
-            <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1 sidebar-scrollbar text-xs">
+            <div className="space-y-2 max-h-[150px] overflow-y-auto pr-1 sidebar-scrollbar text-xs">
               {/* Senses, Immunities, Resistances Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-1.5">
                 {hudData.senses && (
                   <div
                     onClick={() => onInspectRule && onInspectRule('Senses', 'rule')}
-                    className="p-2 rounded-xl bg-zinc-900/70 border border-zinc-800 hover:border-zinc-700 transition-colors cursor-pointer"
+                    className="p-1.5 rounded-lg bg-zinc-900/70 border border-zinc-800 hover:border-zinc-700 transition-colors cursor-pointer"
                     title="Click to inspect rules on creature senses"
                   >
-                    <span className="text-[10px] uppercase font-bold text-zinc-500 block mb-0.5">Senses</span>
-                    <span className="text-zinc-300">{hudData.senses}</span>
+                    <span className="text-[9px] uppercase font-bold text-zinc-500 block">Senses</span>
+                    <span className="text-[11px] text-zinc-300">{hudData.senses}</span>
                   </div>
                 )}
                 {hudData.damageResistances && (
                   <div
                     onClick={() => onInspectRule && onInspectRule(hudData.damageResistances || '', 'rule')}
-                    className="p-2 rounded-xl bg-zinc-900/70 border border-zinc-800 hover:border-amber-500/40 transition-colors cursor-pointer"
+                    className="p-1.5 rounded-lg bg-zinc-900/70 border border-zinc-800 hover:border-amber-500/40 transition-colors cursor-pointer"
                     title="Click to inspect damage resistance rules"
                   >
-                    <span className="text-[10px] uppercase font-bold text-amber-500 block mb-0.5">Damage Resistances</span>
-                    <span className="text-zinc-300">{hudData.damageResistances}</span>
+                    <span className="text-[9px] uppercase font-bold text-amber-500 block">Damage Resistances</span>
+                    <span className="text-[11px] text-zinc-300">{hudData.damageResistances}</span>
                   </div>
                 )}
                 {hudData.damageImmunities && (
                   <div
                     onClick={() => onInspectRule && onInspectRule(hudData.damageImmunities || '', 'rule')}
-                    className="p-2 rounded-xl bg-zinc-900/70 border border-zinc-800 hover:border-emerald-500/40 transition-colors cursor-pointer"
+                    className="p-1.5 rounded-lg bg-zinc-900/70 border border-zinc-800 hover:border-emerald-500/40 transition-colors cursor-pointer"
                     title="Click to inspect damage immunity rules"
                   >
-                    <span className="text-[10px] uppercase font-bold text-emerald-500 block mb-0.5">Damage Immunities</span>
-                    <span className="text-zinc-300">{hudData.damageImmunities}</span>
+                    <span className="text-[9px] uppercase font-bold text-emerald-500 block">Damage Immunities</span>
+                    <span className="text-[11px] text-zinc-300">{hudData.damageImmunities}</span>
                   </div>
                 )}
                 {hudData.conditionImmunities && (
                   <div
                     onClick={() => onInspectRule && onInspectRule(hudData.conditionImmunities || '', 'rule')}
-                    className="p-2 rounded-xl bg-zinc-900/70 border border-zinc-800 hover:border-emerald-500/40 transition-colors cursor-pointer"
+                    className="p-1.5 rounded-lg bg-zinc-900/70 border border-zinc-800 hover:border-emerald-500/40 transition-colors cursor-pointer"
                     title="Click to inspect condition immunity rules"
                   >
-                    <span className="text-[10px] uppercase font-bold text-emerald-500 block mb-0.5">Condition Immunities</span>
-                    <span className="text-zinc-300">{hudData.conditionImmunities}</span>
+                    <span className="text-[9px] uppercase font-bold text-emerald-500 block">Condition Immunities</span>
+                    <span className="text-[11px] text-zinc-300">{hudData.conditionImmunities}</span>
                   </div>
                 )}
                 {hudData.damageVulnerabilities && (
                   <div
                     onClick={() => onInspectRule && onInspectRule(hudData.damageVulnerabilities || '', 'rule')}
-                    className="p-2 rounded-xl bg-zinc-900/70 border border-zinc-800 hover:border-rose-500/40 transition-colors cursor-pointer"
+                    className="p-1.5 rounded-lg bg-zinc-900/70 border border-zinc-800 hover:border-rose-500/40 transition-colors cursor-pointer"
                     title="Click to inspect vulnerability rules"
                   >
-                    <span className="text-[10px] uppercase font-bold text-rose-500 block mb-0.5">Vulnerabilities</span>
-                    <span className="text-zinc-300">{hudData.damageVulnerabilities}</span>
+                    <span className="text-[9px] uppercase font-bold text-rose-500 block">Vulnerabilities</span>
+                    <span className="text-[11px] text-zinc-300">{hudData.damageVulnerabilities}</span>
                   </div>
                 )}
                 {hudData.savingThrows && (
                   <div
                     onClick={() => onInspectRule && onInspectRule('Saving Throws', 'rule')}
-                    className="p-2 rounded-xl bg-zinc-900/70 border border-zinc-800 hover:border-blue-500/40 transition-colors cursor-pointer"
+                    className="p-1.5 rounded-lg bg-zinc-900/70 border border-zinc-800 hover:border-blue-500/40 transition-colors cursor-pointer"
                     title="Click to inspect saving throw rules"
                   >
-                    <span className="text-[10px] uppercase font-bold text-blue-400 block mb-0.5">Saving Throws</span>
-                    <span className="text-zinc-300">{hudData.savingThrows}</span>
+                    <span className="text-[9px] uppercase font-bold text-blue-400 block">Saving Throws</span>
+                    <span className="text-[11px] text-zinc-300">{hudData.savingThrows}</span>
                   </div>
                 )}
               </div>
 
               {/* Interactive Creature Traits List */}
-              <div className="space-y-1.5 pt-1">
-                <span className="text-[10px] uppercase font-bold text-zinc-500 block">Creature Traits</span>
+              <div className="space-y-1 pt-0.5">
+                <span className="text-[9px] uppercase font-bold text-zinc-500 block">Creature Traits</span>
                 {hudData.traits.map((tr, idx) => (
                   <div
                     key={tr.id || idx}
@@ -781,12 +781,12 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                       e.preventDefault();
                       if (onInspectRule) onInspectRule(tr.name, 'trait');
                     }}
-                    className="p-2.5 rounded-xl bg-zinc-900/60 border border-zinc-800 flex flex-col gap-1.5 transition-colors hover:border-zinc-700"
+                    className="p-2 rounded-xl bg-zinc-900/60 border border-zinc-800 flex flex-col gap-1 transition-colors hover:border-zinc-700"
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5 min-w-0">
-                        <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                        <span className="font-bold text-red-300 font-mono truncate">{tr.name}</span>
+                        <Sparkles className="w-3 h-3 text-amber-400 shrink-0" />
+                        <span className="font-bold text-xs text-red-300 font-mono truncate">{tr.name}</span>
                         {onInspectRule && (
                           <button
                             type="button"
@@ -803,7 +803,7 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                       </div>
 
                       {/* Interactive Trait Action Buttons */}
-                      <div className="flex items-center gap-1.5 shrink-0">
+                      <div className="flex items-center gap-1 shrink-0">
                         {tr.recharge && (
                           <button
                             type="button"
@@ -815,7 +815,7 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                                 onToggleRecharge(tr.name);
                               }
                             }}
-                            className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase transition-all cursor-pointer ${
+                            className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase transition-all cursor-pointer ${
                               tr.isRecharged
                                 ? 'bg-emerald-950 border border-emerald-500/40 text-emerald-300'
                                 : 'bg-amber-950 border border-amber-500/50 text-amber-300 hover:bg-amber-900'
@@ -827,7 +827,7 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                         )}
 
                         {tr.saveDc && (
-                          <span className="px-2 py-0.5 rounded bg-amber-950/90 border border-amber-500/40 text-amber-300 text-[10px] font-bold">
+                          <span className="px-1.5 py-0.5 rounded bg-amber-950/90 border border-amber-500/40 text-amber-300 text-[9px] font-bold">
                             {tr.saveAbility || 'Save'} DC {tr.saveDc}
                           </span>
                         )}
@@ -840,7 +840,7 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                               if (onRollDamage) onRollDamage(tr);
                               else onQuickRollAction(tr);
                             }}
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-all cursor-pointer active:scale-95 ${
+                            className={`px-1.5 py-0.5 rounded text-[9px] font-bold border transition-all cursor-pointer active:scale-95 ${
                               tr.isHeal
                                 ? 'bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border-emerald-500/50'
                                 : 'bg-red-950 hover:bg-red-900 text-red-300 border-red-500/50'
@@ -857,7 +857,7 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                             e.stopPropagation();
                             onQuickRollAction(tr);
                           }}
-                          className="px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white border border-zinc-700 text-[10px] font-bold transition-all cursor-pointer active:scale-95"
+                          className="px-1.5 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white border border-zinc-700 text-[9px] font-bold transition-all cursor-pointer active:scale-95"
                           title="Trigger/Announce trait in combat log"
                         >
                           Trigger
@@ -865,14 +865,14 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                       </div>
                     </div>
 
-                    <p className="text-zinc-400 text-xs leading-relaxed">{tr.description}</p>
+                    <p className="text-zinc-400 text-[11px] leading-snug">{tr.description}</p>
                   </div>
                 ))}
               </div>
             </div>
           ) : (
-            /* Action Cards Grid for Attacks, Actions, Bonus Actions, Spells, Reactions, Legendary */
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 max-h-[220px] overflow-y-auto pr-1 sidebar-scrollbar">
+            /* Condensed Single-Row Action Cards Grid (Matches PlayerHeroDock) */
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-1.5 max-h-[150px] overflow-y-auto pr-1 sidebar-scrollbar">
               {currentCategoryList.map((action, idx) => {
                 const isMulti = Boolean(action.isMultiattack || action.type === 'multiattack');
                 const isTargetingThis =
@@ -900,108 +900,118 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                       e.preventDefault();
                       if (onInspectRule) onInspectRule(action.name, action.type || 'action');
                     }}
-                    className={`group p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between gap-2 cursor-pointer ${
+                    className={`group px-2.5 py-1.5 rounded-xl border text-left transition-all flex items-center justify-between gap-2 cursor-pointer ${
                       isTargetingThis
-                        ? 'border-amber-400 bg-red-950/40 shadow-[0_0_15px_rgba(245,158,11,0.4)] ring-1 ring-amber-400'
+                        ? 'border-amber-400 bg-red-950/40 shadow-[0_0_12px_rgba(245,158,11,0.35)] ring-1 ring-amber-400'
                         : 'border-zinc-800/90 hover:border-red-500/50 bg-zinc-900/80 hover:bg-zinc-900'
                     }`}
+                    title={
+                      isMulti
+                        ? `Click to aim ${action.name} sequence on the battlemap`
+                        : `Click to aim ${action.name} on a target token`
+                    }
                   >
-                    {/* Top Row: Icon + Name + Badges + Inspect */}
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                        {action.jb2aIconUrl ? (
-                          <div className="w-7 h-7 rounded-lg overflow-hidden border border-red-500/40 bg-zinc-950 shrink-0 flex items-center justify-center shadow-inner">
-                            {action.jb2aIconUrl.endsWith('.webm') ? (
-                              <video
-                                src={action.jb2aIconUrl}
-                                autoPlay
-                                loop
-                                muted
-                                playsInline
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              <img
-                                src={action.jb2aIconUrl}
-                                alt=""
-                                className="w-full h-full object-cover"
-                                loading="lazy"
-                              />
-                            )}
-                          </div>
-                        ) : (
-                          <div className="w-7 h-7 rounded-lg border border-red-500/30 bg-red-950/40 shrink-0 flex items-center justify-center">
-                            <ActionIcon className="w-3.5 h-3.5 text-red-400 shrink-0" />
-                          </div>
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs font-bold text-zinc-100 group-hover:text-red-200 truncate">
-                              {action.name}
+                    {/* Left: JB2A Icon + Name + Range/Subtitle */}
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      {action.jb2aIconUrl ? (
+                        <div className="w-6 h-6 rounded-lg overflow-hidden border border-red-500/40 bg-zinc-950 shrink-0 flex items-center justify-center shadow-inner">
+                          {action.jb2aIconUrl.endsWith('.webm') ? (
+                            <video
+                              src={action.jb2aIconUrl}
+                              autoPlay
+                              loop
+                              muted
+                              playsInline
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <img
+                              src={action.jb2aIconUrl}
+                              alt=""
+                              className="w-full h-full object-cover"
+                              loading="lazy"
+                            />
+                          )}
+                        </div>
+                      ) : (
+                        <div className="w-6 h-6 rounded-lg border border-red-500/30 bg-red-950/40 shrink-0 flex items-center justify-center">
+                          <ActionIcon className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs font-bold text-zinc-100 group-hover:text-red-200 truncate">
+                            {action.name}
+                          </span>
+                          {onInspectRule && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onInspectRule(action.name, action.type || 'action');
+                              }}
+                              className="p-0.5 text-zinc-500 hover:text-zinc-200 transition-colors cursor-pointer shrink-0"
+                              title="Inspect 5e rules & spell details"
+                            >
+                              <Info className="w-3 h-3" />
+                            </button>
+                          )}
+                          {action.level !== undefined && (
+                            <span className="px-1 py-0.1 rounded bg-blue-950 border border-blue-500/40 text-blue-300 text-[9px] font-bold shrink-0">
+                              {action.level === 0 ? 'Cantrip' : `Lvl ${action.level}`}
                             </span>
-                            {onInspectRule && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onInspectRule(action.name, action.type || 'action');
-                                }}
-                                className="p-0.5 text-zinc-500 hover:text-zinc-200 transition-colors cursor-pointer"
-                                title="Inspect 5e rules & spell details"
-                              >
-                                <Info className="w-3 h-3" />
-                              </button>
-                            )}
-                            {action.level !== undefined && (
-                              <span className="px-1.5 py-0.2 rounded bg-blue-950 border border-blue-500/40 text-blue-300 text-[9px] font-bold shrink-0">
-                                {action.level === 0 ? 'Cantrip' : `Lvl ${action.level}`}
-                              </span>
-                            )}
-                            {action.legendaryCost && action.legendaryCost > 1 && (
-                              <span className="px-1.5 py-0.2 rounded bg-amber-950 border border-amber-500/40 text-amber-300 text-[9px] font-bold shrink-0">
-                                {action.legendaryCost} Actions
-                              </span>
-                            )}
-                          </div>
+                          )}
+                          {action.legendaryCost && action.legendaryCost > 1 && (
+                            <span className="px-1 py-0.1 rounded bg-amber-950 border border-amber-500/40 text-amber-300 text-[9px] font-bold shrink-0">
+                              {action.legendaryCost}A
+                            </span>
+                          )}
+                          {action.recharge && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (!action.isRecharged) {
+                                  onRollRecharge(action);
+                                } else {
+                                  onToggleRecharge(action.name);
+                                }
+                              }}
+                              className={`px-1.5 py-0.1 rounded text-[9px] font-bold uppercase transition-all cursor-pointer shrink-0 ${
+                                action.isRecharged
+                                  ? 'bg-emerald-950 border border-emerald-500/40 text-emerald-300'
+                                  : 'bg-amber-950 border border-amber-500/50 text-amber-300 hover:bg-amber-900'
+                              }`}
+                              title={action.isRecharged ? 'Ready to use' : 'Recharge spent! Click to roll 1d6'}
+                            >
+                              {action.isRecharged ? `Rchg ${action.recharge}` : `Roll ${action.recharge}`}
+                            </button>
+                          )}
+                        </div>
 
-                          <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 mt-0.5 truncate">
-                            <span>{action.reachRange || (action.rangeFt ? (action.rangeFt === 0 ? 'Self' : `${action.rangeFt} ft.`) : (action.category === 'attacks' ? '5 ft.' : 'Action'))}</span>
-                            {action.damageType && (
-                              <>
-                                <span>•</span>
-                                <span className="capitalize">{action.damageType}</span>
-                              </>
-                            )}
-                          </div>
+                        <div className="flex items-center gap-1 text-[10px] text-zinc-400 truncate leading-tight">
+                          <span>
+                            {action.reachRange ||
+                              (action.rangeFt
+                                ? action.rangeFt === 0
+                                  ? 'Self'
+                                  : `${action.rangeFt} ft.`
+                                : action.category === 'attacks'
+                                ? '5 ft.'
+                                : 'Action')}
+                          </span>
+                          {action.damageType && (
+                            <>
+                              <span>•</span>
+                              <span className="capitalize">{action.damageType}</span>
+                            </>
+                          )}
                         </div>
                       </div>
-
-                      {/* Recharge Status Pill */}
-                      {action.recharge && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (!action.isRecharged) {
-                              onRollRecharge(action);
-                            } else {
-                              onToggleRecharge(action.name);
-                            }
-                          }}
-                          className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase transition-all cursor-pointer ${
-                            action.isRecharged
-                              ? 'bg-emerald-950 border border-emerald-500/40 text-emerald-300'
-                              : 'bg-amber-950 border border-amber-500/50 text-amber-300 hover:bg-amber-900'
-                          }`}
-                          title={action.isRecharged ? 'Ready to use' : 'Recharge spent! Click to roll 1d6'}
-                        >
-                          {action.isRecharged ? `Ready (${action.recharge})` : `Roll Recharge (${action.recharge})`}
-                        </button>
-                      )}
                     </div>
 
-                    {/* Middle: Multiattack Sub-Strikes OR Hit, Save, Damage Badges */}
-                    <div className="flex flex-wrap items-center gap-1.5 font-mono text-[10px]">
+                    {/* Right: Inline Hit, Save DC, Damage, or Multiattack Sub-Strike Badges */}
+                    <div className="flex items-center gap-1 shrink-0 font-mono text-[10px]">
                       {isMulti && action.multiattackActions && action.multiattackActions.length > 0 ? (
                         action.multiattackActions.map((sub, sIdx) => (
                           <button
@@ -1011,7 +1021,7 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                               e.stopPropagation();
                               onSelectAction(action);
                             }}
-                            className="flex items-center gap-1 px-2 py-0.5 rounded bg-amber-950/90 hover:bg-amber-900 border border-amber-500/50 hover:border-amber-400 text-amber-200 hover:text-white transition-all cursor-pointer active:scale-95 shadow-sm"
+                            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-950/90 hover:bg-amber-900 border border-amber-500/50 hover:border-amber-400 text-amber-200 hover:text-white transition-all cursor-pointer active:scale-95 shadow-sm"
                             title={`Click to aim Multiattack sequence (${sub.count}× ${sub.name})`}
                           >
                             <Swords className="w-2.5 h-2.5 text-amber-400" />
@@ -1019,8 +1029,8 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                           </button>
                         ))
                       ) : isMulti ? (
-                        <span className="px-2 py-0.5 rounded bg-amber-950/80 border border-amber-500/40 text-amber-300 text-[10px] font-bold">
-                          Multi-Strike Routine
+                        <span className="px-2 py-1 rounded-lg bg-amber-950/80 border border-amber-500/40 text-amber-300 text-[10px] font-bold">
+                          Multiattack
                         </span>
                       ) : null}
 
@@ -1035,8 +1045,8 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                               onQuickRollAction(action);
                             }
                           }}
-                          className="flex flex-col items-center px-2 py-0.5 rounded bg-emerald-950/90 hover:bg-emerald-900 border border-emerald-500/40 hover:border-emerald-400 text-emerald-300 hover:text-white transition-all cursor-pointer active:scale-95 shadow-sm group/hit shrink-0"
-                          title={`Click to Roll to Hit: 1d20 ${formattedHit} (or click Aim to target a token)`}
+                          className="flex flex-col items-center px-2 py-0.5 rounded-lg bg-emerald-950/90 hover:bg-emerald-900 border border-emerald-500/40 hover:border-emerald-400 text-emerald-300 hover:text-white transition-all cursor-pointer active:scale-95 shadow-sm group/hit shrink-0"
+                          title={`Click to Roll to Hit: 1d20 ${formattedHit} (or click card/damage to aim on battlemap)`}
                           aria-label={`Roll to Hit: 1d20 ${formattedHit}`}
                         >
                           <span className="text-[7px] uppercase text-emerald-400/80 group-hover/hit:text-emerald-200 leading-none">Hit</span>
@@ -1051,7 +1061,7 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                             e.stopPropagation();
                             onSelectAction(action);
                           }}
-                          className="flex flex-col items-center px-2 py-0.5 rounded bg-amber-950/90 hover:bg-amber-900 border border-amber-500/40 hover:border-amber-400 text-amber-300 hover:text-white transition-all cursor-pointer active:scale-95 shadow-sm group/dc shrink-0"
+                          className="flex flex-col items-center px-2 py-0.5 rounded-lg bg-amber-950/90 hover:bg-amber-900 border border-amber-500/40 hover:border-amber-400 text-amber-300 hover:text-white transition-all cursor-pointer active:scale-95 shadow-sm group/dc shrink-0"
                           title={`Click to Aim ${action.name} (${action.saveAbility || ''} DC ${action.saveDc}) on Battlemap`}
                           aria-label={`Aim Save DC ${action.saveDc}`}
                         >
@@ -1069,12 +1079,12 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                             e.stopPropagation();
                             onSelectAction(action);
                           }}
-                          className="flex flex-col items-center px-2 py-0.5 rounded bg-red-950/90 hover:bg-red-900 border border-red-500/40 hover:border-red-400 text-red-300 hover:text-white transition-all cursor-pointer active:scale-95 shadow-sm group/dmg shrink-0"
+                          className="flex flex-col items-center px-2 py-0.5 rounded-lg bg-red-950/90 hover:bg-red-900 border border-red-500/40 hover:border-red-400 text-red-300 hover:text-white transition-all cursor-pointer active:scale-95 shadow-sm group/dmg shrink-0"
                           title={`Click to Aim & Deal Damage (${action.damageFormula} ${action.damageType || ''}) on Target Token`}
                           aria-label={`Aim & Deal Damage: ${action.damageFormula}`}
                         >
                           <span className="text-[7px] uppercase text-red-400/80 group-hover/dmg:text-red-200 leading-none">Dmg</span>
-                          <span className="font-bold text-xs">{action.damageFormula}</span>
+                          <span className="font-bold text-xs">{action.damageFormula.replace(/\s+/g, '')}</span>
                         </button>
                       )}
 
@@ -1085,49 +1095,12 @@ export const DmMonsterDock: React.FC<DmMonsterDockProps> = ({
                             e.stopPropagation();
                             onSelectAction(action);
                           }}
-                          className="flex flex-col items-center px-1.5 py-0.5 rounded bg-purple-950/90 hover:bg-purple-900 border border-purple-500/40 hover:border-purple-400 text-purple-300 hover:text-white transition-all cursor-pointer active:scale-95 shadow-sm group/dmg2 shrink-0"
+                          className="flex flex-col items-center px-1.5 py-0.5 rounded-lg bg-purple-950/90 hover:bg-purple-900 border border-purple-500/40 hover:border-purple-400 text-purple-300 hover:text-white transition-all cursor-pointer active:scale-95 shadow-sm group/dmg2 shrink-0"
                           title={`Click to Aim & Deal Secondary Damage (+${action.secondaryDamageFormula} ${action.secondaryDamageType || ''})`}
                           aria-label={`Aim Secondary Damage: +${action.secondaryDamageFormula}`}
                         >
                           <span className="text-[7px] uppercase text-purple-400/80 group-hover/dmg2:text-purple-200 leading-none">Plus</span>
-                          <span className="font-bold text-xs">+{action.secondaryDamageFormula}</span>
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Bottom Actions Row: Aim & Quick Roll */}
-                    <div className="flex items-center gap-1.5 pt-1 border-t border-zinc-800/80">
-                      {/* Aim / Place on Map */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onSelectAction(action);
-                        }}
-                        className={`flex-1 py-1 px-2 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                          isTargetingThis
-                            ? 'bg-amber-500 text-zinc-950 shadow-[0_0_10px_rgba(245,158,11,0.5)] font-extrabold'
-                            : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white'
-                        }`}
-                        title={isMulti ? 'Aim Multiattack Sequence on Battlemap' : 'Aim & Click Target on Battlemap'}
-                      >
-                        <Crosshair className={`w-3 h-3 ${isTargetingThis ? 'text-zinc-950 animate-pulse' : 'text-amber-400'}`} />
-                        <span>{isTargetingThis ? 'Aiming...' : (isMulti ? 'Aim Multiattack' : 'Aim')}</span>
-                      </button>
-
-                      {/* Quick Roll in 3D Dice */}
-                      {(isMulti || action.hitBonus !== undefined || action.damageFormula !== undefined || action.saveDc !== undefined) && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onQuickRollAction(action);
-                          }}
-                          className="py-1 px-2.5 rounded-lg bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-700/60 text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer active:scale-95"
-                          title="Quick Roll Attack, Save DC, & Damage with Visual Animation & 3D Physics Dice"
-                        >
-                          <Dices className="w-3 h-3 text-red-400" />
-                          <span>Roll</span>
+                          <span className="font-bold text-xs">+{action.secondaryDamageFormula.replace(/\s+/g, '')}</span>
                         </button>
                       )}
                     </div>
