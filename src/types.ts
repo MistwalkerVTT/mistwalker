@@ -166,6 +166,7 @@ export interface WallSegment {
   y2?: number;
   type?: WallType | string;
   blocksLight?: boolean;
+  blocksSight?: boolean;
   blocksMovement?: boolean;
 }
 

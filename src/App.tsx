@@ -267,6 +267,7 @@ interface Token {
   haloActive?: boolean;
   monsterState?: TokenMonsterState;
   bubbles?: TokenStatusBubble[];
+  customMonsterData?: any;
 }
 
 interface RollResult {
@@ -1279,6 +1280,8 @@ export default function App() {
     mapThumbnailUrl?: string;
     mapWidth?: number;
     mapHeight?: number;
+    chapterTitle?: string;
+    campaignTitle?: string;
   } | null>(() => {
     try {
       const rawMeta = localStorage.getItem('mistwalker_last_active_scene_meta');

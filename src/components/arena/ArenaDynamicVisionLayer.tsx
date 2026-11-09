@@ -74,7 +74,7 @@ export const ArenaDynamicVisionLayer: React.FC<ArenaDynamicVisionLayerProps> = (
       if (type === 'door' || type === 'secret_door') {
         return w.doorState !== 'open' && !w.isOpen;
       }
-      return w.blocksSight !== false;
+      return (w.blocksSight ?? w.blocksLight) !== false;
     });
 
     return computeVisibilityPolygon(source, occludingWalls, {

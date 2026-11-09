@@ -40,6 +40,9 @@ export interface PendingCombatRoll {
     team?: string;
     currentHp?: number;
     maxHp?: number;
+    x?: number;
+    y?: number;
+    size?: number;
   };
   action: HudActionItem;
   phase: CombatRollPromptPhase;
