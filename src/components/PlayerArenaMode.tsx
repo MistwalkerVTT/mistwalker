@@ -63,6 +63,8 @@ import { WallSegment, DoorState, AURA_PRESETS, AuraPreset } from '../types';
 import { PlayerHeroDock } from './PlayerHeroDock';
 import { GridLayer } from './GridLayer';
 import { buildDmMonsterHudData } from '../services/monsterHudService';
+import { CombatModifier } from '../types/combatModifiers';
+import { computeEffectiveCombatantStats, createModifierFromAction, advanceCombatModifiers } from '../services/combatModifierEngine';
 import { lookupDndRuleDetails, DndRuleEntry } from '../data/dndRulesCompendium';
 import { DndRuleInspectionModal } from './DndRuleInspectionModal';
 import { canTokenHaveHalo } from '../effects/db/tokenFxMap';
@@ -2374,6 +2376,21 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         setRound((r) => r + 1);
       }
       setTurnIndex(nextIdx);
+      const nextTargetId = prev[nextIdx]?.id;
+      if (nextTargetId) {
+        setCombatModifiers((currMods) => {
+          const { active, expired } = advanceCombatModifiers(currMods, nextTargetId, wrappedRound ? round + 1 : round, wrappedRound);
+          expired.forEach((exp) => {
+            addCombatLog(
+              prev[nextIdx]?.name || 'Combatant',
+              prev[nextIdx]?.team || 'gold',
+              '🛡️ ' + exp.sourceName + ' expired — stats restored to normal.',
+              exp.badgeLabel
+            );
+          });
+          return active;
+        });
+      }
       setTurnBannerKey(`turn_${prev[nextIdx]?.id}_${Date.now()}`);
 
       // Play subtle turn stinger sound for game pacing
@@ -2420,6 +2437,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
 
   // Manual Dice Prompt State when Auto Roll is OFF and player casts a spell/action
   const [pendingManualDicePrompt, setPendingManualDicePrompt] = useState<PendingCombatRoll | null>(null);
+  const [combatModifiers, setCombatModifiers] = useState<CombatModifier[]>([]);
 
   // Player-specific Automatic Dice Rolling Toggle State (persisted per character/player in localStorage)
   const [autoRollByPlayerMap, setAutoRollByPlayerMap] = useState<Record<string, boolean>>(() =>
@@ -3234,7 +3252,10 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
 
           setPendingManualDicePrompt({
             actor,
-            target,
+            target: {
+              ...target,
+              ac: computeEffectiveCombatantStats(target, combatModifiers).effectiveAc
+            },
             action,
             targetPointPx,
             phase: hasAttack ? 'to_hit' : 'damage',
@@ -3689,21 +3710,39 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           : lowerName.includes('wild shape')
           ? 18
           : 0;
-        const acBonus =
-          lowerName === 'shield'
-            ? 5
-            : lowerName.includes('shield of faith') || lowerName === 'haste'
-            ? 2
-            : 0;
+
+        // Create temporary stat modifiers (Shield, Shield of Faith, Haste, Bless, Barkskin)
+        const generatedMods = createModifierFromAction(
+          action.name,
+          actor.id,
+          target.id,
+          round,
+          turnIndex,
+          action.castAtLevel || 1
+        );
+        if (generatedMods.length > 0) {
+          setCombatModifiers((prevMods) => [
+            ...prevMods.filter((m) => !(m.targetCombatantId === target.id && m.sourceSpellOrActionId === generatedMods[0].sourceSpellOrActionId)),
+            ...generatedMods
+          ]);
+          generatedMods.forEach((mod) => {
+            spawnFloatingText(
+              target.id,
+              target.x + ((target.size || 1) * arenaGridSize) / 2,
+              target.y + ((target.size || 1) * arenaGridSize) / 2,
+              '✨ ' + mod.sourceName + ' (' + (mod.badgeLabel || 'Active') + ')',
+              'heal'
+            );
+          });
+        }
 
         setCombatants((prev) =>
           prev.map((c) => {
             let updated = c;
-            if (c.id === target.id && (tempHpGain > 0 || acBonus > 0)) {
+            if (c.id === target.id && tempHpGain > 0) {
               updated = {
                 ...updated,
-                tempHp: Math.max(updated.tempHp, tempHpGain),
-                ac: updated.ac + acBonus
+                tempHp: Math.max(updated.tempHp, tempHpGain)
               };
             }
             if (c.id === actor.id) {
@@ -3763,14 +3802,16 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         ? `1d20 Disadvantage [${d20Roll1}, ${d20Roll2}] (${d20}) + ${rawHitBonus} = ${attackTotal}`
         : `1d20 (${d20}) + ${rawHitBonus} = ${attackTotal}`;
 
-      const hitsTarget = isCrit || (!isFumble && attackTotal >= target.ac);
+      const effectiveTargetStats = computeEffectiveCombatantStats(target, combatModifiers);
+      const effectiveTargetAc = effectiveTargetStats.effectiveAc;
+      const hitsTarget = isCrit || (!isFumble && attackTotal >= effectiveTargetAc);
 
       // Trigger 3D Physics To-Hit D20 roll independently
       if (onTrigger3dDice) {
         onTrigger3dDice({
           id: `arena-atk-${Date.now()}`,
           characterName: actor.name,
-          action: `${action.name}${isThreatened ? ' (Disadvantage)' : ''} — ${isCrit ? 'CRITICAL HIT!' : hitsTarget ? `HIT (vs AC ${target.ac})` : `MISS (vs AC ${target.ac})`}`,
+          action: `${action.name}${isThreatened ? ' (Disadvantage)' : ''} — ${isCrit ? 'CRITICAL HIT!' : hitsTarget ? `HIT (vs AC ${effectiveTargetAc})` : `MISS (vs AC ${effectiveTargetAc})`}`,
           rollType: 'attack',
           formula: rollFormula,
           diceNotation: isThreatened ? '2d20kl1' : '1d20',

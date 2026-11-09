@@ -3514,7 +3514,12 @@ export default function App() {
         }
       }
     } else {
-      console.warn('[CampaignBuilder] Scene full-res map not immediately available; awaiting resolution...');
+      console.warn('[CampaignBuilder] Scene full-res map not immediately available; activating grid canvas to keep DM in editor...');
+      const fallbackGridSvg = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
+        '<svg width="1920" height="1080" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="#12151e"/><defs><pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse"><path d="M 50 0 L 0 0 0 50" fill="none" stroke="#262b3d" stroke-width="1"/></pattern></defs><rect width="100%" height="100%" fill="url(#grid)"/><text x="50%" y="50%" font-family="monospace" font-size="24" fill="#64748b" text-anchor="middle">' + (scene.sceneTitle || 'Tactical Battlemap') + ' (Click Re-link Map to upload image)</text></svg>'
+      );
+      setMapType('image');
+      setImageFile(fallbackGridSvg);
     }
 
     // If not already resolved via isPotentiallyDeadOrLocal, run background resolution check
@@ -8387,11 +8392,13 @@ export default function App() {
       });
       setTokens(prev => {
         const next = prev.filter(t => !selectedTokenIds.includes(t.id));
+        tokensRef.current = next;
         if (mapsDataRef.current[activeMapId]) {
           mapsDataRef.current[activeMapId].tokens = next;
         }
         if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) {
-          socketRef.current.emit('SYNC_TOKENS', next);
+          const syncedTokens = prepareTokensForSync(next, compendiumMonsters, combatTrackerCombatants);
+          socketRef.current.emit('SYNC_TOKENS', syncedTokens);
         }
         return next;
       });
