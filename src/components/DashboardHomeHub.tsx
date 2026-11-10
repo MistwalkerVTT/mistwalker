@@ -149,6 +149,31 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
     // in localStorage for the user's last active scene, construct a synthetic Scene immediately
     // so the UI never flashes "Guild House" or an incorrect scene during initial startup.
     if (cachedLastActive?.sceneId && cachedLastActive?.sceneTitle) {
+      // If we have unsaved backup data matching this scene, enrich tokens and walls from it
+      let enrichedTokens = cachedLastActive.tokens || [];
+      let enrichedWalls = cachedLastActive.walls || [];
+      let enrichedReveals = cachedLastActive.reveals || [];
+      let enrichedPolygonReveals = cachedLastActive.polygonReveals || [];
+      let enrichedAnnotations = cachedLastActive.roomAnnotations || [];
+
+      if (unsavedSceneBackup && (unsavedSceneBackup.activeSceneInfo?.sceneId === cachedLastActive.sceneId || !cachedLastActive.tokens?.length)) {
+        if (Array.isArray(unsavedSceneBackup.tokens) && unsavedSceneBackup.tokens.length > 0) {
+          enrichedTokens = unsavedSceneBackup.tokens;
+        }
+        if (Array.isArray(unsavedSceneBackup.walls) && unsavedSceneBackup.walls.length > 0) {
+          enrichedWalls = unsavedSceneBackup.walls;
+        }
+        if (Array.isArray(unsavedSceneBackup.reveals) && unsavedSceneBackup.reveals.length > 0) {
+          enrichedReveals = unsavedSceneBackup.reveals;
+        }
+        if (Array.isArray(unsavedSceneBackup.polygonReveals) && unsavedSceneBackup.polygonReveals.length > 0) {
+          enrichedPolygonReveals = unsavedSceneBackup.polygonReveals;
+        }
+        if (Array.isArray(unsavedSceneBackup.roomAnnotations) && unsavedSceneBackup.roomAnnotations.length > 0) {
+          enrichedAnnotations = unsavedSceneBackup.roomAnnotations;
+        }
+      }
+
       const syntheticScene: Scene = {
         sceneId: cachedLastActive.sceneId,
         sceneTitle: cachedLastActive.sceneTitle,
@@ -159,12 +184,12 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
         mapWidth: cachedLastActive.mapWidth,
         mapHeight: cachedLastActive.mapHeight,
         dmNotes: cachedLastActive.dmNotes || '',
-        tokens: cachedLastActive.tokens || [],
-        walls: cachedLastActive.walls || [],
-        roomAnnotations: cachedLastActive.roomAnnotations || [],
+        tokens: enrichedTokens,
+        walls: enrichedWalls,
+        roomAnnotations: enrichedAnnotations,
         gridSize: cachedLastActive.gridSize || 50,
-        reveals: cachedLastActive.reveals || [],
-        polygonReveals: cachedLastActive.polygonReveals || [],
+        reveals: enrichedReveals,
+        polygonReveals: enrichedPolygonReveals,
         updatedAt: cachedLastActive.timestamp || Date.now()
       };
 
@@ -175,8 +200,8 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
         campaignTitle: cachedLastActive.campaignTitle || 'Campaign',
         chapterTitle: cachedLastActive.chapterTitle || 'Chapter',
         sceneTitle: cachedLastActive.sceneTitle,
-        tokenCount: cachedLastActive.tokensCount ?? (cachedLastActive.tokens?.length || 0),
-        wallCount: cachedLastActive.wallsCount ?? (cachedLastActive.walls?.length || 0),
+        tokenCount: cachedLastActive.tokensCount ?? (enrichedTokens.length || 0),
+        wallCount: cachedLastActive.wallsCount ?? (enrichedWalls.length || 0),
         isRealSave: true,
         sourceLabel: 'Last Active Scene',
         isLoading: false

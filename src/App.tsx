@@ -1693,8 +1693,12 @@ export default function App() {
           console.warn('[VTT] IndexedDB recovery error:', recoverErr);
         }
 
-        // If high-resolution asset is completely missing, alert the DM without poisoning the scene with a blurry thumbnail
+        // If high-resolution asset is completely missing, retain a fallback SVG grid so the DM stays on canvas with tokens & walls
         if (!isCancelled) {
+          const fallbackGridSvg = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
+            '<svg width="1920" height="1080" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="#12151e"/><defs><pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse"><path d="M 50 0 L 0 0 0 50" fill="none" stroke="#262b3d" stroke-width="1"/></pattern></defs><rect width="100%" height="100%" fill="url(#grid)"/><text x="50%" y="50%" font-family="monospace" font-size="24" fill="#64748b" text-anchor="middle">' + ((activeSceneInfo?.sceneTitle || 'Tactical Battlemap') + ' (Click Re-link Map to upload image)') + '</text></svg>'
+          );
+          setImageFile(fallbackGridSvg);
           toast.error(`Battlemap file could not be loaded for "${activeSceneInfo?.sceneTitle || 'Scene'}". Click 'Re-link Map' to select the image file.`, {
             id: 'map-load-error',
             duration: 6000
@@ -6192,9 +6196,52 @@ export default function App() {
     if (backup.combatTrackerTurnIndex !== undefined) setCombatTrackerTurnIndex(backup.combatTrackerTurnIndex);
     if (backup.showCombatTracker !== undefined) setShowCombatTracker(backup.showCombatTracker);
 
-    const targetUrl = backup.imageFile || backup.activeSceneInfo?.mapUrl;
-    if (targetUrl) {
+    let targetUrl = backup.imageFile || backup.activeSceneInfo?.mapUrl;
+
+    // Prevent dead/revoked blob URLs from crashing the stage or bouncing to hub
+    const isDeadBlob = Boolean(targetUrl && targetUrl.startsWith('blob:'));
+    const fallbackGridSvg = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
+      '<svg width="1920" height="1080" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="#12151e"/><defs><pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse"><path d="M 50 0 L 0 0 0 50" fill="none" stroke="#262b3d" stroke-width="1"/></pattern></defs><rect width="100%" height="100%" fill="url(#grid)"/><text x="50%" y="50%" font-family="monospace" font-size="24" fill="#64748b" text-anchor="middle">' + ((backup.activeSceneInfo?.sceneTitle || 'Restored Tactical Scene') + ' (Click Re-link Map to upload image)') + '</text></svg>'
+    );
+
+    if (isDeadBlob) {
+      // Immediately set the SVG canvas so the DM transitions to the canvas and never bounces to hub
+      setImageFile(fallbackGridSvg);
+      // Attempt background IndexedDB recovery for the original high-resolution image
+      (async () => {
+        try {
+          const sceneId = backup.activeSceneInfo?.sceneId;
+          if (sceneId) {
+            const cachedScene = await getLocalAsset(`scene_${sceneId}`);
+            if (cachedScene) {
+              console.log('[App] Recovered high-res map from IndexedDB for restored scene:', sceneId);
+              setImageFile(cachedScene);
+              return;
+            }
+          }
+          if (backup.activeMapId) {
+            const cachedSlot = await getLocalAsset(`map_${backup.activeMapId}`);
+            if (cachedSlot) {
+              console.log('[App] Recovered high-res map from slot in IndexedDB:', backup.activeMapId);
+              setImageFile(cachedSlot);
+              return;
+            }
+          }
+        } catch (err) {
+          console.warn('[App] Error resolving asset for restored backup:', err);
+        }
+      })();
+    } else if (targetUrl && !targetUrl.startsWith('local:')) {
       setImageFile(targetUrl);
+    } else {
+      // If no valid URL or it's a local: token, set fallback SVG grid immediately
+      setImageFile(fallbackGridSvg);
+      if (targetUrl?.startsWith('local:')) {
+        const assetKey = targetUrl.replace('local:', '');
+        getLocalAsset(assetKey).then(cached => {
+          if (cached) setImageFile(cached);
+        }).catch(() => {});
+      }
     }
 
     try {
