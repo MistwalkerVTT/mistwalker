@@ -1633,7 +1633,15 @@ export default function App() {
   useEffect(() => {
     if (imageStatus === 'failed' && imageFile && mapType === 'image') {
       console.warn('[VTT] Active battlemap failed to load:', imageFile);
-      // Auto-recovery for known Guildhouse maps
+      // Auto-recovery for known maps (Guildhouse & Tomb of Valin Sarnaster)
+      if (activeSceneInfo?.sceneId === 'scene-mvzhib38' || activeSceneInfo?.sceneTitle?.toLowerCase().includes('valin sarnaster') || activeSceneInfo?.sceneTitle?.toLowerCase().includes('tomb of valin')) {
+        const fallbackUrl = '/uploads/tomb_of_valin_sarnaster.jpg';
+        if (imageFile !== fallbackUrl) {
+          console.log('[VTT] Auto-recovering Tomb of Valin Sarnaster map with static file:', fallbackUrl);
+          setImageFile(fallbackUrl);
+          return;
+        }
+      }
       if (activeSceneInfo?.sceneId === 'scene-muimqdr3' || activeSceneInfo?.sceneTitle?.toLowerCase().includes('2nd floor')) {
         const fallbackUrl = '/uploads/file-1792161971576-460009101.jpg';
         if (imageFile !== fallbackUrl) {
@@ -3477,6 +3485,11 @@ export default function App() {
       (scene.sceneTitle ? getMemoryAssetSync(scene.sceneTitle) : null);
     if (memCached && memCached !== scene.mapThumbnailUrl) {
       fullResUrl = memCached;
+    }
+
+    // Known canonical maps auto-resolution (e.g. Tomb of Valin Sarnaster)
+    if (!fullResUrl && (scene.sceneId === 'scene-mvzhib38' || scene.sceneTitle?.toLowerCase().includes('valin sarnaster') || scene.sceneTitle?.toLowerCase().includes('tomb of valin'))) {
+      fullResUrl = '/uploads/tomb_of_valin_sarnaster.jpg';
     }
 
     const isPotentiallyDeadOrLocal = !fullResUrl && (!scene.mapUrl ||
