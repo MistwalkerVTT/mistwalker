@@ -333,7 +333,18 @@ async function startServer() {
   // Serve static uploads with automatic Firestore asset restoration on container restart
   app.get('/uploads/:filename', async (req, res) => {
     const filename = req.params.filename;
-    const filePath = path.join(uploadsDir, filename);
+    let filePath = path.join(uploadsDir, filename);
+
+    // If not in uploadsDir, check dist/uploads and public/uploads
+    if (!fs.existsSync(filePath)) {
+      const distUploads = path.resolve(process.cwd(), 'dist', 'uploads', filename);
+      const publicUploads = path.resolve(process.cwd(), 'public', 'uploads', filename);
+      if (fs.existsSync(distUploads)) {
+        filePath = distUploads;
+      } else if (fs.existsSync(publicUploads)) {
+        filePath = publicUploads;
+      }
+    }
 
     // Set CORS, byte-range, and browser disk cache headers for high-performance asset loading
     res.setHeader('Access-Control-Allow-Origin', '*');
