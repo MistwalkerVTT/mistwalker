@@ -48,7 +48,7 @@ import { toast } from 'sonner';
 import { Character } from '../types/character';
 import { Monster } from '../types/monster';
 import { DEFAULT_CHARACTERS, getCharacterTokenUrl, isDdbMatch, resolveTokenDdbCharacterId } from '../data/defaultCharacters';
-import { DEFAULT_MONSTERS } from '../data/defaultMonsters';
+import { DEFAULT_MONSTERS, loadExtendedMonsters } from '../data/defaultMonsters';
 import { PRESET_BATTLEMAPS, PresetBattlemap } from '../data/presetBattlemaps';
 import {
   HudCharacterData,
@@ -1427,6 +1427,16 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
     }
   }, [initialCampaignId]);
 
+  const [extendedMonstersVersion, setExtendedMonstersVersion] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    loadExtendedMonsters().then(() => {
+      if (active) setExtendedMonstersVersion(v => v + 1);
+    });
+    return () => { active = false; };
+  }, []);
+
   const monsterPool = useMemo<Monster[]>(() => {
     const disabledSet = new Set(arenaConfig.disabledMonsterIds || []);
     const merged: Monster[] = [];
@@ -1439,7 +1449,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       }
     });
     return merged.length > 0 ? merged : DEFAULT_MONSTERS;
-  }, [arenaConfig.customArenaMonsters, arenaConfig.disabledMonsterIds, cloudMonsters]);
+  }, [arenaConfig.customArenaMonsters, arenaConfig.disabledMonsterIds, cloudMonsters, extendedMonstersVersion]);
 
   // Drafted Team Gold (Players) and Team Crimson (Opponents / NPCs)
   const [goldHeroIds, setGoldHeroIds] = useState<string[]>(() => {

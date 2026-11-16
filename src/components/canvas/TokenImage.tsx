@@ -4,7 +4,7 @@ import { Group, Circle, Rect, Text, Image as KonvaImage } from 'react-konva';
 import { GifImage } from './GifImage';
 import { TokenBubblesKonvaOverlay } from '../../effects';
 import { getAuraVideoUrl } from '../../effects/db/tokenFxMap';
-import { DEFAULT_MONSTERS } from '../../data/defaultMonsters';
+import { findDefaultMonsterByName } from '../../data/defaultMonsters';
 import { getCharacterTokenDisplayName, resolveTokenCharacterStats } from '../../data/defaultCharacters';
 import { isMonsterToken } from '../../types';
 import {
@@ -90,7 +90,7 @@ export const TokenImage = React.memo(({
 
   const stats = useMemo(() => {
     const fromSheet = resolveTokenCharacterStats(token, characters);
-    const defMonster = DEFAULT_MONSTERS.find(m => m.name.toLowerCase() === (token.name || '').toLowerCase());
+    const defMonster = findDefaultMonsterByName(token.name);
 
     const isCharSheet = fromSheet.isFromCharacterSheet;
     const maxHp = isCharSheet && fromSheet.maxHp

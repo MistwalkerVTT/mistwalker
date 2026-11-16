@@ -58,6 +58,25 @@ export default defineConfig(({mode}) => {
                 return 'vendor-genai';
               }
             } else {
+              if (
+                id.includes('src/data/srdMonstersCatalog') ||
+                id.includes('src\\data\\srdMonstersCatalog')
+              ) {
+                return 'data-monsters';
+              }
+              if (
+                id.includes('src/data/dndRulesCompendium') ||
+                id.includes('src\\data\\dndRulesCompendium') ||
+                id.includes('src/data/criticalHitsTables') ||
+                id.includes('src\\data\\criticalHitsTables') ||
+                id.includes('src/types/wildShape') ||
+                id.includes('src\\types\\wildShape')
+              ) {
+                return 'data-rules';
+              }
+              if (id.includes('src/effects/') || id.includes('src\\effects\\')) {
+                return 'app-effects';
+              }
               if (id.includes('src/components/PlayerView') || id.includes('src\\components\\PlayerView')) {
                 return 'app-player-view';
               }

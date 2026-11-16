@@ -113,7 +113,7 @@ import {
   NARRATION_VOICES
 } from '../types';
 import { Monster, getSizeMultiplier } from '../types/monster';
-import { DEFAULT_MONSTERS } from '../data/defaultMonsters';
+import { DEFAULT_MONSTERS, findDefaultMonsterByName } from '../data/defaultMonsters';
 import { Ally } from '../types/ally';
 import { DEFAULT_ALLIES } from '../data/defaultAllies';
 
@@ -4036,7 +4036,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
                                  {filteredCustomTokens.map((tok, idx) => {
                                    const cleanName = tok.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ").replace(/\b\w/g, l => l.toUpperCase());
                                    const matchedMonster = filteredMonsters.find(m => m.name.toLowerCase() === cleanName.toLowerCase() || m.name.toLowerCase() === tok.name.replace(/\.[^/.]+$/, "").toLowerCase()) ||
-                                                          DEFAULT_MONSTERS.find(m => m.name.toLowerCase() === cleanName.toLowerCase() || m.name.toLowerCase() === tok.name.replace(/\.[^/.]+$/, "").toLowerCase());
+                                                          findDefaultMonsterByName(cleanName) ||
+                                                          findDefaultMonsterByName(tok.name.replace(/\.[^/.]+$/, ""));
 
                                    const monsterName = matchedMonster ? matchedMonster.name : cleanName;
                                    const monsterSize = matchedMonster ? getSizeMultiplier(matchedMonster.size) : (tok.size || 1);

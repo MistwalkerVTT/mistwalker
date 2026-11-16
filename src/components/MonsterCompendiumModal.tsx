@@ -24,7 +24,7 @@ import {
   UserCheck
 } from 'lucide-react';
 import { Monster, MonsterTrait, MonsterAction, getSizeMultiplier } from '../types/monster';
-import { DEFAULT_MONSTERS } from '../data/defaultMonsters';
+import { DEFAULT_MONSTERS, loadExtendedMonsters } from '../data/defaultMonsters';
 import {
   subscribeToMonsters,
   saveMonster,
@@ -55,6 +55,24 @@ export const MonsterCompendiumModal: React.FC<MonsterCompendiumModalProps> = ({
   initialSearchQuery = ''
 }) => {
   const [monsters, setMonsters] = useState<Monster[]>(DEFAULT_MONSTERS);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let active = true;
+    loadExtendedMonsters().then((allDefaults) => {
+      if (!active) return;
+      setMonsters(prev => {
+        const existingIds = new Set(prev.map(m => m.monsterId).filter(Boolean));
+        const existingNames = new Set(prev.map(m => (m.name || '').trim().toLowerCase()).filter(Boolean));
+        const additions = allDefaults.filter(m => {
+          const nameKey = (m.name || '').trim().toLowerCase();
+          return !(m.monsterId && existingIds.has(m.monsterId)) && !(nameKey && existingNames.has(nameKey));
+        });
+        return additions.length > 0 ? [...prev, ...additions] : prev;
+      });
+    });
+    return () => { active = false; };
+  }, [isOpen]);
   const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
   const [selectedType, setSelectedType] = useState<string>('all');
   const [selectedMonster, setSelectedMonster] = useState<Monster | null>(null);

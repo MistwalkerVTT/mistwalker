@@ -1,7 +1,7 @@
-import forestRuinsImg from '../assets/images/forest_ruins_map_1788900106491.jpg';
-import subterraneanMazeImg from '../assets/images/subterranean_maze_map_1788900151367.jpg';
-import skeletonCryptImg from '../assets/images/skeleton_crypt_map_1788900167836.jpg';
-import lavapitImg from '../assets/images/lavapit_map_1788900183173.jpg';
+const forestRuinsImg = '/assets/maps/forest_ruins_map_1788900106491.jpg';
+const subterraneanMazeImg = '/assets/maps/subterranean_maze_map_1788900151367.jpg';
+const skeletonCryptImg = '/assets/maps/skeleton_crypt_map_1788900167836.jpg';
+const lavapitImg = '/assets/maps/lavapit_map_1788900183173.jpg';
 
 export interface PresetBattlemap {
   id: string;

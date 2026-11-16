@@ -1,6 +1,8 @@
 // src/effects/engine/VideoCacheManager.ts
 // Client-side CacheStorage & Cache API manager for ultra-fast (0-2ms) video replay
 
+import { JB2A_REGISTRY } from '../db/jb2aRegistry';
+
 const CACHE_NAME = 'mistwalker-jb2a-v1';
 
 export class VideoCacheManager {
@@ -59,7 +61,6 @@ export class VideoCacheManager {
    */
   public async prewarmTopSpells(): Promise<void> {
     try {
-      const { JB2A_REGISTRY } = await import('../db/jb2aRegistry');
       const topUrls = JB2A_REGISTRY.slice(0, 10).map(a => a.webm);
       await this.prewarmUrls(topUrls);
     } catch {

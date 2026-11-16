@@ -9,6 +9,7 @@ import { aiRouter } from "./server/aiRoutes";
 import { ddbRouter } from "./server/ddbRoutes";
 import { settingsRouter } from "./server/settingsRoutes";
 import cors from "cors";
+import compression from "compression";
 import { DdbHpSyncDaemon } from "./server/ddbCampaignService";
 import { DdbGameLogDaemon } from "./server/ddbGameLogDaemon";
 import { repairMonsterToken } from "./src/data/srdMonstersCatalog";
@@ -63,6 +64,9 @@ async function startServer() {
 
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
+
+  // Enable gzip/deflate compression for API JSON and static responses
+  app.use(compression());
 
   // Enable CORS with credentials support
   app.use(cors({
@@ -330,9 +334,17 @@ async function startServer() {
   // Mount API router
   app.use("/api", apiRouter);
 
+  // Cache missing upload filenames (5 min TTL) and deduplicate concurrent Firestore recovery scans
+  const uploadMissingCache = new Map<string, number>();
+  const uploadRecoveryInFlight = new Map<string, Promise<string | null>>();
+  const UPLOAD_MISSING_TTL_MS = 5 * 60 * 1000;
+
   // Serve static uploads with automatic Firestore asset restoration on container restart
   app.get('/uploads/:filename', async (req, res) => {
-    const filename = req.params.filename;
+    const filename = path.basename(req.params.filename || '');
+    if (!filename || filename === '.' || filename === '..') {
+      return res.status(400).json({ error: 'Invalid upload filename' });
+    }
     let filePath = path.join(uploadsDir, filename);
 
     // If not in uploadsDir, check dist/uploads and public/uploads
@@ -377,79 +389,89 @@ async function startServer() {
     }
 
     const isVideo = /\.(mp4|webm|m4v|mov|ogv)$/i.test(filename);
+    const cachedMissingAt = uploadMissingCache.get(filename);
+    if (cachedMissingAt && Date.now() - cachedMissingAt < UPLOAD_MISSING_TTL_MS) {
+      return res.status(404).json({ error: `Upload ${filename} not found` });
+    }
+
     console.log(`[Server] Upload file missing on disk: ${filename} (isVideo: ${isVideo}). Attempting Firestore recovery...`);
 
     // For video files, do NOT write an image thumbnail base64 string to the .mp4 file
     // Doing so corrupts the video container format.
     if (!isVideo) {
       try {
-        const configPath = path.resolve(process.cwd(), 'firebase-applet-config.json');
-        if (fs.existsSync(configPath)) {
-          const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-          const { initializeApp, getApps } = await import('firebase/app');
-          const { getFirestore, collection, getDocs } = await import('firebase/firestore');
-          const fbApp = getApps().length ? getApps()[0] : initializeApp(config);
-          const db = getFirestore(fbApp, config.firestoreDatabaseId);
+        let recoveryPromise = uploadRecoveryInFlight.get(filename);
+        if (!recoveryPromise) {
+          recoveryPromise = (async (): Promise<string | null> => {
+            const configPath = path.resolve(process.cwd(), 'firebase-applet-config.json');
+            if (!fs.existsSync(configPath)) return null;
 
-          // Check uploadedAssets collection
-          const isBetaServer = process.env.APP_ENV === 'beta' || process.env.RENDER_SERVICE_ID === 'srv-dbhqc7afngtc73cau1i0' || process.env.IS_BETA === 'true';
-          const assetsSnap = await getDocs(collection(db, 'uploadedAssets'));
-          let foundDataUrl: string | null = null;
+            const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+            const { initializeApp, getApps } = await import('firebase/app');
+            const { getFirestore, collection, getDocs } = await import('firebase/firestore');
+            const fbApp = getApps().length ? getApps()[0] : initializeApp(config);
+            const db = getFirestore(fbApp, config.firestoreDatabaseId);
 
-          assetsSnap.forEach(d => {
-            const data = d.data();
-            const isBetaDoc = Boolean(d.id.startsWith('beta_') || data.isBeta);
-            if (isBetaServer ? !isBetaDoc : isBetaDoc) return;
-            if (data.url && (data.url.endsWith(filename) || path.basename(data.url) === filename)) {
-              if (data.url && typeof data.url === 'string' && data.url.startsWith('data:image') && data.url.length > 100000) {
-                foundDataUrl = data.url;
-              }
-            }
-          });
+            // Check uploadedAssets collection
+            const isBetaServer = process.env.APP_ENV === 'beta' || process.env.RENDER_SERVICE_ID === 'srv-dbhqc7afngtc73cau1i0' || process.env.IS_BETA === 'true';
+            const assetsSnap = await getDocs(collection(db, 'uploadedAssets'));
+            let foundDataUrl: string | null = null;
 
-          // If not in uploadedAssets, check monsters collection
-          if (!foundDataUrl) {
-            const monSnap = await getDocs(collection(db, 'monsters'));
-            monSnap.forEach(d => {
-              const mon = d.data();
-              const isBetaDoc = Boolean(d.id.startsWith('beta_') || mon.isBeta);
+            assetsSnap.forEach(d => {
+              const data = d.data();
+              const isBetaDoc = Boolean(d.id.startsWith('beta_') || data.isBeta);
               if (isBetaServer ? !isBetaDoc : isBetaDoc) return;
-              if (mon?.avatarUrl && (mon.avatarUrl.endsWith(filename) || path.basename(mon.avatarUrl) === filename)) {
-                if (typeof mon.avatarUrl === 'string' && mon.avatarUrl.startsWith('data:image')) {
-                  foundDataUrl = mon.avatarUrl;
-                }
-              }
-              if (!foundDataUrl && mon?.statblockImageUrl && (mon.statblockImageUrl.endsWith(filename) || path.basename(mon.statblockImageUrl) === filename)) {
-                if (typeof mon.statblockImageUrl === 'string' && mon.statblockImageUrl.startsWith('data:image')) {
-                  foundDataUrl = mon.statblockImageUrl;
+              if (data.url && (data.url.endsWith(filename) || path.basename(data.url) === filename)) {
+                if (data.url && typeof data.url === 'string' && data.url.startsWith('data:image') && data.url.length > 100000) {
+                  foundDataUrl = data.url;
                 }
               }
             });
-          }
 
-          // If not in uploadedAssets or monsters, check campaigns and chapters
-          if (!foundDataUrl) {
-            const campSnap = await getDocs(collection(db, 'campaigns'));
-            campSnap.forEach(d => {
-              const camp = d.data();
-              const isBetaDoc = Boolean(d.id.startsWith('beta_') || camp.isBeta);
-              if (isBetaServer ? !isBetaDoc : isBetaDoc) return;
-              if (camp?.chapters && Array.isArray(camp.chapters)) {
-                for (const ch of camp.chapters) {
-                  if (ch.scenes && Array.isArray(ch.scenes)) {
-                    for (const sc of ch.scenes) {
-                      if (sc.mapUrl && (sc.mapUrl.endsWith(filename) || path.basename(sc.mapUrl) === filename)) {
-                        if (sc.mapUrl && typeof sc.mapUrl === 'string' && sc.mapUrl.startsWith('data:image') && sc.mapUrl.length > 100000) {
-                          foundDataUrl = sc.mapUrl;
-                          break;
+            // If not in uploadedAssets, check monsters collection
+            if (!foundDataUrl) {
+              const monSnap = await getDocs(collection(db, 'monsters'));
+              monSnap.forEach(d => {
+                const mon = d.data();
+                const isBetaDoc = Boolean(d.id.startsWith('beta_') || mon.isBeta);
+                if (isBetaServer ? !isBetaDoc : isBetaDoc) return;
+                if (mon?.avatarUrl && (mon.avatarUrl.endsWith(filename) || path.basename(mon.avatarUrl) === filename)) {
+                  if (typeof mon.avatarUrl === 'string' && mon.avatarUrl.startsWith('data:image')) {
+                    foundDataUrl = mon.avatarUrl;
+                  }
+                }
+                if (!foundDataUrl && mon?.statblockImageUrl && (mon.statblockImageUrl.endsWith(filename) || path.basename(mon.statblockImageUrl) === filename)) {
+                  if (typeof mon.statblockImageUrl === 'string' && mon.statblockImageUrl.startsWith('data:image')) {
+                    foundDataUrl = mon.statblockImageUrl;
+                  }
+                }
+              });
+            }
+
+            // If not in uploadedAssets or monsters, check campaigns and chapters
+            if (!foundDataUrl) {
+              const campSnap = await getDocs(collection(db, 'campaigns'));
+              campSnap.forEach(d => {
+                const camp = d.data();
+                const isBetaDoc = Boolean(d.id.startsWith('beta_') || camp.isBeta);
+                if (isBetaServer ? !isBetaDoc : isBetaDoc) return;
+                if (camp?.chapters && Array.isArray(camp.chapters)) {
+                  for (const ch of camp.chapters) {
+                    if (ch.scenes && Array.isArray(ch.scenes)) {
+                      for (const sc of ch.scenes) {
+                        if (sc.mapUrl && (sc.mapUrl.endsWith(filename) || path.basename(sc.mapUrl) === filename)) {
+                          if (sc.mapUrl && typeof sc.mapUrl === 'string' && sc.mapUrl.startsWith('data:image') && sc.mapUrl.length > 100000) {
+                            foundDataUrl = sc.mapUrl;
+                            break;
+                          }
                         }
-                      }
-                      if (sc.tokens && Array.isArray(sc.tokens)) {
-                        for (const tok of sc.tokens) {
-                          if (tok.avatarUrl && (tok.avatarUrl.endsWith(filename) || path.basename(tok.avatarUrl) === filename)) {
-                            if (tok.avatarUrl.startsWith('data:image')) {
-                              foundDataUrl = tok.avatarUrl;
-                              break;
+                        if (sc.tokens && Array.isArray(sc.tokens)) {
+                          for (const tok of sc.tokens) {
+                            if (tok.avatarUrl && (tok.avatarUrl.endsWith(filename) || path.basename(tok.avatarUrl) === filename)) {
+                              if (tok.avatarUrl.startsWith('data:image')) {
+                                foundDataUrl = tok.avatarUrl;
+                                break;
+                              }
                             }
                           }
                         }
@@ -457,22 +479,34 @@ async function startServer() {
                     }
                   }
                 }
-              }
-            });
-          }
-
-          if (foundDataUrl) {
-            const matches = (foundDataUrl as string).match(/^data:([^;]+);base64,(.+)$/);
-            if (matches) {
-              fs.writeFileSync(filePath, Buffer.from(matches[2], 'base64'));
-              console.log(`[Server] Successfully recovered missing image upload /uploads/${filename} from Firestore!`);
-              return res.sendFile(filePath, { maxAge: '30d', immutable: true });
+              });
             }
-          }
+
+            if (foundDataUrl) {
+              const matches = (foundDataUrl as string).match(/^data:([^;]+);base64,(.+)$/);
+              if (matches) {
+                fs.writeFileSync(filePath, Buffer.from(matches[2], 'base64'));
+                console.log(`[Server] Successfully recovered missing image upload /uploads/${filename} from Firestore!`);
+                return filePath;
+              }
+            }
+            return null;
+          })().finally(() => {
+            uploadRecoveryInFlight.delete(filename);
+          });
+          uploadRecoveryInFlight.set(filename, recoveryPromise);
         }
+
+        const recoveredPath = await recoveryPromise;
+        if (recoveredPath && fs.existsSync(recoveredPath)) {
+          return res.sendFile(recoveredPath, { maxAge: '30d', immutable: true });
+        }
+        uploadMissingCache.set(filename, Date.now());
       } catch (recoverErr) {
         console.warn('[Server] Failed to auto-recover upload from Firestore:', recoverErr);
       }
+    } else {
+      uploadMissingCache.set(filename, Date.now());
     }
 
     // Critical: Return 404 so missing asset never falls through to Vite index.html SPA

@@ -1,6 +1,5 @@
 import { Monster } from '../types/monster';
 import { SRD_MONSTERS } from './srdMonstersCatalog';
-import { DNDBEYOND_COMPENDIUM_MONSTERS } from './dndbeyondMonstersCatalog';
 
 export const DEFAULT_MONSTERS: Monster[] = [
   {
@@ -249,6 +248,88 @@ export const DEFAULT_MONSTERS: Monster[] = [
     source: 'Monster Manual / Compendium',
     createdAt: Date.now()
   },
-  ...SRD_MONSTERS,
-  ...DNDBEYOND_COMPENDIUM_MONSTERS
+  ...SRD_MONSTERS
 ];
+
+let defaultMonstersByNameCache: Map<string, Monster> | null = null;
+let extendedMonstersPromise: Promise<Monster[]> | null = null;
+let extendedMonstersLoaded = false;
+const extendedMonstersListeners = new Set<() => void>();
+
+/**
+ * O(1) case-insensitive lookup against DEFAULT_MONSTERS (including SRD & DDB catalogs).
+ */
+export function findDefaultMonsterByName(name?: string | null): Monster | undefined {
+  const key = (name || '').trim().toLowerCase();
+  if (!key) return undefined;
+  if (!defaultMonstersByNameCache) {
+    defaultMonstersByNameCache = new Map<string, Monster>();
+    for (const m of DEFAULT_MONSTERS) {
+      const mKey = (m.name || '').trim().toLowerCase();
+      if (mKey && !defaultMonstersByNameCache.has(mKey)) {
+        defaultMonstersByNameCache.set(mKey, m);
+      }
+    }
+  }
+  return defaultMonstersByNameCache.get(key);
+}
+
+export function areExtendedMonstersLoaded(): boolean {
+  return extendedMonstersLoaded;
+}
+
+export function subscribeExtendedMonstersLoaded(listener: () => void): () => void {
+  extendedMonstersListeners.add(listener);
+  return () => {
+    extendedMonstersListeners.delete(listener);
+  };
+}
+
+/**
+ * Lazily fetches the D&D Beyond monster catalog from /data/dndbeyond-monsters.json,
+ * merges it into DEFAULT_MONSTERS + the O(1) lookup cache, and notifies subscribers.
+ */
+export function loadExtendedMonsters(): Promise<Monster[]> {
+  if (extendedMonstersLoaded) {
+    return Promise.resolve(DEFAULT_MONSTERS);
+  }
+  if (extendedMonstersPromise) {
+    return extendedMonstersPromise;
+  }
+  if (typeof window === 'undefined' || typeof fetch !== 'function') {
+    return Promise.resolve(DEFAULT_MONSTERS);
+  }
+
+  extendedMonstersPromise = fetch('/data/dndbeyond-monsters.json')
+    .then(async (res) => {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const ddbMonsters: Monster[] = await res.json();
+      if (Array.isArray(ddbMonsters) && ddbMonsters.length > 0) {
+        const existingIds = new Set(DEFAULT_MONSTERS.map(m => m.monsterId).filter(Boolean));
+        const existingNames = new Set(DEFAULT_MONSTERS.map(m => (m.name || '').trim().toLowerCase()).filter(Boolean));
+        for (const m of ddbMonsters) {
+          const nameKey = (m.name || '').trim().toLowerCase();
+          if (m.monsterId && existingIds.has(m.monsterId)) continue;
+          if (nameKey && existingNames.has(nameKey)) continue;
+          if (m.monsterId) existingIds.add(m.monsterId);
+          if (nameKey) existingNames.add(nameKey);
+          DEFAULT_MONSTERS.push(m);
+          if (defaultMonstersByNameCache && nameKey && !defaultMonstersByNameCache.has(nameKey)) {
+            defaultMonstersByNameCache.set(nameKey, m);
+          }
+        }
+      }
+      extendedMonstersLoaded = true;
+      extendedMonstersListeners.forEach(fn => {
+        try { fn(); } catch {}
+      });
+      return DEFAULT_MONSTERS;
+    })
+    .catch((err) => {
+      console.warn('[DefaultMonsters] Failed to lazy-load extended DDB catalog:', err);
+      extendedMonstersPromise = null;
+      return DEFAULT_MONSTERS;
+    });
+
+  return extendedMonstersPromise;
+}

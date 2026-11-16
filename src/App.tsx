@@ -105,7 +105,7 @@ import {
   saveArenaConfig,
   normalizeArenaWallSegment
 } from './services/arenaConfigService';
-import { DEFAULT_MONSTERS } from './data/defaultMonsters';
+import { DEFAULT_MONSTERS, findDefaultMonsterByName, loadExtendedMonsters } from './data/defaultMonsters';
 import { repairMonsterToken } from './data/srdMonstersCatalog';
 import {
   needsMonsterTokenRender,
@@ -751,6 +751,23 @@ export default function App() {
   const [compendiumInitialSearch, setCompendiumInitialSearch] = useState<string>('');
   const [compendiumMonsters, setCompendiumMonsters] = useState<Monster[]>(DEFAULT_MONSTERS);
 
+  useEffect(() => {
+    let active = true;
+    loadExtendedMonsters().then((allDefaults) => {
+      if (!active) return;
+      setCompendiumMonsters(prev => {
+        const existingIds = new Set(prev.map(m => m.monsterId).filter(Boolean));
+        const existingNames = new Set(prev.map(m => (m.name || '').trim().toLowerCase()).filter(Boolean));
+        const additions = allDefaults.filter(m => {
+          const nameKey = (m.name || '').trim().toLowerCase();
+          return !(m.monsterId && existingIds.has(m.monsterId)) && !(nameKey && existingNames.has(nameKey));
+        });
+        return additions.length > 0 ? [...prev, ...additions] : prev;
+      });
+    });
+    return () => { active = false; };
+  }, []);
+
   const [showCharacterCompendium, setShowCharacterCompendium] = useState(false);
   const [showDdbModal, setShowDdbModal] = useState(false);
   const [characterCompendiumInitialSearch, setCharacterCompendiumInitialSearch] = useState<string>('');
@@ -1216,7 +1233,7 @@ export default function App() {
 
       // Automatically tie AC and HP directly to character sheet!
       const charStats = resolveTokenCharacterStats({ name: data.name }, compendiumCharacters);
-      const defMonster = DEFAULT_MONSTERS.find(m => m.name.toLowerCase() === (data.name || '').toLowerCase());
+      const defMonster = findDefaultMonsterByName(data.name);
 
       const finalAc = data.ac ?? (charStats.isFromCharacterSheet ? charStats.ac : (defMonster?.ac ?? charStats.ac));
       const finalMaxHp = data.maxHp ?? data.hp ?? (charStats.isFromCharacterSheet ? charStats.maxHp : (defMonster?.hp ?? charStats.maxHp));
@@ -1561,7 +1578,7 @@ export default function App() {
 
       // Resolve character stats to get true D&D Beyond initiative bonus
       const charStats = resolveTokenCharacterStats(t, compendiumCharacters);
-      const defMonster = DEFAULT_MONSTERS.find(m => m.name.toLowerCase() === (t.name || '').toLowerCase());
+      const defMonster = findDefaultMonsterByName(t.name);
       const bonus = typeof (t as any).initiativeBonus === 'number'
         ? (t as any).initiativeBonus
         : (charStats.initiativeBonus !== undefined
@@ -5341,7 +5358,7 @@ export default function App() {
 
     // 0. Resolve target token real AC and HP
     const charStats = resolveTokenCharacterStats(targetToken, compendiumCharacters);
-    const defTargetMonster = DEFAULT_MONSTERS.find(m => m.name.toLowerCase() === (targetToken.name || '').toLowerCase());
+    const defTargetMonster = findDefaultMonsterByName(targetToken.name);
     const targetAc = charStats.ac ?? targetToken.ac ?? defTargetMonster?.ac ?? 10;
     const targetMaxHp = charStats.maxHp ?? targetToken.maxHp ?? defTargetMonster?.hp ?? 10;
     const targetCurrentHp = targetToken.currentHp !== undefined ? targetToken.currentHp : (targetToken.hp !== undefined ? targetToken.hp : targetMaxHp);
