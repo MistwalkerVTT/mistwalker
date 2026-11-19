@@ -38,7 +38,10 @@ import {
   Save,
   Edit3,
   Bookmark,
-  Download
+  Download,
+  MoreHorizontal,
+  ChevronDown,
+  Sliders
 } from 'lucide-react';
 import { WildShapeModal } from './WildShapeModal';
 import { ArenaDicePromptModal, PendingCombatRoll } from './ArenaDicePromptModal';
@@ -136,6 +139,8 @@ import {
   ScaledMonsterEntry
 } from '../services/arenaScalingService';
 import { ArenaPvpLobby } from './ArenaPvpLobby';
+import { ArenaHeroPickerModal } from './ArenaHeroPickerModal';
+import { ArenaMapPickerModal } from './ArenaMapPickerModal';
 import {
   ArenaPvpMode,
   ArenaPvpRoomSummary,
@@ -1593,6 +1598,9 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
   const [pvpModeKind, setPvpModeKind] = useState<'online' | 'local'>(() =>
     arenaConfig.allowPvP !== false ? 'online' : 'local'
   );
+  const [heroPickerTarget, setHeroPickerTarget] = useState<null | 'pvp' | 'gold' | 'crimson'>(null);
+  const [showMapPicker, setShowMapPicker] = useState<boolean>(false);
+  const [showLobbyToolsMenu, setShowLobbyToolsMenu] = useState<boolean>(false);
   const [pvpRooms, setPvpRooms] = useState<ArenaPvpRoomSummary[]>([]);
   const [activePvpRoom, setActivePvpRoom] = useState<ArenaPvpRoomSummary | null>(null);
   const [pvpSocketConnected, setPvpSocketConnected] = useState<boolean>(() => Boolean(socketRef.current?.connected));
@@ -5478,499 +5486,462 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
   // VIEW 1: PLAYER ARENA LOBBY & MATCH SETUP (MOBILE & DESKTOP RESPONSIVE)
   // ==========================================================================
   if (phase === 'lobby') {
+    const activeLobbyTab: 'pvp' | 'skirmish' | 'custom' =
+      matchMode === '1v1' || matchMode === '2v2'
+        ? 'pvp'
+        : matchMode === 'random_encounter'
+        ? 'skirmish'
+        : 'custom';
+
+    const openPvpCount = pvpRooms.filter((r) => r.status === 'waiting').length;
+    const isOnlinePvpView =
+      activeLobbyTab === 'pvp' && arenaConfig.allowPvP !== false && pvpModeKind === 'online';
+    const isPvpGuest = Boolean(activePvpRoom && activePvpRoom.hostClientId !== clientIdRef.current);
+
+    const selectedCrimsonHeroes = crimsonHeroIds
+      .slice(0, getMatchModeTeamCap(matchMode))
+      .map((id) => heroPool.find((h) => h.id === id))
+      .filter(Boolean) as Character[];
+
+    const handleToggleGoldHero = (hero: Character) => {
+      const maxAllowed = getMatchModeTeamCap(matchMode);
+      setGoldHeroIds((prev) => {
+        if (prev.includes(hero.id)) {
+          return prev.length > 1 ? prev.filter((id) => id !== hero.id) : prev;
+        }
+        if (maxAllowed === 1) return [hero.id];
+        if (prev.length >= maxAllowed) return [...prev.slice(1), hero.id];
+        return [...prev, hero.id];
+      });
+    };
+
+    const handleToggleCrimsonHero = (hero: Character) => {
+      const maxAllowed = getMatchModeTeamCap(matchMode);
+      setCrimsonHeroIds((prev) => {
+        if (prev.includes(hero.id)) {
+          return prev.length > 1 ? prev.filter((id) => id !== hero.id) : prev;
+        }
+        if (maxAllowed === 1) return [hero.id];
+        if (prev.length >= maxAllowed) return [...prev.slice(1), hero.id];
+        return [...prev, hero.id];
+      });
+    };
+
+    const launchSummaryText = isOnlinePvpView
+      ? activePvpRoom
+        ? `${activePvpRoom.mode.toUpperCase()} Waiting Lobby • ${activePvpRoom.players.length}/${activePvpRoom.mode === '2v2' ? 4 : 2} Players`
+        : 'Online PvP • Host or Join a 1v1 / 2v2 Lobby'
+      : isPvpOrRivalMatchMode(matchMode)
+      ? `${matchMode.toUpperCase()} ${crimsonIsAI ? 'vs AI Rivals' : 'Pass & Play'} • ${selectedGoldHeroes.length}v${selectedCrimsonHeroes.length}`
+      : `${selectedGoldHeroes.length} Hero${selectedGoldHeroes.length === 1 ? '' : 'es'} vs ${draftedMonsters.length} Monster${draftedMonsters.length === 1 ? '' : 's'} • ${difficulty.toUpperCase()}`;
+
+    const renderCompactHeroList = (
+      heroes: Character[],
+      accent: 'gold' | 'crimson',
+      onRemove?: (id: string) => void
+    ) => (
+      <div className="space-y-2">
+        {heroes.map((hero) => {
+          const avatar = hero.avatarUrl || getCharacterTokenUrl(hero.name);
+          return (
+            <div
+              key={hero.id}
+              className={`p-2.5 rounded-2xl bg-zinc-950/90 border flex items-center justify-between gap-2.5 ${
+                accent === 'gold' ? 'border-amber-500/30' : 'border-rose-500/30'
+              }`}
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <img
+                  src={avatar}
+                  alt={hero.name}
+                  className={`w-10 h-10 rounded-xl object-cover border shrink-0 bg-zinc-900 ${
+                    accent === 'gold' ? 'border-amber-500/50' : 'border-rose-500/50'
+                  }`}
+                />
+                <div className="min-w-0">
+                  <div className="text-xs sm:text-sm font-mono font-bold text-white truncate">
+                    {hero.name}
+                  </div>
+                  <div className="text-[10px] text-zinc-400 truncate">
+                    {hero.classLevel} • HP {hero.maxHp || hero.hp} • AC {hero.ac}
+                  </div>
+                </div>
+              </div>
+              {onRemove && heroes.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => onRemove(hero.id)}
+                  className="p-1.5 rounded-lg text-zinc-500 hover:text-rose-400 hover:bg-zinc-900 cursor-pointer shrink-0"
+                  title="Remove fighter"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+
+    const renderTabSwitcher = (compact = false) => (
+      <div
+        className={`flex items-center gap-1 bg-zinc-950/90 border border-zinc-800 rounded-2xl p-1 ${
+          compact ? 'w-full justify-between' : ''
+        }`}
+      >
+        {[
+          {
+            id: 'pvp' as const,
+            label: 'PvP Arena',
+            icon: Swords,
+            badge: openPvpCount > 0 ? String(openPvpCount) : undefined,
+            onClick: () => {
+              setMatchMode(activePvpRoom?.mode || '1v1');
+              if (arenaConfig.allowPvP !== false) setPvpModeKind('online');
+            }
+          },
+          {
+            id: 'skirmish' as const,
+            label: 'Quick Skirmish',
+            icon: Flame,
+            onClick: () => {
+              if (activePvpRoom) handlePvpLeaveRoom();
+              setMatchMode('random_encounter');
+            }
+          },
+          {
+            id: 'custom' as const,
+            label: 'Custom Battle',
+            icon: Sliders,
+            onClick: () => {
+              if (activePvpRoom) handlePvpLeaveRoom();
+              if (matchMode !== 'vs_npcs' && !['3v3', '4v4', '5v5', '6v6'].includes(matchMode)) {
+                setMatchMode('vs_npcs');
+              }
+            }
+          }
+        ].map((tab) => {
+          const Icon = tab.icon;
+          const active = activeLobbyTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={tab.onClick}
+              className={`${compact ? 'flex-1 justify-center' : ''} px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-[11px] sm:text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer transition-all ${
+                active
+                  ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-zinc-950 shadow-md'
+                  : 'text-zinc-400 hover:text-white hover:bg-zinc-800/80'
+              }`}
+            >
+              <Icon className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">{tab.label}</span>
+              {tab.badge && (
+                <span
+                  className={`px-1.5 py-0.5 rounded-full text-[9px] font-black ${
+                    active ? 'bg-zinc-950 text-emerald-300' : 'bg-emerald-500/20 text-emerald-300'
+                  }`}
+                >
+                  {tab.badge}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    );
+
     return (
-      <div className="fixed inset-0 z-[220] bg-zinc-950/95 backdrop-blur-xl flex flex-col overflow-y-auto text-zinc-100 animate-in fade-in duration-200">
-        {/* Top Lobby Bar */}
-        <div className="px-3 py-2.5 sm:px-6 sm:py-4 bg-zinc-900/95 border-b border-zinc-800 flex items-center justify-between gap-2 sticky top-0 z-20 backdrop-blur-md">
+      <div className="fixed inset-0 z-[220] bg-zinc-950/95 backdrop-blur-xl flex flex-col text-zinc-100 animate-in fade-in duration-200">
+        {/* Minimal Top Lobby Header */}
+        <div className="px-3.5 py-2.5 sm:px-6 sm:py-3.5 bg-zinc-900/95 border-b border-zinc-800 flex items-center justify-between gap-3 shrink-0 z-20 backdrop-blur-md">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shadow-lg shadow-amber-500/10 shrink-0">
-              <Swords className="w-5 h-5 sm:w-6 sm:h-6" />
+            <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
+              <Swords className="w-5 h-5" />
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h1 className="text-sm sm:text-lg font-extrabold font-mono tracking-tight text-white truncate">
-                  MistWalker Battle Arena
+              {isEditingArenaName ? (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    setIsEditingArenaName(false);
+                  }}
+                  className="flex items-center gap-1.5"
+                >
+                  <input
+                    type="text"
+                    value={arenaName}
+                    onChange={(e) => setArenaName(e.target.value)}
+                    onBlur={() => setIsEditingArenaName(false)}
+                    autoFocus
+                    className="bg-zinc-950 border border-amber-400 rounded-lg px-2 py-0.5 text-xs font-mono text-amber-300 focus:outline-none"
+                  />
+                  <button type="submit" className="p-1 rounded bg-amber-500/20 text-amber-300 text-xs">
+                    <Check className="w-3 h-3" />
+                  </button>
+                </form>
+              ) : (
+                <h1 className="text-sm sm:text-base font-extrabold font-mono tracking-tight text-white truncate">
+                  Battle Arena
                 </h1>
-                <span className="hidden sm:inline-block px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0">
-                  Stand-Alone Mode
-                </span>
-              </div>
-              <div className="flex items-center gap-2 mt-0.5">
-                {isEditingArenaName ? (
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      setIsEditingArenaName(false);
-                    }}
-                    className="flex items-center gap-1.5"
-                  >
-                    <input
-                      type="text"
-                      value={arenaName}
-                      onChange={(e) => setArenaName(e.target.value)}
-                      onBlur={() => setIsEditingArenaName(false)}
-                      autoFocus
-                      className="bg-zinc-950 border border-amber-400 rounded-lg px-2 py-0.5 text-xs font-mono text-amber-300 focus:outline-none"
-                    />
-                    <button type="submit" className="p-1 rounded bg-amber-500/20 text-amber-300 text-xs">
-                      <Check className="w-3 h-3" />
-                    </button>
-                  </form>
-                ) : (
-                  <div
-                    className="flex items-center gap-1.5 group cursor-pointer"
-                    onClick={() => setIsEditingArenaName(true)}
-                    title="Click to rename arena"
-                  >
-                    <span className="text-[11px] sm:text-xs font-mono font-bold text-amber-300 truncate max-w-[200px]">
-                      🏟️ {arenaName}
-                    </span>
-                    <Edit3 className="w-3 h-3 text-amber-400 opacity-60 group-hover:opacity-100 transition-opacity" />
-                  </div>
-                )}
-                <span className="text-zinc-600 hidden md:inline">•</span>
-                <p className="text-[11px] sm:text-xs text-zinc-400 truncate hidden md:inline">
-                  1v1 to 6v6 • Scaled Random Encounters (1–6P)
-                </p>
-              </div>
+              )}
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={handleOpenSaveArenaModal}
-              className="px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 hover:to-orange-500/30 border border-amber-500/50 text-amber-300 text-[11px] sm:text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer shadow-sm transition-all"
-              title="Save Arena Scene to presets or Campaign Mode"
-            >
-              <Save className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" />
-              <span className="hidden sm:inline">Save Arena</span>
-            </button>
+          {/* Desktop Centered 3-Tab Mode Switcher */}
+          <div className="hidden md:flex">{renderTabSwitcher(false)}</div>
+
+          {/* Right Utility Controls */}
+          <div className="flex items-center gap-2 shrink-0 relative">
             {hasLiveDmMap && (
               <button
                 type="button"
                 onClick={handleExitArenaClean}
-                className="px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/50 text-[11px] sm:text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer animate-pulse"
+                className="px-2.5 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/50 text-[11px] font-mono font-bold flex items-center gap-1.5 cursor-pointer animate-pulse"
               >
-                <Radio className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                <span className="hidden md:inline">DM Scene Active —</span>
+                <Radio className="w-3.5 h-3.5" />
                 <span>Join DM</span>
               </button>
             )}
+
+            {/* Overflow Tools Menu (Rename, Save Arena, Restore Originals) */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowLobbyToolsMenu((v) => !v)}
+                className="p-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 cursor-pointer"
+                title="Arena Tools"
+                aria-label="Arena Tools"
+              >
+                <MoreHorizontal className="w-4 h-4" />
+              </button>
+              {showLobbyToolsMenu && (
+                <>
+                  <div
+                    className="fixed inset-0 z-30"
+                    onClick={() => setShowLobbyToolsMenu(false)}
+                  />
+                  <div className="absolute right-0 mt-2 w-52 rounded-2xl bg-zinc-900 border border-zinc-700 shadow-2xl p-1.5 z-40 space-y-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowLobbyToolsMenu(false);
+                        setIsEditingArenaName(true);
+                      }}
+                      className="w-full px-3 py-2 rounded-xl text-left text-xs font-mono text-zinc-200 hover:bg-zinc-800 flex items-center gap-2 cursor-pointer"
+                    >
+                      <Edit3 className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Rename Arena</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowLobbyToolsMenu(false);
+                        handleOpenSaveArenaModal();
+                      }}
+                      className="w-full px-3 py-2 rounded-xl text-left text-xs font-mono text-zinc-200 hover:bg-zinc-800 flex items-center gap-2 cursor-pointer"
+                    >
+                      <Save className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Save Arena Scene</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowLobbyToolsMenu(false);
+                        handleRestoreOriginalMaps();
+                      }}
+                      className="w-full px-3 py-2 rounded-xl text-left text-xs font-mono text-zinc-200 hover:bg-zinc-800 flex items-center gap-2 cursor-pointer"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Restore Original Maps</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+
             <button
               type="button"
               onClick={handleExitArenaClean}
-              className="px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-[11px] sm:text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer"
+              className="px-3 py-1.5 sm:py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-[11px] sm:text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer"
             >
-              <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span className="hidden sm:inline">Return to Campaign</span>
-              <span className="sm:hidden">Exit</span>
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Exit</span>
             </button>
           </div>
         </div>
 
-        {/* Lobby Main Content Grid */}
-        <div className="max-w-6xl w-full mx-auto p-3.5 sm:p-6 pb-28 md:pb-8 space-y-5 flex-1">
-          {/* Step 1: Select Arena Mode */}
-          <div>
-            <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
-              <h2 className="text-xs font-mono uppercase tracking-wider text-amber-400 font-bold flex items-center gap-1.5">
-                <Crown className="w-4 h-4" />
-                <span>1. Select Arena Combat Mode (Up to 6v6)</span>
-              </h2>
-              {/* Quick Team Skirmish Size Pills */}
-              <div className="flex items-center gap-1 bg-zinc-900/90 border border-zinc-800 rounded-xl p-1">
-                <span className="text-[10px] font-mono text-zinc-400 px-2">Hero Clash Size:</span>
-                {(['1v1', '2v2', '3v3', '4v4', '5v5', '6v6'] as const).map((sz) => (
-                  <button
-                    key={sz}
-                    type="button"
-                    onClick={() => setMatchMode(sz)}
-                    className={`px-2 py-0.5 rounded-lg text-[11px] font-mono font-bold transition-all cursor-pointer ${
-                      matchMode === sz
-                        ? 'bg-amber-500 text-zinc-950 shadow'
-                        : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
-                    }`}
-                  >
-                    {sz}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5">
-              {[
-                {
-                  id: 'random_encounter' as const,
-                  title: 'Random Encounter',
-                  badge: '1–6P vs Scaled AI',
-                  desc: 'Balanced D&D 5e monster encounter scaled to 1–6 players.',
-                  color: 'emerald'
-                },
-                {
-                  id: '1v1' as const,
-                  title: '1v1 / 2v2 PvP Duel',
-                  badge:
-                    pvpRooms.filter((r) => r.status === 'waiting').length > 0
-                      ? `${pvpRooms.filter((r) => r.status === 'waiting').length} Open PvP Lobby`
-                      : matchMode === '2v2'
-                      ? '2v2 Online PvP'
-                      : '1v1 / 2v2 Online PvP',
-                  desc: 'Square off remotely against real players in a 1v1 or 2v2 waiting lobby — or practice vs AI.',
-                  color: 'amber'
-                },
-                {
-                  id: '6v6' as const,
-                  title: '3v3 – 6v6 Party Clash',
-                  badge: ['3v3', '4v4', '5v5', '6v6'].includes(matchMode) ? `${matchMode} Active` : 'Up to 6v6 Squads',
-                  desc: 'Full party vs party colosseum warfare (3v3, 4v4, 5v5, or 6v6).',
-                  color: 'blue'
-                },
-                {
-                  id: 'vs_npcs' as const,
-                  title: 'Party vs NPCs',
-                  badge: '1–6P Custom Pick',
-                  desc: 'Hand-pick specific monsters or bosses from the Bestiary.',
-                  color: 'purple'
-                }
-              ].map((m) => {
-                const active =
-                  m.id === '1v1'
-                    ? matchMode === '1v1' || matchMode === '2v2'
-                    : m.id === '6v6'
-                    ? matchMode === '3v3' || matchMode === '4v4' || matchMode === '5v5' || matchMode === '6v6'
-                    : matchMode === m.id;
-                return (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => setMatchMode(m.id)}
-                    className={`p-3 sm:p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
-                      active
-                        ? 'bg-amber-500/15 border-amber-400 ring-1 ring-amber-400/50 shadow-xl'
-                        : 'bg-zinc-900/80 hover:bg-zinc-900 border-zinc-800 hover:border-zinc-700'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-center justify-between gap-1.5 mb-1">
-                        <span className="text-xs sm:text-sm font-mono font-bold text-white leading-tight">
-                          {m.title}
-                        </span>
-                        {active && <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400 shrink-0" />}
-                      </div>
-                      <span className="inline-block text-[9px] sm:text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-950 text-amber-300 border border-zinc-800 mb-1.5">
-                        {m.badge}
-                      </span>
-                      <p className="text-[11px] sm:text-xs text-zinc-400 leading-snug line-clamp-2 sm:line-clamp-none">
-                        {m.desc}
-                      </p>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+        {/* Mobile 3-Tab Mode Switcher */}
+        <div className="px-3.5 pt-3 md:hidden shrink-0">{renderTabSwitcher(true)}</div>
 
-          {/* Step 2: Online PvP Waiting Lobby (1v1 / 2v2) OR Local Fighter Roster */}
-          {(matchMode === '1v1' || matchMode === '2v2') && arenaConfig.allowPvP !== false && (
-            <div className="flex flex-wrap items-center justify-between gap-2 bg-zinc-900/80 border border-zinc-800 rounded-2xl p-2">
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setPvpModeKind('online')}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-mono font-bold flex items-center gap-2 cursor-pointer transition-all ${
-                    pvpModeKind === 'online'
-                      ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-zinc-950 shadow-md'
-                      : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
-                  }`}
-                >
-                  <Radio className="w-3.5 h-3.5" />
-                  <span>Online PvP Waiting Lobby (1v1 / 2v2)</span>
-                  {pvpRooms.filter((r) => r.status === 'waiting').length > 0 && (
-                    <span className="px-1.5 py-0.5 rounded-full bg-zinc-950/80 text-emerald-300 text-[10px] font-black">
-                      {pvpRooms.filter((r) => r.status === 'waiting').length}
-                    </span>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (activePvpRoom) handlePvpLeaveRoom();
-                    setPvpModeKind('local');
-                  }}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-mono font-bold flex items-center gap-2 cursor-pointer transition-all ${
-                    pvpModeKind === 'local'
-                      ? 'bg-zinc-800 text-white border border-zinc-600'
-                      : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
-                  }`}
-                >
-                  <Bot className="w-3.5 h-3.5" />
-                  <span>Local / AI Practice</span>
-                </button>
-              </div>
-              <span className="text-[11px] font-mono text-zinc-400 px-2">
-                {pvpModeKind === 'online'
-                  ? 'Players sign in on this same page to join your 1v1 or 2v2 lobby'
-                  : 'Single-device pass-and-play or AI rival skirmish'}
-              </span>
-            </div>
-          )}
-
-          {(matchMode === '1v1' || matchMode === '2v2') &&
-          arenaConfig.allowPvP !== false &&
-          pvpModeKind === 'online' ? (
-            <ArenaPvpLobby
-              myClientId={clientIdRef.current}
-              isConnected={pvpSocketConnected}
-              playerDisplayName={pvpPlayerName}
-              onChangePlayerDisplayName={setPvpPlayerName}
-              mySelectedHeroId={goldHeroIds[0] || heroPool[0]?.id || ''}
-              onSelectMyHero={handlePvpSelectMyHero}
-              heroPool={heroPool}
-              campaignGroups={arenaCampaignGroups}
-              campaignFilter={goldCampaignFilter}
-              onChangeCampaignFilter={setGoldCampaignFilter}
-              availableMaps={availableMaps}
-              selectedMap={selectedMap}
-              onSelectMap={handlePvpHostChangeMap}
-              rooms={pvpRooms}
-              activeRoom={activePvpRoom}
-              onCreateRoom={handlePvpCreateRoom}
-              onJoinRoom={handlePvpJoinRoom}
-              onLeaveRoom={handlePvpLeaveRoom}
-              onSwitchTeam={handlePvpSwitchTeam}
-              onToggleReady={handlePvpToggleReady}
-              onHostChangeMode={handlePvpHostChangeMode}
-              onHostStartMatch={handlePvpHostStartMatch}
-            />
-          ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
-            {/* Left Side: Team Gold (Player Challengers) */}
-            <div className="lg:col-span-6 bg-zinc-900/75 border border-amber-500/30 rounded-3xl p-4 sm:p-5 space-y-3.5">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-2.5">
-                <div className="flex items-center gap-2">
-                  <Shield className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400 shrink-0" />
-                  <div>
-                    <h3 className="text-xs sm:text-sm font-mono font-bold text-amber-300">
-                      Team Gold — Players ({goldHeroIds.length}/{getMatchModeTeamCap(matchMode)})
-                    </h3>
-                    <p className="text-[10px] sm:text-[11px] text-zinc-400">
-                      Tap heroes to select ({isPvpOrRivalMatchMode(matchMode) ? `Max ${getMatchModeTeamCap(matchMode)}` : '1–6 Players'})
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {arenaCampaignGroups.length > 1 && (
-                    <div className="relative flex items-center">
-                      <Folder className="w-3 h-3 text-amber-400/80 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                      <select
-                        value={goldCampaignFilter}
-                        onChange={(e) => setGoldCampaignFilter(e.target.value)}
-                        className="bg-zinc-950 border border-zinc-800 hover:border-amber-500/40 rounded-xl pl-7 pr-2.5 py-1 text-[11px] font-mono text-zinc-200 focus:outline-none cursor-pointer max-w-[180px]"
-                      >
-                        <option value="ALL">All Campaigns ({heroPool.length})</option>
-                        {arenaCampaignGroups.map((g) => (
-                          <option key={g.campaignId} value={g.campaignId}>
-                            {g.campaignTitle} ({g.characters.length})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                  {lobbyPlayers.length > 0 && (
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[10px] font-mono shrink-0">
-                      {lobbyPlayers.length} Online
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-60 sm:max-h-72 overflow-y-auto pr-1">
-                {heroPool
-                  .filter((h) => goldCampaignFilter === 'ALL' || h.ddbCampaignId === goldCampaignFilter || goldHeroIds.includes(h.id))
-                  .map((hero) => {
-                  const isSelected = goldHeroIds.includes(hero.id);
-                  const maxAllowed = getMatchModeTeamCap(matchMode);
-                  const avatar = hero.avatarUrl || getCharacterTokenUrl(hero.name);
-                  return (
+        {/* Focused Single-Screen Match Stage */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-5xl w-full mx-auto p-3.5 sm:p-6 space-y-4">
+            {/* TAB 1: PVP ARENA (1v1 / 2v2 Online Waiting Lobby + Subtle Local Practice Toggle) */}
+            {activeLobbyTab === 'pvp' && (
+              <>
+                {arenaConfig.allowPvP !== false && !activePvpRoom && (
+                  <div className="flex items-center justify-end">
                     <button
-                      key={hero.id}
                       type="button"
-                      onClick={() => {
-                        setGoldHeroIds((prev) => {
-                          if (prev.includes(hero.id)) {
-                            return prev.length > 1 ? prev.filter((id) => id !== hero.id) : prev;
-                          }
-                          if (maxAllowed === 1) return [hero.id];
-                          if (prev.length >= maxAllowed) return [...prev.slice(1), hero.id];
-                          return [...prev, hero.id];
-                        });
-                      }}
-                      className={`p-2.5 sm:p-3 rounded-2xl border text-left flex items-center gap-2.5 transition-all cursor-pointer ${
-                        isSelected
-                          ? 'bg-amber-500/20 border-amber-400 text-white shadow-md'
-                          : 'bg-zinc-950/80 hover:bg-zinc-950 border-zinc-800 text-zinc-300'
-                      }`}
+                      onClick={() => setPvpModeKind((v) => (v === 'online' ? 'local' : 'online'))}
+                      className="text-[11px] font-mono text-zinc-400 hover:text-amber-300 flex items-center gap-1.5 cursor-pointer transition-colors"
                     >
-                      <img
-                        src={avatar}
-                        alt={hero.name}
-                        className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl object-cover border border-amber-500/50 shrink-0 bg-zinc-900"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-mono font-bold truncate">{hero.name}</span>
-                          {isSelected && <Check className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
-                        </div>
-                        <div className="text-[10px] text-zinc-400 truncate">
-                          {hero.race} • {hero.classLevel}
-                        </div>
-                        <div className="flex items-center justify-between gap-1 mt-0.5">
-                          <span className="text-[10px] font-mono text-emerald-400">
-                            HP {hero.maxHp || hero.hp} • AC {hero.ac}
-                          </span>
-                          {hero.ddbCampaignTitle && (
-                            <span className="text-[9px] font-mono text-zinc-500 truncate max-w-[95px]" title={hero.ddbCampaignTitle}>
-                              {hero.ddbCampaignTitle}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Right Side: Team Crimson (Opponents / Scaled Random Encounter) */}
-            <div className="lg:col-span-6 bg-zinc-900/75 border border-rose-500/30 rounded-3xl p-4 sm:p-5 space-y-3.5">
-              {isPvpOrRivalMatchMode(matchMode) ? (
-                <>
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-2.5">
-                    <div className="flex items-center gap-2">
-                      <Swords className="w-4 h-4 sm:w-5 sm:h-5 text-rose-400 shrink-0" />
-                      <div>
-                        <h3 className="text-xs sm:text-sm font-mono font-bold text-rose-300">
-                          Team Crimson — Rivals ({crimsonHeroIds.length}/{getMatchModeTeamCap(matchMode)})
-                        </h3>
-                        <p className="text-[10px] sm:text-[11px] text-zinc-400">
-                          Pass-and-Play or Tactical AI Rivals (Max {getMatchModeTeamCap(matchMode)})
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {arenaCampaignGroups.length > 1 && (
-                        <div className="relative flex items-center">
-                          <Folder className="w-3 h-3 text-rose-400/80 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                          <select
-                            value={crimsonCampaignFilter}
-                            onChange={(e) => setCrimsonCampaignFilter(e.target.value)}
-                            className="bg-zinc-950 border border-zinc-800 hover:border-rose-500/40 rounded-xl pl-7 pr-2.5 py-1 text-[11px] font-mono text-zinc-200 focus:outline-none cursor-pointer max-w-[165px]"
-                          >
-                            <option value="ALL">All Campaigns ({heroPool.length})</option>
-                            {arenaCampaignGroups.map((g) => (
-                              <option key={g.campaignId} value={g.campaignId}>
-                                {g.campaignTitle} ({g.characters.length})
-                              </option>
-                            ))}
-                          </select>
-                        </div>
+                      {pvpModeKind === 'online' ? (
+                        <>
+                          <Bot className="w-3.5 h-3.5" />
+                          <span>Switch to Solo / AI Practice Duel</span>
+                        </>
+                      ) : (
+                        <>
+                          <Radio className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Back to Online PvP Waiting Lobby</span>
+                        </>
                       )}
+                    </button>
+                  </div>
+                )}
 
+                {isOnlinePvpView ? (
+                  <ArenaPvpLobby
+                    myClientId={clientIdRef.current}
+                    isConnected={pvpSocketConnected}
+                    playerDisplayName={pvpPlayerName}
+                    onChangePlayerDisplayName={setPvpPlayerName}
+                    mySelectedHeroId={goldHeroIds[0] || heroPool[0]?.id || ''}
+                    onOpenHeroPicker={() => setHeroPickerTarget('pvp')}
+                    heroPool={heroPool}
+                    availableMaps={availableMaps}
+                    selectedMap={selectedMap}
+                    rooms={pvpRooms}
+                    activeRoom={activePvpRoom}
+                    onCreateRoom={handlePvpCreateRoom}
+                    onJoinRoom={handlePvpJoinRoom}
+                    onLeaveRoom={handlePvpLeaveRoom}
+                    onSwitchTeam={handlePvpSwitchTeam}
+                    onToggleReady={handlePvpToggleReady}
+                    onHostChangeMode={handlePvpHostChangeMode}
+                    onHostStartMatch={handlePvpHostStartMatch}
+                  />
+                ) : (
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2 bg-zinc-900/75 border border-zinc-800 rounded-2xl px-4 py-2.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-mono font-bold text-zinc-300">Practice Format:</span>
+                        {(['1v1', '2v2'] as const).map((sz) => (
+                          <button
+                            key={sz}
+                            type="button"
+                            onClick={() => setMatchMode(sz)}
+                            className={`px-3 py-1 rounded-xl text-xs font-mono font-bold cursor-pointer ${
+                              matchMode === sz
+                                ? 'bg-amber-500 text-zinc-950'
+                                : 'bg-zinc-950 text-zinc-400 hover:text-white border border-zinc-800'
+                            }`}
+                          >
+                            {sz}
+                          </button>
+                        ))}
+                      </div>
                       <button
                         type="button"
                         onClick={() => setCrimsonIsAI((v) => !v)}
-                        className={`px-2.5 py-1.5 rounded-xl text-[11px] font-mono font-bold border flex items-center gap-1.5 cursor-pointer ${
+                        className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold border flex items-center gap-1.5 cursor-pointer ${
                           crimsonIsAI
                             ? 'bg-purple-500/20 border-purple-500/50 text-purple-300'
                             : 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
                         }`}
                       >
                         {crimsonIsAI ? <Bot className="w-3.5 h-3.5" /> : <Users className="w-3.5 h-3.5" />}
-                        <span>{crimsonIsAI ? 'AI Controlled' : 'Player 2'}</span>
+                        <span>{crimsonIsAI ? 'AI Rival' : 'Pass & Play (Local P2)'}</span>
                       </button>
                     </div>
-                  </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-60 sm:max-h-72 overflow-y-auto pr-1">
-                    {heroPool
-                      .filter((h) => crimsonCampaignFilter === 'ALL' || h.ddbCampaignId === crimsonCampaignFilter || crimsonHeroIds.includes(h.id))
-                      .map((hero) => {
-                      const isSelected = crimsonHeroIds.includes(hero.id);
-                      const maxAllowed = getMatchModeTeamCap(matchMode);
-                      const avatar = hero.avatarUrl || getCharacterTokenUrl(hero.name);
-                      return (
-                        <button
-                          key={hero.id}
-                          type="button"
-                          onClick={() => {
-                            setCrimsonHeroIds((prev) => {
-                              if (prev.includes(hero.id)) {
-                                return prev.length > 1 ? prev.filter((id) => id !== hero.id) : prev;
-                              }
-                              if (maxAllowed === 1) return [hero.id];
-                              if (prev.length >= maxAllowed) return [...prev.slice(1), hero.id];
-                              return [...prev, hero.id];
-                            });
-                          }}
-                          className={`p-2.5 sm:p-3 rounded-2xl border text-left flex items-center gap-2.5 transition-all cursor-pointer ${
-                            isSelected
-                              ? 'bg-rose-500/20 border-rose-400 text-white shadow-md'
-                              : 'bg-zinc-950/80 hover:bg-zinc-950 border-zinc-800 text-zinc-300'
-                          }`}
-                        >
-                          <img
-                            src={avatar}
-                            alt={hero.name}
-                            className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl object-cover border border-rose-500/50 shrink-0 bg-zinc-900"
-                          />
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs font-mono font-bold truncate">{hero.name}</span>
-                              {isSelected && <Check className="w-3.5 h-3.5 text-rose-400 shrink-0" />}
-                            </div>
-                            <div className="text-[10px] text-zinc-400 truncate">
-                              {hero.race} • {hero.classLevel}
-                            </div>
-                            <div className="flex items-center justify-between gap-1 mt-0.5">
-                              <span className="text-[10px] font-mono text-rose-300">
-                                HP {hero.maxHp || hero.hp} • AC {hero.ac}
-                              </span>
-                              {hero.ddbCampaignTitle && (
-                                <span className="text-[9px] font-mono text-zinc-500 truncate max-w-[95px]" title={hero.ddbCampaignTitle}>
-                                  {hero.ddbCampaignTitle}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      <div className="bg-zinc-900/80 border border-amber-500/30 rounded-3xl p-4 sm:p-5 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-xs sm:text-sm font-mono font-bold text-amber-300 flex items-center gap-2">
+                            <Shield className="w-4 h-4 text-amber-400" />
+                            <span>Team Gold ({selectedGoldHeroes.length}/{getMatchModeTeamCap(matchMode)})</span>
+                          </h3>
+                          <button
+                            type="button"
+                            onClick={() => setHeroPickerTarget('gold')}
+                            className="px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 text-xs font-mono font-bold cursor-pointer"
+                          >
+                            Change Hero{getMatchModeTeamCap(matchMode) > 1 ? 'es' : ''}
+                          </button>
+                        </div>
+                        {renderCompactHeroList(selectedGoldHeroes, 'gold', (id) =>
+                          setGoldHeroIds((prev) => prev.filter((x) => x !== id))
+                        )}
+                      </div>
+
+                      <div className="bg-zinc-900/80 border border-rose-500/30 rounded-3xl p-4 sm:p-5 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-xs sm:text-sm font-mono font-bold text-rose-300 flex items-center gap-2">
+                            <Swords className="w-4 h-4 text-rose-400" />
+                            <span>Team Crimson ({selectedCrimsonHeroes.length}/{getMatchModeTeamCap(matchMode)})</span>
+                          </h3>
+                          <button
+                            type="button"
+                            onClick={() => setHeroPickerTarget('crimson')}
+                            className="px-3 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300 text-xs font-mono font-bold cursor-pointer"
+                          >
+                            Change Rival{getMatchModeTeamCap(matchMode) > 1 ? 's' : ''}
+                          </button>
+                        </div>
+                        {renderCompactHeroList(selectedCrimsonHeroes, 'crimson', (id) =>
+                          setCrimsonHeroIds((prev) => prev.filter((x) => x !== id))
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </>
-              ) : (
-                <>
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-2.5">
-                    <div>
-                      <h3 className="text-xs sm:text-sm font-mono font-bold text-rose-300 flex items-center gap-1.5">
-                        <Skull className="w-4 h-4 text-rose-400 shrink-0" />
-                        <span>
-                          {arenaConfig.lockDmEncounter
-                            ? '🔒 DM Custom Arena Encounter'
-                            : matchMode === 'random_encounter'
-                            ? `Random Encounter (${goldHeroIds.length}P)`
-                            : 'Custom Monster Roster'}
-                        </span>
+                )}
+              </>
+            )}
+
+            {/* TAB 2: QUICK SKIRMISH (Auto-Scaled PvE Encounter) */}
+            {activeLobbyTab === 'skirmish' && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Left: Your Party */}
+                <div className="bg-zinc-900/80 border border-amber-500/30 rounded-3xl p-4 sm:p-5 space-y-3.5">
+                  <div className="flex items-center justify-between gap-2 border-b border-zinc-800 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <Shield className="w-4 h-4 text-amber-400" />
+                      <h3 className="text-xs sm:text-sm font-mono font-bold text-amber-300">
+                        Your Party ({selectedGoldHeroes.length}/6)
                       </h3>
-                      <p className="text-[10px] sm:text-[11px] text-zinc-400">
-                        {arenaConfig.lockDmEncounter
-                          ? 'Encounter squad pinned by your Dungeon Master in Campaign Manager'
-                          : 'Behavior Tree AI • A* Pathfinding • Spellcasting'}
-                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setHeroPickerTarget('gold')}
+                      className="px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 text-xs font-mono font-bold flex items-center gap-1 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Edit Party</span>
+                    </button>
+                  </div>
+                  {renderCompactHeroList(selectedGoldHeroes, 'gold', (id) =>
+                    setGoldHeroIds((prev) => prev.filter((x) => x !== id))
+                  )}
+                </div>
+
+                {/* Right: Scaled Enemy Encounter */}
+                <div className="bg-zinc-900/80 border border-rose-500/30 rounded-3xl p-4 sm:p-5 space-y-3.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <Skull className="w-4 h-4 text-rose-400" />
+                      <h3 className="text-xs sm:text-sm font-mono font-bold text-rose-300">
+                        {arenaConfig.lockDmEncounter ? '🔒 DM Encounter' : 'Scaled Encounter'}
+                      </h3>
+                      <span className="px-2 py-0.5 rounded-lg bg-zinc-950 border border-zinc-800 text-[10px] font-mono text-zinc-400">
+                        APL {currentPartyProfile?.averagePartyLevel || 1}
+                      </span>
                     </div>
 
-                    {!arenaConfig.lockDmEncounter ? (
-                      <div className="flex items-center gap-1 flex-wrap">
+                    {!arenaConfig.lockDmEncounter && (
+                      <div className="flex items-center gap-1">
                         {(['standard', 'hard', 'deadly'] as const).map((diff) => (
                           <button
                             key={diff}
@@ -5997,57 +5968,16 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                               )
                             )
                           }
-                          className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[10px] font-mono font-bold flex items-center gap-1 cursor-pointer"
-                          title="Roll a fresh Random Encounter scaled to your party size"
+                          className="p-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 cursor-pointer"
+                          title="Re-roll encounter"
                         >
-                          <Shuffle className="w-3 h-3" />
-                          <span>Re-Roll</span>
+                          <Shuffle className="w-3.5 h-3.5" />
                         </button>
                       </div>
-                    ) : (
-                      <span className="px-2.5 py-1 rounded-lg bg-rose-500/15 border border-rose-500/40 text-rose-300 text-[10px] font-mono font-bold flex items-center gap-1">
-                        <Lock className="w-3 h-3" />
-                        <span>DM Locked</span>
-                      </span>
                     )}
                   </div>
 
-                  {/* Threat Assessment Gauge */}
-                  <div className="p-2.5 rounded-xl bg-zinc-950/80 border border-zinc-800/80 flex flex-col gap-1.5">
-                    <div className="flex items-center justify-between text-[11px] font-mono">
-                      <div className="flex items-center gap-1.5 text-zinc-300">
-                        <Shield className="w-3.5 h-3.5 text-amber-400" />
-                        <span className="font-bold">Party APL {currentPartyProfile?.averagePartyLevel || 1}</span>
-                        <span className="text-zinc-500">
-                          ({selectedGoldHeroes.length} {selectedGoldHeroes.length === 1 ? 'Hero' : 'Heroes'})
-                        </span>
-                      </div>
-                      <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold border uppercase ${
-                          difficulty === 'standard'
-                            ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-                            : difficulty === 'hard'
-                            ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
-                            : 'bg-rose-500/15 text-rose-300 border-rose-500/30'
-                        }`}
-                      >
-                        {difficulty === 'standard'
-                          ? 'Balanced (3-5 Rnds)'
-                          : difficulty === 'hard'
-                          ? 'Hard Challenge'
-                          : 'Deadly Apex'}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center justify-between text-[10px] font-mono text-zinc-400">
-                      <span>Total Party HP: <strong className="text-zinc-200">{currentPartyProfile?.totalPartyHp || 0}</strong></span>
-                      <span>Avg AC: <strong className="text-zinc-200">{currentPartyProfile?.averageHeroAc || 15}</strong></span>
-                      <span>Est DPR: <strong className="text-zinc-200">~{currentPartyProfile?.estimatedPartyDpr || 10}</strong></span>
-                    </div>
-                  </div>
-
-                  {/* Active Drafted Monsters List */}
-                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                  <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                     {draftedMonsters.map((mon, idx) => {
                       if (!mon) return null;
                       const calibrated = (mon as any).calibratedStats;
@@ -6055,196 +5985,295 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                       const displayAc = calibrated?.ac ?? mon.ac ?? 14;
                       const displayCr = calibrated?.scaledCr ?? mon.challenge?.split(' ')[0] ?? '1';
                       const isBoss = calibrated?.isBoss;
-                      const bossTitle = calibrated?.bossTitle;
-
                       return (
                         <div
                           key={`${mon.monsterId || mon.name}_${idx}`}
-                          className={`p-2.5 rounded-xl bg-zinc-950/90 border flex items-center justify-between gap-2 ${
-                            isBoss
-                              ? 'border-amber-500/60 shadow-[0_0_12px_rgba(245,158,11,0.15)]'
-                              : 'border-rose-500/30'
+                          className={`p-2.5 rounded-2xl bg-zinc-950/90 border flex items-center justify-between gap-2 ${
+                            isBoss ? 'border-amber-500/50' : 'border-zinc-800'
                           }`}
                         >
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <div
-                              className={`w-8 h-8 sm:w-9 sm:h-9 rounded-lg border flex items-center justify-center font-mono font-bold text-[10px] shrink-0 ${
-                                isBoss
-                                  ? 'bg-amber-950/60 border-amber-500/60 text-amber-300'
-                                  : 'bg-rose-950/60 border-rose-500/40 text-rose-300'
-                              }`}
-                            >
-                              {isBoss ? <Crown className="w-4 h-4 text-amber-400" /> : 'CR'}
+                          <div className="min-w-0">
+                            <div className="text-xs font-mono font-bold text-white truncate flex items-center gap-1.5">
+                              {isBoss && <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
+                              <span>{mon.name}</span>
                             </div>
-                            <div className="min-w-0">
-                              <div className="text-xs font-mono font-bold text-white truncate flex items-center gap-1.5">
-                                <span>{mon.name}</span>
-                                {bossTitle && (
-                                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-300 font-bold uppercase tracking-wider">
-                                    {bossTitle}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="text-[10px] font-mono text-zinc-400 truncate">
-                                HP <span className="text-rose-300 font-bold">{displayHp}</span> • AC <span className="text-zinc-200 font-bold">{displayAc}</span> • CR <span className="text-amber-300 font-bold">{displayCr}</span>
-                              </div>
+                            <div className="text-[10px] font-mono text-zinc-400">
+                              HP {displayHp} • AC {displayAc} • CR {displayCr}
                             </div>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setDraftedMonsters((prev) =>
-                                prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev
-                              )
-                            }
-                            className="p-1.5 rounded-lg text-zinc-500 hover:text-rose-400 hover:bg-zinc-900 cursor-pointer shrink-0"
-                            title="Remove from encounter"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          {!arenaConfig.lockDmEncounter && draftedMonsters.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setDraftedMonsters((prev) =>
+                                  prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev
+                                )
+                              }
+                              className="p-1.5 rounded-lg text-zinc-500 hover:text-rose-400 hover:bg-zinc-900 cursor-pointer shrink-0"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       );
                     })}
                   </div>
-
-                  {/* Quick Add Monster Dropdown */}
-                  <div className="pt-2 border-t border-zinc-800 flex items-center gap-2">
-                    <select
-                      onChange={(e) => {
-                        const found = monsterPool.find((m) => m.monsterId === e.target.value);
-                        if (found) {
-                          setDraftedMonsters((prev) => [...prev, found]);
-                        }
-                        e.target.value = '';
-                      }}
-                      defaultValue=""
-                      className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-zinc-200 min-w-0"
-                    >
-                      <option value="" disabled>
-                        + Add Monster / Boss...
-                      </option>
-                      {monsterPool.map((m) => (
-                        <option key={m.monsterId} value={m.monsterId}>
-                          {m.name} (CR {m.challenge?.split(' ')[0]} • HP {m.hp} • AC {m.ac})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-          )}
-
-          {/* Step 3: Select Arena Battlemap & Launch Match */}
-          <div className="bg-zinc-900/75 border border-zinc-800 rounded-3xl p-4 sm:p-5 flex flex-col md:flex-row items-center justify-between gap-5">
-            <div className="flex-1 w-full">
-              <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
-                <span className="text-xs font-mono uppercase tracking-wider text-zinc-400 font-bold">
-                  3. Choose Colosseum Battlemap ({availableMaps.length} Available)
-                  {activePvpRoom && activePvpRoom.hostClientId !== clientIdRef.current && (
-                    <span className="ml-2 text-amber-400">(Controlled by Host)</span>
-                  )}
-                </span>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-300">
-                    Organic Aspect: {(arenaWidth / arenaHeight).toFixed(2)}:1 ({arenaCols}×{arenaRows} Grid • {arenaWidth}×{arenaHeight}px)
-                  </span>
-                  {activeMapWalls.length > 0 && (
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/35 text-amber-300">
-                      🧱 {activeMapWalls.length} Wall(s) / Door(s) Active
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={handleRestoreOriginalMaps}
-                    className="px-2.5 py-1 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 font-mono text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all"
-                    title="Restore original preset battle maps (Forest Ruins, Subterranean Maze, Skeleton Crypt, Lavapit)"
-                  >
-                    <RotateCcw className="w-3 h-3 text-amber-400" />
-                    <span>Restore Originals</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleOpenSaveArenaModal}
-                    className="px-2.5 py-1 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 font-mono text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all"
-                    title="Save Arena Scene to presets or Campaign Mode"
-                  >
-                    <Save className="w-3 h-3 text-amber-400" />
-                    <span>Save Arena</span>
-                  </button>
                 </div>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 max-h-48 overflow-y-auto pr-1">
-                {availableMaps.map((map) => {
-                  const isSel = selectedMap.id === map.id;
-                  const mapWallCount = (arenaConfig.mapWalls?.[map.id] || []).length;
-                  const mapDisabledByGuest = Boolean(
-                    activePvpRoom && activePvpRoom.hostClientId !== clientIdRef.current
-                  );
-                  return (
+            )}
+
+            {/* TAB 3: CUSTOM BATTLE (Hand-Picked Bestiary OR 3v3–6v6 Squad Clash) */}
+            {activeLobbyTab === 'custom' && (
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 bg-zinc-900/75 border border-zinc-800 rounded-2xl px-4 py-2.5">
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     <button
-                      key={map.id}
                       type="button"
-                      disabled={mapDisabledByGuest}
-                      onClick={() => handlePvpHostChangeMap(map)}
-                      className={`group relative rounded-2xl overflow-hidden border h-16 sm:h-20 text-left transition-all ${
-                        mapDisabledByGuest ? 'cursor-not-allowed' : 'cursor-pointer'
-                      } ${
-                        isSel
-                          ? 'border-amber-400 ring-2 ring-amber-400/40'
-                          : 'border-zinc-800 opacity-75 hover:opacity-100'
+                      onClick={() => setMatchMode('vs_npcs')}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold cursor-pointer ${
+                        matchMode === 'vs_npcs'
+                          ? 'bg-purple-500 text-white'
+                          : 'bg-zinc-950 text-zinc-400 hover:text-white border border-zinc-800'
                       }`}
                     >
-                      <img
-                        src={map.thumbnailUrl || map.url}
-                        alt={map.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent flex items-end justify-between p-2 gap-1">
-                        <span className="text-[10px] sm:text-[11px] font-mono font-bold text-white truncate">
-                          {map.name}
-                        </span>
-                        {mapWallCount > 0 && (
-                          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/25 text-amber-300 border border-amber-500/40 shrink-0">
-                            {mapWallCount}🧱
-                          </span>
-                        )}
-                      </div>
+                      Custom Bestiary
                     </button>
-                  );
-                })}
-              </div>
-            </div>
+                    {(['3v3', '4v4', '5v5', '6v6'] as const).map((sz) => (
+                      <button
+                        key={sz}
+                        type="button"
+                        onClick={() => setMatchMode(sz)}
+                        className={`px-2.5 py-1.5 rounded-xl text-xs font-mono font-bold cursor-pointer ${
+                          matchMode === sz
+                            ? 'bg-amber-500 text-zinc-950'
+                            : 'bg-zinc-950 text-zinc-400 hover:text-white border border-zinc-800'
+                        }`}
+                      >
+                        {sz}
+                      </button>
+                    ))}
+                  </div>
 
-            {!((matchMode === '1v1' || matchMode === '2v2') && arenaConfig.allowPvP !== false && pvpModeKind === 'online') && (
+                  {isPvpOrRivalMatchMode(matchMode) && (
+                    <button
+                      type="button"
+                      onClick={() => setCrimsonIsAI((v) => !v)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold border flex items-center gap-1.5 cursor-pointer ${
+                        crimsonIsAI
+                          ? 'bg-purple-500/20 border-purple-500/50 text-purple-300'
+                          : 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
+                      }`}
+                    >
+                      {crimsonIsAI ? <Bot className="w-3.5 h-3.5" /> : <Users className="w-3.5 h-3.5" />}
+                      <span>{crimsonIsAI ? 'AI Controlled' : 'Pass & Play'}</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {/* Left: Team Gold */}
+                  <div className="bg-zinc-900/80 border border-amber-500/30 rounded-3xl p-4 sm:p-5 space-y-3">
+                    <div className="flex items-center justify-between border-b border-zinc-800 pb-2.5">
+                      <h3 className="text-xs sm:text-sm font-mono font-bold text-amber-300 flex items-center gap-2">
+                        <Shield className="w-4 h-4 text-amber-400" />
+                        <span>Team Gold ({selectedGoldHeroes.length}/{getMatchModeTeamCap(matchMode)})</span>
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={() => setHeroPickerTarget('gold')}
+                        className="px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 text-xs font-mono font-bold cursor-pointer"
+                      >
+                        Edit Team
+                      </button>
+                    </div>
+                    {renderCompactHeroList(selectedGoldHeroes, 'gold', (id) =>
+                      setGoldHeroIds((prev) => prev.filter((x) => x !== id))
+                    )}
+                  </div>
+
+                  {/* Right: Custom Monsters OR Team Crimson Squad */}
+                  <div className="bg-zinc-900/80 border border-rose-500/30 rounded-3xl p-4 sm:p-5 space-y-3">
+                    {isPvpOrRivalMatchMode(matchMode) ? (
+                      <>
+                        <div className="flex items-center justify-between border-b border-zinc-800 pb-2.5">
+                          <h3 className="text-xs sm:text-sm font-mono font-bold text-rose-300 flex items-center gap-2">
+                            <Swords className="w-4 h-4 text-rose-400" />
+                            <span>Team Crimson ({selectedCrimsonHeroes.length}/{getMatchModeTeamCap(matchMode)})</span>
+                          </h3>
+                          <button
+                            type="button"
+                            onClick={() => setHeroPickerTarget('crimson')}
+                            className="px-3 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300 text-xs font-mono font-bold cursor-pointer"
+                          >
+                            Edit Rivals
+                          </button>
+                        </div>
+                        {renderCompactHeroList(selectedCrimsonHeroes, 'crimson', (id) =>
+                          setCrimsonHeroIds((prev) => prev.filter((x) => x !== id))
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-between border-b border-zinc-800 pb-2.5">
+                          <h3 className="text-xs sm:text-sm font-mono font-bold text-rose-300 flex items-center gap-2">
+                            <Skull className="w-4 h-4 text-rose-400" />
+                            <span>Custom Monsters ({draftedMonsters.length})</span>
+                          </h3>
+                        </div>
+
+                        <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                          {draftedMonsters.map((mon, idx) => {
+                            if (!mon) return null;
+                            return (
+                              <div
+                                key={`${mon.monsterId || mon.name}_${idx}`}
+                                className="p-2.5 rounded-2xl bg-zinc-950/90 border border-zinc-800 flex items-center justify-between gap-2"
+                              >
+                                <div className="min-w-0">
+                                  <div className="text-xs font-mono font-bold text-white truncate">{mon.name}</div>
+                                  <div className="text-[10px] font-mono text-zinc-400">
+                                    HP {mon.hp || 45} • AC {mon.ac || 14} • CR {mon.challenge?.split(' ')[0] || '1'}
+                                  </div>
+                                </div>
+                                {draftedMonsters.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setDraftedMonsters((prev) =>
+                                        prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev
+                                      )
+                                    }
+                                    className="p-1.5 rounded-lg text-zinc-500 hover:text-rose-400 hover:bg-zinc-900 cursor-pointer shrink-0"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        <select
+                          onChange={(e) => {
+                            const found = monsterPool.find((m) => m.monsterId === e.target.value);
+                            if (found) setDraftedMonsters((prev) => [...prev, found]);
+                            e.target.value = '';
+                          }}
+                          defaultValue=""
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-zinc-200"
+                        >
+                          <option value="" disabled>
+                            + Add Monster / Boss...
+                          </option>
+                          {monsterPool.map((m) => (
+                            <option key={m.monsterId} value={m.monsterId}>
+                              {m.name} (CR {m.challenge?.split(' ')[0]} • HP {m.hp} • AC {m.ac})
+                            </option>
+                          ))}
+                        </select>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Unified Sticky Launch Footer (Compact Battlemap Chip + Summary + Primary CTA) */}
+        <div className="px-3.5 py-3 sm:px-6 sm:py-3.5 bg-zinc-900/95 border-t border-zinc-800 backdrop-blur-xl shrink-0 z-20">
+          <div className="max-w-5xl mx-auto flex flex-wrap items-center justify-between gap-3">
+            {/* Compact Map Picker Chip */}
+            <button
+              type="button"
+              onClick={() => setShowMapPicker(true)}
+              className="flex items-center gap-2.5 p-1.5 pr-3 rounded-2xl bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 hover:border-amber-500/40 transition-all cursor-pointer max-w-full"
+            >
+              <img
+                src={selectedMap.thumbnailUrl || selectedMap.url}
+                alt={selectedMap.name}
+                className="w-11 h-9 rounded-xl object-cover border border-zinc-700 shrink-0"
+              />
+              <div className="text-left min-w-0">
+                <div className="text-[9px] font-mono uppercase tracking-wider text-zinc-500">
+                  Battlemap {isPvpGuest ? '(Host)' : ''}
+                </div>
+                <div className="text-xs font-mono font-bold text-white truncate max-w-[150px] sm:max-w-[200px]">
+                  {selectedMap.name}
+                </div>
+              </div>
+              <ChevronDown className="w-4 h-4 text-zinc-400 shrink-0" />
+            </button>
+
+            <span className="hidden lg:inline text-xs font-mono text-zinc-400">
+              {launchSummaryText}
+            </span>
+
+            {!isOnlinePvpView && (
               <button
                 type="button"
                 onClick={handleStartArenaMatch}
-                className="hidden md:flex px-8 py-5 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-400 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-zinc-950 font-mono font-black text-base shadow-[0_0_30px_rgba(245,158,11,0.4)] items-center justify-center gap-3 cursor-pointer active:scale-95 transition-all shrink-0"
+                className="px-6 py-3 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-400 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-zinc-950 font-mono font-black text-xs sm:text-sm shadow-[0_0_24px_rgba(245,158,11,0.35)] flex items-center gap-2 cursor-pointer active:scale-95 transition-all shrink-0"
               >
-                <Swords className="w-6 h-6" />
-                <span>ROLL INITIATIVE & START ARENA</span>
-                <ChevronRight className="w-5 h-5" />
+                <Swords className="w-4 h-4 sm:w-5 sm:h-5" />
+                <span>START BATTLE</span>
+                <ChevronRight className="w-4 h-4" />
               </button>
             )}
           </div>
         </div>
 
-        {/* Sticky Mobile Bottom Launch Bar */}
-        {!((matchMode === '1v1' || matchMode === '2v2') && arenaConfig.allowPvP !== false && pvpModeKind === 'online') && (
-          <div className="fixed bottom-0 inset-x-0 z-30 p-3 bg-zinc-950/95 border-t border-amber-500/30 backdrop-blur-xl md:hidden">
-            <button
-              type="button"
-              onClick={handleStartArenaMatch}
-              className="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-400 to-orange-500 text-zinc-950 font-mono font-black text-sm shadow-[0_0_25px_rgba(245,158,11,0.4)] flex items-center justify-center gap-2.5 active:scale-95 transition-all cursor-pointer"
-            >
-              <Swords className="w-5 h-5" />
-              <span>ROLL INITIATIVE & START ARENA</span>
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-        )}
+        {/* On-Demand Hero Picker Modal */}
+        <ArenaHeroPickerModal
+          isOpen={heroPickerTarget !== null}
+          onClose={() => setHeroPickerTarget(null)}
+          title={
+            heroPickerTarget === 'pvp'
+              ? 'Choose Your PvP Fighter'
+              : heroPickerTarget === 'crimson'
+              ? 'Select Team Crimson Rivals'
+              : 'Select Your Party'
+          }
+          subtitle={
+            heroPickerTarget === 'pvp'
+              ? 'Only updates your own slot — other players pick their heroes remotely.'
+              : undefined
+          }
+          accent={heroPickerTarget === 'pvp' ? 'sky' : heroPickerTarget === 'crimson' ? 'crimson' : 'gold'}
+          heroPool={heroPool}
+          selectedHeroIds={
+            heroPickerTarget === 'pvp'
+              ? [goldHeroIds[0] || heroPool[0]?.id || '']
+              : heroPickerTarget === 'crimson'
+              ? crimsonHeroIds
+              : goldHeroIds
+          }
+          maxSelect={heroPickerTarget === 'pvp' ? 1 : getMatchModeTeamCap(matchMode)}
+          campaignGroups={arenaCampaignGroups}
+          campaignFilter={heroPickerTarget === 'crimson' ? crimsonCampaignFilter : goldCampaignFilter}
+          onChangeCampaignFilter={
+            heroPickerTarget === 'crimson' ? setCrimsonCampaignFilter : setGoldCampaignFilter
+          }
+          onToggleHero={(hero) => {
+            if (heroPickerTarget === 'pvp') {
+              handlePvpSelectMyHero(hero);
+            } else if (heroPickerTarget === 'crimson') {
+              handleToggleCrimsonHero(hero);
+            } else {
+              handleToggleGoldHero(hero);
+            }
+          }}
+        />
+
+        {/* On-Demand Battlemap Picker Modal */}
+        <ArenaMapPickerModal
+          isOpen={showMapPicker}
+          onClose={() => setShowMapPicker(false)}
+          availableMaps={availableMaps}
+          selectedMap={selectedMap}
+          onSelectMap={handlePvpHostChangeMap}
+          disabledNote={isPvpGuest ? 'Only the PvP Lobby Host can change the battlemap.' : undefined}
+        />
 
         {/* Save Arena Modal */}
         {renderSaveArenaModal()}
