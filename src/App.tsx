@@ -3341,44 +3341,49 @@ export default function App() {
     polygonPoints?: number[];
     customMonsterData?: Monster;
   }) => {
-    // Start with default position
-    let baseSpawnX = 350;
-    let baseSpawnY = 350;
-
-    if (tokenData.polygonPoints && tokenData.polygonPoints.length >= 6) {
-      const { width: mapW, height: mapH } = getMapDimensions();
-      if (mapW > 0 && mapH > 0) {
-        let sumX = 0;
-        let sumY = 0;
-        const count = tokenData.polygonPoints.length / 2;
-        for (let i = 0; i < tokenData.polygonPoints.length; i += 2) {
-          sumX += tokenData.polygonPoints[i];
-          sumY += tokenData.polygonPoints[i + 1];
-        }
-        baseSpawnX = Math.round((sumX / count / 100) * mapW);
-        baseSpawnY = Math.round((sumY / count / 100) * mapH);
-      }
-    } else {
-      baseSpawnX = 350 + Math.floor(Math.random() * 80);
-      baseSpawnY = 350 + Math.floor(Math.random() * 80);
-    }
+    const hasPolygon = Boolean(tokenData.polygonPoints && tokenData.polygonPoints.length >= 6);
+    const { width: mapW, height: mapH } = hasPolygon ? getMapDimensions() : { width: 0, height: 0 };
+    const fallbackBaseX = 350 + Math.floor(Math.random() * 80);
+    const fallbackBaseY = 350 + Math.floor(Math.random() * 80);
 
     setTokens(prev => {
-      const step = Math.max(45, gridSize || 50);
-      const nearbyCount = prev.filter(t => Math.abs(t.x - baseSpawnX) < step * 2.5 && Math.abs(t.y - baseSpawnY) < step * 2.5).length;
-      const col = nearbyCount % 3;
-      const row = Math.floor(nearbyCount / 3);
-      const offsetX = col * step;
-      const offsetY = row * step;
+      const tokenSize = tokenData.size || 1;
+      let spawnX: number;
+      let spawnY: number;
+
+      const polyPos = hasPolygon
+        ? findTokenSpawnPositionInPolygon({
+            polygonPoints: tokenData.polygonPoints!,
+            mapW,
+            mapH,
+            tokenSize,
+            gridSize: gridSize || 50,
+            gridOffsetX,
+            gridOffsetY,
+            existingTokens: prev,
+          })
+        : null;
+
+      if (polyPos) {
+        spawnX = polyPos.x;
+        spawnY = polyPos.y;
+      } else {
+        const step = Math.max(45, gridSize || 50);
+        const nearbyCount = prev.filter(t => Math.abs(t.x - fallbackBaseX) < step * 2.5 && Math.abs(t.y - fallbackBaseY) < step * 2.5).length;
+        const col = nearbyCount % 3;
+        const row = Math.floor(nearbyCount / 3);
+        spawnX = fallbackBaseX + col * step;
+        spawnY = fallbackBaseY + row * step;
+      }
 
       const rawToken: Token = {
         id: `token_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
         name: tokenData.name,
         url: tokenData.avatarUrl,
         avatarUrl: tokenData.avatarUrl,
-        x: baseSpawnX + offsetX,
-        y: baseSpawnY + offsetY,
-        size: tokenData.size || 1,
+        x: spawnX,
+        y: spawnY,
+        size: tokenSize,
         hp: tokenData.hp,
         maxHp: tokenData.hp,
         currentHp: tokenData.hp,
@@ -3428,7 +3433,7 @@ export default function App() {
       }
       return [...prev, repaired];
     });
-  }, [getMapDimensions, gridSize, compendiumMonsters]);
+  }, [getMapDimensions, gridSize, gridOffsetX, gridOffsetY, compendiumMonsters]);
 
   const handleSpawnAllyToken = useCallback((tokenData: {
     name: string;

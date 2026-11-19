@@ -730,7 +730,7 @@ export const RoomBriefingDrawer: React.FC<RoomBriefingDrawerProps> = ({
                 if (onSpawnMonsterToken) {
                   onSpawnMonsterToken({
                     ...tokenData,
-                    polygonPoints: activeRoom?.polygonPoints
+                    polygonPoints: tokenData.polygonPoints ?? activeRoom?.polygonPoints
                   });
                 }
               }}
