@@ -4225,9 +4225,10 @@ export default function PlayerView() {
     if (isTeleportSpell && claimedToken) {
       const maxRangeFt = activeEquippedAsset.rangeFt || (activeEquippedAsset.name.toLowerCase().includes('misty step') ? 30 : 500);
 
-      // Snapped destination to grid tile top-left for token placement
-      const snappedTargetX = Math.round(target.x / gridSize) * gridSize;
-      const snappedTargetY = Math.round(target.y / gridSize) * gridSize;
+      // Snapped destination to the exact grid tile top-left containing the clicked point
+      // (matches handleStageMouseMove's Math.floor quantization so tile centers don't round +1 tile right/down)
+      const snappedTargetX = Math.floor(target.x / gridSize) * gridSize;
+      const snappedTargetY = Math.floor(target.y / gridSize) * gridSize;
 
       // Always guarantee departure center is strictly the claimedToken's center
       const tokenRadius = ((claimedToken.size || 1) * gridSize) / 2;
@@ -7323,7 +7324,9 @@ export default function PlayerView() {
     const isTeleportAim =
       activeEquippedAsset.targetType === 'teleport' ||
       activeEquippedAsset.id === 'misty_step' ||
-      activeEquippedAsset.name.toLowerCase().includes('misty step');
+      activeEquippedAsset.id === 'dimension_door' ||
+      activeEquippedAsset.name.toLowerCase().includes('misty step') ||
+      activeEquippedAsset.name.toLowerCase().includes('dimension door');
     const point = isTeleportAim
       ? {
           x: Math.floor(rawPoint.x / gridSize) * gridSize + gridSize / 2,

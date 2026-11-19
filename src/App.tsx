@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { Stage, Layer, Image as KonvaImage, Rect, Circle, Line, Text, Group, Wedge } from 'react-konva';
 import { isMistwalker3DEnabled, Mistwalker3DModeToggle, Mistwalker3DViewportHost } from './integrations/mistwalker3d/Mistwalker3DBridge';
+import { findTokenSpawnPositionInPolygon } from './utils/polygonSpawn';
 import Konva from 'konva';
 
 // High-performance canvas and drag defaults
@@ -588,7 +589,7 @@ export default function App() {
   const [pendingDmCombatRoll, setPendingDmCombatRoll] = useState<PendingCombatRoll | null>(null);
   const [aimOrigin, setAimOrigin] = useState<{ x: number; y: number } | null>(null);
   const [aimCurrent, setAimCurrent] = useState<{ x: number; y: number } | null>(null);
-  const handleDmTargetTokenRef = useRef<((targetToken: Token, overrideAction?: MonsterActionItem) => void) | null>(null);
+  const handleDmTargetTokenRef = useRef<((targetToken: Token, overrideAction?: MonsterActionItem, skipVisualEffect?: boolean) => void) | null>(null);
   const handleTokenTargetCallback = useCallback((targetToken: Token) => {
     handleDmTargetTokenRef.current?.(targetToken);
   }, []);
@@ -4673,7 +4674,7 @@ export default function App() {
       const targetCreatureToken = findTargetTokenFromPoint(target, undefined, undefined, singleSelected?.id);
       if (targetCreatureToken) {
         if (handleDmTargetTokenRef.current) {
-          handleDmTargetTokenRef.current(targetCreatureToken, activeDmMonsterAction);
+          handleDmTargetTokenRef.current(targetCreatureToken, activeDmMonsterAction, true);
           return;
         }
       }
@@ -5389,7 +5390,7 @@ export default function App() {
     });
   }, [selectedTokenIds, tokens, compendiumMonsters]);
 
-  const handleDmTargetToken = useCallback((targetToken: Token, overrideAction?: MonsterActionItem) => {
+  const handleDmTargetToken = useCallback((targetToken: Token, overrideAction?: MonsterActionItem, skipVisualEffect = false) => {
     const action = overrideAction || activeDmMonsterAction;
     const singleToken = selectedTokenIds.length === 1 ? tokens.find(t => t.id === selectedTokenIds[0]) : null;
     if (!singleToken || !action) return;
@@ -5434,7 +5435,7 @@ export default function App() {
     );
     const aimAngleDeg = Math.atan2(targetCenter.y - casterCenter.y, targetCenter.x - casterCenter.x) * (180 / Math.PI);
 
-    if (matchedAsset) {
+    if (matchedAsset && !skipVisualEffect) {
       const newEffect: VttEffectInstance = {
         id: `eff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         name: isSelfTarget ? matchedAsset.name : `${matchedAsset.name} (${targetToken.name})`,

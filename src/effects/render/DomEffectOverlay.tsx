@@ -799,19 +799,42 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
             const lineLength = Math.max(gridSize * 4, (sizeFt / 5) * gridSize);
             const beamHeight = Math.max(gridSize * 2.2, lineLength * 0.22);
             const isSunbeam = effect.assetKey === 'sunbeam' || effect.name?.toLowerCase().includes('sunbeam');
+            const isLightningBolt = effect.assetKey === 'lightning_bolt' || effect.name?.toLowerCase().includes('lightning bolt');
             const beamFilter = isSunbeam
               ? 'hue-rotate(-150deg) saturate(2.4) brightness(1.6) drop-shadow(0 0 16px rgba(253, 224, 71, 0.8))'
               : 'drop-shadow(0 0 4px rgba(255, 255, 255, 0.25))';
             return (
               <video
                 key={effect.id}
-                src={effect.videoUrl}
+                src={videoCacheManager.getCachedBlobUrl(effect.videoUrl)}
                 autoPlay
                 muted
                 playsInline
                 preload="auto"
                 loop={Boolean(effect.loop || effect.isPersistent)}
+                onLoadedMetadata={(e) => {
+                  const vid = e.target as HTMLVideoElement;
+                  // LightningBolt_01 WebM has a pre-flash (0.1-0.4s) + main bolt (0.7-1.1s);
+                  // start directly at the single decisive bolt strike so it only casts once.
+                  if (isLightningBolt && !vid.dataset.trimmedStart) {
+                    vid.dataset.trimmedStart = '1';
+                    try {
+                      vid.currentTime = 0.62;
+                    } catch {
+                      // ignore
+                    }
+                  }
+                  applySnappyPlayback(vid, effect);
+                }}
                 onLoadedData={(e) => applySnappyPlayback(e.target as HTMLVideoElement, effect)}
+                onTimeUpdate={isLightningBolt ? (e) => {
+                  const vid = e.target as HTMLVideoElement;
+                  if (vid.currentTime >= 1.45 && !vid.dataset.endedOnce) {
+                    vid.dataset.endedOnce = '1';
+                    vid.pause();
+                    handleEnded(effect);
+                  }
+                } : undefined}
                 onError={(e) => console.warn('Effect video load failed:', effect.videoUrl, e)}
                 onEnded={() => handleEnded(effect)}
                 style={{
