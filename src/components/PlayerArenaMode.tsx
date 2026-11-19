@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Stage, Layer, Image as KonvaImage, Group, Circle, Rect, Text, Line } from 'react-konva';
+import { Stage, Layer, Image as KonvaImage, Group, Circle, Rect, Text, Line, Shape } from 'react-konva';
 import useImage from 'use-image';
 import {
   Swords,
@@ -3349,18 +3349,21 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           : target.y;
         // Step 1: Animate on the player at departure position first
         spawnArenaVisualEffect(actor, actor, action);
-        // Step 2: Blink to destination while simultaneously animating at destination
+        // Step 2: Clear departure decoder before blinking & animating at destination so only 1 VP8+alpha decoder runs at a time
         window.setTimeout(() => {
-          setCombatants((prev) =>
-            prev.map((c) =>
-              c.id === actor.id ? { ...markActorUsed(c), x: destX, y: destY } : c
-            )
-          );
+          setArenaEffects((prev) => prev.filter((ef) => ef.ownerId !== actor.id || ef.isPersistent || ef.loop));
           spawnArenaVisualEffect(
             { ...actor, x: destX, y: destY },
             { ...actor, x: destX, y: destY },
             action
           );
+          requestAnimationFrame(() => {
+            setCombatants((prev) =>
+              prev.map((c) =>
+                c.id === actor.id ? { ...markActorUsed(c), x: destX, y: destY } : c
+              )
+            );
+          });
         }, 320);
         addCombatLog(
           actor.name,
@@ -5898,28 +5901,57 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
 
           {/* Arena Tokens & Tap-to-Move Layer */}
           <Layer>
-            {/* Reachable Teleport Squares (e.g. Misty Step 30ft, Dimension Door) */}
+            {/* Reachable Teleport Squares (batched into 1 Konva Shape draw call for 60 FPS targeting) */}
             {activeCombatant &&
               !activeCombatant.isAI &&
               activeTargetingAction &&
               isActionTeleport(activeTargetingAction) &&
-              reachableTeleportSquares.map((cell) => (
-                <Rect
-                  key={`teleport_${cell.col}_${cell.row}`}
-                  x={cell.col * arenaGridSize + 2}
-                  y={cell.row * arenaGridSize + 2}
-                  width={arenaGridSize - 4}
-                  height={arenaGridSize - 4}
-                  cornerRadius={6}
-                  fill="rgba(168, 85, 247, 0.22)"
-                  stroke="rgba(192, 132, 252, 0.7)"
-                  strokeWidth={2}
-                  dash={[6, 4]}
+              reachableTeleportSquares.length > 0 && (
+                <Shape
+                  sceneFunc={(ctx, shape) => {
+                    ctx.beginPath();
+                    for (let i = 0; i < reachableTeleportSquares.length; i++) {
+                      const cell = reachableTeleportSquares[i];
+                      ctx.rect(
+                        cell.col * arenaGridSize + 2,
+                        cell.row * arenaGridSize + 2,
+                        arenaGridSize - 4,
+                        arenaGridSize - 4
+                      );
+                    }
+                    ctx.fillStyle = 'rgba(168, 85, 247, 0.22)';
+                    ctx.fill();
+                    ctx.strokeStyle = 'rgba(192, 132, 252, 0.7)';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([6, 4]);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    ctx.fillStrokeShape(shape);
+                  }}
+                  hitFunc={(ctx, shape) => {
+                    ctx.beginPath();
+                    for (let i = 0; i < reachableTeleportSquares.length; i++) {
+                      const cell = reachableTeleportSquares[i];
+                      ctx.rect(
+                        cell.col * arenaGridSize + 2,
+                        cell.row * arenaGridSize + 2,
+                        arenaGridSize - 4,
+                        arenaGridSize - 4
+                      );
+                    }
+                    ctx.fillStrokeShape(shape);
+                  }}
                   onClick={(e) => {
+                    const stage = e.target.getStage();
+                    const ptr = stage?.getRelativePointerPosition();
+                    if (!ptr) return;
+                    const col = Math.floor(ptr.x / arenaGridSize);
+                    const row = Math.floor(ptr.y / arenaGridSize);
+                    if (!reachableTeleportSquares.some((c) => c.col === col && c.row === row)) return;
                     e.cancelBubble = true;
                     const snapCenter = {
-                      x: cell.col * arenaGridSize + arenaGridSize / 2,
-                      y: cell.row * arenaGridSize + arenaGridSize / 2
+                      x: col * arenaGridSize + arenaGridSize / 2,
+                      y: row * arenaGridSize + arenaGridSize / 2
                     };
                     executeCombatAction(activeCombatant, activeCombatant, activeTargetingAction, snapCenter);
                     setActiveTargetingAction(null);
@@ -5928,10 +5960,16 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                     setAimCurrent(null);
                   }}
                   onTap={(e) => {
+                    const stage = e.target.getStage();
+                    const ptr = stage?.getRelativePointerPosition();
+                    if (!ptr) return;
+                    const col = Math.floor(ptr.x / arenaGridSize);
+                    const row = Math.floor(ptr.y / arenaGridSize);
+                    if (!reachableTeleportSquares.some((c) => c.col === col && c.row === row)) return;
                     e.cancelBubble = true;
                     const snapCenter = {
-                      x: cell.col * arenaGridSize + arenaGridSize / 2,
-                      y: cell.row * arenaGridSize + arenaGridSize / 2
+                      x: col * arenaGridSize + arenaGridSize / 2,
+                      y: row * arenaGridSize + arenaGridSize / 2
                     };
                     executeCombatAction(activeCombatant, activeCombatant, activeTargetingAction, snapCenter);
                     setActiveTargetingAction(null);
@@ -5940,7 +5978,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                     setAimCurrent(null);
                   }}
                 />
-              ))}
+              )}
             {activeCombatant &&
               !activeCombatant.isAI &&
               !activeTargetingAction &&

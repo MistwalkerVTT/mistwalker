@@ -9,6 +9,7 @@ import { VttEffectInstance, Jb2aAssetDefinition } from '../types/effect';
 import { soundCatalog } from '../db/soundCatalog';
 import { getConditionFx, getAuraVideoUrl } from '../db/tokenFxMap';
 import { getDirectionalConeOrigin } from '../geometry/coneGeometry';
+import { videoCacheManager } from '../engine/VideoCacheManager';
 
 interface DomEffectOverlayProps {
   effects: VttEffectInstance[];
@@ -133,11 +134,37 @@ const applySnappyPlayback = (el: HTMLVideoElement | null, effect?: VttEffectInst
       effect?.assetKey === 'misty_step' ||
       effect?.assetKey === 'fey_step' ||
       effect?.assetKey === 'shadow_step' ||
+      effect?.assetKey === 'clouds_jaunt' ||
       effect?.name?.toLowerCase().includes('misty step');
-    el.playbackRate = isRapidTeleport ? 1.85 : 1.35;
-    el.play().catch(() => {});
+    const targetRate = isRapidTeleport ? 2.0 : 1.35;
+    if (el.playbackRate !== targetRate) {
+      el.playbackRate = targetRate;
+    }
+    if (el.paused) {
+      el.play().catch(() => {});
+    }
   } catch (err) {
     // ignore
+  }
+};
+
+// Re-triggers playback at t=0 on an already-mounted <video> decoder when a two-phase
+// teleport updates castTime on the same effect.id (avoids spinning up a 2nd CPU VP8+alpha decoder).
+const syncMountedEffectVideo = (el: HTMLVideoElement | null, effect: VttEffectInstance) => {
+  if (!el) return;
+  const castKey = String(effect.castTime || 0);
+  if (el.dataset.castTime && el.dataset.castTime !== castKey) {
+    el.dataset.castTime = castKey;
+    try {
+      el.currentTime = 0;
+      applySnappyPlayback(el, effect);
+      el.play().catch(() => {});
+    } catch {
+      // ignore
+    }
+  } else if (!el.dataset.castTime) {
+    el.dataset.castTime = castKey;
+    applySnappyPlayback(el, effect);
   }
 };
 
@@ -241,6 +268,22 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
 
   const hasEffects = Boolean(effects && effects.length > 0);
   const hasAimPreview = Boolean(activeEquippedAsset && aimCurrent);
+
+  // Pre-warm equipped spell WebMs into RAM (blob: URL) while the player is aiming
+  // so casting has 0ms network latency and instant local memory decode.
+  useEffect(() => {
+    if (!activeEquippedAsset) return;
+    const urls = [
+      activeEquippedAsset.webm,
+      activeEquippedAsset.departureWebm,
+      activeEquippedAsset.arrivalWebm,
+      activeEquippedAsset.projectileWebm,
+      activeEquippedAsset.burstWebm
+    ].filter(Boolean) as string[];
+    urls.forEach(u => {
+      videoCacheManager.warmBlobUrl(u);
+    });
+  }, [activeEquippedAsset]);
 
   // Pre-filter tokens into active buckets so 95% of plain monster tokens are skipped in O(1)
   const { haloTokens, auraTokens, conditionTokensWithList } = useMemo(() => {
@@ -576,13 +619,15 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
               }}
             >
               <video
-                src={effect.videoUrl}
+                ref={(el) => syncMountedEffectVideo(el, effect)}
+                src={videoCacheManager.getCachedBlobUrl(effect.videoUrl)}
                 autoPlay
                 muted
                 playsInline
                 preload="auto"
                 loop={Boolean(effect.loop || effect.isPersistent)}
                 className={(effect.fadeInMs || effect.fadeOutMs || effect.assetKey === 'dimension_door' || effect.assetKey === 'arcane_gate' || effect.name?.toLowerCase().includes('dimension door')) ? 'animate-effect-fade-portal' : undefined}
+                onLoadedMetadata={(e) => applySnappyPlayback(e.target as HTMLVideoElement, effect)}
                 onLoadedData={(e) => applySnappyPlayback(e.target as HTMLVideoElement, effect)}
                 onError={(e) => console.warn('Effect video load failed:', effect.videoUrl, e)}
                 onEnded={() => handleEnded(effect)}

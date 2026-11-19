@@ -3748,7 +3748,6 @@ export default function PlayerView() {
         y: newY,
         distanceMovedFt: distanceMovedFt ?? 0
       });
-      socketRef.current.emit('MOVE_TOKEN', { id, x: newX, y: newY });
     }
     setTimeout(() => {
       if (activeDraggingTokenIdRef.current === id) {
@@ -4355,25 +4354,33 @@ export default function PlayerView() {
         }
 
         // Step 2: After the departure puff animates on the player (~320ms), blink token to destination
-        // while simultaneously animating at the destination (replacing the departure video so only 1 WebM decodes at a time!)
+        // Reuse the SAME effect.id when departVideoUrl === arriveVideoUrl so DomEffectOverlay reuses
+        // the already-decoded CPU VP8+alpha <video> instance (zero 2nd decoder spin-up!).
+        const reuseSameDecoder = departVideoUrl === arriveVideoUrl;
         window.setTimeout(() => {
           const secondPhaseArriveEffect: VttEffectInstance = {
             ...arriveEffect,
+            id: reuseSameDecoder ? firstPhaseDepartEffect.id : arriveEffect.id,
             videoUrl: arriveVideoUrl,
             castTime: Date.now(),
-            durationMs: 1100
+            durationMs: 1500
           };
 
-          setEffects(prev => [
-            ...prev.filter(e => e.id !== firstPhaseDepartEffect.id),
-            secondPhaseArriveEffect
-          ]);
+          setEffects(prev =>
+            reuseSameDecoder
+              ? prev.map(e => (e.id === firstPhaseDepartEffect.id ? secondPhaseArriveEffect : e))
+              : [...prev.filter(e => e.id !== firstPhaseDepartEffect.id), secondPhaseArriveEffect]
+          );
           if (socketRef.current?.connected) {
             socketRef.current.emit('EFFECT_REMOVE', { id: firstPhaseDepartEffect.id });
             socketRef.current.emit('EFFECT_SPAWN', secondPhaseArriveEffect);
           }
 
-          handleMoveToken(teleportTokenId, snappedTargetX, snappedTargetY, distFt);
+          // Defer token move + vision raycasting by 1 animation frame so it doesn't contend
+          // with the arrival video frame reset on the exact same tick.
+          requestAnimationFrame(() => {
+            handleMoveToken(teleportTokenId, snappedTargetX, snappedTargetY, distFt);
+          });
 
           toast.success(`${teleportTokenName} cast ${teleportSpellName}!`, {
             description: `Teleported ${distFt} ft across the battlefield.`
@@ -7298,16 +7305,41 @@ export default function PlayerView() {
   };
 
   const aimMoveRafRef = useRef<number | null>(null);
+  const lastAimQuantizedRef = useRef<{ x: number; y: number } | null>(null);
   const handleStageMouseMove = (e: any) => {
     if (isSpacePressed) return;
     if (!activeEquippedAsset) return;
     const stage = e.target.getStage();
     if (!stage) return;
-    const point = getStageRelativePointerPosition(stage);
-    if (!point) return;
+    const rawPoint = getStageRelativePointerPosition(stage);
+    if (!rawPoint) return;
+
+    // For teleport spells (Misty Step, Dimension Door, etc.), quantize to grid tile centers
+    // so moving within a single 5ft square doesn't re-render the entire 10k-line PlayerView 60x/sec.
+    const isTeleportAim =
+      activeEquippedAsset.targetType === 'teleport' ||
+      activeEquippedAsset.id === 'misty_step' ||
+      activeEquippedAsset.name.toLowerCase().includes('misty step');
+    const point = isTeleportAim
+      ? {
+          x: Math.floor(rawPoint.x / gridSize) * gridSize + gridSize / 2,
+          y: Math.floor(rawPoint.y / gridSize) * gridSize + gridSize / 2
+        }
+      : rawPoint;
+
+    if (
+      isTeleportAim &&
+      lastAimQuantizedRef.current &&
+      lastAimQuantizedRef.current.x === point.x &&
+      lastAimQuantizedRef.current.y === point.y
+    ) {
+      return;
+    }
+
     if (aimMoveRafRef.current !== null) return;
     aimMoveRafRef.current = requestAnimationFrame(() => {
       aimMoveRafRef.current = null;
+      lastAimQuantizedRef.current = point;
       setAimCurrent(point);
     });
   };
@@ -9262,7 +9294,7 @@ export default function PlayerView() {
         combatants={combatState?.combatants}
         activeEquippedAsset={activeEquippedAsset}
         aimOrigin={aimOrigin}
-        aimCurrent={aimCurrent}
+        aimCurrent={(activeEquippedAsset?.isPersistent || activeEquippedAsset?.paradigm === 'aura') ? aimCurrent : null}
         onEffectComplete={handleEffectComplete}
         onDispelEffect={handleDispelEffect}
         onInspectEffect={handleInspectEffect}
