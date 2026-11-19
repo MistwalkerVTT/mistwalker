@@ -57,7 +57,8 @@ import {
   evaluateDiceFormula,
   normalizePlayerAutoRollKey,
   loadPlayerAutoRollMap,
-  savePlayerAutoRollPreference
+  savePlayerAutoRollPreference,
+  resolveActionSpecialAbilities
 } from '../types/hud';
 import { WallSegment, DoorState, AURA_PRESETS, AuraPreset } from '../types';
 import { PlayerHeroDock } from './PlayerHeroDock';
@@ -938,6 +939,28 @@ function buildArenaCombatantHudData(
       combatant.name.toLowerCase().includes('stavros') ||
       char?.name?.toLowerCase().includes('stavros')
   );
+
+  const arenaSpecialCtx = {
+    characterName: combatant.name,
+    classLevel: combatant.classOrCr || char?.classLevel || '',
+    totalLevel,
+    spellSaveDc,
+    spellMod,
+    hasDivineStrike: special.some((s) => s.name.toLowerCase().includes('divine strike')),
+    hasBlessedStrikes: special.some((s) => s.name.toLowerCase().includes('blessed strikes')),
+    hasFrenzy: special.some((s) => s.name.toLowerCase().includes('frenzy')),
+    hasMartialAdept: special.some((s) => s.name.toLowerCase().includes('martial adept') || s.name.toLowerCase().includes('disarming attack')),
+    hasRadiantStrikes: Boolean(activeWildShape?.canRadiantStrikes || special.some((s) => s.name.toLowerCase().includes('radiant strikes')))
+  };
+
+  for (const list of [attacks, actions, bonusActions, spells]) {
+    for (const act of list) {
+      const triggers = resolveActionSpecialAbilities(act, arenaSpecialCtx);
+      if (triggers.length > 0) {
+        act.specialAbilities = triggers;
+      }
+    }
+  }
 
   return {
     id: combatant.id,

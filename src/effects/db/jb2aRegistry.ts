@@ -1713,7 +1713,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "isPersistent": true,
     "blendMode": "screen",
     "soundKey": "healing_incense",
-    "tags": ["devotees censer", "devotee's censer", "healing incense", "incense", "green smoke"]
+    "tags": ["healing incense", "healing_incense", "incense aura", "green smoke"]
   },
   {
     "id": "sunbeam",

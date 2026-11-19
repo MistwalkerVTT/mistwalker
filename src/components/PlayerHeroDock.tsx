@@ -26,7 +26,15 @@ import {
   PawPrint,
   Dices
 } from 'lucide-react';
-import { HudCharacterData, HudActionItem, HudActionCategory, computeUpcastFormula, evaluateDiceFormula } from '../types/hud';
+import {
+  HudCharacterData,
+  HudActionItem,
+  HudActionCategory,
+  HudSpecialAbilityTrigger,
+  computeUpcastFormula,
+  evaluateDiceFormula,
+  resolveActionSpecialAbilities
+} from '../types/hud';
 import { findJb2aAsset } from '../effects/db/jb2aRegistry';
 import { classifySpellMechanics } from '../services/spellResolutionEngine';
 import { toast } from 'sonner';
@@ -523,24 +531,139 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
     };
   };
 
-  // Resolve the effective action (with any active upcast slot level applied)
+  // Resolve the effective action (with any active upcast slot level applied and inline special abilities attached)
+  const specialAbilitiesCtx = useMemo(() => {
+    const specialArr = Array.isArray(characterData?.special) ? characterData!.special! : [];
+    return {
+      characterName: characterData?.name || claimedToken?.name || '',
+      classLevel: characterData?.classLevel || '',
+      totalLevel: characterData?.totalLevel || 5,
+      spellSaveDc: characterData?.spellSaveDc,
+      hasDivineStrike: specialArr.some(s => (s.name || '').toLowerCase().includes('divine strike')),
+      hasBlessedStrikes: specialArr.some(s => (s.name || '').toLowerCase().includes('blessed strikes')),
+      hasFrenzy: specialArr.some(s => (s.name || '').toLowerCase().includes('frenzy')),
+      hasMartialAdept: specialArr.some(s => (s.name || '').toLowerCase().includes('martial adept') || (s.name || '').toLowerCase().includes('disarming attack')),
+      hasRadiantStrikes: Boolean(activeWildShape?.canRadiantStrikes || specialArr.some(s => (s.name || '').toLowerCase().includes('radiant strikes')))
+    };
+  }, [characterData, claimedToken?.name, activeWildShape]);
+
   const getEffectiveAction = (action: HudActionItem): HudActionItem => {
     const baseLevel = action.level ?? 0;
-    if (baseLevel < 1) return action;
-    const normName = action.name.trim().toLowerCase();
-    const filterSlot =
-      typeof selectedSpellLevel === 'number' &&
-      selectedSpellLevel > baseLevel &&
-      includeUpcastInFilter
-        ? selectedSpellLevel
-        : undefined;
-    const chosenSlot =
-      upcastLevels[action.id] ??
-      upcastLevels[`name:${normName}`] ??
-      filterSlot ??
-      action.spellSlotRequired ??
-      baseLevel;
-    return buildActionAtSlotLevel(action, chosenSlot);
+    let resolved = action;
+    if (baseLevel >= 1) {
+      const normName = action.name.trim().toLowerCase();
+      const filterSlot =
+        typeof selectedSpellLevel === 'number' &&
+        selectedSpellLevel > baseLevel &&
+        includeUpcastInFilter
+          ? selectedSpellLevel
+          : undefined;
+      const chosenSlot =
+        upcastLevels[action.id] ??
+        upcastLevels[`name:${normName}`] ??
+        filterSlot ??
+        action.spellSlotRequired ??
+        baseLevel;
+      resolved = buildActionAtSlotLevel(action, chosenSlot);
+    }
+    const specialAbilities = resolveActionSpecialAbilities(resolved, specialAbilitiesCtx);
+    return specialAbilities.length > 0 ? { ...resolved, specialAbilities } : resolved;
+  };
+
+  // Trigger a special ability button on an attack / action / spell card
+  const handleTriggerSpecialAbility = (
+    e: React.MouseEvent,
+    parentAction: HudActionItem,
+    trigger: HudSpecialAbilityTrigger,
+    closeMobileDrawer = false
+  ) => {
+    e.stopPropagation();
+
+    const triggerAction: HudActionItem = {
+      id: trigger.id,
+      name: trigger.name,
+      category: parentAction.category || 'special',
+      type: trigger.type || 'special',
+      subCategory: parentAction.subCategory || 'special',
+      castingTime: trigger.castingTime || 'Special',
+      rangeFt: trigger.rangeFt ?? parentAction.rangeFt ?? 5,
+      damageFormula: trigger.damageFormula,
+      damageType: trigger.damageType,
+      saveDc: trigger.saveDc,
+      saveAbility: trigger.saveAbility,
+      isHeal: trigger.isHeal,
+      isSelfAction: trigger.isSelfAction,
+      isHaloToggle: trigger.isHaloToggle,
+      jb2aAssetId: trigger.jb2aAssetId,
+      uses: trigger.uses,
+      description: trigger.description
+    };
+
+    // 1. Self-executing AoE / Aura / Toggle abilities (e.g. Devotee's Censer: Healing Incense, Mace of Disruption Halo Light)
+    if (
+      trigger.id === 'special-devotees-censer' ||
+      trigger.isSelfAction ||
+      trigger.isHaloToggle ||
+      trigger.name.toLowerCase().includes('healing incense')
+    ) {
+      onSelectAction(triggerAction);
+      if (closeMobileDrawer) setIsMobileDrawerOpen(false);
+      return;
+    }
+
+    // 2. Spiritual Weapon Bonus Action Strike or targeted spell re-triggers (Call Lightning, Sunbeam, Holy Weapon Burst)
+    if (
+      trigger.id.startsWith('trigger-sw-strike') ||
+      trigger.id.startsWith('trigger-call-bolt') ||
+      trigger.id.startsWith('trigger-sunbeam-ray') ||
+      trigger.id.startsWith('trigger-holy-weapon-burst')
+    ) {
+      onSelectAction(triggerAction);
+      if (closeMobileDrawer) setIsMobileDrawerOpen(false);
+      return;
+    }
+
+    // 3. On-Hit Bonus Damage / Healing Roll (e.g. +1d8 Radiant, +2d6 vs Undead, Divine Smite 2d8, Sneak Attack 8d6, Frenzy 2d6, Cleave 1d12, Aura of Vitality 2d6)
+    if (trigger.damageFormula) {
+      handleRollDamage(triggerAction);
+      if (trigger.saveDc) {
+        toast.info(`${trigger.name} — Target must make a DC ${trigger.saveDc} ${trigger.saveAbility || ''} saving throw!`, {
+          description: trigger.description
+        });
+      }
+      if (closeMobileDrawer) setIsMobileDrawerOpen(false);
+      return;
+    }
+
+    // 4. Pure Saving Throw / Condition On-Hit Trigger (e.g. Stunning Strike DC CON, Topple DC CON, Taunt Pulse)
+    if (trigger.saveDc) {
+      toast.success(`⚡ ${characterData?.name || claimedToken?.name || 'Hero'}: ${trigger.name} (DC ${trigger.saveDc} ${trigger.saveAbility || ''} Save)!`, {
+        description: trigger.description
+      });
+    } else {
+      toast.success(`✨ ${characterData?.name || claimedToken?.name || 'Hero'}: ${trigger.name}!`, {
+        description: trigger.description
+      });
+    }
+    if (closeMobileDrawer) setIsMobileDrawerOpen(false);
+  };
+
+  const getSpecialTriggerBadgeClasses = (accent?: HudSpecialAbilityTrigger['accentColor']) => {
+    switch (accent) {
+      case 'emerald':
+        return 'bg-emerald-950/90 hover:bg-emerald-800/90 border-emerald-500/60 hover:border-emerald-300 text-emerald-200 hover:text-white shadow-[0_0_8px_rgba(16,185,129,0.25)]';
+      case 'cyan':
+        return 'bg-cyan-950/90 hover:bg-cyan-800/90 border-cyan-500/60 hover:border-cyan-300 text-cyan-200 hover:text-white shadow-[0_0_8px_rgba(6,182,212,0.25)]';
+      case 'violet':
+        return 'bg-violet-950/90 hover:bg-violet-800/90 border-violet-500/60 hover:border-violet-300 text-violet-200 hover:text-white shadow-[0_0_8px_rgba(139,92,246,0.25)]';
+      case 'rose':
+        return 'bg-rose-950/90 hover:bg-rose-800/90 border-rose-500/60 hover:border-rose-300 text-rose-200 hover:text-white shadow-[0_0_8px_rgba(244,63,94,0.25)]';
+      case 'blue':
+        return 'bg-blue-950/90 hover:bg-blue-800/90 border-blue-500/60 hover:border-blue-300 text-blue-200 hover:text-white shadow-[0_0_8px_rgba(59,130,246,0.25)]';
+      case 'amber':
+      default:
+        return 'bg-amber-950/90 hover:bg-amber-800/90 border-amber-500/60 hover:border-amber-300 text-amber-200 hover:text-white shadow-[0_0_8px_rgba(245,158,11,0.25)]';
+    }
   };
 
   const setActionUpcastLevel = (action: HudActionItem, nextSlotLevel: number) => {
@@ -1154,6 +1277,24 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                 Properties & Mastery: {detailAction.notes}
               </div>
             )}
+            {detailAction.specialAbilities && detailAction.specialAbilities.length > 0 && (
+              <div className="flex items-center gap-1.5 flex-wrap mt-2 pt-1.5 border-t border-zinc-800/80">
+                <span className="text-[9px] font-mono uppercase tracking-wider text-zinc-400 font-bold">
+                  Special Triggers:
+                </span>
+                {detailAction.specialAbilities.map((trig) => (
+                  <button
+                    key={trig.id}
+                    type="button"
+                    onClick={(e) => handleTriggerSpecialAbility(e, detailAction, trig)}
+                    className={`px-2 py-0.5 rounded-md border font-mono text-[10px] font-bold transition-all cursor-pointer active:scale-95 ${getSpecialTriggerBadgeClasses(trig.accentColor)}`}
+                    title={`${trig.name}${trig.castingTime ? ` (${trig.castingTime})` : ''}: ${trig.description}`}
+                  >
+                    {trig.label}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className={`text-[11px] text-zinc-300 mt-1.5 font-sans leading-relaxed ${pinnedAction ? 'max-h-36 overflow-y-auto pr-1 sidebar-scrollbar' : 'line-clamp-3'}`}>
               {detailAction.description}
             </div>
@@ -1645,6 +1786,21 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                         {action.sourceLabel || action.castingTime || 'Action'}
                         {action.rangeFt !== undefined ? ` • ${action.rangeFt > 0 ? `${action.rangeFt} ft.` : 'Self'}` : ''}
                       </div>
+                      {action.specialAbilities && action.specialAbilities.length > 0 && (
+                        <div className="flex items-center gap-1 flex-wrap mt-1" onClick={(e) => e.stopPropagation()}>
+                          {action.specialAbilities.map((trig) => (
+                            <button
+                              key={trig.id}
+                              type="button"
+                              onClick={(e) => handleTriggerSpecialAbility(e, action, trig, true)}
+                              className={`px-1.5 py-0.5 rounded border font-mono text-[9px] font-bold transition-all cursor-pointer active:scale-95 ${getSpecialTriggerBadgeClasses(trig.accentColor)}`}
+                              title={`${trig.name}${trig.castingTime ? ` (${trig.castingTime})` : ''}: ${trig.description}`}
+                            >
+                              {trig.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -2403,6 +2559,21 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                             </>
                           )}
                         </div>
+                        {action.specialAbilities && action.specialAbilities.length > 0 && (
+                          <div className="flex items-center gap-1 flex-wrap mt-1" onClick={(e) => e.stopPropagation()}>
+                            {action.specialAbilities.map((trig) => (
+                              <button
+                                key={trig.id}
+                                type="button"
+                                onClick={(e) => handleTriggerSpecialAbility(e, action, trig)}
+                                className={`px-1.5 py-0.5 rounded-md border font-mono text-[9px] font-bold leading-tight transition-all cursor-pointer active:scale-95 ${getSpecialTriggerBadgeClasses(trig.accentColor)}`}
+                                title={`${trig.name}${trig.castingTime ? ` (${trig.castingTime})` : ''}: ${trig.description}`}
+                              >
+                                {trig.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -2649,6 +2820,17 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                     Uses: {inspectedAction.uses.available}/{inspectedAction.uses.total} ({inspectedAction.uses.resetType || 'Rest'})
                   </span>
                 )}
+                {inspectedAction.specialAbilities && inspectedAction.specialAbilities.map((trig) => (
+                  <button
+                    key={trig.id}
+                    type="button"
+                    onClick={(e) => handleTriggerSpecialAbility(e, inspectedAction, trig)}
+                    className={`px-2.5 py-1 rounded-lg border font-bold transition-all cursor-pointer active:scale-95 shadow-sm ${getSpecialTriggerBadgeClasses(trig.accentColor)}`}
+                    title={`${trig.name}${trig.castingTime ? ` (${trig.castingTime})` : ''}: ${trig.description}`}
+                  >
+                    {trig.label}
+                  </button>
+                ))}
               </div>
             )}
 

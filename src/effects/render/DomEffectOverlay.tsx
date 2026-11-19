@@ -58,9 +58,7 @@ const AURA_OR_TOKEN_BUFF_KEYWORDS = [
   'antilife shell',
   'antimagic field',
   'healing incense',
-  'healing_incense',
-  'devotee\'s censer',
-  'devotees censer'
+  'healing_incense'
 ];
 
 function isAuraOrTokenLockedEffect(effect: VttEffectInstance): boolean {

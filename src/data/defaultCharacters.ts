@@ -637,12 +637,28 @@ export const DEFAULT_CHARACTERS: Character[] = [
     },
     actions: [
       {
-        name: 'Warhammer, +2',
+        name: 'Mace of Disruption',
         type: 'melee',
-        hitBonus: '+10',
-        damage: '1d8+5 Bludgeoning + 2d8 Radiant',
-        notes: 'Divine Strike (+2d8 Radiant)',
+        hitBonus: '+8',
+        damage: '1d6+3 Bludgeoning',
+        notes: 'Equipped Weapon • +2d6 Radiant vs Fiends/Undead, 20ft Bright Light',
+        description: 'Rare Mace. Sheds bright light in a 20-foot radius. Deals an extra 2d6 radiant damage to Fiends and Undead (DC 15 WIS save if reduced to 25 HP or fewer or destroyed/frightened).'
+      },
+      {
+        name: 'Warhammer, +1',
+        type: 'melee',
+        hitBonus: '+9',
+        damage: '1d8+4 Bludgeoning',
+        notes: 'Equipped Weapon • Versatile (1d10+4)',
         description: 'Dwarven warhammer blessed with divine radiance.'
+      },
+      {
+        name: "Devotee's Censer",
+        type: 'melee',
+        hitBonus: '+8',
+        damage: '1d8+3 Bludgeoning',
+        notes: 'Equipped Weapon • Rare Flail (+1d8 Radiant, 10ft Healing Incense)',
+        description: "Rare Flail. Deals an extra 1d8 radiant damage on hit. Speak the command word as a bonus action (1/Dawn) to emanate a 10-ft cloud of Healing Incense for 1 minute (1d4 healing at the start of each turn)."
       }
     ],
     features: [

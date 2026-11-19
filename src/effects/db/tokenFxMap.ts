@@ -149,7 +149,7 @@ export function getAuraVideoUrl(name?: string, color?: string): string | null {
   }
 
   // 6. Nature, Plants, Healing Incense & Entanglement
-  if (n.includes('incense') || n.includes('censer') || n.includes('green smoke')) {
+  if (n.includes('incense') || n.includes('green smoke')) {
     return '/jb2a/Community/JAA/cloudKill.webm';
   }
   if (n.includes('entangle') || n.includes('overgrowth') || n.includes('briar') || n.includes('vine') || n.includes('root')) {

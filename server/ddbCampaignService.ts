@@ -3,7 +3,7 @@ import { getDdbHeaders, getDdbAuthHeaders } from './ddbService';
 import { Character } from '../src/types/character';
 import { DdbGameLogDaemon } from './ddbGameLogDaemon';
 import { findJb2aAsset } from '../src/effects/db/jb2aRegistry';
-import { computeUpcastFormula, HudUpcastOption } from '../src/types/hud';
+import { computeUpcastFormula, HudUpcastOption, resolveActionSpecialAbilities } from '../src/types/hud';
 import { lookupDndRuleDetails } from '../src/data/dndRulesCompendium';
 
 export interface DdbCampaignSummary {
@@ -711,7 +711,7 @@ export function matchJb2aAssetId(name: string): string | undefined {
   if (n.includes('battleaxe') || n.includes('handaxe') || (n.includes('axe') && !n.includes('great'))) return 'attack_battleaxe';
   if (n.includes('quarterstaff') || n.includes('staff')) return 'attack_quarterstaff';
   if (n.includes('spear') || n.includes('javelin') || n.includes('trident')) return 'attack_spear';
-  if (n.includes('hammer') || n.includes('mace') || n.includes('flail') || n.includes('club') || n.includes('topple')) return 'attack_hammer';
+  if (n.includes('hammer') || n.includes('mace') || n.includes('flail') || n.includes('club') || n.includes('topple') || n.includes('censer')) return 'attack_hammer';
   if (n.includes('dagger') || n.includes('dart')) return 'attack_dagger';
   if (n.includes('sword') || n.includes('scimitar') || n.includes('rapier') || n.includes('slash') || n.includes('cleave')) return 'attack_slash';
   if (n.includes('unarmed') || n.includes('punch') || n.includes('fist') || n.includes('martial arts')) return 'attack_unarmed';
@@ -2093,6 +2093,36 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
       }
     }
   }
+
+  // Attach inline special ability / on-hit trigger buttons to all attacks, actions, bonus actions & spells
+  const specialCtx = {
+    characterName: c.name || 'Character',
+    classLevel,
+    totalLevel: computed.totalLevel,
+    spellSaveDc,
+    spellMod: primarySpellMod,
+    hasDivineStrike: special.some(s => (s.name || '').toLowerCase().includes('divine strike')),
+    hasBlessedStrikes: special.some(s => (s.name || '').toLowerCase().includes('blessed strikes')),
+    hasFrenzy: special.some(s => (s.name || '').toLowerCase().includes('frenzy')),
+    hasMartialAdept: special.some(s => (s.name || '').toLowerCase().includes('martial adept') || (s.name || '').toLowerCase().includes('disarming attack')),
+    hasRadiantStrikes: special.some(s => (s.name || '').toLowerCase().includes('radiant strikes')),
+    rogueLevel,
+    monkLevel,
+    barbarianLevel
+  };
+
+  const applySpecialTriggers = (list: any[]) => {
+    for (const act of list) {
+      const triggers = resolveActionSpecialAbilities(act, specialCtx);
+      if (triggers.length > 0) {
+        act.specialAbilities = triggers;
+      }
+    }
+  };
+  applySpecialTriggers(attacks);
+  applySpecialTriggers(actions);
+  applySpecialTriggers(bonusActions);
+  applySpecialTriggers(spells);
 
   return {
     id: charId,

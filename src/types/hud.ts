@@ -30,6 +30,27 @@ export interface HudUpcastOption {
   summaryLabel: string;       // e.g. "9d6 fire (+1d6)" or "+1 Target"
 }
 
+export interface HudSpecialAbilityTrigger {
+  id: string;
+  label: string;              // Compact pill label on the card, e.g. "🌿 Incense (1d4 AoE)"
+  name: string;               // Full ability name for logs, dice & animations, e.g. "Devotee's Censer: Healing Incense"
+  description: string;        // Tooltip / rule description
+  type?: HudActionType;
+  castingTime?: string;       // e.g. "1 Bonus Action", "On Hit"
+  rangeFt?: number;           // e.g. 10 for Healing Incense
+  damageFormula?: string;     // e.g. "1d4", "1d8", "2d6", "2d8", "8d6"
+  damageType?: string;        // e.g. "healing", "radiant", "piercing", "force"
+  saveDc?: number | string;
+  saveAbility?: string;
+  isHeal?: boolean;
+  isSelfAction?: boolean;     // True if clicking immediately triggers an AoE/Aura on self (like Healing Incense)
+  isHaloToggle?: boolean;     // True if clicking toggles token halo/illumination
+  isBonusRoll?: boolean;      // True if clicking directly rolls bonus on-hit dice & plays burst effect
+  jb2aAssetId?: string;       // e.g. "healing_incense", "divine_smite", "sneak_attack", "stunning_strike"
+  accentColor?: 'emerald' | 'amber' | 'cyan' | 'violet' | 'rose' | 'blue';
+  uses?: HudActionUses;
+}
+
 export interface HudActionItem {
   id: string;
   name: string;
@@ -67,6 +88,7 @@ export interface HudActionItem {
   atHigherLevels?: string;    // Higher level casting scaling description
   canUpcast?: boolean;        // True if spell scales when cast with a higher-level slot
   upcastOptions?: HudUpcastOption[]; // Pre-computed scaling per slot level (level..9)
+  specialAbilities?: HudSpecialAbilityTrigger[]; // Inline special ability / trigger buttons on attack/spell/action cards
 }
 
 /**
@@ -366,4 +388,509 @@ export interface HudCharacterData {
   }>;
   readonlyUrl: string;
   lastUpdated: number;
+}
+
+export interface EnrichSpecialAbilitiesContext {
+  characterName?: string;
+  classLevel?: string;
+  totalLevel?: number;
+  spellSaveDc?: number;
+  spellMod?: number;
+  hasDivineStrike?: boolean;
+  hasBlessedStrikes?: boolean;
+  hasFrenzy?: boolean;
+  hasMartialAdept?: boolean;
+  hasRadiantStrikes?: boolean;
+  rogueLevel?: number;
+  monkLevel?: number;
+  paladinLevel?: number;
+  clericLevel?: number;
+  barbarianLevel?: number;
+  bloodHunterLevel?: number;
+}
+
+/**
+ * Resolves and attaches inline Special Ability & On-Hit Trigger buttons (`specialAbilities`)
+ * for weapons, attacks, spells, and combat actions across D&D Beyond Live Sync, Local Compendium, and Battle Arena.
+ */
+export function resolveActionSpecialAbilities(
+  action: HudActionItem,
+  ctx: EnrichSpecialAbilitiesContext = {}
+): HudSpecialAbilityTrigger[] {
+  const existing = Array.isArray(action.specialAbilities) ? [...action.specialAbilities] : [];
+  const addTrigger = (trigger: HudSpecialAbilityTrigger) => {
+    if (!existing.some((e) => e.id === trigger.id || e.label.toLowerCase() === trigger.label.toLowerCase())) {
+      existing.push(trigger);
+    }
+  };
+
+  const lowerName = (action.name || '').toLowerCase().replace(/[\u2018\u2019`]/g, "'");
+  const lowerNotes = (action.notes || '').toLowerCase();
+  const lowerDesc = (action.description || '').toLowerCase();
+  const lowerChar = (ctx.characterName || '').toLowerCase();
+  const lowerClass = (ctx.classLevel || '').toLowerCase();
+  const totalLvl = ctx.totalLevel || 5;
+  const saveDc = ctx.spellSaveDc || 15;
+  const spellMod = ctx.spellMod !== undefined ? ctx.spellMod : 4;
+
+  const isCleric = Boolean(ctx.clericLevel || lowerClass.includes('cleric') || lowerChar.includes('stavros'));
+  const isPaladin = Boolean(ctx.paladinLevel || lowerClass.includes('paladin') || lowerChar.includes('brannoc'));
+  const isRogue = Boolean(ctx.rogueLevel || lowerClass.includes('rogue') || lowerChar.includes('arameng') || lowerChar.includes('noctua'));
+  const isBarbarian = Boolean(ctx.barbarianLevel || lowerClass.includes('barbarian') || lowerChar.includes('varrak'));
+  const isMonk = Boolean(ctx.monkLevel || lowerClass.includes('monk') || lowerChar.includes('burmi'));
+  const isBloodHunter = Boolean(ctx.bloodHunterLevel || lowerClass.includes('blood hunter') || lowerChar.includes('sylas'));
+  const isEldritchKnight = Boolean(ctx.hasMartialAdept || lowerChar.includes('aziza'));
+  const isMoonDruid = Boolean(ctx.hasRadiantStrikes || lowerChar.includes("g'aiah") || lowerChar.includes('gaiah') || lowerClass.includes('druid'));
+
+  const isWeaponOrUnarmed =
+    action.subCategory === 'weapon' ||
+    action.subCategory === 'unarmed' ||
+    (action.category === 'attacks' && action.subCategory !== 'spell');
+
+  // =========================================================================
+  // 1. SIGNATURE MAGIC WEAPONS
+  // =========================================================================
+
+  // A. Devotee's Censer (Rare Flail — TCoE)
+  // Standard attack is 1d8 + Mod Bludgeoning; Special Ability triggers the 10-ft AoE Healing Incense (1d4 healing) + On-Hit 1d8 Radiant
+  if (lowerName.includes('censer') && !lowerName.includes('healing incense')) {
+    addTrigger({
+      id: 'special-devotees-censer',
+      label: '🌿 Incense (1d4 AoE)',
+      name: "Devotee's Censer: Healing Incense",
+      type: 'bonus_action',
+      castingTime: '1 Bonus Action',
+      rangeFt: 10,
+      damageFormula: '1d4',
+      damageType: 'healing',
+      isHeal: true,
+      isSelfAction: true,
+      jb2aAssetId: 'healing_incense',
+      accentColor: 'emerald',
+      uses: { available: 1, total: 1, resetType: 'Dawn' },
+      description:
+        'Speak the command word as a bonus action to cause the flail to emanate a thin cloud of incense out to 10 feet for 1 minute. At the start of each of your turns, you and any other creatures in the incense each regain 1d4 hit points.'
+    });
+    addTrigger({
+      id: 'trigger-censer-radiant',
+      label: '✨ +1d8 Radiant',
+      name: "Devotee's Censer (Radiant Smite)",
+      type: 'special',
+      castingTime: 'On Hit',
+      rangeFt: 5,
+      damageFormula: '1d8',
+      damageType: 'radiant',
+      isBonusRoll: true,
+      jb2aAssetId: 'divine_smite',
+      accentColor: 'amber',
+      description: "When you hit with an attack using Devotee's Censer, the target takes an extra 1d8 radiant damage."
+    });
+  }
+
+  // B. Mace of Disruption (Rare Mace — DMG)
+  if (lowerName.includes('mace of disruption')) {
+    addTrigger({
+      id: 'trigger-mace-disruption',
+      label: '☀️ +2d6 vs Undead/Fiend',
+      name: 'Mace of Disruption: Fiend/Undead Smite',
+      type: 'special',
+      castingTime: 'On Hit (DC 15 WIS if ≤25 HP)',
+      rangeFt: 5,
+      damageFormula: '2d6',
+      damageType: 'radiant',
+      saveDc: 15,
+      saveAbility: 'WIS',
+      isBonusRoll: true,
+      jb2aAssetId: 'divine_smite',
+      accentColor: 'amber',
+      description:
+        'When you hit a Fiend or an Undead with this magic weapon, that creature takes an extra 2d6 radiant damage. If the target has 25 hit points or fewer after taking this damage, it must succeed on a DC 15 Wisdom saving throw or be destroyed. On a successful save, the creature becomes Frightened of you until the end of your next turn.'
+    });
+    addTrigger({
+      id: 'special-halo-glow',
+      label: '😇 Halo Light (20ft)',
+      name: 'Mace of Disruption: Radiant Illumination',
+      type: 'special',
+      castingTime: 'Toggle Glow',
+      rangeFt: 20,
+      isSelfAction: true,
+      isHaloToggle: true,
+      jb2aAssetId: 'bless',
+      accentColor: 'cyan',
+      description: 'While you hold this weapon, it sheds bright light in a 20-foot radius and dim light for an additional 20 feet. Click to toggle your token halo & glow on the battlemap.'
+    });
+  }
+
+  // C. Staff of Power (Very Rare Staff — DMG)
+  if (lowerName.includes('staff of power')) {
+    addTrigger({
+      id: 'trigger-staff-power-strike',
+      label: '⚡ Power Strike (+1d6)',
+      name: 'Staff of Power: Power Strike',
+      type: 'special',
+      castingTime: 'On Hit (1 Charge)',
+      rangeFt: 5,
+      damageFormula: '1d6',
+      damageType: 'force',
+      isBonusRoll: true,
+      jb2aAssetId: 'eldritch_blast',
+      accentColor: 'violet',
+      description: 'When you hit with a melee attack using the Staff of Power, you can expend 1 charge to deal an extra 1d6 force damage to the target.'
+    });
+  }
+
+  // D.Thunder Gauntlets (Armorer Artificer — TCoE)
+  if (lowerName.includes('thunder gauntlet')) {
+    addTrigger({
+      id: 'trigger-thunder-pulse',
+      label: '🛡️ Taunt Pulse',
+      name: 'Thunder Gauntlets: Distracting Pulse',
+      type: 'special',
+      castingTime: 'On Hit',
+      rangeFt: 5,
+      isBonusRoll: true,
+      jb2aAssetId: 'thunderwave',
+      accentColor: 'cyan',
+      description: 'A creature hit by the gauntlet has disadvantage on attack rolls against targets other than you until the start of your next turn.'
+    });
+  }
+
+  // =========================================================================
+  // 2. CLASS & WEAPON MASTERY TRIGGERS ON WEAPON ATTACKS
+  // =========================================================================
+  if (isWeaponOrUnarmed) {
+    // Cleric: Blessed Strikes (+1d8 Radiant) or Divine Strike (+2d8 / +1d8 Radiant)
+    if (isCleric && (totalLvl >= 8 || ctx.hasDivineStrike || ctx.hasBlessedStrikes) && action.subCategory === 'weapon') {
+      const useBlessedStrikes = Boolean(ctx.hasBlessedStrikes && !ctx.hasDivineStrike);
+      const diceStr = useBlessedStrikes ? '1d8' : totalLvl >= 14 ? '2d8' : '1d8';
+      const titleStr = useBlessedStrikes ? 'Blessed Strikes' : 'Divine Strike';
+      addTrigger({
+        id: `trigger-cleric-strike-${action.id}`,
+        label: `✨ ${titleStr} (+${diceStr})`,
+        name: `${titleStr} (+${diceStr} Radiant)`,
+        type: 'special',
+        castingTime: 'On Hit (1/Turn)',
+        rangeFt: action.rangeFt || 5,
+        damageFormula: diceStr,
+        damageType: 'radiant',
+        isBonusRoll: true,
+        jb2aAssetId: 'divine_smite',
+        accentColor: 'amber',
+        description: `Once on each of your turns when you hit a creature with a weapon attack, you can cause the attack to deal an extra ${diceStr} radiant damage to the target.`
+      });
+    }
+
+    // Paladin: Divine Smite (+2d8 Radiant) on melee weapon attacks
+    if (isPaladin && (action.rangeFt || 5) <= 10) {
+      addTrigger({
+        id: `trigger-paladin-smite-${action.id}`,
+        label: '⚡ Divine Smite (2d8)',
+        name: 'Divine Smite',
+        type: 'bonus_action',
+        castingTime: 'On Hit (1st+ Slot)',
+        rangeFt: 5,
+        damageFormula: '2d8',
+        damageType: 'radiant',
+        isBonusRoll: true,
+        jb2aAssetId: 'divine_smite',
+        accentColor: 'amber',
+        description: 'When you hit a creature with a melee weapon attack, you can expend one spell slot to deal 2d8 radiant damage to the target (+1d8 for each spellLevel above 1st, plus an extra 1d8 against Undead or Fiends).'
+      });
+    }
+
+    // Rogue: Sneak Attack (+Xd6) on finesse or ranged weapons
+    const isRangedOrFinesse =
+      (action.rangeFt && action.rangeFt >= 20) ||
+      lowerNotes.includes('finesse') ||
+      lowerDesc.includes('finesse') ||
+      lowerName.includes('rapier') ||
+      lowerName.includes('shortsword') ||
+      lowerName.includes('dagger') ||
+      lowerName.includes('bow') ||
+      lowerName.includes('crossbow');
+    if (isRogue && isRangedOrFinesse && action.subCategory === 'weapon') {
+      const rLvl = ctx.rogueLevel || (lowerChar.includes('noctua') ? 2 : totalLvl);
+      const saDice = `${Math.max(1, Math.ceil(rLvl / 2))}d6`;
+      addTrigger({
+        id: `trigger-rogue-sneak-${action.id}`,
+        label: `🗡️ Sneak Attack (+${saDice})`,
+        name: `Sneak Attack (${saDice})`,
+        type: 'special',
+        castingTime: 'On Hit (1/Turn)',
+        rangeFt: action.rangeFt || 5,
+        damageFormula: saDice,
+        damageType: action.damageType || 'piercing',
+        isBonusRoll: true,
+        jb2aAssetId: 'sneak_attack',
+        accentColor: 'rose',
+        description: `Once per turn, deal an extra ${saDice} damage to one creature you hit with an attack if you have advantage on the attack roll or an ally is within 5 feet of the target.`
+      });
+    }
+
+    // Barbarian: Frenzy (+2d6) & Weapon Mastery (Cleave / Topple)
+    if (isBarbarian && action.subCategory === 'weapon') {
+      if (ctx.hasFrenzy || lowerChar.includes('varrak')) {
+        addTrigger({
+          id: `trigger-barb-frenzy-${action.id}`,
+          label: '🔥 Frenzy (+2d6)',
+          name: 'Frenzy (Path of the Berserker)',
+          type: 'special',
+          castingTime: 'On Hit (Rage + Reckless)',
+          rangeFt: action.rangeFt || 5,
+          damageFormula: '2d6',
+          damageType: action.damageType || 'slashing',
+          isBonusRoll: true,
+          jb2aAssetId: 'attack_greataxe',
+          accentColor: 'rose',
+          description: 'If you use Reckless Attack while your Rage is active, you deal an extra 2d6 damage to the first target you hit on your turn with a Strength-based attack.'
+        });
+      }
+      if (lowerNotes.includes('cleave') || lowerDesc.includes('cleave') || lowerName.includes('greataxe') || lowerName.includes('halberd')) {
+        addTrigger({
+          id: `trigger-mastery-cleave-${action.id}`,
+          label: '🪓 Cleave (1d12)',
+          name: 'Weapon Mastery: Cleave',
+          type: 'special',
+          castingTime: 'On Hit (2nd Target within 5ft)',
+          rangeFt: 5,
+          damageFormula: '1d12',
+          damageType: 'slashing',
+          isBonusRoll: true,
+          jb2aAssetId: 'attack_greataxe',
+          accentColor: 'amber',
+          description: 'If you hit a creature with a melee attack roll using this weapon, you can make a melee attack roll with the weapon against a second creature within 5 feet of the first that is also within your reach.'
+        });
+      }
+      if (lowerNotes.includes('topple') || lowerDesc.includes('topple') || lowerName.includes('trident') || lowerName.includes('maul') || lowerName.includes('lance')) {
+        addTrigger({
+          id: `trigger-mastery-topple-${action.id}`,
+          label: '🌊 Topple (Prone)',
+          name: 'Weapon Mastery: Topple',
+          type: 'special',
+          castingTime: 'On Hit (CON Save)',
+          rangeFt: 5,
+          saveDc: 16,
+          saveAbility: 'CON',
+          isBonusRoll: true,
+          jb2aAssetId: 'attack_hammer',
+          accentColor: 'cyan',
+          description: 'If you hit a creature with this weapon, you can force the creature to make a Constitution saving throw (DC 8 + Prof + STR) or be knocked Prone.'
+        });
+      }
+    }
+
+    // Monk: Stunning Strike & Flurry of Blows
+    if (isMonk && (totalLvl >= 5 || (ctx.monkLevel || 0) >= 5)) {
+      const mDie = totalLvl >= 17 ? '1d12' : totalLvl >= 11 ? '1d10' : totalLvl >= 5 ? '1d8' : '1d6';
+      addTrigger({
+        id: `trigger-monk-stun-${action.id}`,
+        label: `💫 Stun (DC ${saveDc} CON)`,
+        name: 'Stunning Strike',
+        type: 'special',
+        castingTime: 'On Hit (1 Ki)',
+        rangeFt: 5,
+        saveDc,
+        saveAbility: 'CON',
+        isBonusRoll: true,
+        jb2aAssetId: 'stunning_strike',
+        accentColor: 'amber',
+        description: `When you hit another creature with a melee weapon attack, you can spend 1 ki point to attempt a stunning strike. The target must succeed on a DC ${saveDc} Constitution saving throw or be Stunned until the end of your next turn.`
+      });
+      if (action.subCategory === 'unarmed' || lowerName.includes('unarmed')) {
+        addTrigger({
+          id: `trigger-monk-flurry-${action.id}`,
+          label: `👊 Flurry (${mDie})`,
+          name: 'Flurry of Blows',
+          type: 'bonus_action',
+          castingTime: '1 Bonus Action (1 Ki)',
+          rangeFt: 5,
+          damageFormula: action.damageFormula || `${mDie} + 5`,
+          damageType: 'bludgeoning',
+          isBonusRoll: true,
+          jb2aAssetId: 'flurry_of_blows',
+          accentColor: 'cyan',
+          description: 'Immediately after you take the Attack action on your turn, you can spend 1 ki point to make two unarmed strikes as a bonus action.'
+        });
+      }
+    }
+
+    // Blood Hunter: Crimson Rite (+1d4 / +1d6 / +1d8)
+    if (isBloodHunter && action.subCategory === 'weapon') {
+      const riteDie = totalLvl >= 11 ? '1d8' : totalLvl >= 5 ? '1d6' : '1d4';
+      addTrigger({
+        id: `trigger-crimson-rite-${action.id}`,
+        label: `⚡ Rite (+${riteDie})`,
+        name: `Crimson Rite (+${riteDie})`,
+        type: 'special',
+        castingTime: 'On Hit',
+        rangeFt: action.rangeFt || 5,
+        damageFormula: riteDie,
+        damageType: 'radiant',
+        isBonusRoll: true,
+        jb2aAssetId: 'divine_smite',
+        accentColor: 'rose',
+        description: `Deal an extra ${riteDie} Crimson Rite elemental/radiant damage on hit (plus an extra ${riteDie} radiant against Undead with Rite of the Dawn).`
+      });
+    }
+
+    // Eldritch Knight / Fighter with Martial Adept: Precision / Disarming Attack (+1d6)
+    if (isEldritchKnight && action.subCategory === 'weapon') {
+      addTrigger({
+        id: `trigger-disarming-atk-${action.id}`,
+        label: '⚔️ Disarm (+1d6)',
+        name: 'Martial Adept: Disarming Attack',
+        type: 'special',
+        castingTime: 'On Hit (1 Superiority Die)',
+        rangeFt: action.rangeFt || 5,
+        damageFormula: '1d6',
+        damageType: action.damageType || 'slashing',
+        isBonusRoll: true,
+        jb2aAssetId: 'attack_slash',
+        accentColor: 'amber',
+        description: 'When you hit a creature with a weapon attack, expend one superiority die to add 1d6 to the attack’s damage roll and force the target to make a Strength save or drop one item it is holding.'
+      });
+    }
+
+    // Circle of the Moon Druid (Wild Shape Beast Attacks): Radiant Strikes (+1d8 Radiant)
+    if (isMoonDruid && (action.sourceLabel?.toLowerCase().includes('wild shape') || lowerNotes.includes('radiant strikes'))) {
+      addTrigger({
+        id: `trigger-moon-radiant-${action.id}`,
+        label: '🌙 Radiant (+1d8)',
+        name: 'Lunar Form: Radiant Strikes',
+        type: 'special',
+        castingTime: 'On Hit (1/Turn)',
+        rangeFt: 5,
+        damageFormula: '1d8',
+        damageType: 'radiant',
+        isBonusRoll: true,
+        jb2aAssetId: 'divine_smite',
+        accentColor: 'amber',
+        description: 'Once on each of your turns when you hit a target with an attack roll of your Wild Shape form, you can deal an extra 1d8 Radiant damage.'
+      });
+    }
+  }
+
+  // =========================================================================
+  // 3. SPELLS WITH SECONDARY / TURN-BY-TURN SPECIAL TRIGGERS
+  // =========================================================================
+  if (action.category === 'spells' || action.subCategory === 'spell') {
+    // Cleric Blessed Strikes on damaging Cantrips
+    if (isCleric && (action.level ?? 0) === 0 && action.damageFormula && !action.isHeal && (totalLvl >= 8 || ctx.hasBlessedStrikes)) {
+      addTrigger({
+        id: `trigger-cantrip-blessed-${action.id}`,
+        label: '✨ +1d8 Radiant',
+        name: 'Blessed Strikes (Cantrip Boost)',
+        type: 'special',
+        castingTime: 'On Damage (1/Turn)',
+        rangeFt: action.rangeFt || 60,
+        damageFormula: '1d8',
+        damageType: 'radiant',
+        isBonusRoll: true,
+        jb2aAssetId: 'divine_smite',
+        accentColor: 'amber',
+        description: 'When a creature takes damage from one of your cantrips or weapon attacks, you can also deal 1d8 radiant damage to that creature (1/turn).'
+      });
+    }
+
+    // Spiritual Weapon: Bonus Action Strike trigger
+    if (lowerName.includes('spiritual weapon')) {
+      const swFormula = action.damageFormula || `1d8 + ${Math.max(1, spellMod)}`;
+      addTrigger({
+        id: `trigger-sw-strike-${action.id}`,
+        label: `🔨 Strike (${swFormula.replace(/\s+/g, '')})`,
+        name: 'Spiritual Weapon: Bonus Action Strike',
+        type: 'bonus_action',
+        castingTime: '1 Bonus Action',
+        rangeFt: 20,
+        damageFormula: swFormula,
+        damageType: 'force',
+        isBonusRoll: true,
+        jb2aAssetId: 'spiritual_weapon',
+        accentColor: 'amber',
+        description: 'As a bonus action on your turn, move the weapon up to 20 feet and repeat the attack against a creature within 5 feet of it.'
+      });
+    }
+
+    // Aura of Vitality: Bonus Action 2d6 Heal trigger
+    if (lowerName.includes('aura of vitality')) {
+      addTrigger({
+        id: `trigger-vitality-pulse-${action.id}`,
+        label: '💚 Heal Pulse (2d6)',
+        name: 'Aura of Vitality: Healing Pulse',
+        type: 'bonus_action',
+        castingTime: '1 Bonus Action',
+        rangeFt: 30,
+        damageFormula: '2d6',
+        damageType: 'healing',
+        isHeal: true,
+        isBonusRoll: true,
+        jb2aAssetId: 'cure_wounds',
+        accentColor: 'emerald',
+        description: 'As a bonus action, you can cause one creature in the 30-foot aura (including yourself) to regain 2d6 hit points.'
+      });
+    }
+
+    // Call Lightning: Call Bolt (3d10 Lightning)
+    if (lowerName.includes('call lightning')) {
+      const boltDmg = action.damageFormula || '3d10';
+      addTrigger({
+        id: `trigger-call-bolt-${action.id}`,
+        label: `⚡ Call Bolt (${boltDmg})`,
+        name: 'Call Lightning: Strike Bolt',
+        type: 'action',
+        castingTime: '1 Action',
+        rangeFt: 60,
+        damageFormula: boltDmg,
+        damageType: 'lightning',
+        saveDc,
+        saveAbility: 'DEX',
+        isBonusRoll: true,
+        jb2aAssetId: 'call_lightning',
+        accentColor: 'cyan',
+        description: 'On each of your turns until the spell ends, you can use your action to call down lightning on a point within range (DEX save or 3d10 lightning damage).'
+      });
+    }
+
+    // Sunbeam: Fire New Beam (6d8 Radiant)
+    if (lowerName === 'sunbeam') {
+      addTrigger({
+        id: `trigger-sunbeam-ray-${action.id}`,
+        label: '☀️ Fire Beam (6d8)',
+        name: 'Sunbeam: Solar Line',
+        type: 'action',
+        castingTime: '1 Action',
+        rangeFt: 60,
+        damageFormula: '6d8',
+        damageType: 'radiant',
+        saveDc,
+        saveAbility: 'CON',
+        isBonusRoll: true,
+        jb2aAssetId: 'sunbeam',
+        accentColor: 'amber',
+        description: 'For the duration, you can use an action on each of your turns to create a new 5-foot-wide, 60-foot-long line of radiance (6d8 radiant + Blinded on failed CON save).'
+      });
+    }
+
+    // Holy Weapon: Dismiss Burst (4d8 Radiant)
+    if (lowerName.includes('holy weapon')) {
+      addTrigger({
+        id: `trigger-holy-weapon-burst-${action.id}`,
+        label: '💥 Burst (4d8 AoE)',
+        name: 'Holy Weapon: Radiant Burst',
+        type: 'bonus_action',
+        castingTime: '1 Bonus Action (30ft AoE)',
+        rangeFt: 30,
+        damageFormula: '4d8',
+        damageType: 'radiant',
+        saveDc,
+        saveAbility: 'CON',
+        isBonusRoll: true,
+        jb2aAssetId: 'holy_aura',
+        accentColor: 'amber',
+        description: 'As a bonus action, dismiss Holy Weapon to cause it to emits a burst of radiance. Each creature of your choice within 30 feet must make a CON save or take 4d8 radiant damage and be Blinded for 1 minute.'
+      });
+    }
+  }
+
+  return existing;
 }

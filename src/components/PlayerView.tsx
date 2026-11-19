@@ -135,7 +135,8 @@ import {
   evaluateDiceFormula,
   normalizePlayerAutoRollKey,
   loadPlayerAutoRollMap,
-  savePlayerAutoRollPreference
+  savePlayerAutoRollPreference,
+  resolveActionSpecialAbilities
 } from '../types/hud';
 import { classifySpellMechanics, resolveSpellSavingThrows } from '../services/spellResolutionEngine';
 import { TokenDragRuler, TokenDragState, parseSpeedFt } from './TokenDragRuler';
@@ -1583,6 +1584,28 @@ const buildFallbackHudData = (token: Token, stats: any, customChars?: Character[
         });
       }
     });
+  }
+
+  const specialCtx = {
+    characterName: name,
+    classLevel: matchedChar?.classLevel || '',
+    totalLevel,
+    spellSaveDc,
+    spellMod,
+    hasDivineStrike: special.some(s => s.name.toLowerCase().includes('divine strike')),
+    hasBlessedStrikes: special.some(s => s.name.toLowerCase().includes('blessed strikes')),
+    hasFrenzy: special.some(s => s.name.toLowerCase().includes('frenzy')),
+    hasMartialAdept: special.some(s => s.name.toLowerCase().includes('martial adept') || s.name.toLowerCase().includes('disarming attack')),
+    hasRadiantStrikes: special.some(s => s.name.toLowerCase().includes('radiant strikes'))
+  };
+
+  for (const list of [attacks, actions, bonusActions, spells]) {
+    for (const act of list) {
+      const triggers = resolveActionSpecialAbilities(act, specialCtx);
+      if (triggers.length > 0) {
+        act.specialAbilities = triggers;
+      }
+    }
   }
 
   return {
@@ -4268,7 +4291,7 @@ export default function PlayerView() {
       activeEquippedAsset.targetType === 'self' ||
       activeTargetingAction?.rangeFt === 0 ||
       ['spirit_guardians', 'aura_of_vitality', 'aura_of_life', 'aura_of_purity', 'crusaders_mantle', 'aura_of_protection', 'aura_of_courage', 'antilife_shell', 'holy_aura', 'circle_of_power', 'detect_magic', 'shield', 'armor_of_agathys', 'fire_shield', 'shadow_of_moil', 'ashardalons_stride', 'twilight_sanctuary', 'healing_incense'].includes(activeEquippedAsset.id) ||
-      ['spirit guardians', 'aura of vitality', 'aura of life', 'aura of purity', 'crusader\'s mantle', 'aura of protection', 'aura of courage', 'antilife shell', 'antilife', 'holy aura', 'circle of power', 'detect magic', 'armor of agathys', 'fire shield', 'shadow of moil', 'ashardalon\'s stride', 'twilight sanctuary', 'healing incense', 'devotee\'s censer', 'devotees censer'].some(k => lowerAssetName.includes(k))
+      ['spirit guardians', 'aura of vitality', 'aura of life', 'aura of purity', 'crusader\'s mantle', 'aura of protection', 'aura of courage', 'antilife shell', 'antilife', 'holy aura', 'circle of power', 'detect magic', 'armor of agathys', 'fire shield', 'shadow of moil', 'ashardalon\'s stride', 'twilight sanctuary', 'healing incense'].some(k => lowerAssetName.includes(k))
     );
 
     const isAuraOrBuff = Boolean(
@@ -5233,10 +5256,46 @@ export default function PlayerView() {
       (window as any).__mistwalkerRoll3d(diceEvent);
     }
 
+    // Play JB2A visual burst & SFX if this is a special ability / bonus damage trigger
+    if (action.jb2aAssetId && claimedToken) {
+      const matchedAsset = JB2A_REGISTRY.find(a => a.id === action.jb2aAssetId) || findJb2aAsset(action.jb2aAssetId);
+      if (matchedAsset && !matchedAsset.isPersistent) {
+        const tokenRadius = ((claimedToken.size || 1) * gridSize) / 2;
+        const burstFx: VttEffectInstance = {
+          id: `eff_trig_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          name: action.name,
+          label: matchedAsset.label,
+          assetKey: matchedAsset.id,
+          videoUrl: matchedAsset.webm,
+          thumbUrl: matchedAsset.thumb,
+          paradigm: 'point',
+          x: claimedToken.x + tokenRadius,
+          y: claimedToken.y + tokenRadius,
+          sizeFt: matchedAsset.defaultSizeFt || 10,
+          rotation: 0,
+          opacity: 1.0,
+          blendMode: matchedAsset.blendMode || 'screen',
+          isPersistent: false,
+          loop: false,
+          castTime: Date.now(),
+          durationMs: 2600,
+          soundKey: matchedAsset.soundKey,
+          color: matchedAsset.color,
+          ownerId: claimedToken.id,
+          casterName: charName
+        };
+        setEffects(prev => [...prev, burstFx]);
+        if (matchedAsset.soundKey) soundCatalog.play(matchedAsset.soundKey);
+        if (socketRef.current?.connected) {
+          socketRef.current.emit('EFFECT_SPAWN', burstFx);
+        }
+      }
+    }
+
     toast.success(`${charName}: ${action.name}${upcastSuffix}!`, {
       description: `Rolled ${rolledTotal} ${action.damageType || (action.isHeal ? 'HP' : 'damage')} (${evaluated.breakdown})`
     });
-  }, [hudCharacterData, claimedToken, selectedDicePreset]);
+  }, [hudCharacterData, claimedToken, selectedDicePreset, gridSize]);
 
   // Wild Shape Transform & Revert Handlers for Druids (e.g. G'aiah)
   const handleTransformWildShape = useCallback((form: WildShapeBeastForm, effectiveDruidLevel?: number) => {
@@ -5778,7 +5837,7 @@ export default function PlayerView() {
         asset.targetType === 'self' ||
         action.rangeFt === 0 ||
         ['spirit_guardians', 'aura_of_vitality', 'aura_of_life', 'aura_of_purity', 'crusaders_mantle', 'aura_of_protection', 'aura_of_courage', 'antilife_shell', 'holy_aura', 'circle_of_power', 'detect_magic', 'shield', 'armor_of_agathys', 'fire_shield', 'shadow_of_moil', 'ashardalons_stride', 'twilight_sanctuary', 'healing_incense'].includes(asset.id) ||
-        ['spirit guardians', 'aura of vitality', 'aura of life', 'aura of purity', 'crusader\'s mantle', 'aura of protection', 'aura of courage', 'antilife shell', 'antilife', 'holy aura', 'circle of power', 'detect magic', 'armor of agathys', 'fire shield', 'shadow of moil', 'ashardalon\'s stride', 'twilight sanctuary', 'healing incense', 'devotee\'s censer', 'devotees censer'].some(k => lowerActName.includes(k))
+        ['spirit guardians', 'aura of vitality', 'aura of life', 'aura of purity', 'crusader\'s mantle', 'aura of protection', 'aura of courage', 'antilife shell', 'antilife', 'holy aura', 'circle of power', 'detect magic', 'armor of agathys', 'fire shield', 'shadow of moil', 'ashardalon\'s stride', 'twilight sanctuary', 'healing incense'].some(k => lowerActName.includes(k))
       );
 
       const isAuraOrBuff = Boolean(
