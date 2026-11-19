@@ -910,23 +910,32 @@ export function resolveActionAutomaticExtraDamage(
     action.subCategory === 'weapon' ||
     (action.category === 'attacks' && action.subCategory !== 'spell' && action.subCategory !== 'unarmed' && !lowerName.includes('unarmed'));
 
-  if (!isWeaponAttack) return {};
+  const isDamagingCantrip =
+    (action.subCategory === 'spell' || action.category === 'spells') &&
+    (action.level ?? 0) === 0 &&
+    Boolean(action.damageFormula) &&
+    !action.isHeal;
+
+  if (!isWeaponAttack && !isDamagingCantrip) return {};
 
   let radiantD8Count = 0;
   const labels: string[] = [];
 
-  // 1. Devotee's Censer inherent +1d8 Radiant damage on hit
-  if (lowerName.includes('censer') && !lowerName.includes('healing incense')) {
+  // 1. Devotee's Censer inherent +1d8 Radiant damage on hit (weapons only)
+  if (isWeaponAttack && lowerName.includes('censer') && !lowerName.includes('healing incense')) {
     radiantD8Count += 1;
     labels.push('Radiant');
   }
 
-  // 2. Cleric Divine Strike (+2d8 at Lvl 14+, +1d8 at Lvl 8+) or Blessed Strikes (+1d8)
-  if (isCleric && (totalLvl >= 8 || ctx.hasDivineStrike || ctx.hasBlessedStrikes)) {
-    const useBlessedStrikes = Boolean(ctx.hasBlessedStrikes && !ctx.hasDivineStrike && !lowerChar.includes('stavros'));
+  // 2. Cleric Divine Strike (+2d8 at Lvl 14+, +1d8 at Lvl 8+ on weapons) or Blessed Strikes (+1d8 on weapons OR cantrips)
+  const useBlessedStrikes = Boolean(ctx.hasBlessedStrikes && !ctx.hasDivineStrike && !lowerChar.includes('stavros'));
+  if (isWeaponAttack && isCleric && (totalLvl >= 8 || ctx.hasDivineStrike || ctx.hasBlessedStrikes)) {
     const clericDice = useBlessedStrikes ? 1 : totalLvl >= 14 ? 2 : 1;
     radiantD8Count += clericDice;
     labels.push(useBlessedStrikes ? 'Blessed Strikes' : 'Divine Strike');
+  } else if (isDamagingCantrip && isCleric && useBlessedStrikes) {
+    radiantD8Count += 1;
+    labels.push('Blessed Strikes');
   }
 
   if (radiantD8Count > 0) {

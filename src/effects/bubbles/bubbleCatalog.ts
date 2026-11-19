@@ -761,6 +761,30 @@ export const LASTING_DEBUFF_SPELLS: DebuffSpellConfig[] = [
     targetType: 'self'
   },
   {
+    spellKey: 'holy_weapon',
+    name: 'Holy Weapon',
+    aliases: ['holy weapon', 'holy_weapon'],
+    subLabel: 'HOLY',
+    icon: '🗡️',
+    color: '#facc15',
+    description: 'Concentration (1 hr): Imbued weapon sheds 30 ft bright / 30 ft dim light and deals +2d8 radiant damage on hit. Dismiss as Bonus Action for 4d8 radiant 30 ft AoE + Blinded.',
+    style: 'glow',
+    behavior: 'keep_effect_and_badge',
+    targetType: 'self'
+  },
+  {
+    spellKey: 'deafened',
+    name: 'Deafened',
+    aliases: ['deafened'],
+    subLabel: 'DEAF',
+    icon: '🔇',
+    color: '#94a3b8',
+    description: 'Cannot hear and automatically fails any ability check that requires hearing.',
+    style: 'danger',
+    behavior: 'replace_after_cast',
+    targetType: 'target'
+  },
+  {
     spellKey: 'regenerate',
     name: 'Regenerating',
     aliases: ['regenerate', 'regenerating'],

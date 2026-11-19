@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import Konva from 'konva';
 import { Stage, Layer, Image as KonvaImage, Text, Group, Circle, Rect, Arc, Line } from 'react-konva';
+import { isMistwalker3DEnabled, Mistwalker3DModeToggle, Mistwalker3DViewportHost } from '../integrations/mistwalker3d/Mistwalker3DBridge';
 
 Konva.hitOnDragEnabled = false;
 if (typeof window !== 'undefined') {
@@ -1731,6 +1732,8 @@ const buildFallbackHudData = (token: Token, stats: any, customChars?: Character[
 };
 
 export default function PlayerView() {
+  const [renderMode, setRenderMode] = useState<'2d' | '3d'>('2d');
+  const [selected3DTokenId, setSelected3DTokenId] = useState<string | null>(null);
   const initialBackupRef = useRef(loadPlayerBackupState());
   const initialBackup = initialBackupRef.current;
 
@@ -1854,6 +1857,7 @@ export default function PlayerView() {
   // D&D Beyond Tactical Character HUD State
   const [hudCharacterData, setHudCharacterData] = useState<HudCharacterData | null>(null);
   const [activeTargetingAction, setActiveTargetingAction] = useState<HudActionItem | null>(null);
+  const [multiTargetTokens, setMultiTargetTokens] = useState<Token[]>([]);
   const [isSyncingHudDdb, setIsSyncingHudDdb] = useState<boolean>(false);
   const [isDdbSyncEnabled, setIsDdbSyncEnabled] = useState<boolean>(true);
   const isDdbSyncEnabledRef = useRef<boolean>(true);
@@ -2144,7 +2148,8 @@ export default function PlayerView() {
         const casterHasBlessedHealer = Boolean(
           (actor.name || '').toLowerCase().includes('stavros') ||
           (hudCharacterData?.name || '').toLowerCase().includes('stavros') ||
-          hudCharacterData?.special?.some((s) => (s.name || '').toLowerCase().includes('blessed healer'))
+          hudCharacterData?.special?.some((s) => (s.name || '').toLowerCase().includes('blessed healer')) ||
+          hudCharacterData?.traits?.some((s) => (s.name || '').toLowerCase().includes('blessed healer'))
         );
         const effectiveCastSpellLevel = action.castAtLevel ?? action.level ?? 0;
         const isLeveledHealingSpell = Boolean(
@@ -4893,6 +4898,7 @@ export default function PlayerView() {
         return;
       }
       setActiveTargetingAction(null);
+      setMultiTargetTokens([]);
       setActiveEquippedAsset(null);
       setAimOrigin(null);
       setAimCurrent(null);
@@ -4913,7 +4919,7 @@ export default function PlayerView() {
     const lowerName = action.name.toLowerCase();
 
     // Spiritual Weapon already manifested: selecting the spell again commands it to move & strike
-    if (lowerName.includes('spiritual weapon') && claimedToken) {
+    if (lowerName.includes('spiritual weapon') && !lowerName.includes('holy weapon') && claimedToken) {
       const existingWeapon = findSpiritualWeapon(tokensRef.current, claimedToken.id);
       if (existingWeapon) {
         setActiveEquippedAsset(null);
@@ -4925,6 +4931,141 @@ export default function PlayerView() {
         });
         return;
       }
+    }
+
+    // Divine Word: 30-ft self-centered radiant shockwave + CHA save + HP-threshold effects
+    if (lowerName.includes('divine word') && claimedToken) {
+      const tokenRadius = ((claimedToken.size || 1) * gridSize) / 2;
+      const casterCenter = { x: claimedToken.x + tokenRadius, y: claimedToken.y + tokenRadius };
+      const dwAsset = JB2A_REGISTRY.find(a => a.id === 'divine_word') || matchedAsset;
+      const dwEffect: VttEffectInstance = {
+        id: `eff_dw_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        name: 'Divine Word',
+        label: dwAsset?.label || 'Divine Word (30ft Radiant Shockwave)',
+        assetKey: 'divine_word',
+        videoUrl: dwAsset?.webm || '/jb2a/Community/BossLoot/Wave_1_Radial_1_WHITE_1200x1200.webm',
+        thumbUrl: dwAsset?.thumb,
+        paradigm: 'aura',
+        x: casterCenter.x,
+        y: casterCenter.y,
+        sizeFt: 30,
+        rotation: 0,
+        opacity: 0.95,
+        blendMode: 'screen',
+        isPersistent: false,
+        loop: false,
+        castTime: Date.now(),
+        durationMs: 3200,
+        soundKey: 'radiant_heal',
+        color: '#fef08a',
+        ownerId: claimedToken.id,
+        casterName: claimedToken.name || 'Hero',
+        spellId: action.id
+      };
+      setEffects(prev => [...prev, dwEffect]);
+      soundCatalog.play('radiant_heal');
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('EFFECT_SPAWN', dwEffect);
+      }
+
+      const saveDc = Number(action.saveDc ?? hudCharacterData?.spellSaveDc ?? 18);
+      const radiusPx = (30 / 5) * gridSize;
+      const hostilesInRange = tokensRef.current.filter(t => {
+        if (t.id === claimedToken.id || t.isPlayer || t.category === 'character' || t.category === 'ally') return false;
+        const hp = Number(t.hp ?? t.currentHp ?? 0);
+        if (hp <= 0) return false;
+        const tr = ((t.size || 1) * gridSize) / 2;
+        const tc = { x: t.x + tr, y: t.y + tr };
+        return Math.hypot(tc.x - casterCenter.x, tc.y - casterCenter.y) <= radiusPx + tr;
+      });
+
+      const outcomes: string[] = [];
+      const deafCfg = findLastingDebuffConfig('deafened');
+      const blindCfg = findLastingDebuffConfig('blinded');
+      const stunCfg = findLastingDebuffConfig('stunning_strike');
+
+      hostilesInRange.forEach(enemy => {
+        const curHp = Number(enemy.hp ?? enemy.currentHp ?? 0);
+        const chaRoll = Math.floor(Math.random() * 20) + 1;
+        if (chaRoll >= saveDc) {
+          outcomes.push(`${enemy.name}: Saved (${chaRoll} vs DC ${saveDc})`);
+          return;
+        }
+        if (curHp <= 20) {
+          outcomes.push(`${enemy.name}: KILLED (≤20 HP, failed ${chaRoll})`);
+          if (socketRef.current?.connected) {
+            socketRef.current.emit('REQUEST_TOKEN_MUTATION', {
+              sourceTokenId: claimedToken.id,
+              sourceName: claimedToken.name || 'Hero',
+              targetTokenId: enemy.id,
+              targetName: enemy.name,
+              actionName: 'Divine Word (Instant Death ≤20 HP)',
+              deltaHp: -curHp,
+              requiresApproval: false,
+              isMonster: true,
+              requestId: `req_dw_${Date.now()}_${enemy.id}`
+            });
+          }
+          return;
+        }
+        const badgesToAdd: any[] = [];
+        if (curHp <= 30) {
+          if (stunCfg) badgesToAdd.push(createDebuffBubbleFromConfig(stunCfg, claimedToken.name || 'Hero'));
+          if (blindCfg) badgesToAdd.push(createDebuffBubbleFromConfig(blindCfg, claimedToken.name || 'Hero'));
+          if (deafCfg) badgesToAdd.push(createDebuffBubbleFromConfig(deafCfg, claimedToken.name || 'Hero'));
+          outcomes.push(`${enemy.name}: Stunned, Blinded & Deafened (≤30 HP)`);
+        } else if (curHp <= 40) {
+          if (blindCfg) badgesToAdd.push(createDebuffBubbleFromConfig(blindCfg, claimedToken.name || 'Hero'));
+          if (deafCfg) badgesToAdd.push(createDebuffBubbleFromConfig(deafCfg, claimedToken.name || 'Hero'));
+          outcomes.push(`${enemy.name}: Blinded & Deafened (≤40 HP)`);
+        } else if (curHp <= 50) {
+          if (deafCfg) badgesToAdd.push(createDebuffBubbleFromConfig(deafCfg, claimedToken.name || 'Hero'));
+          outcomes.push(`${enemy.name}: Deafened (≤50 HP)`);
+        } else {
+          outcomes.push(`${enemy.name}: Failed save (${curHp} HP > 50, unaffected)`);
+        }
+        if (badgesToAdd.length > 0) {
+          const existingBubbles = Array.isArray((enemy as any).bubbles) ? (enemy as any).bubbles : [];
+          const mergedBubbles = [...existingBubbles];
+          badgesToAdd.forEach(nb => {
+            if (!mergedBubbles.some((eb: any) => eb.subLabel === nb.subLabel)) {
+              mergedBubbles.push(nb);
+            }
+          });
+          handleUpdateToken(enemy.id, { bubbles: mergedBubbles } as any);
+        }
+      });
+
+      const slotToUse = action.spellSlotRequired ?? action.level ?? 7;
+      if (slotToUse >= 1) {
+        setHudCharacterData(prev => {
+          if (!prev?.spellSlots?.[slotToUse]) return prev;
+          const cur = prev.spellSlots[slotToUse];
+          const nextAvail = Math.max(0, cur.available - 1);
+          const charKey = String(prev.ddbCharacterId || prev.id || claimedToken.id || prev.name);
+          manualSpellSlotsRef.current[charKey] = {
+            ...(manualSpellSlotsRef.current[charKey] || {}),
+            [slotToUse]: { available: nextAvail, total: cur.total }
+          };
+          return { ...prev, spellSlots: { ...prev.spellSlots, [slotToUse]: { ...cur, available: nextAvail } } };
+        });
+      }
+
+      toast.success(`⚡ ${claimedToken.name} spoke a Divine Word!`, {
+        description: outcomes.length > 0 ? outcomes.join(' • ') : '30-ft radiant shockwave unleashed (no hostiles in range).'
+      });
+      return;
+    }
+
+    // Mass Healing Word: enter multi-target selection mode (up to 6 creatures)
+    if (lowerName.includes('mass healing word') && claimedToken) {
+      setMultiTargetTokens([]);
+      setActiveTargetingAction(action);
+      setActiveEquippedAsset(matchedAsset || findJb2aAsset('healing_word') || null);
+      toast.info('🌿 Mass Healing Word: Click up to 6 creatures to heal', {
+        description: "Click 'Heal Selected' or press Enter when ready (Esc to cancel)."
+      });
+      return;
     }
 
     // Handle Halo / Self-Illumination Glow Toggle from the Special tab
@@ -5038,6 +5179,7 @@ export default function PlayerView() {
         });
       }
       setActiveTargetingAction(null);
+      setMultiTargetTokens([]);
       setActiveEquippedAsset(null);
       setAimOrigin(null);
       setAimCurrent(null);
@@ -5116,6 +5258,7 @@ export default function PlayerView() {
         description: `30 ft. Radiant Censure • Undead within 30 ft must make a DC ${dcVal} WIS Save (Undead CR ≤ ${destroyCr} are instantly Destroyed!).`
       });
       setActiveTargetingAction(null);
+      setMultiTargetTokens([]);
       setActiveEquippedAsset(null);
       setAimOrigin(null);
       setAimCurrent(null);
@@ -5206,6 +5349,7 @@ export default function PlayerView() {
       }
 
       setActiveTargetingAction(null);
+      setMultiTargetTokens([]);
       setActiveEquippedAsset(null);
       setAimOrigin(null);
       setAimCurrent(null);
@@ -5416,6 +5560,7 @@ export default function PlayerView() {
       }
 
       setActiveTargetingAction(null);
+      setMultiTargetTokens([]);
       setActiveEquippedAsset(null);
       setAimOrigin(null);
       setAimCurrent(null);
@@ -6076,6 +6221,169 @@ export default function PlayerView() {
     setAimCurrent(null);
   }, [claimedToken, gridSize, gridOffsetX, gridOffsetY, handleMoveToken, hudCharacterData, selectedDicePreset, autoApplyMonsterDamage]);
 
+  const executeMassHealingWord = useCallback((selectedTokens: Token[], action: HudActionItem) => {
+    const caster = claimedToken;
+    if (!caster || selectedTokens.length === 0) return;
+
+    const effectiveCastSpellLevel = action.castAtLevel ?? action.level ?? 3;
+    const slotToUse = action.spellSlotRequired ?? action.level ?? 3;
+    const formula = action.damageFormula || '1d4 + 5';
+    const evaluated = evaluateDiceFormula(formula, false);
+    const isLifeCleric = Boolean(
+      (caster.name || '').toLowerCase().includes('stavros') ||
+      (hudCharacterData?.name || '').toLowerCase().includes('stavros') ||
+      hudCharacterData?.traits?.some(t => (t.name || '').toLowerCase().includes('disciple of life'))
+    );
+    const discipleBonus = isLifeCleric && effectiveCastSpellLevel >= 1 ? (2 + effectiveCastSpellLevel) : 0;
+    const healTotal = Math.abs(evaluated.total) + discipleBonus;
+    const healAsset = findJb2aAsset('healing_word') || findJb2aAsset('cure_wounds');
+
+    if (isAutoRollDiceEnabledRef.current && typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d && evaluated.dice.length > 0) {
+      (window as any).__mistwalkerRoll3d({
+        id: `roll-mhw-${Date.now()}`,
+        characterName: caster.name || 'Hero',
+        action: `${action.name} (${selectedTokens.length} targets)`,
+        rollType: 'heal',
+        formula: `${formula}${discipleBonus > 0 ? ` + ${discipleBonus} (Disciple of Life)` : ''} → ${evaluated.breakdown}`,
+        diceNotation: formula,
+        dice: evaluated.dice,
+        modifier: evaluated.bonus + discipleBonus,
+        total: healTotal,
+        isCritical: false,
+        isFumble: false,
+        theme: selectedDicePreset.id,
+        themeColor: '#10b981',
+        timestamp: Date.now(),
+        source: 'player'
+      });
+    }
+
+    let healedOtherCreature = false;
+    selectedTokens.forEach((targetToken, idx) => {
+      if (targetToken.id !== caster.id) healedOtherCreature = true;
+      const tRadius = ((targetToken.size || 1) * gridSize) / 2;
+      const tCenter = { x: targetToken.x + tRadius, y: targetToken.y + tRadius };
+      if (healAsset) {
+        const eff: VttEffectInstance = {
+          id: `eff_mhw_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`,
+          name: healAsset.name,
+          label: `${action.name} (+${healTotal} HP)`,
+          assetKey: healAsset.id,
+          videoUrl: healAsset.webm,
+          thumbUrl: healAsset.thumb,
+          paradigm: 'point',
+          x: tCenter.x,
+          y: tCenter.y,
+          sizeFt: 6,
+          rotation: 0,
+          opacity: 0.95,
+          blendMode: healAsset.blendMode,
+          isPersistent: false,
+          loop: false,
+          castTime: Date.now(),
+          durationMs: 2800,
+          soundKey: idx === 0 ? healAsset.soundKey : undefined,
+          color: '#10b981',
+          ownerId: caster.id,
+          casterName: caster.name || 'Hero'
+        };
+        setEffects(prev => [...prev, eff]);
+        if (socketRef.current?.connected) {
+          socketRef.current.emit('EFFECT_SPAWN', eff);
+        }
+      }
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('REQUEST_TOKEN_MUTATION', {
+          sourceTokenId: caster.id,
+          sourceName: caster.name || 'Hero',
+          targetTokenId: targetToken.id,
+          targetName: targetToken.name,
+          actionName: action.name,
+          deltaHp: healTotal,
+          requiresApproval: false,
+          isMonster: false,
+          requestId: `req_mhw_${Date.now()}_${idx}`
+        });
+      }
+    });
+    if (healAsset?.soundKey) soundCatalog.play(healAsset.soundKey);
+
+    const casterHasBlessedHealer = Boolean(
+      (caster.name || '').toLowerCase().includes('stavros') ||
+      (hudCharacterData?.name || '').toLowerCase().includes('stavros') ||
+      hudCharacterData?.special?.some(s => (s.name || '').toLowerCase().includes('blessed healer')) ||
+      hudCharacterData?.traits?.some(s => (s.name || '').toLowerCase().includes('blessed healer'))
+    );
+    if (casterHasBlessedHealer && healedOtherCreature && effectiveCastSpellLevel >= 1) {
+      const blessedHealAmount = 2 + effectiveCastSpellLevel;
+      const cRadius = ((caster.size || 1) * gridSize) / 2;
+      const casterCenter = { x: caster.x + cRadius, y: caster.y + cRadius };
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('REQUEST_TOKEN_MUTATION', {
+          sourceTokenId: caster.id,
+          sourceName: caster.name || 'Stavros',
+          targetTokenId: caster.id,
+          targetName: caster.name || 'Stavros',
+          actionName: `Blessed Healer (Lvl ${effectiveCastSpellLevel} Spell)`,
+          deltaHp: blessedHealAmount,
+          requiresApproval: false,
+          isMonster: false,
+          requestId: `req_bh_mhw_${Date.now()}`
+        });
+      }
+      const bhEffect: VttEffectInstance = {
+        id: `eff_bh_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        name: `Blessed Healer (+${blessedHealAmount} HP)`,
+        label: 'Blessed Healer Self-Restoration',
+        assetKey: 'cure_wounds',
+        videoUrl: '/jb2a/Library/1st_Level/Cure_Wounds/CureWounds_01_Green_400x400.webm',
+        thumbUrl: '/jb2a/Library/1st_Level/Cure_Wounds/CureWounds_01_Green_Thumb.webp',
+        paradigm: 'point',
+        x: casterCenter.x,
+        y: casterCenter.y,
+        sizeFt: 5,
+        rotation: 0,
+        opacity: 0.95,
+        blendMode: 'screen',
+        isPersistent: false,
+        loop: false,
+        castTime: Date.now(),
+        durationMs: 2800,
+        color: '#4ade80',
+        ownerId: caster.id,
+        casterName: caster.name || 'Stavros'
+      };
+      setEffects(prev => [...prev, bhEffect]);
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('EFFECT_SPAWN', bhEffect);
+      }
+    }
+
+    if (slotToUse >= 1) {
+      setHudCharacterData(prev => {
+        if (!prev?.spellSlots?.[slotToUse]) return prev;
+        const cur = prev.spellSlots[slotToUse];
+        const nextAvail = Math.max(0, cur.available - 1);
+        const charKey = String(prev.ddbCharacterId || prev.id || caster.id || prev.name);
+        manualSpellSlotsRef.current[charKey] = {
+          ...(manualSpellSlotsRef.current[charKey] || {}),
+          [slotToUse]: { available: nextAvail, total: cur.total }
+        };
+        return { ...prev, spellSlots: { ...prev.spellSlots, [slotToUse]: { ...cur, available: nextAvail } } };
+      });
+    }
+
+    toast.success(`💚 Mass Healing Word healed ${selectedTokens.length} creature${selectedTokens.length > 1 ? 's' : ''} for +${healTotal} HP!`, {
+      description: selectedTokens.map(t => t.name).join(', ')
+    });
+
+    setMultiTargetTokens([]);
+    setActiveTargetingAction(null);
+    setActiveEquippedAsset(null);
+    setAimOrigin(null);
+    setAimCurrent(null);
+  }, [claimedToken, gridSize, hudCharacterData, selectedDicePreset]);
+
   const handleTargetToken = useCallback((targetToken: Token) => {
     if (!activeTargetingAction) return;
     const now = Date.now();
@@ -6086,6 +6394,22 @@ export default function PlayerView() {
     const caster = claimedToken;
     if (!caster) {
       toast.warning('Claim a character first before executing actions.');
+      return;
+    }
+
+    if (action.name.toLowerCase().includes('mass healing word')) {
+      setMultiTargetTokens(prev => {
+        const exists = prev.some(t => t.id === targetToken.id);
+        if (exists) {
+          return prev.filter(t => t.id !== targetToken.id);
+        }
+        if (prev.length >= 6) return prev;
+        const next = [...prev, targetToken];
+        if (next.length === 6) {
+          window.setTimeout(() => executeMassHealingWord(next, action), 40);
+        }
+        return next;
+      });
       return;
     }
 
@@ -6110,6 +6434,7 @@ export default function PlayerView() {
     );
     const isSpiritualWeaponCast = Boolean(
       (activeEquippedAsset?.id === 'spiritual_weapon' || action.name.toLowerCase().includes('spiritual weapon')) &&
+      !action.name.toLowerCase().includes('holy weapon') &&
       !(action as any).isSpiritualStrike
     );
     if (isTeleportSpell || isSpiritualWeaponCast) {
@@ -6191,7 +6516,9 @@ export default function PlayerView() {
         originY: isCone ? dirOrigin.y : casterCenter.y,
         targetX: isAuraOrBuff ? auraLockedCenter.x : targetCenter.x,
         targetY: isAuraOrBuff ? auraLockedCenter.y : targetCenter.y,
-        sizeFt: asset.defaultSizeFt,
+        sizeFt: (asset.id === 'hold_person' || asset.id === 'hold_monster')
+          ? Math.max(asset.defaultSizeFt, (targetToken.size || 1) * 5 + 2)
+          : asset.defaultSizeFt,
         rotation: isCone ? dirAngleDeg : ((isTrajectory || isDirectional) ? aimAngleDeg : 0),
         opacity: 1.0,
         blendMode: asset.blendMode,
@@ -6359,6 +6686,7 @@ export default function PlayerView() {
         description: `15 ft. Radiant Aura active around ${caster.name}. Friendly player characters are protected and unaffected; click any hostile enemy in the aura to apply ${formula || '3d8'} radiant damage (WIS Save DC ${action.saveDc || hudCharacterData?.spellSaveDc || 20}).`
       });
       setActiveTargetingAction(null);
+      setMultiTargetTokens([]);
       setActiveEquippedAsset(null);
       setAimOrigin(null);
       setAimCurrent(null);
@@ -6641,6 +6969,7 @@ export default function PlayerView() {
       });
 
       setActiveTargetingAction(null);
+      setMultiTargetTokens([]);
       setActiveEquippedAsset(null);
       setAimOrigin(null);
       setAimCurrent(null);
@@ -6668,7 +6997,8 @@ export default function PlayerView() {
     const casterHasBlessedHealer = Boolean(
       (caster.name || '').toLowerCase().includes('stavros') ||
       (hudCharacterData?.name || '').toLowerCase().includes('stavros') ||
-      hudCharacterData?.special?.some(s => (s.name || '').toLowerCase().includes('blessed healer'))
+      hudCharacterData?.special?.some(s => (s.name || '').toLowerCase().includes('blessed healer')) ||
+      hudCharacterData?.traits?.some(s => (s.name || '').toLowerCase().includes('blessed healer'))
     );
     const effectiveCastSpellLevel = action.castAtLevel ?? action.level ?? 0;
     const isLeveledHealingSpell = Boolean(
@@ -8619,6 +8949,49 @@ export default function PlayerView() {
         </div>
       )}
 
+      {isMistwalker3DEnabled && (
+        <Mistwalker3DModeToggle
+          renderMode={renderMode}
+          onRenderModeChange={setRenderMode}
+          compact
+          className="fixed top-3 right-3 z-[60]"
+        />
+      )}
+
+      {isMistwalker3DEnabled && renderMode === '3d' && (
+        <div className="fixed inset-0 z-[25] bg-zinc-950 flex">
+          <Mistwalker3DViewportHost
+            sceneId={activeSceneInfo?.sceneId || 'player_scene'}
+            sceneTitle={activeSceneInfo?.sceneTitle || 'MistWalker 3D'}
+            mapUrl={imageFile || (activeSceneInfo as any)?.mapUrl || undefined}
+            mapWidth={activeSceneInfo?.mapWidth || mapDimensions.width || undefined}
+            mapHeight={activeSceneInfo?.mapHeight || mapDimensions.height || undefined}
+            gridSize={gridSize}
+            gridOffsetX={gridOffsetX}
+            gridOffsetY={gridOffsetY}
+            walls={walls}
+            tokens={tokens}
+            roomAnnotations={roomAnnotations}
+            boardAnimatedFeatures={boardAnimatedFeatures}
+            scene3d={(activeSceneInfo as any)?.scene3d}
+            selectedTokenId={selected3DTokenId}
+            panToolActive={isSpacePressed}
+            isDm={false}
+            activeEquippedAsset={activeEquippedAsset}
+            effects={effects}
+            isFogVisible={isFogVisible}
+            reveals={reveals}
+            polygonReveals={polygonReveals}
+            visionConfig={visionConfig}
+            fogResetKey={fogResetKey}
+            claimedTokenId={claimedTokenId}
+            setTokens={setTokens}
+            setWalls={setWalls}
+            onSelectToken={setSelected3DTokenId}
+          />
+        </div>
+      )}
+
       {/* ========================================================= */}
       {/* Fullscreen Konva Stage Canvas                              */}
       {/* ========================================================= */}
@@ -8848,6 +9221,34 @@ export default function PlayerView() {
                 onContextMenu={handleOpenTokenContextMenu}
               />
           ))}
+          {multiTargetTokens.map((mToken, mIdx) => {
+            const rad = ((mToken.size || 1) * gridSize) / 2;
+            const cx = mToken.x + rad;
+            const cy = mToken.y + rad;
+            return (
+              <Group key={`multi-target-${mToken.id}`} x={cx} y={cy} listening={false}>
+                <Circle
+                  radius={rad + 6}
+                  stroke="#10b981"
+                  strokeWidth={3}
+                  dash={[8, 4]}
+                  shadowColor="#10b981"
+                  shadowBlur={10}
+                />
+                <Circle x={rad - 4} y={-rad + 4} radius={11} fill="#065f46" stroke="#34d399" strokeWidth={1.5} />
+                <Text
+                  x={rad - 15}
+                  y={-rad - 2}
+                  width={22}
+                  align="center"
+                  text={`${mIdx + 1}`}
+                  fontSize={12}
+                  fontStyle="bold"
+                  fill="#ecfdf5"
+                />
+              </Group>
+            );
+          })}
         </Layer>
 
         {/* Real-time Token Drag Ruler & Ghost Token HUD Layer */}
@@ -10023,8 +10424,19 @@ export default function PlayerView() {
           onRollDamage={handleRollDamage}
           activeTargetingAction={activeTargetingAction}
           activeEquippedAsset={activeEquippedAsset}
+          multiTargetTokens={multiTargetTokens}
+          multiTargetMax={activeTargetingAction?.name?.toLowerCase().includes('mass healing word') ? 6 : 0}
+          onConfirmMultiTarget={() => {
+            if (activeTargetingAction && multiTargetTokens.length > 0) {
+              executeMassHealingWord(multiTargetTokens, activeTargetingAction);
+            }
+          }}
+          onRemoveMultiTarget={(tokenId) => {
+            setMultiTargetTokens(prev => prev.filter(t => t.id !== tokenId));
+          }}
           onCancelTargeting={() => {
             setActiveTargetingAction(null);
+            setMultiTargetTokens([]);
             setActiveEquippedAsset(null);
             setAimOrigin(null);
             setAimCurrent(null);

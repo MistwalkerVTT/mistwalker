@@ -289,9 +289,9 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "rangeFt": 60,
     "defaultSizeFt": 5,
     "color": "#facc15",
-    "webm": "/jb2a/Library/1st_Level/Shield/Shield_01_Regular_Blue_Complete_400x400.webm",
-    "thumb": "/jb2a/Library/1st_Level/Shield/Shield_01_Regular_Blue_Thumb.webp",
-    "loopWebm": "/jb2a/Library/1st_Level/Shield/Shield_01_Regular_Blue_Complete_400x400.webm",
+    "webm": "/jb2a/Community/JackKerouac/energy_shield_CIRCLE_02.webm",
+    "thumb": "/jb2a/Community/JackKerouac/energy_shield_CIRCLE_02.webm",
+    "loopWebm": "/jb2a/Community/JackKerouac/energy_shield_CIRCLE_02.webm",
     "isPersistent": true,
     "blendMode": "screen",
     "soundKey": "divine_chime",
@@ -302,7 +302,8 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
       "divine shield",
       "holy shield",
       "protective ward"
-    ]
+    ],
+    "render3d": { "projection": "token_aura", "elevationFt": 0.15 }
   },
   {
     "id": "cure_wounds",
@@ -438,8 +439,8 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "blendMode": "screen",
     "soundKey": "teleport_whoosh",
     "tags": [
-      "teleport",
       "misty step",
+      "arcane blink",
       "conjuration",
       "escape"
     ]
@@ -456,14 +457,15 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "rangeFt": 90,
     "defaultSizeFt": 10,
     "color": "#38bdf8",
-    "webm": "/jb2a/Library/1st_Level/Thunderwave/Thunderwave_01_Bright_Blue_BLeft_600x600.webm",
-    "departureWebm": "/jb2a/Library/1st_Level/Thunderwave/Thunderwave_01_Bright_Blue_BLeft_600x600.webm",
+    "webm": "/jb2a/Community/JackKerouac/clouds_lightning_CIRCLE_01.webm",
+    "departureWebm": "/jb2a/Community/JackKerouac/clouds_lightning_CIRCLE_01.webm",
     "arrivalWebm": "/jb2a/Library/2nd_Level/Misty_Step/MistyStep_01_Regular_Blue_400x400.webm",
-    "thumb": "/jb2a/Library/2nd_Level/Misty_Step/MistyStep_01_Regular_Blue_Thumb.webp",
+    "thumb": "/jb2a/Community/JackKerouac/clouds_lightning_CIRCLE_01.webm",
     "isPersistent": false,
     "blendMode": "screen",
     "soundKey": "thunder_boom",
-    "tags": ["thunder step", "teleport", "thunder", "conjuration", "evocation"]
+    "tags": ["thunder step", "thunder teleport", "thunder", "conjuration"],
+    "render3d": { "projection": "billboard", "elevationFt": 2 }
   },
   {
     "id": "fey_step",
@@ -1343,7 +1345,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "isPersistent": false,
     "blendMode": "screen",
     "soundKey": "divine_chime",
-    "tags": ["aid", "heal", "mass cure", "cleric", "paladin", "fortitude", "mass healing word"]
+    "tags": ["aid", "fortitude", "max hp"]
   },
   {
     "id": "sanctuary",
@@ -1523,7 +1525,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "isPersistent": false,
     "blendMode": "screen",
     "soundKey": "dimension_door",
-    "tags": ["dimension door", "vortex warp", "banishment", "portal", "teleport"]
+    "tags": ["dimension door", "dimensional portal", "portal"]
   },
   {
     "id": "chromatic_orb",
@@ -1680,20 +1682,78 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
   },
   {
     "id": "light",
-    "name": "Light / Daylight",
-    "label": "Luminescent Radiant Aura & Flare",
+    "name": "Light",
+    "label": "Light (Soft Luminescent Glow)",
     "level": 0,
     "school": "evocation",
     "paradigm": "aura",
     "shape": "aura",
-    "defaultSizeFt": 20,
-    "color": "#fbbf24",
+    "defaultSizeFt": 6,
+    "color": "#fde047",
     "webm": "/jb2a/Library/Generic/Cast/GenericCast01_01_Regular_Yellow_400x400.webm",
     "thumb": "/jb2a/Library/Generic/Cast/GenericCast01_01_Regular_Yellow_Thumb.webp",
     "isPersistent": true,
     "blendMode": "screen",
     "soundKey": "divine_chime",
-    "tags": ["light", "daylight", "guidance", "illumination", "radiance"]
+    "tags": ["light", "illumination", "radiance"],
+    "render3d": { "projection": "token_aura", "elevationFt": 0.2 }
+  },
+  {
+    "id": "guidance",
+    "name": "Guidance",
+    "label": "Guidance (Subtle Golden Shimmer)",
+    "level": 0,
+    "school": "divination",
+    "paradigm": "point",
+    "shape": "aura",
+    "targetType": "single",
+    "rangeFt": 5,
+    "defaultSizeFt": 5,
+    "color": "#fde047",
+    "webm": "/jb2a/Library/Generic/Token_Border/TokenBorderCircleSpin_02_Regular_Blue_400x400.webm",
+    "thumb": "/jb2a/Library/1st_Level/Bless/Bless_01_Regular_Yellow_Thumb.webp",
+    "isPersistent": false,
+    "blendMode": "screen",
+    "soundKey": "divine_chime",
+    "tags": ["guidance", "divination", "skill check", "cantrip"]
+  },
+  {
+    "id": "holy_weapon",
+    "name": "Holy Weapon",
+    "label": "Holy Weapon (Radiant Weapon Imbue)",
+    "level": 5,
+    "school": "evocation",
+    "paradigm": "point",
+    "shape": "circle",
+    "targetType": "self",
+    "rangeFt": 5,
+    "defaultSizeFt": 6,
+    "color": "#facc15",
+    "webm": "/jb2a/Library/2nd_Level/Divine_Smite/DivineSmite_01_Regular_BlueYellow_Target_400x400.webm",
+    "thumb": "/jb2a/Library/2nd_Level/Divine_Smite/DivineSmite_01_Regular_BlueYellow_Target_Thumb.webp",
+    "isPersistent": false,
+    "blendMode": "screen",
+    "soundKey": "divine_smite",
+    "tags": ["holy weapon", "radiant", "concentration", "weapon buff"]
+  },
+  {
+    "id": "divine_word",
+    "name": "Divine Word",
+    "label": "Divine Word (30ft Radiant Shockwave)",
+    "level": 7,
+    "school": "evocation",
+    "paradigm": "aura",
+    "shape": "circle",
+    "targetType": "self",
+    "rangeFt": 30,
+    "defaultSizeFt": 30,
+    "color": "#fef08a",
+    "webm": "/jb2a/Community/BossLoot/Wave_1_Radial_1_WHITE_1200x1200.webm",
+    "thumb": "/jb2a/Library/1st_Level/Bless/Bless_01_Regular_Yellow_Thumb.webp",
+    "isPersistent": false,
+    "blendMode": "screen",
+    "soundKey": "radiant_heal",
+    "tags": ["divine word", "cleric", "radiant", "shockwave", "banish", "stun"]
   },
   {
     "id": "healing_incense",
@@ -1891,22 +1951,43 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
   },
   {
     "id": "hold_person",
-    "name": "Hold Person / Hold Monster",
-    "label": "Hold Person (Binding Spectral Chains)",
+    "name": "Hold Person",
+    "label": "Hold Person (Spectral Binding Chains)",
     "level": 2,
     "school": "enchantment",
     "paradigm": "aura",
     "shape": "aura",
     "targetType": "single",
     "rangeFt": 60,
-    "defaultSizeFt": 5,
+    "defaultSizeFt": 6,
     "color": "#fbbf24",
     "webm": "/jb2a/Community/JAA/chain1.webm",
     "thumb": "/jb2a/Community/JAA/chain1.webm",
     "isPersistent": true,
     "blendMode": "screen",
     "soundKey": "binding_chains",
-    "tags": ["hold person", "hold monster", "spectral chains", "binding chains", "paralyze"]
+    "tags": ["hold person", "paralyze", "binding"],
+    "render3d": { "projection": "token_aura", "elevationFt": 0.2 }
+  },
+  {
+    "id": "hold_monster",
+    "name": "Hold Monster",
+    "label": "Hold Monster (Heavy Binding Chains)",
+    "level": 5,
+    "school": "enchantment",
+    "paradigm": "aura",
+    "shape": "aura",
+    "targetType": "single",
+    "rangeFt": 90,
+    "defaultSizeFt": 10,
+    "color": "#f59e0b",
+    "webm": "/jb2a/Community/JAA/chain2.webm",
+    "thumb": "/jb2a/Community/JAA/chain2.webm",
+    "isPersistent": true,
+    "blendMode": "screen",
+    "soundKey": "binding_chains",
+    "tags": ["hold monster", "monster chains"],
+    "render3d": { "projection": "token_aura", "elevationFt": 0.2 }
   },
   {
     "id": "arcane_eye",
@@ -2336,7 +2417,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "isPersistent": false,
     "blendMode": "screen",
     "soundKey": "magic_shatter",
-    "tags": ["counterspell", "counter spell", "dispel magic", "dispel", "anti magic", "null magic"]
+    "tags": ["counterspell", "counter spell", "anti magic", "null magic"]
   },
   // =========================================================================
   // EXPANDED PARTY SPELLS, CLASS FEATURES & DRAGON BREATHS (JB2A / BossLoot / JAA / JackKerouac)
@@ -2460,7 +2541,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "isPersistent": true,
     "blendMode": "screen",
     "soundKey": "fey_shimmer",
-    "tags": ["invisibility", "greater invisibility", "invisible", "vanish", "stealth"],
+    "tags": ["invisibility", "invisible", "vanish", "stealth"],
     "render3d": { "projection": "token_aura", "elevationFt": 0.1 }
   },
   {
@@ -2543,7 +2624,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "isPersistent": true,
     "blendMode": "screen",
     "soundKey": "shield_barrier",
-    "tags": ["mage armor", "blade ward", "force armor", "abjuration"],
+    "tags": ["mage armor", "force armor", "abjuration"],
     "render3d": { "projection": "token_aura", "elevationFt": 0.1 }
   },
   {
@@ -2624,7 +2705,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "isPersistent": false,
     "blendMode": "screen",
     "soundKey": "radiant_heal",
-    "tags": ["lesser restoration", "greater restoration", "revivify", "healing spirit", "lay on hands", "second wind", "cleanse"],
+    "tags": ["lesser restoration", "healing spirit", "lay on hands", "cleanse"],
     "render3d": { "projection": "billboard", "elevationFt": 2 }
   },
   {
@@ -2829,7 +2910,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "isPersistent": true,
     "blendMode": "screen",
     "soundKey": "divine_chime",
-    "tags": ["death ward", "beacon of hope", "abjuration", "protection"],
+    "tags": ["death ward", "abjuration", "protection"],
     "render3d": { "projection": "token_aura", "elevationFt": 0.1 }
   },
   {
@@ -3238,6 +3319,535 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "soundKey": "acid_burn",
     "tags": ["acid breath", "black dragon", "copper dragon"],
     "render3d": { "projection": "beam_ribbon", "elevationFt": 2.5 }
+  },
+  // =========================================================================
+  // VECNA CAMPAIGN UNIQUE SPELLS, MAGIC WEAPONS & SIGNATURE FEATURES
+  // =========================================================================
+  {
+    "id": "fire_storm",
+    "name": "Fire Storm",
+    "label": "Fire Storm (Cataclysmic Flame Shockwave)",
+    "level": 7,
+    "school": "evocation",
+    "paradigm": "point",
+    "shape": "circle",
+    "targetType": "aoe",
+    "rangeFt": 150,
+    "defaultSizeFt": 30,
+    "color": "#ea580c",
+    "webm": "/jb2a/Community/BossLoot/Shockwave_1_Fire_1_ORANGE_1200x1200.webm",
+    "thumb": "/jb2a/Community/BossLoot/Shockwave_1_Fire_1_ORANGE_1200x1200.webm",
+    "isPersistent": false,
+    "blendMode": "screen",
+    "soundKey": "fire_explosion",
+    "tags": ["fire storm", "firestorm", "inferno"],
+    "render3d": { "projection": "ground_decal", "elevationFt": 0.25 }
+  },
+  {
+    "id": "divine_word",
+    "name": "Divine Word",
+    "label": "Divine Word (30ft Radiant Decree)",
+    "level": 7,
+    "school": "evocation",
+    "paradigm": "point",
+    "shape": "circle",
+    "targetType": "aoe",
+    "rangeFt": 30,
+    "defaultSizeFt": 30,
+    "color": "#fde047",
+    "webm": "/jb2a/Library/Generic/Explosion/Explosion_03_Regular_BlueYellow_400x400.webm",
+    "thumb": "/jb2a/Library/Generic/Explosion/Explosion_03_Regular_BlueYellow_400x400.webm",
+    "isPersistent": false,
+    "blendMode": "screen",
+    "soundKey": "holy_radiance",
+    "tags": ["divine word", "sacred decree", "holy word"],
+    "render3d": { "projection": "billboard", "elevationFt": 3 }
+  },
+  {
+    "id": "heal",
+    "name": "Heal",
+    "label": "Heal (Golden 6th-Level Restoration)",
+    "level": 6,
+    "school": "evocation",
+    "paradigm": "point",
+    "shape": "circle",
+    "targetType": "single",
+    "rangeFt": 60,
+    "defaultSizeFt": 5,
+    "color": "#facc15",
+    "webm": "/jb2a/Library/Generic/Healing/HealingAbility_01_Yellow_400x400.webm",
+    "thumb": "/jb2a/Library/Generic/Healing/HealingAbility_01_Yellow_400x400.webm",
+    "isPersistent": false,
+    "blendMode": "screen",
+    "soundKey": "radiant_heal",
+    "tags": ["heal", "supreme heal", "golden heal"],
+    "render3d": { "projection": "billboard", "elevationFt": 2.5 }
+  },
+  {
+    "id": "revivify",
+    "name": "Revivify",
+    "label": "Revivify (Resurrection Surge)",
+    "level": 3,
+    "school": "necromancy",
+    "paradigm": "point",
+    "shape": "circle",
+    "targetType": "single",
+    "rangeFt": 5,
+    "defaultSizeFt": 5,
+    "color": "#c084fc",
+    "webm": "/jb2a/Library/Generic/Healing/HealingAbility_01_Purple_400x400.webm",
+    "thumb": "/jb2a/Library/Generic/Healing/HealingAbility_01_Purple_400x400.webm",
+    "isPersistent": false,
+    "blendMode": "screen",
+    "soundKey": "holy_radiance",
+    "tags": ["revivify", "resurrection", "raise dead"],
+    "render3d": { "projection": "vertical_pillar", "elevationFt": 0 }
+  },
+  {
+    "id": "mass_healing_word",
+    "name": "Mass Healing Word",
+    "label": "Mass Healing Word (Emerald Healing Burst)",
+    "level": 3,
+    "school": "evocation",
+    "paradigm": "point",
+    "shape": "circle",
+    "targetType": "aoe",
+    "rangeFt": 60,
+    "defaultSizeFt": 30,
+    "color": "#34d399",
+    "webm": "/jb2a/Library/Generic/Healing/HealingAbility_02_Regular_GreenOrange_Burst_600x600.webm",
+    "thumb": "/jb2a/Library/Generic/Healing/HealingAbility_02_Regular_GreenOrange_Burst_600x600.webm",
+    "isPersistent": false,
+    "blendMode": "screen",
+    "soundKey": "radiant_heal",
+    "tags": ["mass healing word", "mass word"],
+    "render3d": { "projection": "ground_decal", "elevationFt": 0.2 }
+  },
+  {
+    "id": "mass_cure_wounds",
+    "name": "Mass Cure Wounds",
+    "label": "Mass Cure Wounds (30ft Radiant Wave)",
+    "level": 5,
+    "school": "evocation",
+    "paradigm": "point",
+    "shape": "circle",
+    "targetType": "aoe",
+    "rangeFt": 60,
+    "defaultSizeFt": 30,
+    "color": "#2dd4bf",
+    "webm": "/jb2a/Library/Generic/Healing/HealingAbility_03_Regular_BlueGreen_600x600.webm",
+    "thumb": "/jb2a/Library/Generic/Healing/HealingAbility_03_Regular_BlueGreen_600x600.webm",
+    "isPersistent": false,
+    "blendMode": "screen",
+    "soundKey": "radiant_heal",
+    "tags": ["mass cure wounds", "mass cure"],
+    "render3d": { "projection": "ground_decal", "elevationFt": 0.2 }
+  },
+  {
+    "id": "greater_restoration",
+    "name": "Greater Restoration",
+    "label": "Greater Restoration (Purifying Burst)",
+    "level": 5,
+    "school": "abjuration",
+    "paradigm": "point",
+    "shape": "circle",
+    "targetType": "single",
+    "rangeFt": 5,
+    "defaultSizeFt": 5,
+    "color": "#fde047",
+    "webm": "/jb2a/Community/JackKerouac/energy_quickburst_CIRCLE_04.webm",
+    "thumb": "/jb2a/Community/JackKerouac/energy_quickburst_CIRCLE_04.webm",
+    "isPersistent": false,
+    "blendMode": "screen",
+    "soundKey": "divine_chime",
+    "tags": ["greater restoration", "purify"],
+    "render3d": { "projection": "billboard", "elevationFt": 2 }
+  },
+  {
+    "id": "beacon_of_hope",
+    "name": "Beacon of Hope",
+    "label": "Beacon of Hope (30ft Radiant Inspiration)",
+    "level": 3,
+    "school": "abjuration",
+    "paradigm": "aura",
+    "shape": "aura",
+    "targetType": "aoe",
+    "rangeFt": 30,
+    "defaultSizeFt": 30,
+    "color": "#fef08a",
+    "webm": "/jb2a/Community/JackKerouac/energy_quickburst_CIRCLE_06.webm",
+    "thumb": "/jb2a/Community/JackKerouac/energy_quickburst_CIRCLE_06.webm",
+    "loopWebm": "/jb2a/Community/JackKerouac/energy_quickburst_CIRCLE_06.webm",
+    "isPersistent": true,
+    "blendMode": "screen",
+    "soundKey": "holy_radiance",
+    "tags": ["beacon of hope", "hope beacon"],
+    "render3d": { "projection": "ground_decal", "elevationFt": 0.15 }
+  },
+  {
+    "id": "daylight",
+    "name": "Daylight",
+    "label": "Daylight (60ft Blazing Sun Sphere)",
+    "level": 3,
+    "school": "evocation",
+    "paradigm": "point",
+    "shape": "circle",
+    "targetType": "aoe",
+    "rangeFt": 60,
+    "defaultSizeFt": 60,
+    "color": "#fef08a",
+    "webm": "/jb2a/Community/JackKerouac/energy_quickburst_CIRCLE_07.webm",
+    "thumb": "/jb2a/Community/JackKerouac/energy_quickburst_CIRCLE_07.webm",
+    "isPersistent": true,
+    "blendMode": "screen",
+    "soundKey": "holy_radiance",
+    "tags": ["daylight", "sun sphere"],
+    "render3d": { "projection": "ground_decal", "elevationFt": 0.15 }
+  },
+  {
+    "id": "banishment",
+    "name": "Banishment",
+    "label": "Banishment (Planar Rift Vortex)",
+    "level": 4,
+    "school": "abjuration",
+    "paradigm": "point",
+    "shape": "circle",
+    "targetType": "single",
+    "rangeFt": 60,
+    "defaultSizeFt": 5,
+    "color": "#818cf8",
+    "webm": "/jb2a/Community/JackKerouac/energy_portal_strange_CIRCLE.webm",
+    "thumb": "/jb2a/Community/JackKerouac/energy_portal_strange_CIRCLE.webm",
+    "isPersistent": false,
+    "blendMode": "screen",
+    "soundKey": "dimension_door",
+    "tags": ["banishment", "banish", "planar rift"],
+    "render3d": { "projection": "ground_decal", "elevationFt": 0.2 }
+  },
+  {
+    "id": "dispel_magic",
+    "name": "Dispel Magic",
+    "label": "Dispel Magic (Arcane Unraveling Ring)",
+    "level": 3,
+    "school": "abjuration",
+    "paradigm": "point",
+    "shape": "circle",
+    "targetType": "single",
+    "rangeFt": 120,
+    "defaultSizeFt": 10,
+    "color": "#38bdf8",
+    "webm": "/jb2a/Community/BossLoot/Spell_Cast_1_CIRCLES_1_BLUE_1_1200x1200.webm",
+    "thumb": "/jb2a/Community/BossLoot/Spell_Cast_1_CIRCLES_1_BLUE_1_1200x1200.webm",
+    "isPersistent": false,
+    "blendMode": "screen",
+    "soundKey": "magic_shatter",
+    "tags": ["dispel magic", "dispel", "unravel"],
+    "render3d": { "projection": "ground_decal", "elevationFt": 0.2 }
+  },
+  {
+    "id": "blade_ward",
+    "name": "Blade Ward",
+    "label": "Blade Ward (Kinetic Deflection Shield)",
+    "level": 0,
+    "school": "abjuration",
+    "paradigm": "aura",
+    "shape": "aura",
+    "targetType": "self",
+    "rangeFt": 0,
+    "defaultSizeFt": 5,
+    "color": "#94a3b8",
+    "webm": "/jb2a/Community/JackKerouac/energy_shield_CIRCLE_03.webm",
+    "thumb": "/jb2a/Community/JackKerouac/energy_shield_CIRCLE_03.webm",
+    "loopWebm": "/jb2a/Community/JackKerouac/energy_shield_CIRCLE_03.webm",
+    "isPersistent": true,
+    "blendMode": "screen",
+    "soundKey": "shield_clash",
+    "tags": ["blade ward", "kinetic ward"],
+    "render3d": { "projection": "token_aura", "elevationFt": 0.15 }
+  },
+  {
+    "id": "greater_invisibility",
+    "name": "Greater Invisibility",
+    "label": "Greater Invisibility (Spectral Phase Ring)",
+    "level": 4,
+    "school": "illusion",
+    "paradigm": "aura",
+    "shape": "aura",
+    "targetType": "single",
+    "rangeFt": 5,
+    "defaultSizeFt": 5,
+    "color": "#7dd3fc",
+    "webm": "/jb2a/Library/Generic/Token_Border/TokenBorderCircleSpin_03_Regular_Blue_400x400.webm",
+    "thumb": "/jb2a/Library/Generic/Token_Border/TokenBorderCircleSpin_03_Regular_Blue_400x400.webm",
+    "loopWebm": "/jb2a/Library/Generic/Token_Border/TokenBorderCircleSpin_03_Regular_Blue_400x400.webm",
+    "isPersistent": true,
+    "blendMode": "screen",
+    "soundKey": "fey_shimmer",
+    "tags": ["greater invisibility", "phase cloak"],
+    "render3d": { "projection": "token_aura", "elevationFt": 0.15 }
+  },
+  {
+    "id": "second_wind",
+    "name": "Second Wind",
+    "label": "Second Wind (Fighter Stamina Surge)",
+    "level": 0,
+    "school": "martial",
+    "paradigm": "point",
+    "shape": "circle",
+    "targetType": "self",
+    "rangeFt": 0,
+    "defaultSizeFt": 5,
+    "color": "#22c55e",
+    "webm": "/jb2a/Library/Generic/Template/Circle/Aura/AuraThemedInwardCompleteNature01_01_Regular_Green_700x700.webm",
+    "thumb": "/jb2a/Library/Generic/Template/Circle/Aura/AuraThemedInwardCompleteNature01_01_Regular_Green_700x700.webm",
+    "isPersistent": false,
+    "blendMode": "screen",
+    "soundKey": "radiant_heal",
+    "tags": ["second wind", "stamina surge", "fighter heal"],
+    "render3d": { "projection": "token_aura", "elevationFt": 0.15 }
+  },
+  {
+    "id": "patient_defense",
+    "name": "Patient Defense",
+    "label": "Patient Defense (Ki Dodge Stance)",
+    "level": 0,
+    "school": "martial",
+    "paradigm": "aura",
+    "shape": "aura",
+    "targetType": "self",
+    "rangeFt": 0,
+    "defaultSizeFt": 5,
+    "color": "#cbd5e1",
+    "webm": "/jb2a/Library/Generic/Template/Circle/Aura/AuraThemedInwardLoopMetal01_01_Regular_Grey_700x700.webm",
+    "thumb": "/jb2a/Library/Generic/Template/Circle/Aura/AuraThemedInwardLoopMetal01_01_Regular_Grey_700x700.webm",
+    "loopWebm": "/jb2a/Library/Generic/Template/Circle/Aura/AuraThemedInwardLoopMetal01_01_Regular_Grey_700x700.webm",
+    "isPersistent": true,
+    "blendMode": "screen",
+    "soundKey": "wind_whoosh",
+    "tags": ["patient defense", "ki dodge", "monk defense"],
+    "render3d": { "projection": "token_aura", "elevationFt": 0.15 }
+  },
+  {
+    "id": "uncanny_dodge",
+    "name": "Uncanny Dodge",
+    "label": "Uncanny Dodge (Shadow Deflection)",
+    "level": 0,
+    "school": "martial",
+    "paradigm": "point",
+    "shape": "circle",
+    "targetType": "self",
+    "rangeFt": 0,
+    "defaultSizeFt": 5,
+    "color": "#a855f7",
+    "webm": "/jb2a/Community/JackKerouac/energy_shield_CIRCLE_04.webm",
+    "thumb": "/jb2a/Community/JackKerouac/energy_shield_CIRCLE_04.webm",
+    "isPersistent": false,
+    "blendMode": "screen",
+    "soundKey": "shadow_step",
+    "tags": ["uncanny dodge", "evasion", "rogue dodge"],
+    "render3d": { "projection": "token_aura", "elevationFt": 0.15 }
+  },
+  {
+    "id": "cunning_action",
+    "name": "Cunning Action",
+    "label": "Cunning Action (Dash / Disengage / Hide)",
+    "level": 0,
+    "school": "martial",
+    "paradigm": "point",
+    "shape": "circle",
+    "targetType": "self",
+    "rangeFt": 0,
+    "defaultSizeFt": 5,
+    "color": "#94a3b8",
+    "webm": "/jb2a/Library/TMFX/Border/Circle/BorderInPulse_01_Circle_Normal_500.webm",
+    "thumb": "/jb2a/Library/TMFX/Border/Circle/BorderInPulse_01_Circle_Normal_500.webm",
+    "isPersistent": false,
+    "blendMode": "screen",
+    "soundKey": "wind_whoosh",
+    "tags": ["cunning action", "cunning action (dash / disengage / hide)", "dash", "disengage", "hide"],
+    "render3d": { "projection": "token_aura", "elevationFt": 0.1 }
+  },
+  {
+    "id": "attack_rapier_sneak",
+    "name": "Rapier (Sneak Attack)",
+    "label": "Silent Weaver Rapier Thrust",
+    "level": 0,
+    "school": "martial",
+    "paradigm": "cone",
+    "shape": "cone",
+    "targetType": "single",
+    "rangeFt": 5,
+    "defaultSizeFt": 10,
+    "color": "#a855f7",
+    "webm": "/jb2a/Community/BossLoot/Silent_Weaver_Rapier.webm",
+    "thumb": "/jb2a/Community/BossLoot/Silent_Weaver_Rapier.webm",
+    "isPersistent": false,
+    "blendMode": "screen",
+    "soundKey": "sneak_attack",
+    "tags": ["rapier, +2 (sneak attack)", "rapier", "silent weaver"],
+    "render3d": { "projection": "beam_ribbon", "elevationFt": 2.5 }
+  },
+  {
+    "id": "attack_shortbow_sneak",
+    "name": "Shortbow (Sneak Attack)",
+    "label": "Shadow Vortex Shortbow Shot",
+    "level": 0,
+    "school": "martial",
+    "paradigm": "projectile",
+    "shape": "ray",
+    "targetType": "single",
+    "rangeFt": 80,
+    "defaultSizeFt": 5,
+    "color": "#a855f7",
+    "webm": "/jb2a/Community/BossLoot/Vortex_Arrow_1_30ft_1600x400.webm",
+    "thumb": "/jb2a/Community/BossLoot/Vortex_Arrow_1_30ft_1600x400.webm",
+    "projectileWebm": "/jb2a/Community/BossLoot/Vortex_Arrow_1_30ft_1600x400.webm",
+    "isPersistent": false,
+    "blendMode": "screen",
+    "soundKey": "bow_arrow",
+    "tags": ["shortbow, +1 (sneak attack)", "shortbow", "vortex arrow"],
+    "render3d": { "projection": "beam_ribbon", "elevationFt": 3 }
+  },
+  {
+    "id": "attack_longsword_magic",
+    "name": "Longsword, +2",
+    "label": "Eldritch Knight Longsword Slash",
+    "level": 0,
+    "school": "martial",
+    "paradigm": "cone",
+    "shape": "cone",
+    "targetType": "single",
+    "rangeFt": 5,
+    "defaultSizeFt": 10,
+    "color": "#facc15",
+    "webm": "/jb2a/Library/Generic/Weapon_Attacks/Melee/Group01/MeleeAttack01_MagicSword01_01_Regular_Yellow_800x600.webm",
+    "thumb": "/jb2a/Library/Generic/Weapon_Attacks/Melee/Group01/MeleeAttack01_MagicSword01_01_Regular_Yellow_800x600.webm",
+    "isPersistent": false,
+    "blendMode": "screen",
+    "soundKey": "sword_slash",
+    "tags": ["longsword, +2", "longsword", "magic sword"],
+    "render3d": { "projection": "beam_ribbon", "elevationFt": 2.5 }
+  },
+  {
+    "id": "attack_war_magic",
+    "name": "War Magic Attack",
+    "label": "War Magic Arcane Cleave",
+    "level": 0,
+    "school": "martial",
+    "paradigm": "cone",
+    "shape": "cone",
+    "targetType": "single",
+    "rangeFt": 5,
+    "defaultSizeFt": 10,
+    "color": "#38bdf8",
+    "webm": "/jb2a/Community/BossLoot/Queens_Burden_Sword.webm",
+    "thumb": "/jb2a/Community/BossLoot/Queens_Burden_Sword.webm",
+    "isPersistent": false,
+    "blendMode": "screen",
+    "soundKey": "greatsword_cleave",
+    "tags": ["war magic attack", "war magic", "eldritch strike"],
+    "render3d": { "projection": "beam_ribbon", "elevationFt": 2.5 }
+  },
+  {
+    "id": "attack_longbow_arcane",
+    "name": "Longbow, +1",
+    "label": "Arcane Longbow Shot",
+    "level": 0,
+    "school": "martial",
+    "paradigm": "projectile",
+    "shape": "ray",
+    "targetType": "single",
+    "rangeFt": 150,
+    "defaultSizeFt": 5,
+    "color": "#38bdf8",
+    "webm": "/jb2a/Community/BossLoot/Arrow_Arcane_Shot_Blue_1_30ft_1600x400.webm",
+    "thumb": "/jb2a/Community/BossLoot/Arrow_Arcane_Shot_Blue_1_30ft_1600x400.webm",
+    "projectileWebm": "/jb2a/Community/BossLoot/Arrow_Arcane_Shot_Blue_1_30ft_1600x400.webm",
+    "isPersistent": false,
+    "blendMode": "screen",
+    "soundKey": "bow_arrow",
+    "tags": ["longbow, +1", "longbow", "arcane arrow"],
+    "render3d": { "projection": "beam_ribbon", "elevationFt": 3 }
+  },
+  {
+    "id": "attack_mace_disruption",
+    "name": "Mace of Disruption",
+    "label": "Mace of Disruption (Radiant Impact)",
+    "level": 0,
+    "school": "martial",
+    "paradigm": "cone",
+    "shape": "cone",
+    "targetType": "single",
+    "rangeFt": 5,
+    "defaultSizeFt": 10,
+    "color": "#fde047",
+    "webm": "/jb2a/Community/BossLoot/Greatclub_Mace_Attack.webm",
+    "thumb": "/jb2a/Community/BossLoot/Greatclub_Mace_Attack.webm",
+    "isPersistent": false,
+    "blendMode": "screen",
+    "soundKey": "holy_radiance",
+    "tags": ["mace of disruption", "disruption mace"],
+    "render3d": { "projection": "billboard", "elevationFt": 2.5 }
+  },
+  {
+    "id": "attack_devotees_censer",
+    "name": "Devotee's Censer",
+    "label": "Devotee's Censer (Radiant Flail Swing)",
+    "level": 0,
+    "school": "martial",
+    "paradigm": "cone",
+    "shape": "cone",
+    "targetType": "single",
+    "rangeFt": 5,
+    "defaultSizeFt": 10,
+    "color": "#facc15",
+    "webm": "/jb2a/Community/BossLoot/Flail_Censer_Attack.webm",
+    "thumb": "/jb2a/Community/BossLoot/Flail_Censer_Attack.webm",
+    "isPersistent": false,
+    "blendMode": "screen",
+    "soundKey": "metal_clang",
+    "tags": ["devotee's censer", "devotees censer", "devotee"],
+    "render3d": { "projection": "billboard", "elevationFt": 2.5 }
+  },
+  {
+    "id": "attack_staff_of_power",
+    "name": "Staff of Power",
+    "label": "Staff of Power (Arcane Force Discharge)",
+    "level": 0,
+    "school": "evocation",
+    "paradigm": "point",
+    "shape": "circle",
+    "targetType": "single",
+    "rangeFt": 5,
+    "defaultSizeFt": 10,
+    "color": "#f97316",
+    "webm": "/jb2a/Community/BossLoot/Energy_1_Wipe_1_Radial_1_Smoke_1_ORANGE_1200x1200.webm",
+    "thumb": "/jb2a/Community/BossLoot/Energy_1_Wipe_1_Radial_1_Smoke_1_ORANGE_1200x1200.webm",
+    "isPersistent": false,
+    "blendMode": "screen",
+    "soundKey": "magic_explosion",
+    "tags": ["staff of power", "arcane staff"],
+    "render3d": { "projection": "billboard", "elevationFt": 2.5 }
+  },
+  {
+    "id": "attack_rod_pact_keeper",
+    "name": "Rod of the Pact Keeper",
+    "label": "Rod of the Pact Keeper (Eldritch Surge)",
+    "level": 0,
+    "school": "evocation",
+    "paradigm": "point",
+    "shape": "circle",
+    "targetType": "single",
+    "rangeFt": 30,
+    "defaultSizeFt": 10,
+    "color": "#a855f7",
+    "webm": "/jb2a/Community/BossLoot/Explosion_2_Radial_PURPLE_1200x1200.webm",
+    "thumb": "/jb2a/Community/BossLoot/Explosion_2_Radial_PURPLE_1200x1200.webm",
+    "isPersistent": false,
+    "blendMode": "screen",
+    "soundKey": "eldritch_blast",
+    "tags": ["rod of the pact keeper, +2", "rod of the pact keeper", "pact keeper"],
+    "render3d": { "projection": "billboard", "elevationFt": 2.5 }
   }
 ];
 
@@ -3260,6 +3870,35 @@ export const findJb2aAsset = (idOrName: string): Jb2aAssetDefinition | undefined
   const byId = (id: string) => JB2A_SPELLS_MAP[id];
 
   // Comprehensive D&D 5e Spell & Feature Animation Resolution
+  // Prioritize Vecna campaign unique spells, magic weapons & features first
+  if (n.includes('fire storm') || n.includes('firestorm')) return byId('fire_storm');
+  if (n.includes('divine word')) return byId('divine_word');
+  if (n === 'heal') return byId('heal');
+  if (n.includes('revivify') || n.includes('resurrection')) return byId('revivify');
+  if (n.includes('mass healing word')) return byId('mass_healing_word');
+  if (n.includes('mass cure wounds')) return byId('mass_cure_wounds');
+  if (n.includes('greater restoration')) return byId('greater_restoration');
+  if (n.includes('beacon of hope')) return byId('beacon_of_hope');
+  if (n.includes('daylight')) return byId('daylight');
+  if (n.includes('banishment')) return byId('banishment');
+  if (n.includes('dispel magic')) return byId('dispel_magic');
+  if (n.includes('blade ward')) return byId('blade_ward');
+  if (n.includes('greater invisibility')) return byId('greater_invisibility');
+  if (n.includes('second wind')) return byId('second_wind');
+  if (n.includes('patient defense')) return byId('patient_defense');
+  if (n.includes('uncanny dodge')) return byId('uncanny_dodge');
+  if (n.includes('cunning action')) return byId('cunning_action');
+  if (n.includes('mace of disruption')) return byId('attack_mace_disruption');
+  if (n.includes('devotee') && !n.includes('incense')) return byId('attack_devotees_censer');
+  if (n.includes('staff of power')) return byId('attack_staff_of_power');
+  if (n.includes('rod of the pact keeper')) return byId('attack_rod_pact_keeper');
+  if (n.includes('war magic')) return byId('attack_war_magic');
+  if (n.includes('rapier')) return byId('attack_rapier_sneak');
+  if (n.includes('shortbow')) return byId('attack_shortbow_sneak');
+  if (n.includes('longsword')) return byId('attack_longsword_magic');
+  if (n.includes('longbow')) return byId('attack_longbow_arcane');
+  if (n.includes('hold monster')) return byId('hold_monster');
+  if (n === 'teleport' || n.includes('teleportation circle')) return byId('teleport');
   // Prioritize newly added dedicated high-fidelity party spells & class features first
   if (n.includes('hypnotic pattern')) return byId('hypnotic_pattern');
   if (n.includes('sunburst')) return byId('sunburst');
@@ -3309,7 +3948,8 @@ export const findJb2aAsset = (idOrName: string): Jb2aAssetDefinition | undefined
   if (n.includes('druidcraft') || n.includes('goodberry')) return byId('druidcraft');
   if (n.includes('elementalism')) return byId('elementalism');
   if (n.includes('faerie fire')) return byId('faerie_fire');
-  if (n === 'light' || n.includes('daylight') || n.includes('guidance') || n.includes('thaumaturgy') || n.includes('mending') || n.includes('true strike')) return byId('light');
+  if (n.includes('guidance')) return byId('guidance');
+  if (n === 'light' || n.includes('daylight') || n.includes('thaumaturgy') || n.includes('mending') || n.includes('true strike')) return byId('light');
   if (n.includes('sunbeam')) return byId('sunbeam');
   if (n.includes('create bonfire') || n === 'bonfire') return byId('bonfire');
   if (n.includes('teleportation circle') || n === 'teleport') return byId('teleport');
@@ -3320,7 +3960,8 @@ export const findJb2aAsset = (idOrName: string): Jb2aAssetDefinition | undefined
   if (n.includes('blade barrier')) return byId('blade_barrier');
   if (n.includes('glyph of warding')) return byId('glyph_of_warding');
   if (n.includes('alarm')) return byId('alarm');
-  if (n.includes('hold person') || n.includes('hold monster')) return byId('hold_person');
+  if (n.includes('hold monster')) return byId('hold_monster');
+  if (n.includes('hold person')) return byId('hold_person');
   if (n.includes('arcane eye')) return byId('arcane_eye');
   if (n.includes('color spray') || n.includes('colour spray') || n.includes('hypnotic pattern')) return byId('color_spray');
   if (n.includes('circle of death')) return byId('circle_of_death');
@@ -3341,7 +3982,8 @@ export const findJb2aAsset = (idOrName: string): Jb2aAssetDefinition | undefined
   if (n.includes('aura of courage')) return byId('aura_of_courage');
   if (n.includes('antilife') || n.includes('anti-life')) return byId('antilife_shell');
   if (n.includes('twilight sanctuary') || n.includes('twilight')) return byId('twilight_sanctuary');
-  if (n.includes('holy aura') || n.includes('channel divinity') || n.includes('divine word')) return byId('holy_aura');
+  if (n.includes('divine word')) return byId('divine_word');
+  if (n.includes('holy aura') || n.includes('channel divinity')) return byId('holy_aura');
   if (n === 'fly' || n.includes('flight') || n.includes('haste')) return byId('fly');
   if (n.includes('blight') || n.includes('bestow curse') || n.includes('finger of death') || n.includes('power word kill')) return byId('blight');
   if (n.includes('warding bond') || n.includes('death ward') || n.includes('enlarge/reduce') || n.includes('enlarge reduce') || n.includes('protection from')) return byId('warding_bond');
@@ -3365,7 +4007,8 @@ export const findJb2aAsset = (idOrName: string): Jb2aAssetDefinition | undefined
   if (n.includes('chromatic orb')) return byId('chromatic_orb');
   if (n.includes('scorching ray')) return byId('scorching_ray');
   if (n.includes('hellish rebuke')) return byId('hellish_rebuke');
-  if (n.includes('spiritual weapon') || n.includes('holy weapon') || n.includes('magic weapon')) return byId('spiritual_weapon');
+  if (n.includes('holy weapon') || n.includes('magic weapon')) return byId('holy_weapon');
+  if (n.includes('spiritual weapon')) return byId('spiritual_weapon');
   if (n.includes('spirit guardians') || n.includes('guardian of faith')) return byId('spirit_guardians');
   if (n.includes('misty step') || n.includes("cloud's jaunt") || n.includes('clouds jaunt') || n.includes('arcane charge')) return byId('misty_step');
   if (n.includes('fey step') || n.includes('invisibility') || n.includes('polymorph')) return byId('fey_step');

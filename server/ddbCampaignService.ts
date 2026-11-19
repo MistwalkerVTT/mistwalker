@@ -658,7 +658,8 @@ export function matchJb2aAssetId(name: string): string | undefined {
   if (n.includes('chromatic orb')) return 'chromatic_orb';
   if (n.includes('scorching ray')) return 'scorching_ray';
   if (n.includes('hellish rebuke')) return 'hellish_rebuke';
-  if (n.includes('spiritual weapon') || n.includes('holy weapon')) return 'spiritual_weapon';
+  if (n.includes('holy weapon') || n.includes('magic weapon')) return 'holy_weapon';
+  if (n.includes('spiritual weapon')) return 'spiritual_weapon';
   if (n.includes('spirit guardians')) return 'spirit_guardians';
   if (n.includes('misty step') || n.includes("cloud's jaunt") || n.includes('clouds jaunt')) return 'misty_step';
   if (n.includes('thunderwave') || n.includes('thunderclap')) return 'thunderwave';
@@ -666,7 +667,11 @@ export function matchJb2aAssetId(name: string): string | undefined {
   if (n.includes('call lightning')) return 'call_lightning';
   if (n.includes('chain lightning')) return 'chain_lightning';
   if (n.includes('witch bolt') || n.includes('shocking grasp') || n.includes('lightning launcher')) return 'witch_bolt';
-  if (n.includes('bless') || n.includes('divine word')) return 'bless';
+  if (n.includes('divine word')) return 'divine_word';
+  if (n.includes('guidance')) return 'guidance';
+  if (n.includes('hold monster')) return 'hold_monster';
+  if (n.includes('hold person')) return 'hold_person';
+  if (n.includes('bless')) return 'bless';
   if (n.includes('bardic inspiration') || n.includes('mantle of inspiration') || n.includes('silvery barbs')) return 'bardic_inspiration';
   if (n.includes('cutting words') || n.includes('vicious mockery') || n.includes('dissonant whispers') || n.includes('command')) return 'cutting_words';
   if (n.includes("hunter's mark") || n.includes('hunters mark') || n.includes('hex')) return 'hunters_mark';

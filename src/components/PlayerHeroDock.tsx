@@ -82,6 +82,10 @@ interface PlayerHeroDockProps {
   collapseRequestTick?: number;
   onAdjustHp?: (delta: number) => void;
   onAdjustSpellSlot?: (level: number, delta: number) => void;
+  multiTargetTokens?: any[];
+  multiTargetMax?: number;
+  onConfirmMultiTarget?: () => void;
+  onRemoveMultiTarget?: (tokenId: string) => void;
 }
 
 export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
@@ -117,7 +121,11 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
   activeWildShape,
   collapseRequestTick,
   onAdjustHp,
-  onAdjustSpellSlot
+  onAdjustSpellSlot,
+  multiTargetTokens = [],
+  multiTargetMax = 0,
+  onConfirmMultiTarget,
+  onRemoveMultiTarget
 }) => {
   const currentTargetingAction = activeTargetingAction ?? selectedAction ?? (
     activeEquippedAsset ? {
@@ -260,9 +268,14 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
     setSearchQuery('');
   }, [characterData?.id, claimedToken?.id]);
 
-  // Close hover/cast description card or inspected modal on Escape key
+  // Close hover/cast description card or inspected modal on Escape key; Enter confirms multi-target heal
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' && multiTargetMax > 0 && multiTargetTokens.length > 0 && onConfirmMultiTarget) {
+        e.preventDefault();
+        onConfirmMultiTarget();
+        return;
+      }
       if (e.key === 'Escape') {
         if (showTraitsModal) {
           setShowTraitsModal(false);
@@ -274,12 +287,14 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
           setHoveredAction(null);
           setPinnedAction(null);
           onClearInspectedAura?.();
+        } else if (currentTargetingAction && onCancelTargeting) {
+          onCancelTargeting();
         }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [hoveredAction, pinnedAction, inspectedAction, channelDivinityMenuHub, showTraitsModal, onClearInspectedAura]);
+  }, [hoveredAction, pinnedAction, inspectedAction, channelDivinityMenuHub, showTraitsModal, onClearInspectedAura, multiTargetMax, multiTargetTokens.length, onConfirmMultiTarget, currentTargetingAction, onCancelTargeting]);
 
   // Dedicated Damage / Healing Dice Roll Handler (e.g. clicking "9d8 radiant")
   const handleRollDamage = (action: HudActionItem) => {
@@ -1085,8 +1100,26 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                     ▲ {formatSpellLevelLabel(currentTargetingAction.castAtLevel)} Slot
                   </span>
                 )}
-                <span className="hidden sm:inline text-zinc-400"> — Click target on battlemap</span>
+                <span className="hidden sm:inline text-zinc-400">
+                  {multiTargetMax > 0
+                    ? ` — Click up to ${multiTargetMax} creatures (${multiTargetTokens.length}/${multiTargetMax} selected)`
+                    : ' — Click target on battlemap'}
+                </span>
               </span>
+              {multiTargetMax > 0 && onConfirmMultiTarget && (
+                <button
+                  type="button"
+                  disabled={multiTargetTokens.length === 0}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onConfirmMultiTarget();
+                  }}
+                  className="px-2.5 py-0.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:bg-zinc-800 disabled:text-zinc-500 text-zinc-950 text-[11px] font-extrabold transition-all cursor-pointer active:scale-95 shadow-sm shrink-0"
+                  title="Heal the selected creatures now (Enter)"
+                >
+                  Heal Selected ({multiTargetTokens.length}/{multiTargetMax})
+                </button>
+              )}
               {isAttackRollAction(currentTargetingAction) && currentTargetingAction.hitBonus !== undefined && (
                 <button
                   type="button"
@@ -1175,6 +1208,27 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
               </button>
             </div>
           </div>
+
+          {multiTargetMax > 0 && multiTargetTokens.length > 0 && (
+            <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-zinc-800/80 text-[10px]">
+              <span className="text-emerald-400 font-bold uppercase tracking-wider">Targets:</span>
+              {multiTargetTokens.map((t: any, idx: number) => (
+                <button
+                  key={t.id || idx}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemoveMultiTarget?.(t.id);
+                  }}
+                  className="px-2 py-0.5 rounded-md bg-emerald-950/80 hover:bg-rose-950/80 border border-emerald-500/50 hover:border-rose-400 text-emerald-200 hover:text-rose-200 font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                  title={`Click to deselect ${t.name}`}
+                >
+                  <span>#{idx + 1} {t.name}</span>
+                  <X className="w-2.5 h-2.5" />
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Inline Upcast Slot Selector while Aiming Leveled Spells */}
           {(currentTargetingAction.level ?? 0) >= 1 && (
