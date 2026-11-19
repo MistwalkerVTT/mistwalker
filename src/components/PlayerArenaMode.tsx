@@ -3331,17 +3331,21 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         const destY = targetPointPx
           ? Math.floor(targetPointPx.y / arenaGridSize) * arenaGridSize
           : target.y;
+        // Step 1: Animate on the player at departure position first
         spawnArenaVisualEffect(actor, actor, action);
-        setCombatants((prev) =>
-          prev.map((c) =>
-            c.id === actor.id ? { ...markActorUsed(c), x: destX, y: destY } : c
-          )
-        );
-        spawnArenaVisualEffect(
-          { ...actor, x: destX, y: destY },
-          { ...actor, x: destX, y: destY },
-          action
-        );
+        // Step 2: Blink to destination while simultaneously animating at destination
+        window.setTimeout(() => {
+          setCombatants((prev) =>
+            prev.map((c) =>
+              c.id === actor.id ? { ...markActorUsed(c), x: destX, y: destY } : c
+            )
+          );
+          spawnArenaVisualEffect(
+            { ...actor, x: destX, y: destY },
+            { ...actor, x: destX, y: destY },
+            action
+          );
+        }, 320);
         addCombatLog(
           actor.name,
           actor.team,

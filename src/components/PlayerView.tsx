@@ -4278,20 +4278,51 @@ export default function PlayerView() {
           });
         }, 1300);
       } else {
-        // Standard rapid teleportation (Misty Step, Fey Step, Shadow Step)
-        // Use a single Arrival poof locally so the browser only decodes 1 WebM while moving the token and updating vision
-        setEffects(prev => [...prev, arriveEffect]);
+        // Standard rapid teleportation (Misty Step, Fey Step, Shadow Step, Cloud's Jaunt):
+        // Step 1: Animate on the player at their starting position FIRST
+        const teleportTokenId = claimedToken.id;
+        const teleportTokenName = claimedToken.name;
+        const teleportSpellName = activeEquippedAsset.name;
+        const departVideoUrl = activeEquippedAsset.departureWebm || activeEquippedAsset.webm;
+        const arriveVideoUrl = activeEquippedAsset.arrivalWebm || activeEquippedAsset.webm;
+
+        const firstPhaseDepartEffect: VttEffectInstance = {
+          ...departEffect,
+          videoUrl: departVideoUrl,
+          durationMs: 900
+        };
+
+        setEffects(prev => [...prev, firstPhaseDepartEffect]);
         if (activeEquippedAsset.soundKey) soundCatalog.play(activeEquippedAsset.soundKey);
         if (socketRef.current?.connected) {
-          socketRef.current.emit('EFFECT_SPAWN', arriveEffect);
+          socketRef.current.emit('EFFECT_SPAWN', firstPhaseDepartEffect);
         }
 
-        // Relocate claimed character token to destination tile
-        handleMoveToken(claimedToken.id, snappedTargetX, snappedTargetY, distFt);
+        // Step 2: After the departure puff animates on the player (~320ms), blink token to destination
+        // while simultaneously animating at the destination (replacing the departure video so only 1 WebM decodes at a time!)
+        window.setTimeout(() => {
+          const secondPhaseArriveEffect: VttEffectInstance = {
+            ...arriveEffect,
+            videoUrl: arriveVideoUrl,
+            castTime: Date.now(),
+            durationMs: 1100
+          };
 
-        toast.success(`${claimedToken.name} cast ${activeEquippedAsset.name}!`, {
-          description: `Teleported ${distFt} ft across the battlefield.`
-        });
+          setEffects(prev => [
+            ...prev.filter(e => e.id !== firstPhaseDepartEffect.id),
+            secondPhaseArriveEffect
+          ]);
+          if (socketRef.current?.connected) {
+            socketRef.current.emit('EFFECT_REMOVE', { id: firstPhaseDepartEffect.id });
+            socketRef.current.emit('EFFECT_SPAWN', secondPhaseArriveEffect);
+          }
+
+          handleMoveToken(teleportTokenId, snappedTargetX, snappedTargetY, distFt);
+
+          toast.success(`${teleportTokenName} cast ${teleportSpellName}!`, {
+            description: `Teleported ${distFt} ft across the battlefield.`
+          });
+        }, 320);
       }
 
       setAimOrigin(null);
@@ -6885,6 +6916,7 @@ export default function PlayerView() {
     setAimCurrent(point);
   };
 
+  const aimMoveRafRef = useRef<number | null>(null);
   const handleStageMouseMove = (e: any) => {
     if (isSpacePressed) return;
     if (!activeEquippedAsset) return;
@@ -6892,7 +6924,11 @@ export default function PlayerView() {
     if (!stage) return;
     const point = getStageRelativePointerPosition(stage);
     if (!point) return;
-    setAimCurrent(point);
+    if (aimMoveRafRef.current !== null) return;
+    aimMoveRafRef.current = requestAnimationFrame(() => {
+      aimMoveRafRef.current = null;
+      setAimCurrent(point);
+    });
   };
 
   const handleStageMouseUp = () => {

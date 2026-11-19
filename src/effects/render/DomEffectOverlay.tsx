@@ -126,10 +126,15 @@ function resolveAttachedToken(
 }
 
 
-const applySnappyPlayback = (el: HTMLVideoElement | null) => {
+const applySnappyPlayback = (el: HTMLVideoElement | null, effect?: VttEffectInstance) => {
   if (!el) return;
   try {
-    el.playbackRate = 1.35;
+    const isRapidTeleport =
+      effect?.assetKey === 'misty_step' ||
+      effect?.assetKey === 'fey_step' ||
+      effect?.assetKey === 'shadow_step' ||
+      effect?.name?.toLowerCase().includes('misty step');
+    el.playbackRate = isRapidTeleport ? 1.85 : 1.35;
     el.play().catch(() => {});
   } catch (err) {
     // ignore
@@ -437,7 +442,7 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                 muted
                 playsInline
                 preload="auto"
-                onLoadedData={(e) => applySnappyPlayback(e.target as HTMLVideoElement)}
+                onLoadedData={(e) => applySnappyPlayback(e.target as HTMLVideoElement, effect)}
                 onError={(e) => console.warn('Effect video load failed:', effect.videoUrl, e)}
                 onEnded={() => handleEnded(effect)}
                 style={{
@@ -476,7 +481,7 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                 playsInline
                 preload="auto"
                 loop={Boolean(effect.loop || effect.isPersistent)}
-                onLoadedData={(e) => applySnappyPlayback(e.target as HTMLVideoElement)}
+                onLoadedData={(e) => applySnappyPlayback(e.target as HTMLVideoElement, effect)}
                 onError={(e) => console.warn('Effect video load failed:', effect.videoUrl, e)}
                 onEnded={() => handleEnded(effect)}
                 style={{
@@ -513,7 +518,7 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                 playsInline
                 preload="auto"
                 loop={Boolean(effect.loop || effect.isPersistent)}
-                onLoadedData={(e) => applySnappyPlayback(e.target as HTMLVideoElement)}
+                onLoadedData={(e) => applySnappyPlayback(e.target as HTMLVideoElement, effect)}
                 onError={(e) => console.warn('Effect video load failed:', effect.videoUrl, e)}
                 onEnded={() => handleEnded(effect)}
                 style={{
@@ -578,7 +583,7 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                 preload="auto"
                 loop={Boolean(effect.loop || effect.isPersistent)}
                 className={(effect.fadeInMs || effect.fadeOutMs || effect.assetKey === 'dimension_door' || effect.assetKey === 'arcane_gate' || effect.name?.toLowerCase().includes('dimension door')) ? 'animate-effect-fade-portal' : undefined}
-                onLoadedData={(e) => applySnappyPlayback(e.target as HTMLVideoElement)}
+                onLoadedData={(e) => applySnappyPlayback(e.target as HTMLVideoElement, effect)}
                 onError={(e) => console.warn('Effect video load failed:', effect.videoUrl, e)}
                 onEnded={() => handleEnded(effect)}
                 style={{
