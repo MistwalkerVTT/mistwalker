@@ -1390,6 +1390,76 @@ function isTrulyGuardType(name: string): boolean {
   return /^(guard|noble|commoner|gladiator|veteran|knight)(\s+\d+)?$/i.test(n);
 }
 
+interface SortedMonsterCatalogIndex {
+  sorted: Monster[];
+  exactMap: Map<string, Monster>;
+}
+
+const catalogIndexByCompendium = new WeakMap<Monster[], SortedMonsterCatalogIndex>();
+let emptyCompendiumCatalogIndex: SortedMonsterCatalogIndex | null = null;
+
+function canonicalizeMonsterLookupKey(name: string): string {
+  const norm = (name || '').trim().toLowerCase().replace(/['"`]/g, '').replace(/\s+/g, ' ');
+  if (!norm) return '';
+  if (norm.endsWith('ies') && norm.length > 4) return norm.slice(0, -3) + 'y';
+  if (norm.endsWith('ves') && norm.length > 4) return norm.slice(0, -3) + 'f';
+  if (norm.endsWith('s') && !norm.endsWith('ss') && !norm.endsWith('us') && !norm.endsWith('is') && norm.length > 3) {
+    return norm.slice(0, -1);
+  }
+  return norm;
+}
+
+function getSortedMonsterCatalogIndex(compendium: Monster[]): SortedMonsterCatalogIndex {
+  if (!compendium || compendium.length === 0) {
+    if (emptyCompendiumCatalogIndex) return emptyCompendiumCatalogIndex;
+  } else {
+    const cached = catalogIndexByCompendium.get(compendium);
+    if (cached) return cached;
+  }
+
+  const hasValidAvatar = (m: Monster): number => {
+    const u = String(m.avatarUrl || (m as any).url || '');
+    if (!u) return 0;
+    if (u === GENERIC_FALLBACK_AVATAR && !isTrulyGuardType(m.name)) return 0;
+    if (u.startsWith('/uploads/token_') || u.startsWith('/uploads/avatar_')) return 0;
+    if (u.includes('media.dndbeyond.com/compendium-images/veor/')) return 0;
+    return 1;
+  };
+
+  const sorted = [...(compendium || []), ...SRD_MONSTERS].sort((a, b) => {
+    const aValid = hasValidAvatar(a);
+    const bValid = hasValidAvatar(b);
+    if (aValid !== bValid) return bValid - aValid;
+    const aCustom = a.isCustom || a.isRoomCustom || a.source === 'Custom Compendium' || a.source === 'Room Zone Custom' || a.source === 'AI Rendered Compendium' ? 1 : 0;
+    const bCustom = b.isCustom || b.isRoomCustom || b.source === 'Custom Compendium' || b.source === 'Room Zone Custom' || b.source === 'AI Rendered Compendium' ? 1 : 0;
+    if (aCustom !== bCustom) return bCustom - aCustom;
+    const aLocal = (a.avatarUrl?.startsWith('data:image/') || (a.avatarUrl?.startsWith('/uploads/file-') && a.avatarUrl !== GENERIC_FALLBACK_AVATAR)) ? 1 : 0;
+    const bLocal = (b.avatarUrl?.startsWith('data:image/') || (b.avatarUrl?.startsWith('/uploads/file-') && b.avatarUrl !== GENERIC_FALLBACK_AVATAR)) ? 1 : 0;
+    return bLocal - aLocal;
+  });
+
+  const exactMap = new Map<string, Monster>();
+  for (const m of sorted) {
+    if (!m.name) continue;
+    const rawKey = m.name.trim().toLowerCase().replace(/['"`]/g, '').replace(/\s+/g, ' ');
+    if (rawKey && !exactMap.has(rawKey)) {
+      exactMap.set(rawKey, m);
+    }
+    const canonKey = canonicalizeMonsterLookupKey(m.name);
+    if (canonKey && !exactMap.has(canonKey)) {
+      exactMap.set(canonKey, m);
+    }
+  }
+
+  const index: SortedMonsterCatalogIndex = { sorted, exactMap };
+  if (!compendium || compendium.length === 0) {
+    emptyCompendiumCatalogIndex = index;
+  } else {
+    catalogIndexByCompendium.set(compendium, index);
+  }
+  return index;
+}
+
 const NON_CREATURE_STAT_OR_ITEM_WORDS = new Set([
   // Ability scores, checks, saves, DCs, skills, and game mechanics
   'strength', 'dexterity', 'constitution', 'intelligence', 'wisdom', 'charisma',
@@ -1611,27 +1681,8 @@ export function resolveMonster(
     ? candidateWords[candidateWords.length - 1]
     : null;
 
-  const hasValidAvatar = (m: Monster): number => {
-    const u = String(m.avatarUrl || (m as any).url || '');
-    if (!u) return 0;
-    if (u === GENERIC_FALLBACK_AVATAR && !isTrulyGuardType(m.name)) return 0;
-    if (u.startsWith('/uploads/token_') || u.startsWith('/uploads/avatar_')) return 0;
-    if (u.includes('media.dndbeyond.com/compendium-images/veor/')) return 0;
-    return 1;
-  };
-
-  // Prefer entries with valid avatars first, then custom/rendered monsters, then curated local uploads
-  const allAvailable = [...compendium, ...SRD_MONSTERS].sort((a, b) => {
-    const aValid = hasValidAvatar(a);
-    const bValid = hasValidAvatar(b);
-    if (aValid !== bValid) return bValid - aValid;
-    const aCustom = a.isCustom || a.isRoomCustom || a.source === 'Custom Compendium' || a.source === 'Room Zone Custom' || a.source === 'AI Rendered Compendium' ? 1 : 0;
-    const bCustom = b.isCustom || b.isRoomCustom || b.source === 'Custom Compendium' || b.source === 'Room Zone Custom' || b.source === 'AI Rendered Compendium' ? 1 : 0;
-    if (aCustom !== bCustom) return bCustom - aCustom;
-    const aLocal = (a.avatarUrl?.startsWith('data:image/') || (a.avatarUrl?.startsWith('/uploads/file-') && a.avatarUrl !== GENERIC_FALLBACK_AVATAR)) ? 1 : 0;
-    const bLocal = (b.avatarUrl?.startsWith('data:image/') || (b.avatarUrl?.startsWith('/uploads/file-') && b.avatarUrl !== GENERIC_FALLBACK_AVATAR)) ? 1 : 0;
-    return bLocal - aLocal;
-  });
+  // Prefer entries with valid avatars first, then custom/rendered monsters, then curated local uploads (cached O(1) index)
+  const { sorted: allAvailable, exactMap } = getSortedMonsterCatalogIndex(compendium);
 
   // Match candidate or parenType strictly
   const matchCandidates = [
@@ -1643,9 +1694,13 @@ export function resolveMonster(
   ].filter(Boolean) as string[];
 
   let found: Monster | undefined;
-  // Strict exact match: names must match exactly (case-insensitive, allowing singular/plural 's' or 'es' endings).
+  // Fast O(1) hash lookup first, then fallback to full exact scan if needed
   for (const cName of matchCandidates) {
-    found = allAvailable.find(m => isExactMonsterMatch(cName, m.name));
+    const rawKey = cName.trim().toLowerCase().replace(/['"`]/g, '').replace(/\s+/g, ' ');
+    found = exactMap.get(rawKey) || exactMap.get(canonicalizeMonsterLookupKey(cName));
+    if (!found) {
+      found = allAvailable.find(m => isExactMonsterMatch(cName, m.name));
+    }
     if (found) break;
   }
 
@@ -1669,7 +1724,9 @@ export function resolveMonster(
       const lowerCandidate = cName.toLowerCase().trim();
       const mappedTargetName = SEMANTIC_BASE_ALIASES[lowerCandidate];
       if (mappedTargetName) {
-        const baseMonster = allAvailable.find(m => isExactMonsterMatch(mappedTargetName, m.name));
+        const baseMonster =
+          exactMap.get(mappedTargetName.toLowerCase()) ||
+          allAvailable.find(m => isExactMonsterMatch(mappedTargetName, m.name));
         if (baseMonster) {
           const isDirectNpcAlias = lowerCandidate === 'valin sarnaster';
           found = {

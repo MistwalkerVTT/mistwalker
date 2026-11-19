@@ -819,7 +819,7 @@ const PlayerToken = React.memo(({
       />
 
       {/* Lifted & Animated Token Body Group */}
-      <Group ref={floatingGroupRef}>
+      <Group ref={floatingGroupRef} listening={false}>
         {/* Halo highlight for claimed token */}
         <Group visible={isClaimed} listening={false}>
           <Circle
@@ -860,6 +860,7 @@ const PlayerToken = React.memo(({
 
         {/* 1. Circular Avatar Clip */}
         <Group
+          listening={false}
           clipFunc={(ctx) => {
             ctx.arc(radius, radius, radius, 0, Math.PI * 2, false);
           }}
@@ -876,6 +877,7 @@ const PlayerToken = React.memo(({
               width={tokenPx}
               height={tokenPx}
               perfectDrawEnabled={false}
+              listening={false}
             />
           ) : (
             <>
@@ -884,6 +886,7 @@ const PlayerToken = React.memo(({
                 height={tokenPx}
                 fill={token.isPlayer ? '#1e3a8a' : isAlly ? '#713f12' : '#7f1d1d'}
                 perfectDrawEnabled={false}
+                listening={false}
               />
               <Circle
                 x={radius}
@@ -891,6 +894,7 @@ const PlayerToken = React.memo(({
                 radius={radius * 0.72}
                 fill={token.isPlayer ? '#1d4ed8' : isAlly ? '#eab308' : '#991b1b'}
                 perfectDrawEnabled={false}
+                listening={false}
               />
               <Text
                 x={0}
@@ -903,6 +907,7 @@ const PlayerToken = React.memo(({
                 fontFamily="sans-serif"
                 fill="white"
                 perfectDrawEnabled={false}
+                listening={false}
               />
             </>
           )}
@@ -941,7 +946,7 @@ const PlayerToken = React.memo(({
 
         {/* 4. Large, High-Contrast HP Pill Badge directly tied to D&D Beyond & Character Sheet (PLAYERS & ALLIES ONLY - Monsters & Condition tokens NEVER show HP in player view) */}
         {showHp && !isCondition && (!isMonster || isAlly) && (
-          <Group x={pillX} y={pillY}>
+          <Group x={pillX} y={pillY} listening={false}>
             {/* Dark slate container badge */}
             <Rect
               width={pillWidth}
@@ -951,6 +956,7 @@ const PlayerToken = React.memo(({
               strokeWidth={isAlly ? 1.5 : (hpRatio <= 0.25 ? 1.5 : 1)}
               cornerRadius={Math.max(4, Math.round(pillHeight * 0.2))}
               perfectDrawEnabled={false}
+              listening={false}
             />
             {/* Background HP Track */}
             <Rect
@@ -961,6 +967,7 @@ const PlayerToken = React.memo(({
               fill="rgba(30, 41, 59, 0.9)"
               cornerRadius={Math.round(barHeight / 2)}
               perfectDrawEnabled={false}
+              listening={false}
             />
             {/* Filled HP progress bar */}
             {hpRatio > 0 && (
@@ -972,6 +979,7 @@ const PlayerToken = React.memo(({
                 fill={hpColor}
                 cornerRadius={Math.round(barHeight / 2)}
                 perfectDrawEnabled={false}
+                listening={false}
               />
             )}
             {/* Crisp Monospace HP text */}
@@ -985,6 +993,7 @@ const PlayerToken = React.memo(({
               fontFamily="monospace"
               fill="#ffffff"
               perfectDrawEnabled={false}
+              listening={false}
             />
           </Group>
         )}
@@ -2867,17 +2876,32 @@ export default function PlayerView() {
       }
     });
 
-    // Real-time token move relay from other clients
+    // Real-time token move relay from other clients (coalesced via requestAnimationFrame to prevent main-thread backlog)
+    let pendingRemoteMoveRafId: number | null = null;
+    const pendingRemoteMoves = new Map<string, { x: number; y: number }>();
+
     socket.on('MOVE_TOKEN', (data: { id: string; x: number; y: number }) => {
       if (data?.id) {
         if (activeDraggingTokenIdRef.current === data.id) return;
         const localMove = locallyMovedTokensRef.current.get(data.id);
         if (localMove && (Date.now() - localMove.timestamp < 1500)) return;
-        setTokens(prev => {
-          const next = prev.map(t => t.id === data.id ? { ...t, x: data.x, y: data.y } : t);
-          tokensRef.current = next;
-          return next;
-        });
+        pendingRemoteMoves.set(data.id, { x: data.x, y: data.y });
+        if (pendingRemoteMoveRafId === null) {
+          pendingRemoteMoveRafId = requestAnimationFrame(() => {
+            pendingRemoteMoveRafId = null;
+            if (pendingRemoteMoves.size === 0) return;
+            const updates = new Map(pendingRemoteMoves);
+            pendingRemoteMoves.clear();
+            setTokens(prev => {
+              const next = prev.map(t => {
+                const u = updates.get(t.id);
+                return u ? { ...t, x: u.x, y: u.y } : t;
+              });
+              tokensRef.current = next;
+              return next;
+            });
+          });
+        }
       }
     });
 
@@ -6877,9 +6901,12 @@ export default function PlayerView() {
     }
   }, [claimedToken?.name]);
 
+  // Cache previous playerVisionSources array by signature so monster movements never invalidate activeFovPolygons
+  const prevPlayerVisionSourcesRef = useRef<{ sig: string; list: VisionSource[] }>({ sig: '', list: [] });
+
   // Vision Sources for Player Characters (shared party vision providers)
   const playerVisionSources = useMemo<VisionSource[]>(() => {
-    if (!visionConfig.enabled) return [];
+    if (!visionConfig.enabled) return prevPlayerVisionSourcesRef.current.list.length === 0 ? prevPlayerVisionSourcesRef.current.list : [];
 
     const activeVisionTokens = tokens.filter((t) => {
       if ((t as any).hidden) return false;
@@ -6963,6 +6990,13 @@ export default function PlayerView() {
       }
     }
 
+    const sig = sources
+      .map(s => `${s.id}:${Math.round(s.x * 2)},${Math.round(s.y * 2)}:${Math.round(s.radiusPx)}:${s.angleDegrees || 360}:${s.directionDegrees || 0}:${s.color || ''}`)
+      .join('|');
+    if (sig === prevPlayerVisionSourcesRef.current.sig) {
+      return prevPlayerVisionSourcesRef.current.list;
+    }
+    prevPlayerVisionSourcesRef.current = { sig, list: sources };
     return sources;
   }, [tokens, gridSize, visionConfig.enabled, claimedTokenId, boardAnimatedFeatures, targetMapW, targetMapH, walls, reveals, polygonReveals]);
 
@@ -7045,16 +7079,9 @@ export default function PlayerView() {
         if (d > fov.radius + radius) continue;
 
         // fov.points is already wall-clipped by computeVisibilityPolygon, so if any sample point of the token
-        // is inside fov.points OR has clear line of sight within fov.radius, the token is visible!
+        // is inside fov.points, the token is visible!
         const isInsideFov = samplePoints.some(pt => isPointInPolygon(pt.x, pt.y, fov.points));
         if (isInsideFov) {
-          return true;
-        }
-
-        const hasClearLos = samplePoints.some(
-          pt => distanceBetween(fov.center.x, fov.center.y, pt.x, pt.y) <= fov.radius && !isLineOfSightBlocked(fov.center, pt, walls)
-        );
-        if (hasClearLos) {
           return true;
         }
       }

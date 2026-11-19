@@ -46,6 +46,8 @@ export function distanceBetween(x1: number, y1: number, x2: number, y2: number):
   return Math.sqrt(dx * dx + dy * dy);
 }
 
+const polygonAabbCache = new WeakMap<number[], { minX: number; maxX: number; minY: number; maxY: number }>();
+
 /**
  * Fast ray-casting algorithm to test whether a 2D point (px, py) lies inside a polygon [x0, y0, x1, y1, ...]
  */
@@ -53,17 +55,22 @@ export function isPointInPolygon(px: number, py: number, poly: number[]): boolea
   const len = poly.length;
   if (len < 6) return false;
 
-  // Fast AABB bounding box rejection
-  let minX = poly[0], maxX = poly[0], minY = poly[1], maxY = poly[1];
-  for (let i = 2; i < len; i += 2) {
-    const x = poly[i];
-    const y = poly[i + 1];
-    if (x < minX) minX = x;
-    else if (x > maxX) maxX = x;
-    if (y < minY) minY = y;
-    else if (y > maxY) maxY = y;
+  // Fast AABB bounding box rejection (cached per polygon array reference)
+  let aabb = polygonAabbCache.get(poly);
+  if (!aabb) {
+    let minX = poly[0], maxX = poly[0], minY = poly[1], maxY = poly[1];
+    for (let i = 2; i < len; i += 2) {
+      const x = poly[i];
+      const y = poly[i + 1];
+      if (x < minX) minX = x;
+      else if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      else if (y > maxY) maxY = y;
+    }
+    aabb = { minX, maxX, minY, maxY };
+    polygonAabbCache.set(poly, aabb);
   }
-  if (px < minX || px > maxX || py < minY || py > maxY) return false;
+  if (px < aabb.minX || px > aabb.maxX || py < aabb.minY || py > aabb.maxY) return false;
 
   let inside = false;
   for (let i = 0, j = len - 2; i < len; j = i, i += 2) {

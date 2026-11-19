@@ -3,7 +3,7 @@
 // Features 60 FPS zero-overhead GPU compositing, native VP9 alpha transparency,
 // and live animated targeting preview under the cursor while aiming spells.
 
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useMemo } from 'react';
 import { X, Sparkles } from 'lucide-react';
 import { VttEffectInstance, Jb2aAssetDefinition } from '../types/effect';
 import { soundCatalog } from '../db/soundCatalog';
@@ -270,9 +270,51 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
 
   const hasEffects = Boolean(effects && effects.length > 0);
   const hasAimPreview = Boolean(activeEquippedAsset && aimCurrent);
-  const hasTokens = Boolean(tokens && tokens.length > 0);
 
-  if (!hasEffects && !hasAimPreview && !hasTokens) return null;
+  // Pre-filter tokens into active buckets so 95% of plain monster tokens are skipped in O(1)
+  const { haloTokens, auraTokens, conditionTokensWithList } = useMemo(() => {
+    const halos: any[] = [];
+    const auras: any[] = [];
+    const conds: Array<{ token: any; conditions: string[] }> = [];
+
+    if (tokens && tokens.length > 0) {
+      for (let i = 0; i < tokens.length; i++) {
+        const t = tokens[i];
+        if (!t) continue;
+        if (t.haloActive) {
+          halos.push(t);
+        }
+        if ((Array.isArray(t.auras) && t.auras.length > 0) || (t.auraRadius && t.auraRadius > 0)) {
+          auras.push(t);
+        }
+        const tConds = Array.isArray(t.conditions) && t.conditions.length > 0 ? t.conditions : null;
+        let matchedCombConds: string[] | null = null;
+        if (combatants && combatants.length > 0) {
+          const matched = combatants.find((c: any) =>
+            c.id === t.id ||
+            c.tokenId === t.id ||
+            (c.name && t.name && c.name.toLowerCase().trim() === t.name.toLowerCase().trim())
+          );
+          if (Array.isArray(matched?.conditions) && matched.conditions.length > 0) {
+            matchedCombConds = matched.conditions;
+          }
+        }
+        if (tConds || matchedCombConds) {
+          const set = new Set<string>();
+          tConds?.forEach((c: string) => { if (c) set.add(c); });
+          matchedCombConds?.forEach((c: string) => { if (c) set.add(c); });
+          if (set.size > 0) {
+            conds.push({ token: t, conditions: Array.from(set) });
+          }
+        }
+      }
+    }
+    return { haloTokens: halos, auraTokens: auras, conditionTokensWithList: conds };
+  }, [tokens, combatants]);
+
+  const hasActiveTokenDomFx = haloTokens.length > 0 || auraTokens.length > 0 || conditionTokensWithList.length > 0;
+
+  if (!hasEffects && !hasAimPreview && !hasActiveTokenDomFx) return null;
 
   return (
     <div
@@ -290,8 +332,7 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
         }}
       >
         {/* 0. Glowing Halos above token heads (toggled per token via token menu) */}
-        {tokens?.map((token) => {
-          if (!token.haloActive) return null;
+        {haloTokens.map((token) => {
           const tokenWidth = gridSize * (token.size || 1);
           const haloW = tokenWidth * 0.62;
           const haloH = tokenWidth * 0.2;
@@ -319,7 +360,7 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
         })}
 
         {/* 1. Animated Token Auras (Looping JB2A runes, spirit guardians, cold auras, nature swirls) */}
-        {tokens?.map((token) => {
+        {auraTokens.map((token) => {
           const tokenSize = token.size || 1;
           const tokenWidth = gridSize * tokenSize;
           const tokenRadius = tokenWidth / 2;
@@ -674,7 +715,7 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
         })}
 
         {/* 2c. Direct On-Map Clickable Title Pins for Token-Equipped Auras (token.auraRadius / token.auras) */}
-        {tokens?.map((token) => {
+        {auraTokens.map((token) => {
           if (!onInspectEffect && !onClearTokenAura) return null;
 
           const auras: any[] = [];
@@ -786,30 +827,12 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
         {/* 2c. Token Status & Lasting Debuff Badges are cleanly rendered in Konva with clear crisp icons */}
 
         {/* 3. Animated Token Condition Overlays (Dizzy stars, poison clouds, charm hearts, fear, ice, fire, skulls) */}
-        {tokens?.map((token) => {
+        {conditionTokensWithList.map(({ token, conditions }) => {
           const tokenSize = token.size || 1;
           const tokenWidth = gridSize * tokenSize;
           const tokenRadius = tokenWidth / 2;
           const centerX = (token.x ?? 0) + tokenRadius;
           const centerY = (token.y ?? 0) + tokenRadius;
-
-          const conditionsSet = new Set<string>();
-          if (Array.isArray(token.conditions)) {
-            token.conditions.forEach((c: string) => { if (c) conditionsSet.add(c); });
-          }
-          if (combatants && combatants.length > 0) {
-            const matched = combatants.find((c: any) =>
-              c.id === token.id ||
-              c.tokenId === token.id ||
-              (c.name && token.name && c.name.toLowerCase().trim() === token.name.toLowerCase().trim())
-            );
-            if (Array.isArray(matched?.conditions)) {
-              matched.conditions.forEach((c: string) => { if (c) conditionsSet.add(c); });
-            }
-          }
-
-          const conditions = Array.from(conditionsSet);
-          if (conditions.length === 0) return null;
 
           return conditions.map((conditionName) => {
             const fx = getConditionFx(conditionName);

@@ -40,6 +40,8 @@ interface DynamicLightingLayerProps {
   snapToGridEnabled?: boolean;
   fogResetKey?: number;
   animatedFeatures?: AnimatedFeature[];
+  precomputedVisionSources?: VisionSource[];
+  precomputedFovPolygons?: VisibilityPolygon[];
 }
 
 export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.memo(({
@@ -68,7 +70,9 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
   gridOffsetY = 0,
   snapToGridEnabled = false,
   fogResetKey = 0,
-  animatedFeatures = []
+  animatedFeatures = [],
+  precomputedVisionSources,
+  precomputedFovPolygons
 }) => {
   // Track hovered wall for eraser and visual feedback
   const [hoveredWallId, setHoveredWallId] = useState<string | null>(null);
@@ -165,9 +169,14 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
     };
   }, [walls]);
 
+  // Cache previous visionSources array by signature so moving monster tokens (which have no vision)
+  // never creates a new visionSources array or triggers offscreen fog/ambient canvas redraws.
+  const prevVisionSourcesRef = useRef<{ sig: string; list: VisionSource[] }>({ sig: '', list: [] });
+
   // Convert player/vision tokens into VisionSources
   const visionSources: VisionSource[] = useMemo(() => {
-    if (!visionConfig.enabled) return [];
+    if (precomputedVisionSources) return precomputedVisionSources;
+    if (!visionConfig.enabled) return prevVisionSourcesRef.current.list.length === 0 ? prevVisionSourcesRef.current.list : [];
 
     // In player view and DM view, show shared party vision for all active player/ally tokens
     // Monster tokens strictly do NOT get vision and never pierce or remove fog of war
@@ -252,16 +261,24 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
       }
     }
 
+    const sig = sources
+      .map(s => `${s.id}:${Math.round(s.x * 2)},${Math.round(s.y * 2)}:${Math.round(s.radiusPx)}:${s.angleDegrees || 360}:${s.directionDegrees || 0}:${s.color || ''}`)
+      .join('|');
+    if (sig === prevVisionSourcesRef.current.sig) {
+      return prevVisionSourcesRef.current.list;
+    }
+    prevVisionSourcesRef.current = { sig, list: sources };
     return sources;
-  }, [tokens, gridSize, visionConfig.enabled, isPlayerView, claimedTokenId, animatedFeatures, mapDimensions, walls, reveals, polygonReveals]);
+  }, [precomputedVisionSources, tokens, gridSize, visionConfig.enabled, isPlayerView, claimedTokenId, animatedFeatures, mapDimensions, walls, reveals, polygonReveals]);
 
   // Compute 2D visibility polygons via raycasting
   const activeFovPolygons: VisibilityPolygon[] = useMemo(() => {
+    if (precomputedFovPolygons) return precomputedFovPolygons;
     if (!visionConfig.enabled || visionSources.length === 0) return [];
     return visionSources.map((source) =>
       computeVisibilityPolygon(source, walls, mapDimensions)
     );
-  }, [visionSources, walls, mapDimensions, visionConfig.enabled]);
+  }, [precomputedFovPolygons, visionSources, walls, mapDimensions, visionConfig.enabled]);
 
   // Reset explored memory whenever fog is reset, hidden, or exploration memory disabled
   useEffect(() => {
@@ -425,9 +442,13 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
       fogCanvasRef.current = document.createElement('canvas');
     }
     const canvas = fogCanvasRef.current;
-    if (canvas.width !== mapDimensions.width || canvas.height !== mapDimensions.height) {
-      canvas.width = mapDimensions.width;
-      canvas.height = mapDimensions.height;
+    // Downscale offscreen fog buffer (0.5x, max 1600px) to cut pixel fill & GPU upload cost by 4-6x
+    const fogScale = Math.min(0.5, 1600 / Math.max(1, mapDimensions.width, mapDimensions.height));
+    const targetW = Math.max(1, Math.round(mapDimensions.width * fogScale));
+    const targetH = Math.max(1, Math.round(mapDimensions.height * fogScale));
+    if (canvas.width !== targetW || canvas.height !== targetH) {
+      canvas.width = targetW;
+      canvas.height = targetH;
     }
 
     const ctx = canvas.getContext('2d');
@@ -435,11 +456,12 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.save();
+    ctx.scale(fogScale, fogScale);
 
     // 1. Base dark fog rectangle
     ctx.fillStyle = '#050508';
     ctx.globalAlpha = baseDarkness;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, mapDimensions.width, mapDimensions.height);
     ctx.globalAlpha = 1.0;
 
     // 2. Use destination-out to carve revealed visibility out of the black fog layer
@@ -620,15 +642,20 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
       ambientCanvasRef.current = document.createElement('canvas');
     }
     const canvas = ambientCanvasRef.current;
-    if (canvas.width !== mapDimensions.width || canvas.height !== mapDimensions.height) {
-      canvas.width = mapDimensions.width;
-      canvas.height = mapDimensions.height;
+    const ambientScale = Math.min(0.5, 1600 / Math.max(1, mapDimensions.width, mapDimensions.height));
+    const targetW = Math.max(1, Math.round(mapDimensions.width * ambientScale));
+    const targetH = Math.max(1, Math.round(mapDimensions.height * ambientScale));
+    if (canvas.width !== targetW || canvas.height !== targetH) {
+      canvas.width = targetW;
+      canvas.height = targetH;
     }
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    ctx.scale(ambientScale, ambientScale);
 
     for (const fov of activeFovPolygons) {
       const src = visionSources.find(s => s.id === fov.sourceId);
@@ -655,6 +682,7 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
       ctx.restore();
     }
 
+    ctx.restore();
     setAmbientCanvasVersion(v => v + 1);
   }, [visionConfig.enabled, activeFovPolygons, visionSources, mapDimensions.width, mapDimensions.height]);
 
@@ -674,9 +702,16 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
     </Layer>
   );
 
+  const visibleWallsForLayer = useMemo(() => {
+    if (campaignMode === 'run' && (isPlayerView || visionConfig.dmPreviewMode)) {
+      return walls.filter(w => w.wallType === 'door' || w.wallType === 'secret_door');
+    }
+    return walls;
+  }, [walls, campaignMode, isPlayerView, visionConfig.dmPreviewMode]);
+
   const wallsInteractiveLayer = (
     <Layer id="walls-interactive-layer" listening={campaignMode === 'creator'}>
-      {walls.map((wall) => {
+      {visibleWallsForLayer.map((wall) => {
         const isSelected = wall.id === selectedWallId && campaignMode === 'creator';
         const isDoor = wall.wallType === 'door';
         const isSecretDoor = wall.wallType === 'secret_door';

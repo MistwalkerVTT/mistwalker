@@ -66,7 +66,6 @@ export const TokenImage = React.memo(({
     : rawTokenUrl;
   const isGif = Boolean(rawTokenUrl && rawTokenUrl.toLowerCase().endsWith('.gif'));
   const [image] = useImage(isGif ? null : (effectiveTokenUrl || null), 'anonymous');
-  const [isHovered, setIsHovered] = useState(false);
 
   const matchedCombatant = useMemo(() => {
     if (!combatants || combatants.length === 0) return null;
@@ -424,7 +423,6 @@ export const TokenImage = React.memo(({
         }
       }}
       onMouseEnter={(e) => {
-        setIsHovered(true);
         const stage = e.target.getStage();
         if (stage && !isTokenDraggingRef.current) stage.container().style.cursor = 'grab';
         if (onMouseEnter) {
@@ -432,7 +430,6 @@ export const TokenImage = React.memo(({
         }
       }}
       onMouseLeave={(e) => {
-        setIsHovered(false);
         const stage = e.target.getStage();
         if (stage && !isTokenDraggingRef.current) {
           if (isSpacePressed) {
@@ -546,7 +543,7 @@ export const TokenImage = React.memo(({
       />
 
       {/* Lifted & Animated Token Body Group */}
-      <Group ref={floatingGroupRef}>
+      <Group ref={floatingGroupRef} listening={false}>
         {/* Selection Glow Indicator */}
         {isSelected && (
           <>
@@ -579,6 +576,7 @@ export const TokenImage = React.memo(({
 
         {/* 1. Circular Avatar Clip */}
         <Group
+          listening={false}
           clipFunc={(ctx) => {
             ctx.arc(radius, radius, radius, 0, Math.PI * 2, false);
           }}
@@ -595,6 +593,7 @@ export const TokenImage = React.memo(({
               width={tokenWidth}
               height={tokenWidth}
               perfectDrawEnabled={false}
+              listening={false}
             />
           ) : (
             <Rect
@@ -602,6 +601,7 @@ export const TokenImage = React.memo(({
               height={tokenWidth}
               fill={token.isPlayer ? '#1e3a8a' : (token.category === 'ally' || (token as any).allyId) ? '#713f12' : '#7f1d1d'}
               perfectDrawEnabled={false}
+              listening={false}
             />
           )}
         </Group>
@@ -625,8 +625,8 @@ export const TokenImage = React.memo(({
               : "#10b981"
           }
           strokeWidth={isSelected ? 3.5 : flightMetrics.isElevated ? 3.2 : (token.category === 'ally' || (token as any).allyId) ? 3 : 2.5}
-          shadowColor={isSelected ? "#f59e0b" : flightMetrics.isElevated ? flightMetrics.tierColor : (token.category === 'ally' || (token as any).allyId) ? "#eab308" : undefined}
-          shadowBlur={isSelected ? 8 : flightMetrics.isElevated ? 10 : (token.category === 'ally' || (token as any).allyId) ? 6 : 0}
+          shadowColor={isSelected ? "#f59e0b" : undefined}
+          shadowBlur={isSelected ? 8 : 0}
           shadowForStrokeEnabled={false}
           perfectDrawEnabled={false}
           listening={false}
@@ -654,13 +654,14 @@ export const TokenImage = React.memo(({
 
         {/* 3. AC Shield Badge on Top-Left */}
         {!token.isCondition && (!isPlayerView || !isMonster) && (
-          <Group x={12} y={12}>
+          <Group x={12} y={12} listening={false}>
             <Circle
               radius={11}
               fill="#0f172a"
               stroke="#38bdf8"
               strokeWidth={1.5}
               perfectDrawEnabled={false}
+              listening={false}
             />
             <Text
               x={-11}
@@ -672,6 +673,7 @@ export const TokenImage = React.memo(({
               fontStyle="bold"
               fill="#38bdf8"
               perfectDrawEnabled={false}
+              listening={false}
             />
             <Text
               x={-11}
@@ -683,13 +685,14 @@ export const TokenImage = React.memo(({
               fontStyle="bold"
               fill="#ffffff"
               perfectDrawEnabled={false}
+              listening={false}
             />
           </Group>
         )}
 
         {/* 4. Large, High-Contrast HP Pill Badge directly tied to D&D Beyond & Character Sheet (Monsters NEVER show HP in player view) */}
         {!token.isCondition && (!isPlayerView || !isMonster) && (
-          <Group x={pillX} y={pillY}>
+          <Group x={pillX} y={pillY} listening={false}>
             {/* Dark slate container badge */}
             <Rect
               width={pillWidth}
@@ -698,11 +701,8 @@ export const TokenImage = React.memo(({
               stroke={isAlly ? "#eab308" : (stats.hpRatio <= 0.25 ? "#ef4444" : "#475569")}
               strokeWidth={isAlly ? 1.5 : (stats.hpRatio <= 0.25 ? 1.5 : 1)}
               cornerRadius={Math.max(4, Math.round(pillHeight * 0.2))}
-              shadowColor="#000000"
-              shadowBlur={4}
-              shadowOpacity={0.7}
-              shadowOffsetY={2}
               perfectDrawEnabled={false}
+              listening={false}
             />
             {/* Background HP Track */}
             <Rect
@@ -713,6 +713,7 @@ export const TokenImage = React.memo(({
               fill="rgba(30, 41, 59, 0.9)"
               cornerRadius={Math.round(barHeight / 2)}
               perfectDrawEnabled={false}
+              listening={false}
             />
             {/* Filled HP progress bar */}
             {stats.hpRatio > 0 && (
@@ -724,6 +725,7 @@ export const TokenImage = React.memo(({
                 fill={hpColor}
                 cornerRadius={Math.round(barHeight / 2)}
                 perfectDrawEnabled={false}
+                listening={false}
               />
             )}
             {/* Crisp Monospace HP text */}
@@ -736,9 +738,8 @@ export const TokenImage = React.memo(({
               fontStyle="bold"
               fontFamily="monospace"
               fill="#ffffff"
-              shadowColor="#000000"
-              shadowBlur={2}
               perfectDrawEnabled={false}
+              listening={false}
             />
           </Group>
         )}
@@ -750,11 +751,13 @@ export const TokenImage = React.memo(({
             fontSize={nameFontSize}
             fontStyle={isSelected ? "bold" : "normal"}
             fill={isSelected ? "#fbbf24" : "white"}
+            stroke="rgba(0, 0, 0, 0.85)"
+            strokeWidth={3}
+            fillAfterStrokeEnabled={true}
             align="center"
             width={tokenWidth}
-            shadowColor="#000000"
-            shadowBlur={3}
             perfectDrawEnabled={false}
+            listening={false}
           />
           {mergedConditions.length > 0 && (
             <Text
@@ -763,12 +766,14 @@ export const TokenImage = React.memo(({
               fontStyle="bold"
               fontFamily="monospace"
               fill="#f43f5e"
+              stroke="rgba(0, 0, 0, 0.85)"
+              strokeWidth={2.5}
+              fillAfterStrokeEnabled={true}
               align="center"
               width={tokenWidth}
               y={nameFontSize + 4}
-              shadowColor="#000000"
-              shadowBlur={3}
               perfectDrawEnabled={false}
+              listening={false}
             />
           )}
         </Group>

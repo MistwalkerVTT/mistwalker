@@ -1965,12 +1965,19 @@ export default function App() {
 
   // Stand-Alone Soundboard & Ambient Audio Mixer (Jukebox & Spatial 2D Audio)
   const [showAudioMixerModal, setShowAudioMixerModal] = useState(false);
+  const prevDmListenerPointsRef = useRef<{ sig: string; points: Array<{ x: number; y: number }> }>({ sig: '', points: [] });
   const dmListenerPoints = useMemo(() => {
     const playerTokens = tokens.filter(
       (t) => !t.isCondition && (t.isPlayer === true || t.category === 'character' || (!t.isMonster && t.category !== 'monster'))
     );
     const sourceList = playerTokens.length > 0 ? playerTokens : tokens;
-    return sourceList.map((t) => ({ x: t.x, y: t.y }));
+    const sig = sourceList.map(t => `${t.id}:${Math.round(t.x)},${Math.round(t.y)}`).join('|');
+    if (sig === prevDmListenerPointsRef.current.sig) {
+      return prevDmListenerPointsRef.current.points;
+    }
+    const nextPoints = sourceList.map((t) => ({ x: t.x, y: t.y }));
+    prevDmListenerPointsRef.current = { sig, points: nextPoints };
+    return nextPoints;
   }, [tokens]);
 
   const {
@@ -2571,10 +2578,12 @@ export default function App() {
       }
     });
 
+    let pendingRemoteMoveRafId: number | null = null;
+    const pendingRemoteMoves = new Map<string, { x: number; y: number }>();
+
     socket.on('MOVE_TOKEN', (data: { id: string; x: number; y: number }) => {
       if (data?.id) {
         lastRemoteTokenUpdateTimeRef.current = Date.now();
-        console.log('[DM Socket] Live MOVE_TOKEN from player:', data.id, data.x, data.y);
         const liveSlot = liveMapIdRef.current;
         if (mapsDataRef.current[liveSlot]?.tokens) {
           mapsDataRef.current[liveSlot].tokens = mapsDataRef.current[liveSlot].tokens.map((t: any) =>
@@ -2582,15 +2591,30 @@ export default function App() {
           );
         }
         if (activeMapIdRef.current === liveSlot) {
-          isRemoteTokenUpdateRef.current = true;
-          setTokens(prev => {
-            const next = prev.map(t => t.id === data.id ? { ...t, x: data.x, y: data.y } : t);
-            const moved = next.find(t => t.id === data.id);
-            if (moved) {
-              evaluateTokenMoveRef.current(moved, data.x, data.y);
-            }
-            return next;
-          });
+          pendingRemoteMoves.set(data.id, { x: data.x, y: data.y });
+          if (pendingRemoteMoveRafId === null) {
+            pendingRemoteMoveRafId = requestAnimationFrame(() => {
+              pendingRemoteMoveRafId = null;
+              if (pendingRemoteMoves.size === 0) return;
+              const updates = new Map(pendingRemoteMoves);
+              pendingRemoteMoves.clear();
+              isRemoteTokenUpdateRef.current = true;
+              setTokens(prev => {
+                const next = prev.map(t => {
+                  const u = updates.get(t.id);
+                  return u ? { ...t, x: u.x, y: u.y } : t;
+                });
+                tokensRef.current = next;
+                updates.forEach((pos, movedId) => {
+                  const moved = next.find(t => t.id === movedId);
+                  if (moved) {
+                    evaluateTokenMoveRef.current(moved, pos.x, pos.y);
+                  }
+                });
+                return next;
+              });
+            });
+          }
         }
       }
     });
@@ -10831,19 +10855,59 @@ export default function App() {
                       const deltaY = rawY - startPos.y;
                       const curSelected = selectedTokenIdsRef.current;
 
-                      if (curSelected.length > 1 && curSelected.includes(token.id)) {
-                        setTokens(prev => prev.map(t => {
-                          if (curSelected.includes(t.id)) {
-                            const init = dragStartPositionsRef.current[t.id] || { x: t.x, y: t.y };
-                            return { ...t, x: init.x + deltaX, y: init.y + deltaY };
+                      // Konva natively updates e.target (the dragged token Group) at 60/120 FPS on the canvas.
+                      // For multi-token selection drags, imperatively move sibling Konva nodes on the layer without
+                      // calling setTokens() on every mousemove frame unless a selected token needs live vision/DOM FX sync!
+                      const layer = e.target.getLayer();
+                      if (curSelected.length > 1 && curSelected.includes(token.id) && layer) {
+                        curSelected.forEach(id => {
+                          if (id === token.id) return;
+                          const init = dragStartPositionsRef.current[id];
+                          if (!init) return;
+                          const node = layer.findOne(`#${id}`);
+                          if (node) {
+                            node.position({ x: init.x + deltaX, y: init.y + deltaY });
                           }
-                          return t;
-                        }));
-                      } else {
-                        setTokens(prev => prev.map(t => t.id === token.id ? { ...t, x: rawX, y: rawY } : t));
+                        });
+                        layer.batchDraw();
                       }
 
                       const now = Date.now();
+                      // Only trigger a throttled React state update during drag if a dragged token has active vision or DOM FX
+                      const needsLiveReactSync = (() => {
+                        const checkTok = (t: Token) => {
+                          const isAlly = t.category === 'ally' || !!(t as any).allyId;
+                          const isMon = !isAlly && (isMonsterToken(t) || t.isMonster === true || t.category === 'monster' || t.isPlayer === false);
+                          const hasVision = !isMon && t.visionEnabled !== false;
+                          const hasDomFx = Boolean(
+                            t.haloActive ||
+                            (t.auraRadius && t.auraRadius > 0) ||
+                            (Array.isArray(t.auras) && t.auras.length > 0) ||
+                            (Array.isArray(t.conditions) && t.conditions.length > 0) ||
+                            effects.some(eff => eff.attachedTokenId === t.id || eff.ownerId === t.id)
+                          );
+                          return hasVision || hasDomFx;
+                        };
+                        if (curSelected.length > 1 && curSelected.includes(token.id)) {
+                          return tokensRef.current.some(t => curSelected.includes(t.id) && checkTok(t));
+                        }
+                        return checkTok(token);
+                      })();
+
+                      if (needsLiveReactSync && (now - lastTokenMoveEmitTimeRef.current > 35)) {
+                        if (curSelected.length > 1 && curSelected.includes(token.id)) {
+                          setTokens(prev => prev.map(t => {
+                            if (curSelected.includes(t.id)) {
+                              const init = dragStartPositionsRef.current[t.id] || { x: t.x, y: t.y };
+                              return { ...t, x: init.x + deltaX, y: init.y + deltaY };
+                            }
+                            return t;
+                          }));
+                        } else {
+                          setTokens(prev => prev.map(t => t.id === token.id ? { ...t, x: rawX, y: rawY } : t));
+                        }
+                      }
+
                       if (now - lastTokenMoveEmitTimeRef.current > 35) {
                         lastTokenMoveEmitTimeRef.current = now;
                         if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) {
@@ -10873,12 +10937,27 @@ export default function App() {
                       const { x: curGridOffX, y: curGridOffY } = gridOffsetRef.current;
                       const snappedX = Math.round((e.target.x() - curGridOffX) / gridSize) * gridSize + curGridOffX;
                       const snappedY = Math.round((e.target.y() - curGridOffY) / gridSize) * gridSize + curGridOffY;
+                      // Immediately snap Konva node position so it lands on grid even if snappedX === token.x
+                      e.target.position({ x: snappedX, y: snappedY });
                       
                       const startPos = dragStartPositionsRef.current[token.id] || { x: token.x, y: token.y };
                       const deltaX = snappedX - startPos.x;
                       const deltaY = snappedY - startPos.y;
                       const curSelected = selectedTokenIdsRef.current;
                       const curTokens = tokensRef.current;
+                      const layer = e.target.getLayer();
+                      if (curSelected.length > 1 && curSelected.includes(token.id) && layer) {
+                        curSelected.forEach(id => {
+                          if (id === token.id) return;
+                          const init = dragStartPositionsRef.current[id];
+                          if (!init) return;
+                          const node = layer.findOne(`#${id}`);
+                          if (node) {
+                            node.position({ x: init.x + deltaX, y: init.y + deltaY });
+                          }
+                        });
+                      }
+                      layer?.batchDraw();
 
                       let nextTokens: Token[];
                       if (curSelected.length > 1 && curSelected.includes(token.id)) {
