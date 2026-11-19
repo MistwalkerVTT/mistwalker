@@ -1,10 +1,21 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
+import fs from 'fs';
 import path from 'path';
 import {defineConfig, loadEnv} from 'vite';
 
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
+  const enable3DFlag = env.VITE_ENABLE_3D === 'true' || process.env.VITE_ENABLE_3D === 'true';
+  const addon3DDir = path.resolve(__dirname, '../Mistwalker 3D');
+  const addon3DEntry = path.join(addon3DDir, 'src/index.ts');
+  const use3DAddon = enable3DFlag && fs.existsSync(addon3DEntry);
+  const stub3DEntry = path.resolve(__dirname, 'src/integrations/mistwalker3d/stub.ts');
+
+  if (enable3DFlag && !use3DAddon) {
+    console.warn(`[MistWalker 3D] VITE_ENABLE_3D=true but ${addon3DEntry} was not found. Falling back to 2D stub.`);
+  }
+
   return {
     plugins: [react(), tailwindcss()],
     optimizeDeps: {
@@ -12,14 +23,18 @@ export default defineConfig(({mode}) => {
     },
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
+      '__MISTWALKER_3D_ENABLED__': JSON.stringify(use3DAddon),
     },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
+        '@mistwalker/3d': use3DAddon ? addon3DEntry : stub3DEntry,
       },
+      dedupe: ['react', 'react-dom', 'three'],
     },
     server: {
       hmr: process.env.DISABLE_HMR !== 'true',
+      fs: use3DAddon ? { allow: [path.resolve(__dirname, '.'), addon3DDir] } : undefined,
       watch: {
         ignored: ['**/uploads/**']
       }
