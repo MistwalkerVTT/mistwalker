@@ -3,7 +3,7 @@ import { getDdbHeaders, getDdbAuthHeaders } from './ddbService';
 import { Character } from '../src/types/character';
 import { DdbGameLogDaemon } from './ddbGameLogDaemon';
 import { findJb2aAsset } from '../src/effects/db/jb2aRegistry';
-import { computeUpcastFormula, HudUpcastOption, resolveActionSpecialAbilities, consolidateChannelDivinityLists } from '../src/types/hud';
+import { computeUpcastFormula, HudUpcastOption, resolveActionSpecialAbilities, resolveActionAutomaticExtraDamage, consolidateChannelDivinityLists } from '../src/types/hud';
 import { lookupDndRuleDetails } from '../src/data/dndRulesCompendium';
 
 export interface DdbCampaignSummary {
@@ -2158,8 +2158,18 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
   const applySpecialTriggers = (list: any[]) => {
     for (const act of list) {
       const triggers = resolveActionSpecialAbilities(act, specialCtx);
-      if (triggers.length > 0) {
-        act.specialAbilities = triggers;
+      act.specialAbilities = triggers.length > 0 ? triggers : undefined;
+      const extraDmg = resolveActionAutomaticExtraDamage(act, specialCtx);
+      if (extraDmg.extraDamageFormula && act.damageFormula) {
+        const baseDmg = act.baseDamageFormula || act.damageFormula;
+        const cleanExtra = extraDmg.extraDamageFormula.replace(/^\+/, '').trim();
+        act.baseDamageFormula = baseDmg;
+        if (!baseDmg.includes(`+ ${cleanExtra}`)) {
+          act.damageFormula = `${baseDmg} + ${cleanExtra}`;
+        }
+        act.extraDamageFormula = extraDmg.extraDamageFormula;
+        act.extraDamageType = extraDmg.extraDamageType;
+        act.extraDamageLabel = extraDmg.extraDamageLabel;
       }
     }
   };

@@ -68,6 +68,9 @@ export interface HudActionItem {
   damageFormula?: string;     // e.g. "1d12 + 8"
   baseDamageFormula?: string; // Unmodified base damage formula before upcasting
   damageType?: string;        // e.g. "slashing", "fire", "radiant"
+  extraDamageFormula?: string; // Automatically added rider damage rolled alongside base damage (e.g. "2d8" Divine Strike, "3d8" Devotee's Censer + Divine Strike)
+  extraDamageType?: string;    // e.g. "radiant"
+  extraDamageLabel?: string;   // e.g. "Divine Strike", "Radiant + Divine Strike"
   description: string;
   notes?: string;             // Weapon properties / mastery notes
   baseNotes?: string;         // Unmodified base notes before upcasting
@@ -454,7 +457,8 @@ export function resolveActionSpecialAbilities(
   // =========================================================================
 
   // A. Devotee's Censer (Rare Flail — TCoE)
-  // Standard attack is 1d8 + Mod Bludgeoning; Special Ability triggers the 10-ft AoE Healing Incense (1d4 healing) + On-Hit 1d8 Radiant
+  // Standard attack is 1d8 + Mod Bludgeoning (+1d8 Radiant + Divine Strike automatically rolled with attack);
+  // Special Ability triggers the 10-ft AoE Healing Incense (1d4 healing)
   if (lowerName.includes('censer') && !lowerName.includes('healing incense')) {
     addTrigger({
       id: 'special-devotees-censer',
@@ -472,20 +476,6 @@ export function resolveActionSpecialAbilities(
       uses: { available: 1, total: 1, resetType: 'Dawn' },
       description:
         'Speak the command word as a bonus action to cause the flail to emanate a thin cloud of incense out to 10 feet for 1 minute. At the start of each of your turns, you and any other creatures in the incense each regain 1d4 hit points.'
-    });
-    addTrigger({
-      id: 'trigger-censer-radiant',
-      label: '✨ +1d8 Radiant',
-      name: "Devotee's Censer (Radiant Smite)",
-      type: 'special',
-      castingTime: 'On Hit',
-      rangeFt: 5,
-      damageFormula: '1d8',
-      damageType: 'radiant',
-      isBonusRoll: true,
-      jb2aAssetId: 'divine_smite',
-      accentColor: 'amber',
-      description: "When you hit with an attack using Devotee's Censer, the target takes an extra 1d8 radiant damage."
     });
   }
 
@@ -507,19 +497,6 @@ export function resolveActionSpecialAbilities(
       accentColor: 'amber',
       description:
         'When you hit a Fiend or an Undead with this magic weapon, that creature takes an extra 2d6 radiant damage. If the target has 25 hit points or fewer after taking this damage, it must succeed on a DC 15 Wisdom saving throw or be destroyed. On a successful save, the creature becomes Frightened of you until the end of your next turn.'
-    });
-    addTrigger({
-      id: 'special-halo-glow',
-      label: '😇 Halo Light (20ft)',
-      name: 'Mace of Disruption: Radiant Illumination',
-      type: 'special',
-      castingTime: 'Toggle Glow',
-      rangeFt: 20,
-      isSelfAction: true,
-      isHaloToggle: true,
-      jb2aAssetId: 'bless',
-      accentColor: 'cyan',
-      description: 'While you hold this weapon, it sheds bright light in a 20-foot radius and dim light for an additional 20 feet. Click to toggle your token halo & glow on the battlemap.'
     });
   }
 
@@ -561,26 +538,9 @@ export function resolveActionSpecialAbilities(
   // 2. CLASS & WEAPON MASTERY TRIGGERS ON WEAPON ATTACKS
   // =========================================================================
   if (isWeaponOrUnarmed) {
-    // Cleric: Blessed Strikes (+1d8 Radiant) or Divine Strike (+2d8 / +1d8 Radiant)
-    if (isCleric && (totalLvl >= 8 || ctx.hasDivineStrike || ctx.hasBlessedStrikes) && action.subCategory === 'weapon') {
-      const useBlessedStrikes = Boolean(ctx.hasBlessedStrikes && !ctx.hasDivineStrike);
-      const diceStr = useBlessedStrikes ? '1d8' : totalLvl >= 14 ? '2d8' : '1d8';
-      const titleStr = useBlessedStrikes ? 'Blessed Strikes' : 'Divine Strike';
-      addTrigger({
-        id: `trigger-cleric-strike-${action.id}`,
-        label: `✨ ${titleStr} (+${diceStr})`,
-        name: `${titleStr} (+${diceStr} Radiant)`,
-        type: 'special',
-        castingTime: 'On Hit (1/Turn)',
-        rangeFt: action.rangeFt || 5,
-        damageFormula: diceStr,
-        damageType: 'radiant',
-        isBonusRoll: true,
-        jb2aAssetId: 'divine_smite',
-        accentColor: 'amber',
-        description: `Once on each of your turns when you hit a creature with a weapon attack, you can cause the attack to deal an extra ${diceStr} radiant damage to the target.`
-      });
-    }
+    // Note: Cleric Divine Strike (+2d8 / +1d8 Radiant) & Devotee's Censer (+1d8 Radiant)
+    // are automatically added to the weapon's damage roll and displayed beside the primary damage badge,
+    // rather than cluttering the card body with separate pill buttons.
 
     // Paladin: Divine Smite (+2d8 Radiant) on melee weapon attacks
     if (isPaladin && (action.rangeFt || 5) <= 10) {
@@ -894,7 +854,65 @@ export function resolveActionSpecialAbilities(
     }
   }
 
-  return existing;
+  // Filtering: remove any previously cached Halo Light or Divine Strike / Censer Radiant triggers from existing items
+  const cleaned = existing.filter(
+    (t) =>
+      t.id !== 'special-halo-glow' &&
+      t.id !== 'trigger-censer-radiant' &&
+      !t.id.startsWith('trigger-cleric-strike-') &&
+      !t.label.toLowerCase().includes('divine strike') &&
+      !t.label.toLowerCase().includes('halo light')
+  );
+  return cleaned;
+}
+
+/**
+ * Computes any automatic rider damage (such as Cleric Divine Strike / Blessed Strikes +2d8/+1d8 Radiant,
+ * or Devotee's Censer +1d8 Radiant) so that it is automatically rolled with the weapon attack
+ * and displayed as a compact badge right beside the primary damage badge on the right side of the card.
+ */
+export function resolveActionAutomaticExtraDamage(
+  action: HudActionItem,
+  ctx: EnrichSpecialAbilitiesContext = {}
+): { extraDamageFormula?: string; extraDamageType?: string; extraDamageLabel?: string } {
+  const lowerName = (action.name || '').toLowerCase().replace(/[\u2018\u2019`]/g, "'");
+  const lowerChar = (ctx.characterName || '').toLowerCase();
+  const lowerClass = (ctx.classLevel || '').toLowerCase();
+  const totalLvl = ctx.totalLevel || 5;
+  const isCleric = Boolean(ctx.clericLevel || lowerClass.includes('cleric') || lowerChar.includes('stavros'));
+
+  const isWeaponAttack =
+    action.subCategory === 'weapon' ||
+    (action.category === 'attacks' && action.subCategory !== 'spell' && action.subCategory !== 'unarmed' && !lowerName.includes('unarmed'));
+
+  if (!isWeaponAttack) return {};
+
+  let radiantD8Count = 0;
+  const labels: string[] = [];
+
+  // 1. Devotee's Censer inherent +1d8 Radiant damage on hit
+  if (lowerName.includes('censer') && !lowerName.includes('healing incense')) {
+    radiantD8Count += 1;
+    labels.push('Radiant');
+  }
+
+  // 2. Cleric Divine Strike (+2d8 at Lvl 14+, +1d8 at Lvl 8+) or Blessed Strikes (+1d8)
+  if (isCleric && (totalLvl >= 8 || ctx.hasDivineStrike || ctx.hasBlessedStrikes)) {
+    const useBlessedStrikes = Boolean(ctx.hasBlessedStrikes && !ctx.hasDivineStrike && !lowerChar.includes('stavros'));
+    const clericDice = useBlessedStrikes ? 1 : totalLvl >= 14 ? 2 : 1;
+    radiantD8Count += clericDice;
+    labels.push(useBlessedStrikes ? 'Blessed Strikes' : 'Divine Strike');
+  }
+
+  if (radiantD8Count > 0) {
+    return {
+      extraDamageFormula: `+${radiantD8Count}d8`,
+      extraDamageType: 'radiant',
+      extraDamageLabel: labels.length > 1 ? 'Radiant' : labels[0] || 'Divine Strike'
+    };
+  }
+
+  return {};
 }
 
 export interface ConsolidateChannelDivinityContext {

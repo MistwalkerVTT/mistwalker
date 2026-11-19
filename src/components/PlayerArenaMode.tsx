@@ -974,9 +974,7 @@ function buildArenaCombatantHudData(
   for (const list of [attacks, actions, bonusActions, spells]) {
     for (const act of list) {
       const triggers = resolveActionSpecialAbilities(act, arenaSpecialCtx);
-      if (triggers.length > 0) {
-        act.specialAbilities = triggers;
-      }
+      act.specialAbilities = triggers.length > 0 ? triggers : undefined;
     }
   }
 

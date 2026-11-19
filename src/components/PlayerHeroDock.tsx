@@ -34,6 +34,7 @@ import {
   computeUpcastFormula,
   evaluateDiceFormula,
   resolveActionSpecialAbilities,
+  resolveActionAutomaticExtraDamage,
   consolidateChannelDivinityLists,
   isChannelDivinityRelatedAction
 } from '../types/hud';
@@ -605,7 +606,24 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
       resolved = buildActionAtSlotLevel(action, chosenSlot);
     }
     const specialAbilities = resolveActionSpecialAbilities(resolved, specialAbilitiesCtx);
-    return specialAbilities.length > 0 ? { ...resolved, specialAbilities } : resolved;
+    const extraDmg = resolveActionAutomaticExtraDamage(resolved, specialAbilitiesCtx);
+    const baseDmgFormula = resolved.baseDamageFormula ?? resolved.damageFormula;
+    let combinedDamageFormula = baseDmgFormula;
+    if (extraDmg.extraDamageFormula && baseDmgFormula) {
+      const cleanExtra = extraDmg.extraDamageFormula.replace(/^\+/, '').trim();
+      if (!baseDmgFormula.includes(`+ ${cleanExtra}`)) {
+        combinedDamageFormula = `${baseDmgFormula} + ${cleanExtra}`;
+      }
+    }
+    return {
+      ...resolved,
+      baseDamageFormula: baseDmgFormula,
+      damageFormula: combinedDamageFormula,
+      extraDamageFormula: extraDmg.extraDamageFormula ?? resolved.extraDamageFormula,
+      extraDamageType: extraDmg.extraDamageType ?? resolved.extraDamageType,
+      extraDamageLabel: extraDmg.extraDamageLabel ?? resolved.extraDamageLabel,
+      specialAbilities: specialAbilities.length > 0 ? specialAbilities : undefined
+    };
   };
 
   const handleClickActionCard = (action: HudActionItem, closeMobileDrawer = false) => {
@@ -1880,24 +1898,40 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                       </span>
                     )}
                     {action.damageFormula && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onSelectAction(action);
-                          setIsMobileDrawerOpen(false);
-                        }}
-                        className={`px-2 py-1 rounded-lg font-bold border transition-all cursor-pointer active:scale-95 ${
-                          isUpcasted
-                            ? 'bg-fuchsia-950/90 hover:bg-fuchsia-900 border-fuchsia-400/60 text-fuchsia-200'
-                            : action.isHeal
-                            ? 'bg-emerald-950/90 hover:bg-emerald-900 border-emerald-500/50 text-emerald-300'
-                            : 'bg-rose-950/90 hover:bg-rose-900 border-rose-500/50 text-rose-300'
-                        }`}
-                        title={`Cast & Fire: ${action.name} (${action.damageFormula})`}
-                      >
-                        {action.damageFormula}
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSelectAction(action);
+                            setIsMobileDrawerOpen(false);
+                          }}
+                          className={`px-2 py-1 rounded-lg font-bold border transition-all cursor-pointer active:scale-95 ${
+                            isUpcasted
+                              ? 'bg-fuchsia-950/90 hover:bg-fuchsia-900 border-fuchsia-400/60 text-fuchsia-200'
+                              : action.isHeal
+                              ? 'bg-emerald-950/90 hover:bg-emerald-900 border-emerald-500/50 text-emerald-300'
+                              : 'bg-rose-950/90 hover:bg-rose-900 border-rose-500/50 text-rose-300'
+                          }`}
+                          title={`Cast & Fire: ${action.name} (${action.damageFormula})`}
+                        >
+                          {(action.extraDamageFormula ? (action.baseDamageFormula || action.damageFormula) : action.damageFormula).replace(/\s+/g, '')}
+                        </button>
+                        {action.extraDamageFormula && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onSelectAction(action);
+                              setIsMobileDrawerOpen(false);
+                            }}
+                            className="px-2 py-1 rounded-lg font-bold border border-amber-500/50 bg-amber-950/90 hover:bg-amber-900 text-amber-300 transition-all cursor-pointer active:scale-95"
+                            title={`Automatic ${action.extraDamageLabel || 'Radiant'} Damage (${action.extraDamageFormula} ${action.extraDamageType || 'radiant'}) included in attack roll (${action.damageFormula})`}
+                          >
+                            {action.extraDamageFormula}
+                          </button>
+                        )}
+                      </>
                     )}
                     {action.uses && (
                       <span className="px-1.5 py-1 rounded-lg bg-indigo-950 border border-indigo-500/40 text-indigo-300 font-bold">
@@ -2684,31 +2718,53 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                       )}
 
                       {action.damageFormula && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onSelectAction(action);
-                          }}
-                          className={`flex flex-col items-center px-2 py-1 rounded-lg border transition-all cursor-pointer active:scale-95 shrink-0 ${
-                            isUpcasted
-                              ? 'bg-fuchsia-950/90 hover:bg-fuchsia-900 border-fuchsia-400/70 hover:border-fuchsia-300 text-fuchsia-200 hover:text-white shadow-sm hover:shadow-[0_0_12px_rgba(217,70,239,0.5)]'
-                              : action.isHeal
-                              ? 'bg-emerald-950/90 hover:bg-emerald-900 border-emerald-500/40 hover:border-emerald-400 text-emerald-300 hover:text-white shadow-sm hover:shadow-[0_0_12px_rgba(16,185,129,0.5)]'
-                              : 'bg-rose-950/90 hover:bg-rose-900 border-rose-500/40 hover:border-rose-400 text-rose-300 hover:text-white shadow-sm hover:shadow-[0_0_12px_rgba(244,63,94,0.5)]'
-                          }`}
-                          title={`Cast & Fire: ${action.name}${isUpcasted ? ` at ${formatSpellLevelLabel(currentSlot)} Level` : ''} (${action.damageFormula})`}
-                          aria-label={`Fire ${action.name}: ${action.damageFormula}`}
-                        >
-                          <span className="text-[8px] uppercase opacity-75 leading-none truncate max-w-[56px]">
-                            {isUpcasted
-                              ? `▲ ${formatSpellLevelLabel(currentSlot)}`
-                              : action.damageType || (action.isHeal ? 'Heal' : 'Dmg')}
-                          </span>
-                          <span className="font-bold text-xs leading-tight">
-                            {action.damageFormula.replace(/\s+/g, '')}
-                          </span>
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onSelectAction(action);
+                            }}
+                            className={`flex flex-col items-center px-2 py-1 rounded-lg border transition-all cursor-pointer active:scale-95 shrink-0 ${
+                              isUpcasted
+                                ? 'bg-fuchsia-950/90 hover:bg-fuchsia-900 border-fuchsia-400/70 hover:border-fuchsia-300 text-fuchsia-200 hover:text-white shadow-sm hover:shadow-[0_0_12px_rgba(217,70,239,0.5)]'
+                                : action.isHeal
+                                ? 'bg-emerald-950/90 hover:bg-emerald-900 border-emerald-500/40 hover:border-emerald-400 text-emerald-300 hover:text-white shadow-sm hover:shadow-[0_0_12px_rgba(16,185,129,0.5)]'
+                                : 'bg-rose-950/90 hover:bg-rose-900 border-rose-500/40 hover:border-rose-400 text-rose-300 hover:text-white shadow-sm hover:shadow-[0_0_12px_rgba(244,63,94,0.5)]'
+                            }`}
+                            title={`Cast & Fire: ${action.name}${isUpcasted ? ` at ${formatSpellLevelLabel(currentSlot)} Level` : ''} (${action.damageFormula})`}
+                            aria-label={`Fire ${action.name}: ${action.damageFormula}`}
+                          >
+                            <span className="text-[8px] uppercase opacity-75 leading-none truncate max-w-[56px]">
+                              {isUpcasted
+                                ? `▲ ${formatSpellLevelLabel(currentSlot)}`
+                                : action.damageType || (action.isHeal ? 'Heal' : 'Dmg')}
+                            </span>
+                            <span className="font-bold text-xs leading-tight">
+                              {(action.extraDamageFormula ? (action.baseDamageFormula || action.damageFormula) : action.damageFormula).replace(/\s+/g, '')}
+                            </span>
+                          </button>
+
+                          {action.extraDamageFormula && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onSelectAction(action);
+                              }}
+                              className="flex flex-col items-center px-2 py-1 rounded-lg border border-amber-500/40 hover:border-amber-400 bg-amber-950/90 hover:bg-amber-900 text-amber-300 hover:text-white transition-all cursor-pointer active:scale-95 shrink-0 shadow-sm hover:shadow-[0_0_12px_rgba(245,158,11,0.5)]"
+                              title={`Automatic ${action.extraDamageLabel || 'Radiant'} Damage (${action.extraDamageFormula} ${action.extraDamageType || 'radiant'}) — rolled automatically with ${action.name} (${action.damageFormula})`}
+                              aria-label={`${action.extraDamageLabel || 'Extra'}: ${action.extraDamageFormula}`}
+                            >
+                              <span className="text-[8px] uppercase opacity-75 leading-none truncate max-w-[56px]">
+                                {action.extraDamageType || 'Radiant'}
+                              </span>
+                              <span className="font-bold text-xs leading-tight">
+                                {action.extraDamageFormula}
+                              </span>
+                            </button>
+                          )}
+                        </>
                       )}
 
                       {action.isHaloToggle && (
