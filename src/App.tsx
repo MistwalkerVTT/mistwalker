@@ -667,6 +667,14 @@ export default function App() {
     currentY: number;
     active: boolean;
   } | null>(null);
+  const selectionBoxRef = useRef<{
+    startX: number;
+    startY: number;
+    currentX: number;
+    currentY: number;
+    active: boolean;
+  } | null>(null);
+  selectionBoxRef.current = selectionBox;
   const dragStartPositionsRef = useRef<Record<string, { x: number; y: number }>>({});
   const [activeMenu, setActiveMenu] = useState<'instant' | 'persistent' | 'aura' | 'tokens' | 'conditions' | 'combat' | 'dice' | 'music' | 'grid' | null>(null);
   
@@ -7788,15 +7796,24 @@ export default function App() {
     }
 
     if (!isCanvasDrawingTool) {
-      if (e.evt?.shiftKey) {
-        // Shift+Drag creates marquee selection box
-        setSelectionBox({
+      if (e.evt?.button === 0 && (tool === 'select' || e.evt?.shiftKey)) {
+        // Select tool drag (or Shift+Drag in Pan tool) creates marquee selection box
+        if (!e.evt?.shiftKey) {
+          setSelectedTokenIds([]);
+        }
+        setActiveTokenMenu(null);
+        if (stage && typeof stage.stopDrag === 'function') {
+          stage.stopDrag();
+        }
+        const nextBox = {
           startX: point.x,
           startY: point.y,
           currentX: point.x,
           currentY: point.y,
           active: true,
-        });
+        };
+        selectionBoxRef.current = nextBox;
+        setSelectionBox(nextBox);
       } else {
         // Normal click on empty ground deselects tokens and dismisses menus (Player View parity)
         setSelectedTokenIds([]);
@@ -7884,7 +7901,10 @@ export default function App() {
       setMousePos(point);
     }
 
-    if (tool === 'select' && selectionBox?.active) {
+    if (selectionBox?.active) {
+      if (Math.hypot(point.x - selectionBox.startX, point.y - selectionBox.startY) > 4) {
+        cancelHoldPing();
+      }
       setSelectionBox(prev => prev ? { ...prev, currentX: point.x, currentY: point.y } : null);
       return;
     }
@@ -7984,6 +8004,44 @@ export default function App() {
     }
   };
 
+  const finishSelectionBox = useCallback((additive: boolean) => {
+    const box = selectionBoxRef.current;
+    if (!box?.active) return;
+    selectionBoxRef.current = null;
+    setSelectionBox(null);
+
+    const minX = Math.min(box.startX, box.currentX);
+    const maxX = Math.max(box.startX, box.currentX);
+    const minY = Math.min(box.startY, box.currentY);
+    const maxY = Math.max(box.startY, box.currentY);
+    const width = maxX - minX;
+    const height = maxY - minY;
+
+    if (width > 6 || height > 6) {
+      const hitTokenIds = tokensRef.current.filter(t => {
+        const tWidth = gridSize * t.size;
+        const tHeight = gridSize * t.size;
+        const tCenterX = t.x + tWidth / 2;
+        const tCenterY = t.y + tHeight / 2;
+        return tCenterX >= minX && tCenterX <= maxX && tCenterY >= minY && tCenterY <= maxY;
+      }).map(t => t.id);
+
+      if (hitTokenIds.length > 0) {
+        setSelectedTokenIds(prev => additive ? Array.from(new Set([...prev, ...hitTokenIds])) : hitTokenIds);
+        toast.info(`Selected ${hitTokenIds.length} item(s)`);
+      }
+    }
+  }, [gridSize]);
+
+  useEffect(() => {
+    if (!selectionBox?.active) return;
+    const handleWindowMouseUp = (ev: MouseEvent) => {
+      finishSelectionBox(Boolean(ev.shiftKey));
+    };
+    window.addEventListener('mouseup', handleWindowMouseUp);
+    return () => window.removeEventListener('mouseup', handleWindowMouseUp);
+  }, [selectionBox?.active, finishSelectionBox]);
+
   const handleMouseUp = (e?: any) => {
     if (isSpacePressed || isShiftPanActive) {
       if (stageRef.current) {
@@ -8043,29 +8101,8 @@ export default function App() {
       setWallEraseDragCurrent(null);
       return;
     }
-    if (tool === 'select' && selectionBox?.active) {
-      const minX = Math.min(selectionBox.startX, selectionBox.currentX);
-      const maxX = Math.max(selectionBox.startX, selectionBox.currentX);
-      const minY = Math.min(selectionBox.startY, selectionBox.currentY);
-      const maxY = Math.max(selectionBox.startY, selectionBox.currentY);
-      const width = maxX - minX;
-      const height = maxY - minY;
-
-      if (width > 6 || height > 6) {
-        const hitTokenIds = tokens.filter(t => {
-          const tWidth = gridSize * t.size;
-          const tHeight = gridSize * t.size;
-          const tCenterX = t.x + tWidth / 2;
-          const tCenterY = t.y + tHeight / 2;
-          return tCenterX >= minX && tCenterX <= maxX && tCenterY >= minY && tCenterY <= maxY;
-        }).map(t => t.id);
-
-        if (hitTokenIds.length > 0) {
-          setSelectedTokenIds(prev => e?.evt?.shiftKey ? Array.from(new Set([...prev, ...hitTokenIds])) : hitTokenIds);
-          toast.info(`Selected ${hitTokenIds.length} item(s)`);
-        }
-      }
-      setSelectionBox(null);
+    if (selectionBoxRef.current?.active) {
+      finishSelectionBox(Boolean(e?.evt?.shiftKey));
     }
     if (tool === 'ai-describe' && isAiDescribing && aiDescribeRect) {
       triggerAiDescribe(aiDescribeRect);
@@ -10186,7 +10223,7 @@ export default function App() {
                   });
                 }
               }}
-              draggable={Boolean((isSpacePressed || isShiftPanActive) || (!isCanvasDrawingTool && !isDraggingToken && !hoveredZoneId && !isRoomDrawerOpen && !selectionBox?.active))}
+              draggable={Boolean((isSpacePressed || isShiftPanActive) || (!isCanvasDrawingTool && tool !== 'select' && !isShiftPressed && !isDraggingToken && !hoveredZoneId && !isRoomDrawerOpen && !selectionBox?.active))}
               className={isSpacePressed || isShiftPanActive ? 'cursor-grab' : (tool === 'spell_aim' || tool === 'grid_calibrate') ? 'cursor-crosshair' : 'cursor-default'}
               onDragStart={(e) => {
                 if (e.target === stageRef.current && !isDraggingTokenRef.current) {
@@ -11151,7 +11188,7 @@ export default function App() {
               )}
 
               {/* Marquee Selection Layer */}
-              {tool === 'select' && selectionBox?.active && (
+              {selectionBox?.active && (
                 <Layer listening={false}>
                   <Rect
                     x={Math.min(selectionBox.startX, selectionBox.currentX)}
