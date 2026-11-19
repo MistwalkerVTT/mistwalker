@@ -74,6 +74,8 @@ import { GifImage } from './canvas/GifImage';
 import { getImageTransform } from '../lib/canvasTransforms';
 import { DND_CONDITIONS } from '../data/defaultTokens';
 import { AnimatedFeaturesKonvaImage, AnimatedFeature, WeatherEffectType } from './AnimatedMapOverlay';
+import { WebGLMapShaderKonvaImage } from './WebGLMapShaderKonvaImage';
+import { getMapShaderPreset } from '../data/mapShaderPresets';
 import { DiceTableOverlay } from './DiceTableOverlay';
 import { MapLoadingSpinDial } from './MapLoadingSpinDial';
 import { ArenaLoadingScreen } from './arena';
@@ -258,6 +260,7 @@ interface SyncState {
   boardAnimatedFeatures?: AnimatedFeature[];
   boardAnimatedEnabled?: boolean;
   boardWeatherEffect?: WeatherEffectType;
+  mapShaderEnabled?: boolean;
   characters?: Character[];
   combatants?: Combatant[];
   effects?: VttEffectInstance[];
@@ -1762,6 +1765,7 @@ export default function PlayerView() {
   const [fogResetKey, setFogResetKey] = useState<number>(() => initialBackup?.fogResetKey || 0);
   const [boardAnimatedFeatures, setBoardAnimatedFeatures] = useState<AnimatedFeature[]>(() => Array.isArray(initialBackup?.boardAnimatedFeatures) ? initialBackup.boardAnimatedFeatures : []);
   const [boardAnimatedEnabled, setBoardAnimatedEnabled] = useState<boolean>(() => initialBackup?.boardAnimatedEnabled !== undefined ? initialBackup.boardAnimatedEnabled : true);
+  const [mapShaderEnabled, setMapShaderEnabled] = useState<boolean>(() => initialBackup?.mapShaderEnabled !== undefined ? initialBackup.mapShaderEnabled : true);
   const [boardWeatherEffect, setBoardWeatherEffect] = useState<WeatherEffectType>(() => initialBackup?.boardWeatherEffect || 'none');
   const [roomAnnotations, setRoomAnnotations] = useState<RoomAnnotation[]>(() => Array.isArray(initialBackup?.roomAnnotations) ? normalizeRoomAnnotations(initialBackup.roomAnnotations) : []);
 
@@ -1819,6 +1823,10 @@ export default function PlayerView() {
     mapHeight?: number;
     mapUrl?: string;
   } | null>(() => initialBackup?.activeSceneInfo || null);
+  const activeMapShaderPreset = useMemo(
+    () => getMapShaderPreset(imageFile, activeSceneInfo),
+    [imageFile, activeSceneInfo]
+  );
 
   // Character Seizing / Claiming
   const [claimedTokenId, setClaimedTokenId] = useState<string | null>(() => {
@@ -2815,6 +2823,7 @@ export default function PlayerView() {
         setBoardAnimatedFeatures(state.boardAnimatedFeatures);
       }
       if (state.boardAnimatedEnabled !== undefined) setBoardAnimatedEnabled(state.boardAnimatedEnabled);
+      if (state.mapShaderEnabled !== undefined) setMapShaderEnabled(state.mapShaderEnabled);
       if (state.boardWeatherEffect) setBoardWeatherEffect(state.boardWeatherEffect);
       if (state.gridSize) setGridSize(state.gridSize);
       if (state.gridVisible !== undefined) setGridVisible(state.gridVisible);
@@ -9129,13 +9138,24 @@ export default function PlayerView() {
               {...getImageTransform(targetMapW, targetMapH, mapRotation)}
             />
           ) : image ? (
-            <KonvaImage
-              image={image}
-              width={targetMapW}
-              height={targetMapH}
-              perfectDrawEnabled={false}
-              {...getImageTransform(targetMapW, targetMapH, mapRotation)}
-            />
+            activeMapShaderPreset && mapShaderEnabled ? (
+              <WebGLMapShaderKonvaImage
+                image={image}
+                preset={activeMapShaderPreset}
+                width={targetMapW}
+                height={targetMapH}
+                perfectDrawEnabled={false}
+                {...getImageTransform(targetMapW, targetMapH, mapRotation)}
+              />
+            ) : (
+              <KonvaImage
+                image={image}
+                width={targetMapW}
+                height={targetMapH}
+                perfectDrawEnabled={false}
+                {...getImageTransform(targetMapW, targetMapH, mapRotation)}
+              />
+            )
           ) : null}
         </Layer>
 

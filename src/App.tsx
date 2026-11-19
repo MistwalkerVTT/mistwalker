@@ -50,6 +50,8 @@ import { ApiKeyModal } from './components/ApiKeyModal';
 import { CombatTracker } from './components/CombatTracker';
 import { LeftSidebar } from './components/LeftSidebar';
 import { AnimatedMapOverlay, AnimatedFeaturesKonvaImage } from './components/AnimatedMapOverlay';
+import { WebGLMapShaderKonvaImage } from './components/WebGLMapShaderKonvaImage';
+import { getMapShaderPreset } from './data/mapShaderPresets';
 import { DiceTableOverlay } from './components/DiceTableOverlay';
 import { DdbDiceRollEvent } from './types/dice';
 import { evaluateDiceFormula } from './types/hud';
@@ -1436,6 +1438,11 @@ export default function App() {
   // Environmental Animated FX & Weather State on Main Board (Uploaded & Generated Maps)
   const [boardAnimatedFeatures, setBoardAnimatedFeatures] = useState<AnimatedFeature[]>([]);
   const [boardAnimatedEnabled, setBoardAnimatedEnabled] = useState<boolean>(true);
+  const [mapShaderEnabled, setMapShaderEnabled] = useState<boolean>(true);
+  const activeMapShaderPreset = useMemo(
+    () => getMapShaderPreset(imageFile, activeSceneInfo),
+    [imageFile, activeSceneInfo]
+  );
   const [boardWeatherEffect, setBoardWeatherEffect] = useState<WeatherEffectType>('none');
   const [boardPlacingAnimatedType, setBoardPlacingAnimatedType] = useState<AnimatedFeatureType | null>(null);
   const [boardPlacingTemplate, setBoardPlacingTemplate] = useState<Partial<AnimatedFeature> | null>(null);
@@ -2415,6 +2422,7 @@ export default function App() {
       boardAnimatedFeatures: boardAnimatedFeatures,
       boardAnimatedEnabled: boardAnimatedEnabled,
       boardWeatherEffect: boardWeatherEffect,
+      mapShaderEnabled: mapShaderEnabled,
       characters: compendiumCharacters,
       combatants: sortedCombatTrackerCombatants,
       combatRound: combatTrackerRound,
@@ -2431,7 +2439,7 @@ export default function App() {
         mapHeight: dims.height,
       }
     });
-  }, [getMapDimensions, imageFile, activeSceneInfo, tokens, compendiumMonsters, combatTrackerCombatants, prepareTokensForSync, walls, gridSize, gridOpacity, gridVisible, gridOffsetX, gridOffsetY, isFogVisible, fogResetKey, reveals, polygonReveals, visionConfig, roomAnnotations, mapRotation, boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect, compendiumCharacters, sortedCombatTrackerCombatants, combatTrackerRound, combatTrackerTurnIndex, showCombatTracker]);
+  }, [getMapDimensions, imageFile, activeSceneInfo, tokens, compendiumMonsters, combatTrackerCombatants, prepareTokensForSync, walls, gridSize, gridOpacity, gridVisible, gridOffsetX, gridOffsetY, isFogVisible, fogResetKey, reveals, polygonReveals, visionConfig, roomAnnotations, mapRotation, boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect, mapShaderEnabled, compendiumCharacters, sortedCombatTrackerCombatants, combatTrackerRound, combatTrackerTurnIndex, showCombatTracker]);
 
   const broadcastFullStateRef = useRef<() => void>(() => {});
   useEffect(() => {
@@ -2493,10 +2501,11 @@ export default function App() {
       socketRef.current.emit('SYNC_STATE', {
         boardAnimatedFeatures,
         boardAnimatedEnabled,
-        boardWeatherEffect
+        boardWeatherEffect,
+        mapShaderEnabled
       });
     }
-  }, [boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect]);
+  }, [boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect, mapShaderEnabled]);
 
   useEffect(() => {
     activeMapIdRef.current = activeMapId;
@@ -10292,13 +10301,26 @@ export default function App() {
                   const isRotated = mapRotation % 180 !== 0;
                   const targetW = isRotated ? mapH : mapW;
                   const targetH = isRotated ? mapW : mapH;
+                  const transform = getImageTransform(targetW, targetH, mapRotation);
+                  if (activeMapShaderPreset && mapShaderEnabled) {
+                    return (
+                      <WebGLMapShaderKonvaImage
+                        image={image}
+                        preset={activeMapShaderPreset}
+                        width={targetW}
+                        height={targetH}
+                        perfectDrawEnabled={false}
+                        {...transform}
+                      />
+                    );
+                  }
                   return (
                     <KonvaImage
                       image={image}
                       width={targetW}
                       height={targetH}
                       perfectDrawEnabled={false}
-                      {...getImageTransform(targetW, targetH, mapRotation)}
+                      {...transform}
                     />
                   );
                 })()}
@@ -11384,6 +11406,27 @@ export default function App() {
                 </div>
               );
             })()}
+
+            {/* Active WebGL2 Subtle Map Shader Quick Toggle (DM Live Switch) */}
+            {mapType === 'image' && image && activeMapShaderPreset && (
+              <button
+                type="button"
+                onClick={() => setMapShaderEnabled(prev => !prev)}
+                title={`Toggle ${activeMapShaderPreset.name} (synced to Player View)`}
+                className={`absolute top-3 right-3 z-40 px-3 py-1.5 rounded-full text-[11px] font-mono font-semibold backdrop-blur-md border transition-all flex items-center gap-1.5 shadow-lg ${
+                  mapShaderEnabled
+                    ? 'bg-sky-950/85 border-sky-400/60 text-sky-200 hover:bg-sky-900/90'
+                    : 'bg-zinc-950/85 border-zinc-600/60 text-zinc-400 hover:text-zinc-200 hover:border-zinc-400'
+                }`}
+              >
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    mapShaderEnabled ? 'bg-sky-400 animate-pulse' : 'bg-zinc-500'
+                  }`}
+                />
+                <span>Subtle Map Shader: {mapShaderEnabled ? 'ON' : 'OFF'}</span>
+              </button>
+            )}
 
             {/* Active Placing & Polygon Drawing Banner */}
             {boardPlacingAnimatedType && (() => {
