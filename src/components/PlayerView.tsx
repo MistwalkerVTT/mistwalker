@@ -33,6 +33,7 @@ import {
   Check,
   X,
   Move,
+  CircleDot,
   Sparkles,
   Trash2,
   BookOpen,
@@ -118,8 +119,11 @@ import {
   TokenStatusBubble,
   findLastingDebuffConfig,
   createDebuffBubbleFromConfig,
-  TokenBubblesKonvaOverlay
+  TokenBubblesKonvaOverlay,
+  BadgeHoverTooltip
 } from '../effects';
+import { resolveSpellBadgeTargets, scheduleSpellBadgeApplication } from '../effects/bubbles/applySpellBadge';
+import { TokenBadgesMenuTab } from './TokenBadgesMenuTab';
 import type { PlayerStationMode } from './PlayerStationModal';
 import type { PlayerCharacterChoiceItem } from './PlayerCharacterSelectModal';
 import { PlayerHeroDock } from './PlayerHeroDock';
@@ -2417,7 +2421,7 @@ export default function PlayerView() {
     handleEl.addEventListener('pointercancel', onUp);
     e.preventDefault();
   }, []);
-  const [tokenMenuTab, setTokenMenuTab] = useState<'stats' | 'conditions' | 'auras'>('stats');
+  const [tokenMenuTab, setTokenMenuTab] = useState<'stats' | 'conditions' | 'auras' | 'badges'>('stats');
   const [customAuraRadiusInput, setCustomAuraRadiusInput] = useState<number>(10);
   const [customAuraColorInput, setCustomAuraColorInput] = useState<string>('rgba(234, 179, 8, 0.4)');
   const [customAuraOpacityInput, setCustomAuraOpacityInput] = useState<number>(0.35);
@@ -4355,7 +4359,23 @@ export default function PlayerView() {
       return Math.hypot(target.x - tcX, target.y - tcY) <= tRad + 15;
     }) || hitToken;
 
-    const isDebuffOnTarget = Boolean(lastingDebuff && targetCreatureToken);
+    const spellBadgeTargets = lastingDebuff
+      ? resolveSpellBadgeTargets({
+          config: lastingDebuff,
+          allTokens: tokens,
+          gridSize,
+          castPoint: target,
+          aoeRadiusFt: activeEquippedAsset.defaultSizeFt,
+          directTargetToken: targetCreatureToken,
+          casterToken: claimedToken
+        })
+      : [];
+
+    const isDebuffOnTarget = Boolean(
+      lastingDebuff &&
+      spellBadgeTargets.length > 0 &&
+      (lastingDebuff.behavior ?? 'replace_after_cast') === 'replace_after_cast'
+    );
 
     const newEffect: VttEffectInstance = {
       id: `eff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -4415,35 +4435,29 @@ export default function PlayerView() {
       socketRef.current.emit('EFFECT_SPAWN', newEffect);
     }
 
-    if (lastingDebuff && targetCreatureToken) {
-      const targetTokenId = targetCreatureToken.id;
-      const targetTokenName = targetCreatureToken.name;
-      const effectToRemoveId = newEffect.id;
-      setTimeout(() => {
-        // Remove the main full-size blast animation now that it transitioned into the badge
-        setEffects(prev => prev.filter(e => e.id !== effectToRemoveId));
-        if (socketRef.current?.connected) {
-          socketRef.current.emit('EFFECT_REMOVE', { id: effectToRemoveId });
-        }
-
-        const bubble = createDebuffBubbleFromConfig(lastingDebuff, claimedToken?.name || 'Hero');
-        setTokens(prev => {
-          const next = prev.map(t => {
-            if (t.id !== targetTokenId) return t;
-            const existing = t.bubbles || [];
-            const filtered = existing.filter(b => b.sourceSpellId !== lastingDebuff.spellKey && b.label !== lastingDebuff.name);
-            return { ...t, bubbles: [...filtered, bubble] };
-          });
-          tokensRef.current = next;
+    if (lastingDebuff && spellBadgeTargets.length > 0) {
+      scheduleSpellBadgeApplication({
+        config: lastingDebuff,
+        casterName: claimedToken?.name || 'Hero',
+        targetTokens: spellBadgeTargets,
+        effectIdToRemove: newEffect.id,
+        onRemoveEffect: (effectId) => {
+          setEffects(prev => prev.filter(e => e.id !== effectId));
           if (socketRef.current?.connected) {
-            socketRef.current.emit('SYNC_TOKENS', next);
+            socketRef.current.emit('EFFECT_REMOVE', { id: effectId });
           }
-          return next;
-        });
-        toast.success(`✨ ${lastingDebuff.name} badge added above ${targetTokenName}!`, {
-          description: lastingDebuff.description
-        });
-      }, 2800);
+        },
+        updateTokens: (updater) => {
+          setTokens(prev => {
+            const next = updater(prev);
+            tokensRef.current = next;
+            if (socketRef.current?.connected) {
+              socketRef.current.emit('SYNC_TOKENS', next);
+            }
+            return next;
+          });
+        }
+      });
     }
 
     // Roll 3D physics damage/healing dice if the cast spell has a damageFormula (including upcasted formulas!)
@@ -4597,27 +4611,33 @@ export default function PlayerView() {
 
       const lastingDebuff = findLastingDebuffConfig(asset.id || asset.name);
       if (lastingDebuff && claimedToken) {
-        const targetTokenId = claimedToken.id;
-        const targetTokenName = claimedToken.name;
-        setTimeout(() => {
-          const bubble = createDebuffBubbleFromConfig(lastingDebuff, claimedToken.name || 'Hero');
-          setTokens(prev => {
-            const next = prev.map(t => {
-              if (t.id !== targetTokenId) return t;
-              const existing = t.bubbles || [];
-              const filtered = existing.filter(b => b.sourceSpellId !== lastingDebuff.spellKey && b.label !== lastingDebuff.name);
-              return { ...t, bubbles: [...filtered, bubble] };
+        const badgeTargets = resolveSpellBadgeTargets({
+          config: lastingDebuff,
+          allTokens: tokensRef.current,
+          gridSize,
+          castPoint: {
+            x: (claimedToken.x ?? 0) + (((claimedToken.size || 1) * gridSize) / 2),
+            y: (claimedToken.y ?? 0) + (((claimedToken.size || 1) * gridSize) / 2)
+          },
+          aoeRadiusFt: asset.defaultSizeFt,
+          directTargetToken: claimedToken,
+          casterToken: claimedToken
+        });
+        scheduleSpellBadgeApplication({
+          config: lastingDebuff,
+          casterName: claimedToken.name || 'Hero',
+          targetTokens: badgeTargets,
+          updateTokens: (updater) => {
+            setTokens(prev => {
+              const next = updater(prev);
+              tokensRef.current = next;
+              if (socketRef.current?.connected) {
+                socketRef.current.emit('SYNC_TOKENS', next);
+              }
+              return next;
             });
-            tokensRef.current = next;
-            if (socketRef.current?.connected) {
-              socketRef.current.emit('SYNC_TOKENS', next);
-            }
-            return next;
-          });
-          toast.success(`✨ ${lastingDebuff.name} badge added above ${targetTokenName}!`, {
-            description: lastingDebuff.description
-          });
-        }, 2800);
+          }
+        });
       }
     toast.success(`Cast ${asset.name}!`, {
       description: `${asset.defaultSizeFt}ft ${asset.shape} placed at character position.`
@@ -6133,33 +6153,37 @@ export default function PlayerView() {
 
       const lastingDebuff = findLastingDebuffConfig(asset.id || action.name);
       if (lastingDebuff && targetToken) {
-        const targetTokenId = targetToken.id;
-        const targetTokenName = targetToken.name;
-        const effectToRemoveId = newEffect.id;
-        setTimeout(() => {
-          setEffects(prev => prev.filter(e => e.id !== effectToRemoveId));
-          if (socketRef.current?.connected) {
-            socketRef.current.emit('EFFECT_REMOVE', { id: effectToRemoveId });
-          }
-
-          const bubble = createDebuffBubbleFromConfig(lastingDebuff, caster.name || 'Hero');
-          setTokens(prev => {
-            const next = prev.map(t => {
-              if (t.id !== targetTokenId) return t;
-              const existing = t.bubbles || [];
-              const filtered = existing.filter(b => b.sourceSpellId !== lastingDebuff.spellKey && b.label !== lastingDebuff.name);
-              return { ...t, bubbles: [...filtered, bubble] };
-            });
-            tokensRef.current = next;
+        const badgeTargets = resolveSpellBadgeTargets({
+          config: lastingDebuff,
+          allTokens: tokensRef.current,
+          gridSize,
+          castPoint: targetCenter,
+          aoeRadiusFt: asset.defaultSizeFt,
+          directTargetToken: targetToken,
+          casterToken: caster
+        });
+        scheduleSpellBadgeApplication({
+          config: lastingDebuff,
+          casterName: caster.name || 'Hero',
+          targetTokens: badgeTargets,
+          effectIdToRemove: newEffect.id,
+          onRemoveEffect: (effectId) => {
+            setEffects(prev => prev.filter(e => e.id !== effectId));
             if (socketRef.current?.connected) {
-              socketRef.current.emit('SYNC_TOKENS', next);
+              socketRef.current.emit('EFFECT_REMOVE', { id: effectId });
             }
-            return next;
-          });
-          toast.success(`✨ ${lastingDebuff.name} badge added above ${targetTokenName}!`, {
-            description: lastingDebuff.description
-          });
-        }, 2800);
+          },
+          updateTokens: (updater) => {
+            setTokens(prev => {
+              const next = updater(prev);
+              tokensRef.current = next;
+              if (socketRef.current?.connected) {
+                socketRef.current.emit('SYNC_TOKENS', next);
+              }
+              return next;
+            });
+          }
+        });
       }
     }
 
@@ -8948,6 +8972,21 @@ export default function PlayerView() {
                   <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse shrink-0" />
                 )}
               </button>
+              <button
+                type="button"
+                onClick={() => setTokenMenuTab('badges')}
+                className={`flex-1 py-1 rounded-md text-[10px] font-bold font-mono transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                  tokenMenuTab === 'badges'
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-xs'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                <CircleDot className="w-2.5 h-2.5 text-emerald-400" />
+                <span>Badges</span>
+                {(currentToken.bubbles?.length || 0) > 0 && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                )}
+              </button>
             </div>
             
             {tokenMenuTab === 'stats' && (
@@ -9422,9 +9461,19 @@ export default function PlayerView() {
                 </div>
               </div>
             )}
+
+            {tokenMenuTab === 'badges' && (
+              <TokenBadgesMenuTab
+                tokenName={currentToken.name || 'token'}
+                bubbles={currentToken.bubbles}
+                onUpdateBubbles={(next) => handleUpdateToken(currentToken.id, { bubbles: next })}
+              />
+            )}
           </div>
         );
       })()}
+
+      <BadgeHoverTooltip />
 
       {/* Backdrop to close right-click menu when clicking away */}
       {activeTokenMenu && !tokenMenuPinned && (

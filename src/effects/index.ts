@@ -21,5 +21,6 @@ export * from './ui/CompendiumCustomFxModal';
 export * from './ui/Attribution';
 export * from './geometry/coneGeometry';
 export * from './ui/TokenBubblesKonvaOverlay';
+export * from './ui/BadgeHoverTooltip';
 export { TokenBadgesKonvaOverlay } from './ui/TokenBubblesKonvaOverlay';
-export { PRESET_DM_BADGES, createDebuffBadgeFromConfig } from './bubbles/bubbleCatalog';
+export { PRESET_DM_BADGES, createDebuffBadgeFromConfig, findSpellBadgeConfig } from './bubbles/bubbleCatalog';

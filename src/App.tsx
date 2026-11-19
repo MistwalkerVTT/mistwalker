@@ -68,8 +68,11 @@ import {
   PRESET_DM_BUBBLES,
   findLastingDebuffConfig,
   createDebuffBubbleFromConfig,
-  TokenBubblesKonvaOverlay
+  TokenBubblesKonvaOverlay,
+  BadgeHoverTooltip
 } from './effects';
+import { resolveSpellBadgeTargets, scheduleSpellBadgeApplication } from './effects/bubbles/applySpellBadge';
+import { TokenBadgesMenuTab } from './components/TokenBadgesMenuTab';
 import { JB2A_REGISTRY, findJb2aAsset } from './effects/db/jb2aRegistry';
 import { getAuraVideoUrl } from './effects/db/tokenFxMap';
 import { MainCampaignBar } from './components/MainCampaignBar';
@@ -4588,7 +4591,23 @@ export default function App() {
       return Math.hypot(target.x - tcX, target.y - tcY) <= tRad + 15;
     }) || hitToken;
 
-    const isDebuffOnTarget = Boolean(lastingDebuff && targetCreatureToken);
+    const spellBadgeTargets = lastingDebuff
+      ? resolveSpellBadgeTargets({
+          config: lastingDebuff,
+          allTokens: tokens,
+          gridSize,
+          castPoint: target,
+          aoeRadiusFt: activeEquippedAsset.defaultSizeFt,
+          directTargetToken: targetCreatureToken,
+          casterToken: selectedToken || hitToken
+        })
+      : [];
+
+    const isDebuffOnTarget = Boolean(
+      lastingDebuff &&
+      spellBadgeTargets.length > 0 &&
+      (lastingDebuff.behavior ?? 'replace_after_cast') === 'replace_after_cast'
+    );
 
     const newEffect: VttEffectInstance = {
       id: `eff_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -4666,34 +4685,30 @@ export default function App() {
       toast.success(`Cast ${activeEquippedAsset.name}!`);
     }
 
-    // After the main spell animation (2.8s), move lasting debuff spells (Hunter's Mark, Hex, etc.) into a status badge above the enemy's head
-    if (lastingDebuff && targetCreatureToken) {
-      const targetTokenId = targetCreatureToken.id;
-      const targetTokenName = targetCreatureToken.name;
-      const effectToRemoveId = newEffect.id;
-      setTimeout(() => {
-        // Remove the main full-size blast animation now that it transitioned into the badge
-        setEffects(prev => prev.filter(e => e.id !== effectToRemoveId));
-        if (socketRef.current?.connected) {
-          socketRef.current.emit('EFFECT_REMOVE', { id: effectToRemoveId });
-        }
-
-        const bubble = createDebuffBubbleFromConfig(lastingDebuff, selectedToken?.name || 'Caster');
-        setTokens(prev => {
-          const next = prev.map(t => {
-            if (t.id !== targetTokenId) return t;
-            const existing = t.bubbles || [];
-            const filtered = existing.filter(b => b.sourceSpellId !== lastingDebuff.spellKey && b.label !== lastingDebuff.name);
-            return { ...t, bubbles: [...filtered, bubble] };
+    // Automatically apply status/buff/debuff badges for applicable spells
+    if (lastingDebuff && spellBadgeTargets.length > 0) {
+      scheduleSpellBadgeApplication({
+        config: lastingDebuff,
+        casterName: selectedToken?.name || 'Caster',
+        targetTokens: spellBadgeTargets,
+        effectIdToRemove: newEffect.id,
+        onRemoveEffect: (effectId) => {
+          setEffects(prev => prev.filter(e => e.id !== effectId));
+          if (socketRef.current?.connected) {
+            socketRef.current.emit('EFFECT_REMOVE', { id: effectId });
+          }
+        },
+        updateTokens: (updater) => {
+          setTokens(prev => {
+            const next = updater(prev);
+            if (mapsDataRef.current[activeMapId]) mapsDataRef.current[activeMapId].tokens = next;
+            if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) {
+              socketRef.current.emit('SYNC_TOKENS', next);
+            }
+            return next;
           });
-          if (mapsDataRef.current[activeMapId]) mapsDataRef.current[activeMapId].tokens = next;
-          if (socketRef.current?.connected && (activeMapIdRef.current === liveMapIdRef.current)) socketRef.current.emit('SYNC_TOKENS', next);
-          return next;
-        });
-        toast.success(`✨ ${lastingDebuff.name} badge added above ${targetTokenName}'s head!`, {
-          description: lastingDebuff.description
-        });
-      }, 2800);
+        }
+      });
     }
 
     setAimOrigin(null);
@@ -13026,270 +13041,17 @@ export default function App() {
             )}
 
             {tokenMenuTab === 'bubbles' && (
-              <div className="space-y-3">
-                {/* Active Monster Badges Header / List */}
-                <div className="flex justify-between items-center px-1">
-                  <span className="text-[9px] font-mono text-zinc-400 uppercase font-bold tracking-tighter flex items-center gap-1">
-                    <CircleDot className="w-2.5 h-2.5 text-emerald-400" />
-                    Active Status Badges
-                  </span>
-                  <span className="text-[9px] font-mono text-emerald-400 font-bold">
-                    {(currentToken?.bubbles || []).length} Active
-                  </span>
-                </div>
-
-                {((currentToken?.bubbles || []).length > 0) ? (
-                  <div className="space-y-1.5 max-h-36 overflow-y-auto sidebar-scrollbar pr-1">
-                    {(currentToken?.bubbles || []).map((b) => (
-                      <div
-                        key={b.id}
-                        className="bg-zinc-900/90 border border-zinc-800 rounded-lg p-1.5 flex items-center justify-between group hover:border-zinc-700 transition-all"
-                      >
-                        <div className="flex items-center gap-2 overflow-hidden">
-                          {/* Miniature Badge Preview */}
-                          <div
-                            className="w-5 h-5 rounded-full flex flex-col items-center justify-center shrink-0 border shadow-xs"
-                            style={{
-                              backgroundColor: b.bgColor || '#090d16',
-                              borderColor: b.color || '#38bdf8'
-                            }}
-                          >
-                            <span className="text-[8px] leading-none">{b.icon || '•'}</span>
-                          </div>
-                          <div className="flex flex-col min-w-0">
-                            <span className="text-[11px] font-bold text-zinc-200 truncate flex items-center gap-1">
-                              {b.label}
-                              {b.subLabel && (
-                                <span className="text-[8px] px-1 py-0.2 rounded font-mono font-bold bg-zinc-800" style={{ color: b.color }}>
-                                  {b.subLabel}
-                                </span>
-                              )}
-                            </span>
-                            {b.description && (
-                              <span className="text-[8px] font-mono text-zinc-400 truncate max-w-[150px]">
-                                {b.description}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const next = (currentToken?.bubbles || []).filter(item => item.id !== b.id);
-                            handleUpdateDmToken({ bubbles: next });
-                            toast.info(`Removed ${b.label} badge`);
-                          }}
-                          className="p-1 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors cursor-pointer shrink-0"
-                          title="Remove badge"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleUpdateDmToken({ bubbles: [] });
-                        toast.info('Cleared all status badges');
-                      }}
-                      className="w-full text-center py-1 text-[9px] font-mono text-red-400 hover:text-red-300 cursor-pointer"
-                    >
-                      Clear All Badges
-                    </button>
-                  </div>
-                ) : (
-                  <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-2 text-center text-[10px] text-zinc-400 font-mono">
-                    No active badges. Choose a 1-click preset or build a custom badge below.
-                  </div>
-                )}
-
-                {/* Section: 1-Click Preset Badges */}
-                <div>
-                  <div className="flex justify-between items-center px-1 mb-1.5">
-                    <span className="text-[9px] font-mono text-zinc-400 uppercase font-bold tracking-tighter">
-                      1-Click Preset Badges
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto sidebar-scrollbar pr-1">
-                    {PRESET_DM_BUBBLES.map((preset) => {
-                      const isActive = (currentToken?.bubbles || []).some(b => b.label === preset.label);
-                      return (
-                        <button
-                          key={preset.label}
-                          type="button"
-                          onClick={() => {
-                            if (isActive) {
-                              const next = (currentToken?.bubbles || []).filter(b => b.label !== preset.label);
-                              handleUpdateDmToken({ bubbles: next });
-                            } else {
-                              const newBubble: TokenStatusBubble = {
-                                ...preset,
-                                id: `badge_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`
-                              };
-                              handleUpdateDmToken({
-                                bubbles: [...(currentToken?.bubbles || []).filter(b => b.label !== preset.label), newBubble]
-                              });
-                              toast.success(`Added ${preset.label} badge above ${currentToken?.name || 'monster'}!`);
-                            }
-                          }}
-                          className={`text-left p-1.5 rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 ${
-                            isActive
-                              ? 'bg-emerald-500/20 border-emerald-400/70 text-emerald-100 shadow-sm'
-                              : 'bg-zinc-900/90 hover:bg-zinc-850 border-zinc-800 text-zinc-300 hover:text-white'
-                          }`}
-                        >
-                          {/* Miniature Badge Avatar */}
-                          <div
-                            className="w-5 h-5 rounded-full flex flex-col items-center justify-center shrink-0 border"
-                            style={{
-                              backgroundColor: '#090d16',
-                              borderColor: preset.color
-                            }}
-                          >
-                            <span className="text-[8px] leading-none">{preset.icon}</span>
-                          </div>
-                          <div className="flex flex-col min-w-0">
-                            <span className="text-[10px] font-bold truncate leading-tight">{preset.label}</span>
-                            <span className="text-[8px] font-mono font-bold" style={{ color: preset.color }}>
-                              {preset.subLabel}
-                            </span>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Section: Custom Badge Creator */}
-                <div className="border-t border-zinc-800/80 pt-2.5 space-y-2">
-                  <div className="flex justify-between items-center px-1">
-                    <span className="text-[9px] font-mono text-zinc-400 uppercase font-bold tracking-tighter">
-                      Custom Badge Creator
-                    </span>
-                    {/* Live Badge Preview */}
-                    <div className="flex items-center gap-1 bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-700">
-                      <span className="text-[8px] font-mono text-zinc-400">Preview:</span>
-                      <div
-                        className="w-5 h-5 rounded-full flex flex-col items-center justify-center shrink-0 border shadow-xs"
-                        style={{
-                          backgroundColor: '#090d16',
-                          borderColor: customBubbleColor
-                        }}
-                      >
-                        {customBubbleSubLabel && (
-                          <span className="text-[5px] font-bold font-mono leading-none" style={{ color: customBubbleColor }}>
-                            {customBubbleSubLabel.substring(0, 4)}
-                          </span>
-                        )}
-                        <span className="text-[8px] leading-none">{customBubbleIcon || '🎯'}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Label & SubLabel Inputs */}
-                  <div className="grid grid-cols-3 gap-1.5">
-                    <div className="col-span-2">
-                      <input
-                        type="text"
-                        placeholder="Badge Label (e.g. Phase 2)"
-                        value={customBubbleLabel}
-                        onChange={(e) => setCustomBubbleLabel(e.target.value)}
-                        className="w-full bg-zinc-900 border border-zinc-700 rounded px-1.5 py-1 text-[10px] text-zinc-200 font-mono focus:outline-none focus:border-emerald-400"
-                      />
-                    </div>
-                    <div>
-                      <input
-                        type="text"
-                        placeholder="Tag/Val"
-                        maxLength={4}
-                        value={customBubbleSubLabel}
-                        onChange={(e) => setCustomBubbleSubLabel(e.target.value.toUpperCase())}
-                        className="w-full bg-zinc-900 border border-zinc-700 rounded px-1.5 py-1 text-[10px] text-center text-zinc-200 font-mono uppercase font-bold focus:outline-none focus:border-emerald-400"
-                        title="Top small text (up to 4 chars)"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Icon Picker */}
-                  <div className="flex items-center gap-1 overflow-x-auto pb-1 sidebar-scrollbar">
-                    {['🎯', '💀', '🛡️', '⚔️', '🔥', '❄️', '⚡', '🩸', '👑', '👁️', '⛓️', '⏳', '⚠️', '💣', '💎', '✨', '🧠', '🚫', '💤', '💥'].map(ic => (
-                      <button
-                        key={ic}
-                        type="button"
-                        onClick={() => setCustomBubbleIcon(ic)}
-                        className={`w-6 h-6 rounded text-xs shrink-0 border transition-all cursor-pointer flex items-center justify-center ${
-                          customBubbleIcon === ic
-                            ? 'bg-emerald-500/30 border-emerald-400 scale-110 shadow-xs'
-                            : 'bg-zinc-900 border-zinc-800 hover:border-zinc-700 text-zinc-300'
-                        }`}
-                      >
-                        {ic}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Color Palette Swatches */}
-                  <div className="flex items-center justify-between px-0.5">
-                    <span className="text-[9px] text-zinc-400 font-mono">Color:</span>
-                    <div className="flex items-center gap-1.5">
-                      {[
-                        { label: 'Sky', val: '#38bdf8' },
-                        { label: 'Emerald', val: '#22c55e' },
-                        { label: 'Purple', val: '#a855f7' },
-                        { label: 'Amber', val: '#fbbf24' },
-                        { label: 'Red', val: '#ef4444' },
-                        { label: 'Pink', val: '#ec4899' },
-                        { label: 'Indigo', val: '#6366f1' },
-                        { label: 'Slate', val: '#94a3b8' }
-                      ].map(c => (
-                        <button
-                          key={c.label}
-                          type="button"
-                          onClick={() => setCustomBubbleColor(c.val)}
-                          className={`w-4 h-4 rounded-full border transition-all cursor-pointer ${
-                            customBubbleColor === c.val
-                              ? 'scale-125 border-white shadow-sm ring-1 ring-white/50'
-                              : 'border-white/30 hover:border-white/70'
-                          }`}
-                          style={{ backgroundColor: c.val }}
-                          title={c.label}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Add Custom Badge Button */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const lbl = customBubbleLabel.trim() || 'Status Marker';
-                      const newBubble: TokenStatusBubble = {
-                        id: `badge_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-                        label: lbl,
-                        subLabel: customBubbleSubLabel.trim() || undefined,
-                        icon: customBubbleIcon || '🎯',
-                        color: customBubbleColor,
-                        style: customBubbleStyle,
-                        createdTime: Date.now()
-                      };
-                      handleUpdateDmToken({
-                        bubbles: [...(currentToken?.bubbles || []), newBubble]
-                      });
-                      setCustomBubbleLabel('');
-                      setCustomBubbleSubLabel('');
-                      toast.success(`Added "${lbl}" badge above ${currentToken?.name || 'monster'}!`);
-                    }}
-                    className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold font-mono shadow-md transition-all cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Add Custom Badge</span>
-                  </button>
-                </div>
-              </div>
+              <TokenBadgesMenuTab
+                tokenName={currentToken?.name || 'monster'}
+                bubbles={currentToken?.bubbles}
+                onUpdateBubbles={(next) => handleUpdateDmToken({ bubbles: next })}
+              />
             )}
           </div>
         );
       })()}
+
+      <BadgeHoverTooltip />
 
       {/* Close menu when clicking away (unless pinned) */}
       {activeTokenMenu && !tokenMenuPinned && (

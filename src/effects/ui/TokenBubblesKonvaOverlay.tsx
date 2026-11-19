@@ -6,6 +6,7 @@
 import React from 'react';
 import { Group, Circle, Text } from 'react-konva';
 import { TokenStatusBubble, TokenStatusBadge } from '../types/bubble';
+import { emitBadgeHover } from './BadgeHoverTooltip';
 
 interface TokenBubblesKonvaOverlayProps {
   bubbles: TokenStatusBubble[] | undefined;
@@ -26,14 +27,31 @@ export const TokenBubblesKonvaOverlay: React.FC<TokenBubblesKonvaOverlayProps> =
   const badgeY = -9; // Floats right above the token head rim
 
   return (
-    <Group listening={false}>
+    <Group>
       {bubbles.map((b, idx) => {
         const bx = startX + idx * badgeSpacing;
         const color = b.color || '#38bdf8';
         const hasSub = Boolean(b.subLabel);
 
         return (
-          <Group key={b.id || `badge-${idx}`} x={bx} y={badgeY}>
+          <Group
+            key={b.id || `badge-${idx}`}
+            x={bx}
+            y={badgeY}
+            onMouseEnter={(e) => {
+              const stage = e.target.getStage();
+              if (stage) stage.container().style.cursor = 'help';
+              emitBadgeHover({ badge: b, x: e.evt.clientX, y: e.evt.clientY });
+            }}
+            onMouseMove={(e) => {
+              emitBadgeHover({ badge: b, x: e.evt.clientX, y: e.evt.clientY });
+            }}
+            onMouseLeave={(e) => {
+              const stage = e.target.getStage();
+              if (stage) stage.container().style.cursor = '';
+              emitBadgeHover(null);
+            }}
+          >
             {/* Outer subtle glow ring */}
             <Circle
               radius={13}
