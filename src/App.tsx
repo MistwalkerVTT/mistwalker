@@ -1670,9 +1670,30 @@ export default function App() {
 
   // Battlemap load failure handler (recovers high-res from IndexedDB and avoids blurry thumbnail poisoning)
   useEffect(() => {
+    // Immediate recovery if Three Moons Dungeon is currently showing the fallback error SVG
+    if (
+      mapType === 'image' &&
+      typeof imageFile === 'string' &&
+      imageFile.startsWith('data:image/svg+xml') &&
+      activeSceneInfo?.sceneTitle?.toLowerCase().includes('three moons')
+    ) {
+      const fallbackUrl = '/uploads/file-1792161850867-913230359.jpg';
+      console.log('[VTT] Auto-recovering Three Moons Dungeon from placeholder SVG to static file:', fallbackUrl);
+      setImageFile(fallbackUrl);
+      return;
+    }
+
     if (imageStatus === 'failed' && imageFile && mapType === 'image') {
       console.warn('[VTT] Active battlemap failed to load:', imageFile);
-      // Auto-recovery for known maps (Guildhouse & Tomb of Valin Sarnaster)
+      // Auto-recovery for known maps (Three Moons Dungeon, Guildhouse & Tomb of Valin Sarnaster)
+      if (activeSceneInfo?.sceneTitle?.toLowerCase().includes('three moons')) {
+        const fallbackUrl = '/uploads/file-1792161850867-913230359.jpg';
+        if (imageFile !== fallbackUrl) {
+          console.log('[VTT] Auto-recovering Three Moons Dungeon map with static file:', fallbackUrl);
+          setImageFile(fallbackUrl);
+          return;
+        }
+      }
       if (activeSceneInfo?.sceneId === 'scene-mvzhib38' || activeSceneInfo?.sceneTitle?.toLowerCase().includes('valin sarnaster') || activeSceneInfo?.sceneTitle?.toLowerCase().includes('tomb of valin')) {
         const fallbackUrl = '/uploads/tomb_of_valin_sarnaster.jpg';
         if (imageFile !== fallbackUrl) {

@@ -147,6 +147,11 @@ export function getMapShaderPreset(
   imageFile?: string | null,
   activeSceneInfo?: SceneShaderMatchInfo | null
 ): MapShaderPreset | null {
+  // Never run map shaders on fallback error placeholder SVGs
+  if (typeof imageFile === 'string' && imageFile.startsWith('data:image/svg+xml')) {
+    return null;
+  }
+
   const urlCandidates = [imageFile, activeSceneInfo?.mapUrl]
     .filter((v): v is string => typeof v === 'string' && v.length > 0);
 
