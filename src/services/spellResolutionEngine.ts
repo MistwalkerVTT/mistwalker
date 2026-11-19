@@ -225,6 +225,127 @@ export const KNOWN_SPELL_OVERRIDES: Record<string, Partial<ClassifiedSpellProfil
     healingFormula: '2d4', // D&D 2024 buffed Healing Word to 2d4 + mod!
     jb2aSuggestedCategory: 'healing',
   },
+  'mass healing word': {
+    archetype: 'healing_buff',
+    requiresAttackRoll: false,
+    requiresTargetSave: false,
+    healingFormula: '2d4',
+    jb2aSuggestedCategory: 'healing',
+  },
+  'mass cure wounds': {
+    archetype: 'healing_buff',
+    requiresAttackRoll: false,
+    requiresTargetSave: false,
+    healingFormula: '5d8',
+    jb2aSuggestedCategory: 'healing',
+  },
+  'prayer of healing': {
+    archetype: 'healing_buff',
+    requiresAttackRoll: false,
+    requiresTargetSave: false,
+    healingFormula: '2d8',
+    jb2aSuggestedCategory: 'healing',
+  },
+  'heal': {
+    archetype: 'healing_buff',
+    requiresAttackRoll: false,
+    requiresTargetSave: false,
+    healingFormula: '70',
+    jb2aSuggestedCategory: 'healing',
+  },
+  'mass heal': {
+    archetype: 'healing_buff',
+    requiresAttackRoll: false,
+    requiresTargetSave: false,
+    healingFormula: '700',
+    jb2aSuggestedCategory: 'healing',
+  },
+  'power word heal': {
+    archetype: 'healing_buff',
+    requiresAttackRoll: false,
+    requiresTargetSave: false,
+    jb2aSuggestedCategory: 'healing',
+  },
+  'regenerate': {
+    archetype: 'healing_buff',
+    requiresAttackRoll: false,
+    requiresTargetSave: false,
+    healingFormula: '4d8+15',
+    jb2aSuggestedCategory: 'healing',
+  },
+  'aura of vitality': {
+    archetype: 'healing_buff',
+    requiresAttackRoll: false,
+    requiresTargetSave: false,
+    healingFormula: '2d6',
+    jb2aSuggestedCategory: 'healing',
+  },
+  'healing spirit': {
+    archetype: 'healing_buff',
+    requiresAttackRoll: false,
+    requiresTargetSave: false,
+    healingFormula: '1d6',
+    jb2aSuggestedCategory: 'healing',
+  },
+  'goodberry': {
+    archetype: 'healing_buff',
+    requiresAttackRoll: false,
+    requiresTargetSave: false,
+    healingFormula: '1',
+    jb2aSuggestedCategory: 'healing',
+  },
+  'aid': {
+    archetype: 'healing_buff',
+    requiresAttackRoll: false,
+    requiresTargetSave: false,
+    healingFormula: '5',
+    jb2aSuggestedCategory: 'healing',
+  },
+  "heroes' feast": {
+    archetype: 'healing_buff',
+    requiresAttackRoll: false,
+    requiresTargetSave: false,
+    healingFormula: '2d10',
+    jb2aSuggestedCategory: 'healing',
+  },
+  'preserve life': {
+    archetype: 'healing_buff',
+    requiresAttackRoll: false,
+    requiresTargetSave: false,
+    jb2aSuggestedCategory: 'healing',
+  },
+  'lesser restoration': {
+    archetype: 'healing_buff',
+    requiresAttackRoll: false,
+    requiresTargetSave: false,
+    jb2aSuggestedCategory: 'healing',
+  },
+  'greater restoration': {
+    archetype: 'healing_buff',
+    requiresAttackRoll: false,
+    requiresTargetSave: false,
+    jb2aSuggestedCategory: 'healing',
+  },
+  'revivify': {
+    archetype: 'healing_buff',
+    requiresAttackRoll: false,
+    requiresTargetSave: false,
+    healingFormula: '1',
+    jb2aSuggestedCategory: 'healing',
+  },
+  'beacon of hope': {
+    archetype: 'healing_buff',
+    requiresAttackRoll: false,
+    requiresTargetSave: false,
+    jb2aSuggestedCategory: 'healing',
+  },
+  'amulet of the drunkard': {
+    archetype: 'healing_buff',
+    requiresAttackRoll: false,
+    requiresTargetSave: false,
+    healingFormula: '4d4+4',
+    jb2aSuggestedCategory: 'healing',
+  },
   'fount of moonlight': {
     archetype: 'healing_buff',
     requiresAttackRoll: false,
@@ -383,10 +504,12 @@ export function classifySpellMechanics(input: {
     };
   }
 
-  // 1. Healing & Temp HP spells NEVER roll to hit
+  // 1. Healing & Temp HP spells NEVER roll to hit or saving throws
   if (
     input.isHealing ||
-    /\b(regains?\s+\d+d\d+|regains?\s+hit\s+points|restore[sd]?\s+hit\s+points|temporary\s+hit\s+points)\b/i.test(desc)
+    input.damageType?.toLowerCase() === 'healing' ||
+    /\b(cure wounds|healing word|mass healing word|mass cure wounds|prayer of healing|preserve life|aura of vitality|healing spirit|regenerate|goodberry|revivify|restoration|heroes' feast|heroes feast|beacon of hope|drunkard|second wind|lay on hands|wholeness of body|quickened healing|potion of|power word heal)\b/i.test(normalizedName) ||
+    /\b(regains?\s+\d+d\d+|regains?\s+hit\s+points|restore[sd]?\s+hit\s+points|temporary\s+hit\s+points|healing\s+energy)\b/i.test(desc)
   ) {
     const healDiceMatch = desc.match(/(\d+d\d+(?:\s*\+\s*\d+)?)/i);
     return {

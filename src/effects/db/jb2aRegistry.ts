@@ -1718,15 +1718,17 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
   {
     "id": "sunbeam",
     "name": "Sunbeam",
-    "label": "60ft Brilliant Solar Energy Beam",
+    "label": "60ft Brilliant Solar Radiant Beam",
     "level": 6,
     "school": "evocation",
     "paradigm": "line",
     "shape": "line",
+    "targetType": "line",
+    "rangeFt": 60,
     "defaultSizeFt": 60,
     "color": "#fde047",
-    "webm": "/jb2a/Library/Generic/Energy/EnergyBeam_01_Regular_Blue_60ft_2800x400.webm",
-    "thumb": "/jb2a/Library/Generic/Energy/EnergyBeam_01_Regular_Blue_Thumb.webp",
+    "webm": "/jb2a/Library/1st_Level/Guiding_Bolt/GuidingBolt_01_Regular_BlueYellow_05ft_600x400.webm",
+    "thumb": "/jb2a/Library/1st_Level/Guiding_Bolt/GuidingBolt_01_Regular_BlueYellow_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
     "soundKey": "sunbeam_laser",
@@ -2628,7 +2630,7 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
   {
     "id": "silence",
     "name": "Silence",
-    "label": "Silence (20ft Soundless Sphere)",
+    "label": "Silence (20ft Sustained Soundless Dome)",
     "level": 2,
     "school": "illusion",
     "paradigm": "point",
@@ -2636,9 +2638,10 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "targetType": "aoe",
     "rangeFt": 120,
     "defaultSizeFt": 20,
-    "color": "#e2e8f0",
-    "webm": "/jb2a/Community/BossLoot/Wave_1_Radial_1_WHITE_1200x1200.webm",
-    "thumb": "/jb2a/Community/BossLoot/Wave_1_Radial_1_WHITE_1200x1200.webm",
+    "color": "#94a3b8",
+    "webm": "/jb2a/Library/5th_Level/Wall_Of_Force/WallOfForce_01_Grey_Sphere_400x400.webm",
+    "loopWebm": "/jb2a/Library/5th_Level/Wall_Of_Force/WallOfForce_01_Grey_Sphere_400x400.webm",
+    "thumb": "/jb2a/Library/5th_Level/Wall_Of_Force/WallOfForce_01_Grey_Thumb.webp",
     "isPersistent": true,
     "blendMode": "screen",
     "soundKey": "magic_hum",
@@ -3307,7 +3310,7 @@ export const findJb2aAsset = (idOrName: string): Jb2aAssetDefinition | undefined
   if (n.includes('elementalism')) return byId('elementalism');
   if (n.includes('faerie fire')) return byId('faerie_fire');
   if (n === 'light' || n.includes('daylight') || n.includes('guidance') || n.includes('thaumaturgy') || n.includes('mending') || n.includes('true strike')) return byId('light');
-  if (n.includes('sunbeam') || n.includes('sunburst')) return byId('sunbeam');
+  if (n.includes('sunbeam')) return byId('sunbeam');
   if (n.includes('create bonfire') || n === 'bonfire') return byId('bonfire');
   if (n.includes('teleportation circle') || n === 'teleport') return byId('teleport');
   if (n.includes('barkskin') || n.includes('summon beast')) return byId('barkskin');
@@ -3352,7 +3355,7 @@ export const findJb2aAsset = (idOrName: string): Jb2aAssetDefinition | undefined
   if (n.includes('eldritch blast')) return byId('eldritch_blast');
   if (n.includes('magic missile')) return byId('magic_missile');
   if (n.includes('healing word') || n.includes('mass healing word')) return byId('healing_word');
-  if (n.includes('cure wounds') || n.includes('mass cure wounds') || n.includes('preserve life') || n.includes('wholeness of body') || n.includes('quickened healing') || n.includes('second wind') || n.includes('restoration') || n.includes('revivify') || n.includes('resurrection') || n.includes('spare the dying') || n.includes('lay on hands') || n === 'heal') return byId('cure_wounds');
+  if (n.includes('cure wounds') || n.includes('mass cure wounds') || n.includes('preserve life') || n.includes('wholeness of body') || n.includes('quickened healing') || n.includes('second wind') || n.includes('restoration') || n.includes('revivify') || n.includes('resurrection') || n.includes('spare the dying') || n.includes('lay on hands') || n.includes('drunkard') || n === 'heal') return byId('cure_wounds');
   if (n.includes('aid') || n.includes('false life') || n.includes('heroism')) return byId('aid');
   if (n.includes('sanctuary') || n.includes('mirror image')) return byId('sanctuary');
   if (n.includes('shield of faith')) return byId('shield_of_faith');
@@ -3381,7 +3384,7 @@ export const findJb2aAsset = (idOrName: string): Jb2aAssetDefinition | undefined
   if (n.includes('toll the dead')) return byId('toll_the_dead');
   if (n.includes('hunger of hadar') || n.includes('black tentacles')) return byId('black_tentacles');
   if (n.includes('arms of hadar')) return byId('arms_of_hadar');
-  if (n.includes('shatter') || n.includes('silence')) return byId('shatter');
+  if (n.includes('shatter')) return byId('shatter');
   if (n.includes('moonbeam')) return byId('moonbeam');
   if (n.includes('disintegrate')) return byId('disintegrate');
   if (n.includes('cloud of daggers')) return byId('cloud_of_daggers');

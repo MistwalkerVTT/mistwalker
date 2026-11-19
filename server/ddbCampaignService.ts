@@ -672,7 +672,8 @@ export function matchJb2aAssetId(name: string): string | undefined {
   if (n.includes("hunter's mark") || n.includes('hunters mark') || n.includes('hex')) return 'hunters_mark';
   if (n.includes('toll the dead')) return 'toll_the_dead';
   if (n.includes('arms of hadar') || n.includes('hunger of hadar')) return 'arms_of_hadar';
-  if (n.includes('shatter') || n.includes('silence')) return 'shatter';
+  if (n.includes('silence')) return 'silence';
+  if (n.includes('shatter')) return 'shatter';
   if (n.includes('moonbeam')) return 'moonbeam';
   if (n.includes('disintegrate')) return 'disintegrate';
   if (n.includes('cloud of daggers')) return 'cloud_of_daggers';
@@ -1098,15 +1099,19 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
       } else if (
         def.filterType === 'Potion' ||
         def.filterType === 'Scroll' ||
-        def.filterType === 'Wondrous item' && (def.canUse || lowerName.includes('potion') || lowerName.includes('gem of brightness') || lowerName.includes('necklace of fireballs')) ||
+        def.filterType === 'Wondrous item' && (def.canUse || lowerName.includes('potion') || lowerName.includes('gem of brightness') || lowerName.includes('necklace of fireballs') || lowerName.includes('drunkard')) ||
         lowerName.includes('potion') ||
         lowerName.includes('elixir') ||
         lowerName.includes('scroll') ||
-        lowerName.includes('healer')
+        lowerName.includes('healer') ||
+        lowerName.includes('drunkard')
       ) {
-        const isHealingPotion = lowerName.includes('healing');
+        const isDrunkardAmulet = lowerName.includes('drunkard');
+        const isHealingPotion = lowerName.includes('healing') || isDrunkardAmulet;
         let potionFormula: string | undefined;
-        if (isHealingPotion) {
+        if (isDrunkardAmulet) {
+          potionFormula = '4d4 + 4';
+        } else if (isHealingPotion) {
           if (lowerName.includes('supreme')) potionFormula = '10d4 + 20';
           else if (lowerName.includes('superior')) potionFormula = '8d4 + 8';
           else if (lowerName.includes('greater')) potionFormula = '4d4 + 4';
@@ -1120,7 +1125,9 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
           subCategory: 'item',
           sourceLabel: def.filterType || 'Item',
           quantity: item.quantity || 1,
-          rangeFt: 5,
+          rangeFt: isDrunkardAmulet ? 0 : 5,
+          isSelfAction: isDrunkardAmulet,
+          damageType: isHealingPotion ? 'healing' : undefined,
           description: cleanDdbText(def.description, snippetCtx) || 'Consumable or usable magic item.',
           jb2aAssetId: isHealingPotion ? 'cure_wounds' : jb2aAssetId,
           isHeal: isHealingPotion,
@@ -1259,6 +1266,9 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
           damageFormula = `${computed.totalLevel * 5}`;
         } else if (lowerName.includes('second wind')) {
           damageFormula = `1d10 + ${computed.totalLevel}`;
+        } else if (lowerName.includes('drunkard')) {
+          damageFormula = '4d4 + 4';
+          damageType = 'healing';
         } else if (lowerName.includes('blessed strikes')) {
           damageFormula = '1d8';
           damageType = 'radiant';
@@ -1338,21 +1348,31 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
         saveDc = spellSaveDc;
         saveAbility = 'WIS';
       }
-      const rangeFt = act.range?.range || act.range?.rangeValue || (lowerName.includes("cloud's jaunt") || lowerName.includes('jaunt') || lowerName.includes('turn undead') || lowerName.includes('preserve life') ? 30 : lowerName.includes('launcher') ? 90 : isAttackAction ? 5 : 0);
+      const rangeFt = lowerName.includes('drunkard')
+        ? 0
+        : (act.range?.range || act.range?.rangeValue || (lowerName.includes("cloud's jaunt") || lowerName.includes('jaunt') || lowerName.includes('turn undead') || lowerName.includes('preserve life') ? 30 : lowerName.includes('launcher') ? 90 : isAttackAction ? 5 : 0));
 
       const isHeal = Boolean(
         lowerName.includes('heal') ||
+        lowerName.includes('cure') ||
+        lowerName.includes('drunkard') ||
         lowerName.includes('preserve life') ||
         lowerName.includes('wholeness of body') ||
         lowerName.includes('second wind') ||
         lowerName.includes('mantle of inspiration') ||
-        lowerName.includes('lay on hands')
+        lowerName.includes('lay on hands') ||
+        lowerName.includes('potion of healing')
       );
+
+      if (isHeal && !damageType) {
+        damageType = 'healing';
+      }
 
       const isSelfAction = Boolean(
         rangeFt === 0 &&
         !isAttackAction &&
         (lowerName.includes('rage') ||
+          lowerName.includes('drunkard') ||
           lowerName.includes('large form') ||
           lowerName.includes('patient defense') ||
           lowerName.includes('step of the wind') ||
@@ -1822,7 +1842,19 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
     // Extract Damage or Healing from def.modifiers + Higher-Level Upcast Scaling
     let damageFormula: string | undefined;
     let damageType: string | undefined;
-    let isHeal = lowerName.includes('cure') || lowerName.includes('heal') || lowerName.includes('restoration') || lowerName.includes('revivify') || lowerName.includes('aid');
+    let isHeal =
+      lowerName.includes('cure') ||
+      lowerName.includes('heal') ||
+      lowerName.includes('restoration') ||
+      lowerName.includes('revivify') ||
+      lowerName.includes('aid') ||
+      lowerName.includes('regenerate') ||
+      lowerName.includes('goodberry') ||
+      lowerName.includes('aura of vitality') ||
+      lowerName.includes("heroes' feast") ||
+      lowerName.includes('heroes feast') ||
+      lowerName.includes('preserve life') ||
+      lowerName.includes('drunkard');
     let perSlotDice: { count: number; sides: number; fixed?: number } | null = null;
 
     if (Array.isArray(def.modifiers)) {

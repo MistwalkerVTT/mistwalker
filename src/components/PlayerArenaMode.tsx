@@ -285,6 +285,9 @@ export function isActionHealing(action: HudActionItem | undefined | null): boole
     name.includes('heal') ||
     name.includes('cure') ||
     name.includes('potion') ||
+    name.includes('drunkard') ||
+    name.includes('preserve life') ||
+    name.includes('wholeness of body') ||
     name.includes('draught') ||
     name.includes('lay on hands') ||
     name.includes('second wind') ||
@@ -295,7 +298,10 @@ export function isActionHealing(action: HudActionItem | undefined | null): boole
     name.includes('restoration') ||
     name.includes('prayer') ||
     name.includes('regeneration') ||
-    name.includes('vitality')
+    name.includes('regenerate') ||
+    name.includes('vitality') ||
+    name.includes("heroes' feast") ||
+    name.includes('heroes feast')
   ) {
     return true;
   }
@@ -3422,12 +3428,14 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         if (!healFormula || healFormula === '0') {
           if (lowerName.includes('healing word')) {
             healFormula = '1d4 + 4';
-          } else if (lowerName.includes('potion')) {
+          } else if (lowerName.includes('potion') || lowerName.includes('drunkard')) {
             healFormula = '4d4 + 4';
           } else if (lowerName.includes('second wind')) {
             healFormula = `1d10 + ${actor.classOrCr?.match(/\d+/)?.[0] || '5'}`;
           } else if (lowerName.includes('lay on hands')) {
             healFormula = '15';
+          } else if (lowerName.includes('preserve life')) {
+            healFormula = `${(Number(actor.classOrCr?.match(/\d+/)?.[0]) || 15) * 5}`;
           } else {
             healFormula = '2d8 + 4';
           }
@@ -3737,7 +3745,11 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
               })
             : [target];
 
-        const targetsToProcess = affectedTargets.length > 0 ? affectedTargets : [target];
+        const targetsToProcess = (affectedTargets.length > 0
+          ? affectedTargets
+          : target.team !== actor.team
+          ? [target]
+          : []);
         const saveSummaries: string[] = [];
         const damageMap = new Map<string, number>();
         const conditionMap = new Map<string, string>();
@@ -6154,6 +6166,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
               !isTeleport &&
               (action.isSelfAction ||
                 lowerName.includes('potion') ||
+                lowerName.includes('drunkard') ||
                 lowerName.includes('second wind') ||
                 lowerName.includes('surge') ||
                 lowerName.includes('wholeness of body'));

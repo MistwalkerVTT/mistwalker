@@ -18,7 +18,8 @@ interface AimReticleProps {
 }
 
 const SINGLE_TARGET_IDS = new Set([
-  'healing_word', 'cure_wounds', 'sacred_flame', 'toll_the_dead', 'guiding_bolt',
+  'healing_word', 'mass_healing_word', 'cure_wounds', 'mass_cure_wounds', 'prayer_of_healing', 'preserve_life',
+  'restoration', 'spare_the_dying', 'sacred_flame', 'toll_the_dead', 'guiding_bolt',
   'fire_bolt', 'eldritch_blast', 'ray_of_frost', 'magic_missile', 'scorching_ray',
   'chromatic_orb', 'witch_bolt', 'thorn_whip', 'disintegrate', 'chain_lightning',
   'blight', 'hold_person', 'sanctuary', 'shield_of_faith', 'hunters_mark', 'counterspell', 'hellish_rebuke',
@@ -26,7 +27,8 @@ const SINGLE_TARGET_IDS = new Set([
   'bardic_inspiration', 'cutting_words', 'attack_dagger', 'attack_bow', 'attack_crossbow',
   'attack_spear', 'attack_greatsword', 'attack_slash', 'attack_hammer', 'attack_greataxe',
   'attack_battleaxe', 'attack_quarterstaff', 'attack_glaive', 'attack_claw', 'attack_bite',
-  'attack_unarmed', 'mage_armor', 'barkskin', 'fly', 'warding_bond', 'aid'
+  'attack_unarmed', 'mage_armor', 'barkskin', 'fly', 'warding_bond', 'aid', 'bless',
+  'command', 'silvery_barbs', 'invisibility', 'haste', 'death_ward', 'enlarge_reduce', 'polymorph'
 ]);
 
 const CASTER_AURA_IDS = new Set([
@@ -76,45 +78,10 @@ export const AimReticle: React.FC<AimReticleProps> = React.memo(({
     );
     const isOutOfRange = distanceFt > maxRangeFt;
     const teleportColor = isOutOfRange ? '#ef4444' : (asset.color || '#818cf8');
-    const rangeLimitRadiusPx = (maxRangeFt / 5) * gridSize;
-    const targetRingRadius = gridSize / 2; // 5ft standard creature footprint
 
     return (
       <Group listening={false}>
-        {/* Departure Origin Ring at Caster (Point A) */}
-        <Circle
-          x={origin.x}
-          y={origin.y}
-          radius={targetRingRadius}
-          stroke={teleportColor}
-          strokeWidth={2.5 / stageScale}
-          dash={[4, 4]}
-          fill={teleportColor}
-          opacity={0.25}
-        />
-        <Text
-          text="Departure"
-          x={origin.x - (25 / stageScale)}
-          y={origin.y - targetRingRadius - (16 / stageScale)}
-          fill="#cbd5e1"
-          fontSize={10 / stageScale}
-          fontFamily="monospace"
-        />
-
-        {/* Max Teleportation Range Boundary Circle (around Caster) */}
-        {maxRangeFt <= 120 && (
-          <Circle
-            x={origin.x}
-            y={origin.y}
-            radius={rangeLimitRadiusPx}
-            stroke={teleportColor}
-            strokeWidth={1.5 / stageScale}
-            dash={[6, 6]}
-            opacity={0.4}
-          />
-        )}
-
-        {/* Teleport Vector Line from Departure to Arrival */}
+        {/* Teleport Vector Line from Departure to Arrival (no boundary circles) */}
         {distancePx > 10 && (
           <Line
             points={[origin.x, origin.y, current.x, current.y]}
@@ -125,20 +92,11 @@ export const AimReticle: React.FC<AimReticleProps> = React.memo(({
           />
         )}
 
-        {/* Arrival Ghost Silhouette / Ring (Point B) */}
+        {/* Small Arrival Target Point */}
         <Circle
           x={current.x}
           y={current.y}
-          radius={targetRingRadius}
-          stroke={teleportColor}
-          strokeWidth={2.5 / stageScale}
-          fill={teleportColor}
-          opacity={isOutOfRange ? 0.15 : 0.35}
-        />
-        <Circle
-          x={current.x}
-          y={current.y}
-          radius={5 / stageScale}
+          radius={4.5 / stageScale}
           fill={teleportColor}
         />
 
@@ -220,21 +178,16 @@ export const AimReticle: React.FC<AimReticleProps> = React.memo(({
 
   // 3. Self Personal Protective Spells (Shield, Armor of Agathys)
   if (asset.targetType === 'self' || asset.id === 'shield' || asset.id === 'armor_of_agathys') {
-    const ringRadius = (gridSize / 2) + (6 / stageScale);
     return (
       <Group x={origin.x} y={origin.y} listening={false}>
         <Circle
-          radius={ringRadius}
-          stroke={color}
-          strokeWidth={3 / stageScale}
-          dash={[6, 3]}
+          radius={4.5 / stageScale}
           fill={color}
-          opacity={0.22}
         />
         <Text
           text={`${asset.name} (Self)`}
-          x={-ringRadius}
-          y={-ringRadius - (20 / stageScale)}
+          x={-(gridSize / 2)}
+          y={-(gridSize / 2) - (20 / stageScale)}
           fill="#ffffff"
           fontSize={12 / stageScale}
           fontFamily="monospace"
@@ -276,11 +229,18 @@ export const AimReticle: React.FC<AimReticleProps> = React.memo(({
     );
   }
 
-  // 5. Single-Target Creature Spells & Attacks (Healing Word, Cure Wounds, Sacred Flame, Toll the Dead, Fire Bolt, etc.)
+  // 5. Single-Target Creature Spells & Attacks (Healing Word, Mass Healing Word, Cure Wounds, Sacred Flame, Toll the Dead, Fire Bolt, etc.)
+  const lowerAssetName = asset.name.toLowerCase();
   const isSingle = asset.targetType === 'single' ||
     SINGLE_TARGET_IDS.has(asset.id) ||
     asset.paradigm === 'projectile' ||
-    asset.paradigm === 'ray';
+    asset.paradigm === 'ray' ||
+    lowerAssetName.includes('healing word') ||
+    lowerAssetName.includes('cure wounds') ||
+    lowerAssetName.includes('sacred flame') ||
+    lowerAssetName.includes('toll the dead') ||
+    lowerAssetName.includes('preserve life') ||
+    lowerAssetName.includes('prayer of healing');
 
   if (isSingle) {
     const maxRangeFt = asset.rangeFt !== undefined
@@ -288,7 +248,6 @@ export const AimReticle: React.FC<AimReticleProps> = React.memo(({
       : (asset.id === 'cure_wounds' ? 5 : (asset.id === 'healing_word' ? 60 : 60));
     const isOutOfRange = maxRangeFt > 0 && distanceFt > maxRangeFt;
     const reticleColor = isOutOfRange ? '#ef4444' : color;
-    const targetRingRadius = gridSize / 2; // Exact 1 creature tile radius (5ft)
 
     return (
       <Group listening={false}>
@@ -302,21 +261,11 @@ export const AimReticle: React.FC<AimReticleProps> = React.memo(({
             opacity={0.85}
           />
         )}
-        {/* Target Creature Ring (5ft / 1 tile) */}
+        {/* Center Target Crosshair Dot (no circle ring) */}
         <Circle
           x={current.x}
           y={current.y}
-          radius={targetRingRadius}
-          stroke={reticleColor}
-          strokeWidth={2 / stageScale}
-          fill={reticleColor}
-          opacity={0.25}
-        />
-        {/* Center Target Crosshair Dot */}
-        <Circle
-          x={current.x}
-          y={current.y}
-          radius={4 / stageScale}
+          radius={4.5 / stageScale}
           fill={reticleColor}
         />
         {/* Range & Target Readout */}

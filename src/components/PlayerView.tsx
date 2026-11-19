@@ -4186,6 +4186,10 @@ export default function PlayerView() {
         return;
       }
 
+      const isSequentialPortal = activeEquippedAsset.id === 'dimension_door' ||
+        activeEquippedAsset.id === 'arcane_gate' ||
+        activeEquippedAsset.name.toLowerCase().includes('dimension door');
+
       // Departure Poof at Point A (where character vanishes from)
       const departEffect: VttEffectInstance = {
         id: `eff_depart_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -4204,9 +4208,9 @@ export default function PlayerView() {
         isPersistent: false,
         loop: false,
         castTime: Date.now(),
-        durationMs: 3500,
-        fadeInMs: 400,
-        fadeOutMs: 600,
+        durationMs: isSequentialPortal ? 3500 : 1500,
+        fadeInMs: isSequentialPortal ? 400 : undefined,
+        fadeOutMs: isSequentialPortal ? 600 : undefined,
         soundKey: activeEquippedAsset.soundKey || 'teleport_whoosh',
         color: activeEquippedAsset.color,
         ownerId: claimedToken.id,
@@ -4231,18 +4235,14 @@ export default function PlayerView() {
         isPersistent: false,
         loop: false,
         castTime: Date.now() + 80,
-        durationMs: 3500,
-        fadeInMs: 400,
-        fadeOutMs: 600,
+        durationMs: isSequentialPortal ? 3500 : 1500,
+        fadeInMs: isSequentialPortal ? 400 : undefined,
+        fadeOutMs: isSequentialPortal ? 600 : undefined,
         soundKey: activeEquippedAsset.soundKey || 'teleport_whoosh',
         color: activeEquippedAsset.color,
         ownerId: claimedToken.id,
         casterName: claimedToken.name
       };
-
-      const isSequentialPortal = activeEquippedAsset.id === 'dimension_door' ||
-        activeEquippedAsset.id === 'arcane_gate' ||
-        activeEquippedAsset.name.toLowerCase().includes('dimension door');
 
       if (isSequentialPortal) {
         // Step 1: Open departure portal on player token FIRST
@@ -4275,10 +4275,10 @@ export default function PlayerView() {
         }, 1300);
       } else {
         // Standard rapid teleportation (Misty Step, Fey Step, Shadow Step)
-        setEffects(prev => [...prev, departEffect, arriveEffect]);
+        // Use a single Arrival poof locally so the browser only decodes 1 WebM while moving the token and updating vision
+        setEffects(prev => [...prev, arriveEffect]);
         if (activeEquippedAsset.soundKey) soundCatalog.play(activeEquippedAsset.soundKey);
         if (socketRef.current?.connected) {
-          socketRef.current.emit('EFFECT_SPAWN', departEffect);
           socketRef.current.emit('EFFECT_SPAWN', arriveEffect);
         }
 
@@ -5174,18 +5174,28 @@ export default function PlayerView() {
       return;
     }
 
+    const isSelfOnlyHealAction = Boolean(
+      lowerName.includes('drunkard') ||
+      lowerName.includes('second wind') ||
+      lowerName.includes('wholeness of body') ||
+      lowerName.includes('quickened healing') ||
+      (action.isSelfAction && (action.rangeFt || 0) === 0 && (action.isHeal || action.damageType?.toLowerCase() === 'healing'))
+    );
     const isManeuver = [
       'dash', 'dodge', 'disengage', 'hide', 'rage', 'action surge', 'second wind',
       'divine intervention', 'blessed strikes',
       'blessed healer', 'destroy undead', 'enlightened magic', 'relentless endurance',
       'ki points', 'patient defense', 'step of the wind', 'wholeness of body',
       'quickened healing', 'indomitable', 'arcane recovery', 'portent', 'lucky',
-      'wild shape', 'wild resurgence', 'crimson rite', 'magical cunning', 'cunning action', 'steady aim'
-    ].some(k => lowerName.includes(k)) || (action.category === 'special' && action.isSelfAction && !action.isChannelDivinityHub);
-    const isSpellOrTargeted = action.category === 'spells' || action.subCategory === 'spell' || action.isHeal || lowerName.includes('shield');
-    if (action.isSelfAction && isManeuver && !isSpellOrTargeted && claimedToken) {
+      'wild shape', 'wild resurgence', 'crimson rite', 'magical cunning', 'cunning action', 'steady aim',
+      'drunkard'
+    ].some(k => lowerName.includes(k)) || (action.category === 'special' && action.isSelfAction && !action.isChannelDivinityHub) || isSelfOnlyHealAction;
+    const isSpellOrTargeted = !isSelfOnlyHealAction && (action.category === 'spells' || action.subCategory === 'spell' || action.isHeal || lowerName.includes('shield'));
+    if ((action.isSelfAction || isSelfOnlyHealAction) && isManeuver && !isSpellOrTargeted && claimedToken) {
       const tokenRadius = ((claimedToken.size || 1) * gridSize) / 2;
       const casterCenter = { x: claimedToken.x + tokenRadius, y: claimedToken.y + tokenRadius };
+      const effectiveHeal = Boolean(action.isHeal || isSelfOnlyHealAction || action.damageType?.toLowerCase() === 'healing');
+      const effectiveFormula = action.damageFormula || (lowerName.includes('drunkard') ? '4d4 + 4' : undefined);
 
       if (matchedAsset) {
         const newEffect: VttEffectInstance = {
@@ -5220,42 +5230,46 @@ export default function PlayerView() {
         }
       }
 
-      if (action.damageFormula && isAutoRollDiceEnabledRef.current) {
-        const evaluated = evaluateDiceFormula(action.damageFormula, false);
-        const rolledTotal = evaluated.total;
+      if (effectiveFormula && isAutoRollDiceEnabledRef.current) {
+        const evaluated = evaluateDiceFormula(effectiveFormula, false);
+        const rolledTotal = Math.abs(evaluated.total);
         const diceResults = evaluated.dice;
 
         if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d && diceResults.length > 0) {
           (window as any).__mistwalkerRoll3d({
             id: `roll-${Date.now()}`,
             characterName: claimedToken.name || 'Hero',
-            action: `${action.name}${action.isHeal ? ' (Self Heal)' : ''}`,
-            rollType: action.isHeal ? 'heal' : 'roll',
-            formula: `${action.damageFormula} → ${evaluated.breakdown}`,
-            diceNotation: action.damageFormula,
+            action: `${action.name}${effectiveHeal ? ' (Self Heal)' : ''}`,
+            rollType: effectiveHeal ? 'heal' : 'roll',
+            formula: `${effectiveFormula} → ${evaluated.breakdown}`,
+            diceNotation: effectiveFormula,
             dice: diceResults,
             modifier: evaluated.bonus,
             total: rolledTotal,
             isCritical: false,
             isFumble: false,
             theme: selectedDicePreset.id,
-            themeColor: selectedDicePreset.theme.primaryColor,
+            themeColor: effectiveHeal ? '#10b981' : selectedDicePreset.theme.primaryColor,
             timestamp: Date.now(),
             source: 'player'
           });
         }
 
-        if (action.isHeal && rolledTotal > 0 && socketRef.current?.connected) {
-          socketRef.current.emit('REQUEST_TOKEN_MUTATION', {
-            sourceTokenId: claimedToken.id,
-            sourceName: claimedToken.name || 'Hero',
-            targetTokenId: claimedToken.id,
-            targetName: claimedToken.name || 'Hero',
-            actionName: action.name,
-            deltaHp: rolledTotal,
-            requiresApproval: false,
-            requestId: `req_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
-          });
+        if (effectiveHeal && rolledTotal > 0) {
+          if (socketRef.current?.connected) {
+            socketRef.current.emit('REQUEST_TOKEN_MUTATION', {
+              sourceTokenId: claimedToken.id,
+              sourceName: claimedToken.name || 'Hero',
+              targetTokenId: claimedToken.id,
+              targetName: claimedToken.name || 'Hero',
+              actionName: action.name,
+              deltaHp: rolledTotal,
+              requiresApproval: false,
+              requestId: `req_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
+            });
+          } else {
+            setHudCharacterData(prev => prev ? { ...prev, currentHp: Math.min(prev.maxHp, prev.currentHp + rolledTotal) } : null);
+          }
         }
 
         if (socketRef.current?.connected && diceResults.length > 0) {
@@ -5264,16 +5278,16 @@ export default function PlayerView() {
             characterId: String(hudCharacterData?.id || claimedToken.id || ''),
             characterName: claimedToken.name || 'Hero',
             avatarUrl: hudCharacterData?.avatarUrl || claimedToken.avatarUrl || claimedToken.url,
-            action: `${action.name}${action.isHeal ? ' (Self Heal)' : ''}`,
-            rollType: action.isHeal ? 'heal' : 'roll',
-            formula: action.damageFormula,
-            diceNotation: action.damageFormula,
+            action: `${action.name}${effectiveHeal ? ' (Self Heal)' : ''}`,
+            rollType: effectiveHeal ? 'heal' : 'roll',
+            formula: effectiveFormula,
+            diceNotation: effectiveFormula,
             dice: diceResults,
             total: rolledTotal,
             isCritical: lowerName.includes('divine intervention') && rolledTotal <= (hudCharacterData?.totalLevel || 15),
             isFumble: false,
             theme: selectedDicePreset.id,
-            themeColor: selectedDicePreset.theme.primaryColor,
+            themeColor: effectiveHeal ? '#10b981' : selectedDicePreset.theme.primaryColor,
             timestamp: Date.now(),
             source: 'player'
           });
@@ -5286,9 +5300,9 @@ export default function PlayerView() {
             ? rolledTotal <= divThreshold
               ? `✨ DEITY INTERVENES! Rolled ${rolledTotal} on d100 (Target: ≤ ${divThreshold})`
               : `Rolled ${rolledTotal} on d100 (Target: ≤ ${divThreshold} — Try again after a Long Rest)`
-            : action.isHeal
-              ? `Restored +${rolledTotal} HP (${action.damageFormula})`
-              : `Rolled ${rolledTotal}${action.damageType ? ` ${action.damageType}` : ''} (${action.damageFormula})`
+            : effectiveHeal
+              ? `Restored +${rolledTotal} HP (${effectiveFormula})`
+              : `Rolled ${rolledTotal}${action.damageType ? ` ${action.damageType}` : ''} (${effectiveFormula})`
         });
       } else {
         toast.success(`${claimedToken.name} used ${action.name}!`, {
@@ -6106,7 +6120,12 @@ export default function PlayerView() {
         atHigherLevels: action.atHigherLevels,
         actionSnapshot: { ...action }
       };
-      setEffects(prev => [...prev, newEffect]);
+      setEffects(prev => {
+        const filtered = isAuraOrBuff
+          ? prev.filter(e => !(e.isPersistent && e.attachedTokenId === auraLockedToken.id && e.assetKey === asset.id))
+          : prev;
+        return [...filtered, newEffect];
+      });
       if (asset.soundKey) soundCatalog.play(asset.soundKey);
       if (socketRef.current?.connected) {
         socketRef.current.emit('EFFECT_SPAWN', newEffect);
@@ -6166,22 +6185,31 @@ export default function PlayerView() {
       });
     }
     // 3. Classify spell mechanics & auto-cast resolution
+    const lowerActionName = action.name.toLowerCase();
+    const isEffectiveHeal = Boolean(
+      action.isHeal ||
+      action.damageType?.toLowerCase() === 'healing' ||
+      /\b(cure wounds|healing word|mass healing word|mass cure wounds|prayer of healing|preserve life|aura of vitality|healing spirit|regenerate|goodberry|revivify|restoration|heroes' feast|heroes feast|beacon of hope|drunkard|second wind|lay on hands|wholeness of body|quickened healing|potion of healing|power word heal)\b/i.test(lowerActionName) ||
+      lowerActionName === 'heal' ||
+      lowerActionName === 'mass heal' ||
+      lowerActionName === 'aid'
+    );
+
     const isSpellAction = action.category === 'spells' || action.subCategory === 'spell';
     const spellProfile = isSpellAction
       ? classifySpellMechanics({
           name: action.name,
           description: action.description,
-          attackType: action.isAttack && !action.saveDc && !action.saveAbility ? 'spell' : undefined,
-          saveDcAbility: action.saveAbility,
-          saveDc: action.saveDc,
+          attackType: !isEffectiveHeal && action.isAttack && !action.saveDc && !action.saveAbility ? 'spell' : undefined,
+          saveDcAbility: isEffectiveHeal ? undefined : action.saveAbility,
+          saveDc: isEffectiveHeal ? undefined : action.saveDc,
           damageFormula: action.damageFormula,
-          damageType: action.damageType,
-          isHealing: action.isHeal,
+          damageType: isEffectiveHeal ? 'healing' : action.damageType,
+          isHealing: isEffectiveHeal,
         })
       : null;
 
     let formula = action.damageFormula || (action as any).damage;
-    const lowerActionName = action.name.toLowerCase();
 
     // Auto-resolve Sneak Attack damage formula dynamically if missing
     if (!formula && lowerActionName.includes('sneak attack')) {
@@ -6194,9 +6222,11 @@ export default function PlayerView() {
       formula = '1d6';
     }
 
-    if (!formula && action.isHeal) {
-      if (lowerActionName.includes('healing word')) formula = '2d4 + 3';
+    if (!formula && isEffectiveHeal) {
+      if (lowerActionName.includes('drunkard')) formula = '4d4 + 4';
+      else if (lowerActionName.includes('healing word')) formula = '2d4 + 3';
       else if (lowerActionName.includes('cure wounds')) formula = '2d8 + 3';
+      else if (lowerActionName.includes('preserve life')) formula = `${(hudCharacterData?.totalLevel || 15) * 5}`;
       else formula = '1d8 + 2';
     }
 
@@ -6207,9 +6237,66 @@ export default function PlayerView() {
           : ` [Lvl ${action.castAtLevel} Slot]`
         : '';
 
+    const isTargetAlly = targetToken.category === 'ally' || Boolean((targetToken as any).allyId);
+    const isTargetMonster = !isTargetAlly && (isMonsterToken(targetToken) || targetToken.isMonster === true || targetToken.category === 'monster' || targetToken.isPlayer === false);
+    const isFriendlyPlayerOrSelf = isSelfTarget || Boolean(targetToken.isPlayer) || targetToken.category === 'character' || isTargetAlly;
+    const isSpiritGuardiansOrFriendlySafeAura =
+      lowerActionName.includes('spirit guardians') ||
+      lowerActionName.includes('guardian of faith');
+
+    // Spirit Guardians never hurts player characters and certainly never hurts the player casting it!
+    if (isSpiritGuardiansOrFriendlySafeAura && isFriendlyPlayerOrSelf) {
+      toast.success(`✨ ${caster.name} activated ${action.name}${upcastSuffix}!`, {
+        description: `15 ft. Radiant Aura active around ${caster.name}. Friendly player characters are protected and unaffected; click any hostile enemy in the aura to apply ${formula || '3d8'} radiant damage (WIS Save DC ${action.saveDc || hudCharacterData?.spellSaveDc || 20}).`
+      });
+      setActiveTargetingAction(null);
+      setActiveEquippedAsset(null);
+      setAimOrigin(null);
+      setAimCurrent(null);
+      return;
+    }
+
     let calculatedDeltaHp = 0;
     if (isAutoRollDiceEnabledRef.current) {
-      if (spellProfile?.archetype === 'utility_zone') {
+      if (isEffectiveHeal) {
+        // Healing spells and items NEVER roll to hit or saving throws and ALWAYS restore positive HP!
+        if (formula) {
+          const evaluated = evaluateDiceFormula(formula, false);
+          const rolledTotal = Math.abs(evaluated.total);
+          const diceResults = evaluated.dice;
+          calculatedDeltaHp = rolledTotal;
+
+          const autoFormulaMatch = formula.match(/(\d*)d(\d+)/i);
+          const autoFallbackSides = autoFormulaMatch ? parseInt(autoFormulaMatch[2], 10) : 8;
+
+          const diceEvent: DdbDiceRollEvent = {
+            id: `roll-${Date.now()}`,
+            characterId: String(hudCharacterData?.id || caster.id || ''),
+            characterName: caster.name || 'Hero',
+            avatarUrl: hudCharacterData?.avatarUrl || caster.avatarUrl || caster.url,
+            action: `${action.name}${upcastSuffix} (Healing)`,
+            rollType: 'heal',
+            formula: `${formula} → ${evaluated.breakdown}`,
+            diceNotation: formula,
+            dice: diceResults.length > 0 ? diceResults : [{ sides: autoFallbackSides, result: rolledTotal, type: `d${autoFallbackSides}` }],
+            modifier: evaluated.bonus,
+            total: rolledTotal,
+            isCritical: false,
+            isFumble: false,
+            theme: selectedDicePreset.id,
+            themeColor: '#10b981',
+            timestamp: Date.now(),
+            source: 'player'
+          };
+
+          if (socketRef.current?.connected) {
+            socketRef.current.emit('SYNC_LOCAL_DICE_ROLL', diceEvent);
+          }
+          if (typeof window !== 'undefined' && (window as any).__mistwalkerRoll3d) {
+            (window as any).__mistwalkerRoll3d(diceEvent);
+          }
+        }
+      } else if (spellProfile?.archetype === 'utility_zone') {
         // Skip all dice rolls and only spawn visual effect
         calculatedDeltaHp = 0;
       } else if (spellProfile?.archetype === 'saving_throw') {
@@ -6310,17 +6397,17 @@ export default function PlayerView() {
           });
         } else if (formula) {
           const evaluated = evaluateDiceFormula(formula, isCrit);
-          calculatedDeltaHp = action.isHeal ? evaluated.total : -evaluated.total;
+          calculatedDeltaHp = isEffectiveHeal ? Math.abs(evaluated.total) : -evaluated.total;
 
           const formulaMatch = formula.match(/(\d*)d(\d+)/i);
-          const fallbackSides = formulaMatch ? parseInt(formulaMatch[2], 10) : (action.isHeal ? 8 : 6);
+          const fallbackSides = formulaMatch ? parseInt(formulaMatch[2], 10) : (isEffectiveHeal ? 8 : 6);
           const dmgDiceEvent: DdbDiceRollEvent = {
             id: `dmg-${Date.now()}`,
             characterId: String(hudCharacterData?.id || caster.id || ''),
             characterName: caster.name || 'Hero',
             avatarUrl: hudCharacterData?.avatarUrl || caster.avatarUrl || caster.url,
-            action: `${action.name}${upcastSuffix} (${action.isHeal ? 'Healing' : isCrit ? 'CRITICAL HIT' : 'Damage'})`,
-            rollType: action.isHeal ? 'heal' : 'damage',
+            action: `${action.name}${upcastSuffix} (${isEffectiveHeal ? 'Healing' : isCrit ? 'CRITICAL HIT' : 'Damage'})`,
+            rollType: isEffectiveHeal ? 'heal' : 'damage',
             formula: `${formula} → ${evaluated.breakdown}`,
             diceNotation: formula,
             dice: evaluated.dice.length > 0 ? evaluated.dice : [{ sides: fallbackSides, result: Math.abs(calculatedDeltaHp), type: `d${fallbackSides}` }],
@@ -6329,7 +6416,7 @@ export default function PlayerView() {
             isCritical: isCrit,
             isFumble: false,
             theme: selectedDicePreset.id,
-            themeColor: action.isHeal ? '#10b981' : isCrit ? '#10b981' : selectedDicePreset.theme.primaryColor,
+            themeColor: isEffectiveHeal ? '#10b981' : isCrit ? '#10b981' : selectedDicePreset.theme.primaryColor,
             timestamp: Date.now() + 100,
             source: 'player'
           };
@@ -6344,20 +6431,20 @@ export default function PlayerView() {
       } else if (formula) {
         // Auto-hit damage or healing buff: Never roll d20!
         const evaluated = evaluateDiceFormula(formula, false);
-        const rolledTotal = evaluated.total;
+        const rolledTotal = Math.abs(evaluated.total);
         const diceResults = evaluated.dice;
-        calculatedDeltaHp = action.isHeal ? rolledTotal : -rolledTotal;
+        calculatedDeltaHp = isEffectiveHeal ? rolledTotal : -rolledTotal;
 
         const autoFormulaMatch = formula.match(/(\d*)d(\d+)/i);
-        const autoFallbackSides = autoFormulaMatch ? parseInt(autoFormulaMatch[2], 10) : (action.isHeal ? 8 : 6);
+        const autoFallbackSides = autoFormulaMatch ? parseInt(autoFormulaMatch[2], 10) : (isEffectiveHeal ? 8 : 6);
 
         const diceEvent: DdbDiceRollEvent = {
           id: `roll-${Date.now()}`,
           characterId: String(hudCharacterData?.id || caster.id || ''),
           characterName: caster.name || 'Hero',
           avatarUrl: hudCharacterData?.avatarUrl || caster.avatarUrl || caster.url,
-          action: `${action.name}${upcastSuffix} (${action.isHeal ? 'Healing' : 'Auto-Hit Damage'})`,
-          rollType: action.isHeal ? 'heal' : 'damage',
+          action: `${action.name}${upcastSuffix} (${isEffectiveHeal ? 'Healing' : 'Auto-Hit Damage'})`,
+          rollType: isEffectiveHeal ? 'heal' : 'damage',
           formula: `${formula} → ${evaluated.breakdown}`,
           diceNotation: formula,
           dice: diceResults.length > 0 ? diceResults : [{ sides: autoFallbackSides, result: Math.abs(calculatedDeltaHp), type: `d${autoFallbackSides}` }],
@@ -6366,7 +6453,7 @@ export default function PlayerView() {
           isCritical: false,
           isFumble: false,
           theme: selectedDicePreset.id,
-          themeColor: action.isHeal ? '#10b981' : selectedDicePreset.theme.primaryColor,
+          themeColor: isEffectiveHeal ? '#10b981' : selectedDicePreset.theme.primaryColor,
           timestamp: Date.now(),
           source: 'player'
         };
@@ -6381,9 +6468,7 @@ export default function PlayerView() {
     }
 
     // 4. Emit REQUEST_TOKEN_MUTATION
-    const isTargetAlly = targetToken.category === 'ally' || Boolean((targetToken as any).allyId);
-    const isTargetMonster = !isTargetAlly && (isMonsterToken(targetToken) || targetToken.isMonster === true || targetToken.category === 'monster' || targetToken.isPlayer === false);
-    const isTargetOtherPlayer = targetToken.isPlayer && !isSelfTarget && !action.isHeal;
+    const isTargetOtherPlayer = targetToken.isPlayer && !isSelfTarget && !isEffectiveHeal;
     const requiresApproval = isTargetOtherPlayer || (isTargetMonster && !autoApplyMonsterDamage);
 
     const upcastActionLabel =
@@ -6394,7 +6479,7 @@ export default function PlayerView() {
         : action.name;
 
     if (!isAutoRollDiceEnabledRef.current) {
-      let isAttackAction = Boolean(
+      let isAttackAction = !isEffectiveHeal && Boolean(
         action.isAttack ||
         action.hitBonus !== undefined ||
         action.category === 'attacks' ||
@@ -6402,7 +6487,7 @@ export default function PlayerView() {
         action.subCategory === 'unarmed'
       );
 
-      if (action.category === 'spells' || action.subCategory === 'spell') {
+      if (!isEffectiveHeal && (action.category === 'spells' || action.subCategory === 'spell')) {
         const profile = spellProfile || classifySpellMechanics({
           name: action.name,
           description: action.description,
@@ -6411,7 +6496,7 @@ export default function PlayerView() {
           saveDc: action.saveDc,
           damageFormula: action.damageFormula,
           damageType: action.damageType,
-          isHealing: action.isHeal
+          isHealing: isEffectiveHeal
         });
         isAttackAction = profile.requiresAttackRoll;
       }
@@ -6421,7 +6506,7 @@ export default function PlayerView() {
         : parseInt(String(action.hitBonus || '+6').replace('+', ''), 10) || 6;
 
       const targetAc = (targetToken as any).ac || (targetToken as any).armorClass || (targetToken as any).stats?.armorClass || 13;
-      const atkFormula = formula || action.damageFormula || (action as any).damage || (action.isHeal ? '1d8 + 3' : '1d8');
+      const atkFormula = formula || action.damageFormula || (action as any).damage || (isEffectiveHeal ? '1d8 + 3' : '1d8');
 
       setPendingCombatRoll({
         actor: {
@@ -6439,9 +6524,9 @@ export default function PlayerView() {
         phase: isAttackAction ? 'to_hit' : 'damage',
         hitBonus: rawHit,
         damageFormula: atkFormula,
-        isHeal: Boolean(action.isHeal),
-        saveDc: action.saveDc ? Number(action.saveDc) : undefined,
-        saveAbility: action.saveAbility,
+        isHeal: isEffectiveHeal,
+        saveDc: !isEffectiveHeal && action.saveDc ? Number(action.saveDc) : undefined,
+        saveAbility: !isEffectiveHeal ? action.saveAbility : undefined,
         expendedActionSlot,
         context: 'player_view'
       });

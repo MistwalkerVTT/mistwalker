@@ -136,57 +136,25 @@ const applySnappyPlayback = (el: HTMLVideoElement | null) => {
   }
 };
 
-function getAuraVisualMeta(nameOrKey?: string, defaultColor?: string) {
+function getAuraVisualMeta(nameOrKey?: string) {
   const n = (nameOrKey || '').toLowerCase();
 
-  // Spells that explicitly do NOT have an external boundary circle
-  if (
-    n.includes('spirit') ||
-    n.includes('guardian') ||
-    n.includes('darkness') ||
-    n.includes('wall of fire') ||
-    n.includes('shield of faith') ||
-    n.includes('fog cloud') ||
-    n.includes('fog')
-  ) {
-    return { isCircleAura: false, borderColor: '', glowColor: '', opacity: 1.0 };
-  }
-
+  // Only draw a boundary circle on the specific auras explicitly requested:
   // Aura of Protection -> White boundary circle
-  if (n.includes('protection') || n.includes('paladin')) {
+  if (n.includes('aura of protection') || n === 'aura_of_protection') {
     return { isCircleAura: true, borderColor: '#ffffff', glowColor: 'rgba(255, 255, 255, 0.4)', opacity: 0.35 };
   }
   // Aura of Courage -> Red boundary circle
-  if (n.includes('courage')) {
+  if (n.includes('aura of courage') || n === 'aura_of_courage') {
     return { isCircleAura: true, borderColor: '#ef4444', glowColor: 'rgba(239, 68, 68, 0.4)', opacity: 0.35 };
   }
   // Antilife Shell -> Blue boundary circle
-  if (n.includes('antilife') || n.includes('anti-life')) {
+  if (n.includes('antilife') || n.includes('anti-life') || n === 'antilife_shell') {
     return { isCircleAura: true, borderColor: '#3b82f6', glowColor: 'rgba(59, 130, 246, 0.5)', opacity: 0.8 };
   }
-  // Aura of Life -> subtle healing/preservation green
-  if (n.includes('life')) {
-    return { isCircleAura: true, borderColor: 'rgba(34, 197, 94, 0.85)', glowColor: 'rgba(34, 197, 94, 0.35)', opacity: 0.35 };
-  }
-  // Aura of Vitality -> emerald/spring green
-  if (n.includes('vitality')) {
-    return { isCircleAura: true, borderColor: 'rgba(16, 185, 129, 0.85)', glowColor: 'rgba(16, 185, 129, 0.35)', opacity: 0.35 };
-  }
-  // Twilight Sanctuary
-  if (n.includes('twilight') || n.includes('faerie')) {
-    return { isCircleAura: true, borderColor: 'rgba(168, 85, 247, 0.85)', glowColor: 'rgba(168, 85, 247, 0.35)', opacity: 0.45 };
-  }
-  // Crusader's Mantle
-  if (n.includes('crusader') || n.includes('mantle')) {
-    return { isCircleAura: true, borderColor: 'rgba(245, 158, 11, 0.9)', glowColor: 'rgba(245, 158, 11, 0.4)', opacity: 0.45 };
-  }
-  // Armor of Agathys / Ice Barrier
-  if (n.includes('agathys') || n.includes('ice barrier') || n.includes('frost')) {
-    return { isCircleAura: true, borderColor: 'rgba(147, 197, 253, 0.9)', glowColor: 'rgba(147, 197, 253, 0.45)', opacity: 0.8 };
-  }
-  if (defaultColor) {
-    return { isCircleAura: true, borderColor: defaultColor, glowColor: defaultColor, opacity: 0.5 };
-  }
+
+  // All other animations (Misty Step, Toll the Dead, Sacred Flame, Healing Word, Mass Healing Word,
+  // Cure Wounds, Amulet of the Drunkard, Spirit Guardians, Bless, Sanctuary, etc.) do NOT draw a boundary circle
   return { isCircleAura: false, borderColor: '', glowColor: '', opacity: 1.0 };
 }
 
@@ -580,7 +548,7 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
             ? (attachedTokenRadius + (rawSizeFt / 5) * gridSize) * 2
             : Math.max(gridSize * 1.5, ((rawSizeFt * 2) / 5) * gridSize);
 
-          const meta = getAuraVisualMeta(effect.name || effect.assetKey, effect.color);
+          const meta = getAuraVisualMeta(effect.name || effect.assetKey);
           const isAura = effect.paradigm === 'aura' || Boolean(attachedToken) || meta.isCircleAura;
           const finalOpacity = (effect.opacity !== undefined && effect.opacity !== 1.0) ? effect.opacity : meta.opacity;
 
@@ -595,11 +563,11 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                 height: `${pixelDiameter}px`,
                 transform: `translate(-50%, -50%) rotate(${effect.rotation || 0}deg) translateZ(0)`,
                 transformOrigin: '50% 50%',
-                borderRadius: isAura ? '50%' : undefined,
-                border: (isAura && meta.isCircleAura) ? `2px solid ${meta.borderColor}` : undefined,
-                boxShadow: (isAura && meta.isCircleAura) ? `0 0 12px 2px ${meta.glowColor}, inset 0 0 8px 1px ${meta.glowColor}` : undefined,
+                borderRadius: meta.isCircleAura ? '50%' : undefined,
+                border: meta.isCircleAura ? `2px solid ${meta.borderColor}` : undefined,
+                boxShadow: meta.isCircleAura ? `0 0 12px 2px ${meta.glowColor}, inset 0 0 8px 1px ${meta.glowColor}` : undefined,
                 pointerEvents: 'none',
-                overflow: isAura ? 'hidden' : undefined
+                overflow: meta.isCircleAura ? 'hidden' : undefined
               }}
             >
               <video
