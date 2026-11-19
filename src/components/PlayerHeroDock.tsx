@@ -45,11 +45,13 @@ import {
 } from '../types/hud';
 import { findJb2aAsset } from '../effects/db/jb2aRegistry';
 import { classifySpellMechanics } from '../services/spellResolutionEngine';
+import { useMartialDamageRiders } from '../hooks/useMartialDamageRiders';
 import { toast } from 'sonner';
 
 interface PlayerHeroDockProps {
   characterData: HudCharacterData | null;
   claimedToken?: any | null;
+  martialRidersController?: ReturnType<typeof useMartialDamageRiders>;
   onSelectAction: (action: HudActionItem) => void;
   onRollToHit?: (action: HudActionItem) => void;
   onRollDamage?: (action: HudActionItem) => void;
@@ -125,8 +127,18 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
   multiTargetTokens = [],
   multiTargetMax = 0,
   onConfirmMultiTarget,
-  onRemoveMultiTarget
+  onRemoveMultiTarget,
+  martialRidersController
 }) => {
+  const internalRiders = useMartialDamageRiders({
+    characterData,
+    claimedToken,
+    characterName: characterData?.name || claimedToken?.name,
+    classLevel: characterData?.classLevel,
+    totalLevel: characterData?.totalLevel
+  });
+  const riders = martialRidersController || internalRiders;
+
   const currentTargetingAction = activeTargetingAction ?? selectedAction ?? (
     activeEquippedAsset ? {
       id: activeEquippedAsset.id,
@@ -372,6 +384,9 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
   // Dedicated To-Hit Roll Handler
   const handleRollToHit = (action: HudActionItem) => {
     if (!isAttackRollAction(action)) return;
+    if (action.hasAdvantage) {
+      riders.consumeVexAdvantageOnRoll();
+    }
     if (onRollToHit) {
       onRollToHit(action);
       return;
@@ -382,7 +397,10 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
       ? action.hitBonus
       : (parseInt(String(action.hitBonus).replace('+', ''), 10) || 0);
     const modStr = rawHit >= 0 ? `+${rawHit}` : `${rawHit}`;
-    const d20 = Math.floor(Math.random() * 20) + 1;
+    const d20_1 = Math.floor(Math.random() * 20) + 1;
+    const d20_2 = Math.floor(Math.random() * 20) + 1;
+    const hasAdv = Boolean(action.hasAdvantage);
+    const d20 = hasAdv ? Math.max(d20_1, d20_2) : d20_1;
     const total = d20 + rawHit;
     const isCrit = d20 === 20;
     const isFumble = d20 === 1;
@@ -393,17 +411,22 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
       characterId: String(characterData?.id || claimedToken?.id || ''),
       characterName: charName,
       avatarUrl: characterData?.avatarUrl || claimedToken?.avatarUrl || claimedToken?.url,
-      action: `${action.name} (To Hit)`,
+      action: `${action.name} (To Hit)${hasAdv ? ' [ADVANTAGE]' : ''}`,
       rollType: 'attack',
-      formula: `1d20 ${modStr}`,
-      diceNotation: '1d20',
-      dice: [{ sides: 20, result: d20, type: 'd20' }],
+      formula: hasAdv ? `2d20kh1 [${d20_1}, ${d20_2}] (${d20}) ${modStr}` : `1d20 (${d20}) ${modStr}`,
+      diceNotation: hasAdv ? '2d20kh1' : '1d20',
+      dice: hasAdv
+        ? [
+            { sides: 20, result: d20_1, type: 'd20' },
+            { sides: 20, result: d20_2, type: 'd20' }
+          ]
+        : [{ sides: 20, result: d20, type: 'd20' }],
       modifier: rawHit,
       total,
       isCritical: isCrit,
       isFumble: isFumble,
       theme: 'default',
-      themeColor: isCrit ? '#10b981' : isFumble ? '#ef4444' : '#10b981',
+      themeColor: isCrit ? '#10b981' : isFumble ? '#ef4444' : hasAdv ? '#eab308' : '#10b981',
       timestamp: Date.now(),
       source: 'player'
     };
@@ -693,7 +716,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
         combinedDamageFormula = `${baseDmgFormula} + ${cleanExtra}`;
       }
     }
-    return {
+    const actionWithSpecial: HudActionItem = {
       ...resolved,
       baseDamageFormula: baseDmgFormula,
       damageFormula: combinedDamageFormula,
@@ -702,6 +725,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
       extraDamageLabel: extraDmg.extraDamageLabel ?? resolved.extraDamageLabel,
       specialAbilities: specialAbilities.length > 0 ? specialAbilities : undefined
     };
+    return riders.applyRidersToWeaponAction(actionWithSpecial);
   };
 
   const handleClickActionCard = (action: HudActionItem, closeMobileDrawer = false) => {
@@ -1080,6 +1104,137 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
     }
   };
 
+  const handleEndTurnClick = () => {
+    riders.startNewTurnRefresh();
+    onEndTurn?.();
+  };
+
+  const renderMartialRidersBar = (compact = false) => {
+    const hasAnyMartialOrAttacks =
+      activeCategory === 'attacks' ||
+      riders.rogueLevel > 0 ||
+      riders.isGloomStalker ||
+      riders.huntersMarkActive ||
+      riders.vexAdvantagePrimed ||
+      (characterData?.attacks && characterData.attacks.length > 0);
+
+    if (!hasAnyMartialOrAttacks) return null;
+
+    return (
+      <div className={`flex items-center gap-1.5 flex-wrap ${compact ? 'px-1 py-1' : 'py-1'} border-b border-zinc-800/60 font-mono text-[11px]`}>
+        <span className="text-[10px] text-zinc-500 uppercase font-bold shrink-0 flex items-center gap-1">
+          <span>⚔️</span>
+          <span>Martial Riders:</span>
+        </span>
+
+        {/* 1. Hunter's Mark Toggle */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            riders.toggleHuntersMark();
+          }}
+          className={`px-2 py-0.5 rounded-lg border transition-all cursor-pointer flex items-center gap-1 select-none active:scale-95 ${
+            riders.huntersMarkActive
+              ? 'bg-emerald-950/80 border-emerald-400 text-emerald-300 shadow-[0_0_8px_rgba(16,185,129,0.35)] font-bold'
+              : 'bg-zinc-900/60 border-zinc-800 text-zinc-500 hover:text-zinc-300 hover:border-zinc-700'
+          }`}
+          title="D&D 2024 Hunter's Mark: +1d6 Force damage on weapon attacks"
+        >
+          <span>🎯 Hunter's Mark</span>
+          <span className={`text-[10px] ${riders.huntersMarkActive ? 'text-emerald-400 font-bold' : 'opacity-60'}`}>
+            +1d6
+          </span>
+        </button>
+
+        {/* 2. Sneak Attack Toggle */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            riders.toggleSneakAttack();
+          }}
+          className={`px-2 py-0.5 rounded-lg border transition-all cursor-pointer flex items-center gap-1 select-none active:scale-95 ${
+            riders.sneakAttackReady
+              ? 'bg-amber-950/80 border-amber-400 text-amber-300 shadow-[0_0_8px_rgba(245,158,11,0.35)] font-bold'
+              : 'bg-zinc-900/40 border-zinc-800/80 text-zinc-600 line-through opacity-70'
+          }`}
+          title={`D&D 2024 Sneak Attack: +${riders.sneakAttackDice} on Finesse/Ranged weapon once per turn`}
+        >
+          <span>🗡️ Sneak Attack</span>
+          <span className={`text-[10px] ${riders.sneakAttackReady ? 'text-amber-400 font-bold' : 'opacity-60'}`}>
+            +{riders.sneakAttackDice} {riders.sneakAttackReady ? '(Ready)' : '(Used)'}
+          </span>
+        </button>
+
+        {/* 3. Dreadful Strike Toggle (Gloom Stalker) */}
+        {(riders.isGloomStalker || riders.dreadfulStrikeActive) && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              riders.toggleDreadfulStrike();
+            }}
+            disabled={riders.dreadfulStrikeChargesLeft <= 0}
+            className={`px-2 py-0.5 rounded-lg border transition-all cursor-pointer flex items-center gap-1 select-none active:scale-95 ${
+              riders.dreadfulStrikeActive && riders.dreadfulStrikeChargesLeft > 0
+                ? 'bg-purple-950/80 border-purple-400 text-purple-300 shadow-[0_0_8px_rgba(168,85,247,0.35)] font-bold'
+                : riders.dreadfulStrikeChargesLeft <= 0
+                ? 'bg-zinc-900/40 border-zinc-800/80 text-zinc-600 opacity-50 cursor-not-allowed'
+                : 'bg-zinc-900/60 border-zinc-800 text-zinc-500 hover:text-zinc-300 hover:border-zinc-700'
+            }`}
+            title={`Gloom Stalker Dreadful Strike: +2d6 Psychic damage once per turn (${riders.dreadfulStrikeChargesLeft}/${riders.maxDreadfulCharges} charges left)`}
+          >
+            <span>👻 Dreadful Strike</span>
+            <span className={`text-[10px] ${riders.dreadfulStrikeActive ? 'text-purple-300 font-bold' : 'opacity-60'}`}>
+              +2d6 Psy [{riders.dreadfulStrikeChargesLeft}/{riders.maxDreadfulCharges}]
+            </span>
+          </button>
+        )}
+
+        {/* 4. +1 Ammunition Toggle */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            riders.togglePlusOneAmmo();
+          }}
+          className={`px-2 py-0.5 rounded-lg border transition-all cursor-pointer flex items-center gap-1 select-none active:scale-95 ${
+            riders.plusOneAmmoActive
+              ? 'bg-sky-950/80 border-sky-400 text-sky-300 shadow-[0_0_8px_rgba(56,189,248,0.35)] font-bold'
+              : 'bg-zinc-900/60 border-zinc-800 text-zinc-500 hover:text-zinc-300 hover:border-zinc-700'
+          }`}
+          title="+1 Crossbow Bolts / Ammunition: +1 to Hit and +1 Damage on Crossbows and Bows"
+        >
+          <span>🏹 +1 Bolts</span>
+          <span className={`text-[10px] ${riders.plusOneAmmoActive ? 'text-sky-300 font-bold' : 'opacity-60'}`}>
+            +1 Hit/+1 Dmg
+          </span>
+        </button>
+
+        {/* 5. Vex Advantage Primed Indicator / Toggle */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            riders.toggleVexAdvantage();
+          }}
+          className={`px-2 py-0.5 rounded-lg border transition-all cursor-pointer flex items-center gap-1 select-none active:scale-95 ${
+            riders.vexAdvantagePrimed
+              ? 'bg-yellow-500/25 border-yellow-400 text-yellow-300 shadow-[0_0_12px_rgba(234,179,8,0.45)] font-bold animate-pulse'
+              : 'bg-zinc-900/60 border-zinc-800 text-zinc-500 hover:text-zinc-300 hover:border-zinc-700'
+          }`}
+          title="Vex Weapon Mastery: Hitting with Hand Crossbow, Shortsword, or Rapier grants Advantage on your next attack roll. Click to toggle manual Advantage."
+        >
+          <span>⚡ Vex Adv</span>
+          <span className={`text-[10px] ${riders.vexAdvantagePrimed ? 'text-yellow-300 font-bold' : 'opacity-60'}`}>
+            {riders.vexAdvantagePrimed ? '★ ACTIVE' : 'Off'}
+          </span>
+        </button>
+      </div>
+    );
+  };
+
   return (
     <div
       id="player-hero-bottom-dock"
@@ -1177,7 +1332,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
               {onEndTurn && (
                 <button
                   type="button"
-                  onClick={onEndTurn}
+                  onClick={handleEndTurnClick}
                   className={`px-2.5 py-1 rounded-lg font-mono text-[11px] font-bold transition-all cursor-pointer active:scale-95 flex items-center gap-1 shrink-0 ${
                     isMyTurn
                       ? 'bg-amber-500 hover:bg-amber-400 text-zinc-950 shadow-md shadow-amber-500/30 animate-pulse'
@@ -1677,7 +1832,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
             {onEndTurn && (
               <button
                 type="button"
-                onClick={onEndTurn}
+                onClick={handleEndTurnClick}
                 className={`px-3 py-2 rounded-lg font-mono text-[11px] font-bold cursor-pointer transition-all active:scale-95 ${
                   isMyTurn
                     ? 'bg-amber-500 hover:bg-amber-400 text-zinc-950 shadow-md shadow-amber-500/20 animate-pulse'
@@ -1912,6 +2067,9 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
               })}
             </div>
           )}
+
+          {/* Martial Riders Quick-Toggles (Mobile) */}
+          {renderMartialRidersBar(true)}
 
           {/* Action Rows */}
           <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 min-h-[140px] max-h-[46dvh] sidebar-scrollbar">
@@ -2522,7 +2680,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
             {onEndTurn && (
               <button
                 type="button"
-                onClick={onEndTurn}
+                onClick={handleEndTurnClick}
                 className={`px-3 py-1.5 rounded-xl font-mono text-xs font-bold transition-all cursor-pointer active:scale-95 ${
                   isMyTurn
                     ? 'bg-amber-500 hover:bg-amber-400 text-zinc-950 shadow-md shadow-amber-500/30 animate-pulse'
@@ -2684,6 +2842,9 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                 )}
               </div>
             )}
+
+            {/* Martial Damage Riders & Weapon Masteries Quick-Toggles */}
+            {renderMartialRidersBar(false)}
 
             {/* D&D Beyond Tactical Action Cards Grid */}
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 max-h-[185px] overflow-y-auto pr-1 sidebar-scrollbar">

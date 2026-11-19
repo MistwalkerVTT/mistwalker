@@ -127,6 +127,7 @@ import { TokenBadgesMenuTab } from './TokenBadgesMenuTab';
 import type { PlayerStationMode } from './PlayerStationModal';
 import type { PlayerCharacterChoiceItem } from './PlayerCharacterSelectModal';
 import { PlayerHeroDock } from './PlayerHeroDock';
+import { useMartialDamageRiders } from '../hooks/useMartialDamageRiders';
 import { CombatDicePromptModal, PendingCombatRoll, RollAdvantageMode } from './CombatDicePromptModal';
 import { WildShapeBeastForm, ActiveWildShapeState, GAIAH_WILD_SHAPE_FORMS } from '../types/wildShape';
 import { DndRuleInspectionModal } from './DndRuleInspectionModal';
@@ -1960,6 +1961,14 @@ export default function PlayerView() {
     return found;
   }, [tokens, claimedTokenId]);
 
+  const martialRiders = useMartialDamageRiders({
+    characterData: hudCharacterData,
+    claimedToken: claimedToken,
+    characterName: hudCharacterData?.name || claimedToken?.name,
+    classLevel: hudCharacterData?.classLevel,
+    totalLevel: hudCharacterData?.totalLevel
+  });
+
   // Clear Wild Shape state and ensure D&D Beyond sync always starts ON when switching characters
   useEffect(() => {
     activeWildShapeRef.current = null;
@@ -2062,6 +2071,11 @@ export default function PlayerView() {
     }) => {
       if (!pendingCombatRoll) return;
       const { actor, target, action } = pendingCombatRoll;
+
+      const outcome = martialRiders.recordWeaponHitOutcome(action.name, result.hits);
+      if (outcome.primedVex) {
+        toast.info('⚡ Vex Weapon Mastery: Advantage primed on your next attack roll!');
+      }
 
       if (!result.hits) {
         toast.error(
@@ -5618,10 +5632,17 @@ export default function PlayerView() {
       ? action.hitBonus
       : (parseInt(String(action.hitBonus).replace('+', ''), 10) || 0);
     const modStr = rawHit >= 0 ? `+${rawHit}` : `${rawHit}`;
-    const d20 = Math.floor(Math.random() * 20) + 1;
+    const d20_1 = Math.floor(Math.random() * 20) + 1;
+    const d20_2 = Math.floor(Math.random() * 20) + 1;
+    const hasAdv = Boolean(action.hasAdvantage || martialRiders.vexAdvantagePrimed);
+    const d20 = hasAdv ? Math.max(d20_1, d20_2) : d20_1;
     const total = d20 + rawHit;
     const isCrit = d20 === 20;
     const isFumble = d20 === 1;
+
+    if (hasAdv) {
+      martialRiders.consumeVexAdvantageOnRoll();
+    }
 
     const charName = hudCharacterData?.name || claimedToken?.name || 'Hero';
     const diceEvent: DdbDiceRollEvent = {
@@ -5629,17 +5650,22 @@ export default function PlayerView() {
       characterId: String(hudCharacterData?.id || claimedToken?.id || ''),
       characterName: charName,
       avatarUrl: hudCharacterData?.avatarUrl || claimedToken?.avatarUrl || claimedToken?.url,
-      action: `${action.name} (To Hit)`,
+      action: `${action.name} (To Hit)${hasAdv ? ' [ADVANTAGE]' : ''}`,
       rollType: 'attack',
-      formula: `1d20 ${modStr}`,
-      diceNotation: '1d20',
-      dice: [{ sides: 20, result: d20, type: 'd20' }],
+      formula: hasAdv ? `2d20kh1 [${d20_1}, ${d20_2}] (${d20}) ${modStr}` : `1d20 (${d20}) ${modStr}`,
+      diceNotation: hasAdv ? '2d20kh1' : '1d20',
+      dice: hasAdv
+        ? [
+            { sides: 20, result: d20_1, type: 'd20' },
+            { sides: 20, result: d20_2, type: 'd20' }
+          ]
+        : [{ sides: 20, result: d20, type: 'd20' }],
       modifier: rawHit,
       total,
       isCritical: isCrit,
       isFumble: isFumble,
       theme: selectedDicePreset.id,
-      themeColor: isCrit ? '#10b981' : isFumble ? '#ef4444' : selectedDicePreset.theme.primaryColor,
+      themeColor: isCrit ? '#10b981' : isFumble ? '#ef4444' : hasAdv ? '#eab308' : selectedDicePreset.theme.primaryColor,
       timestamp: Date.now(),
       source: 'player'
     };
@@ -5653,12 +5679,12 @@ export default function PlayerView() {
 
     toast.success(`${charName}: ${action.name} To Hit!`, {
       description: isCrit
-        ? `CRITICAL HIT! Nat 20 ${modStr} = ${total}`
+        ? `CRITICAL HIT! Nat 20 ${modStr} = ${total}${hasAdv ? ' (Advantage)' : ''}`
         : isFumble
         ? `NATURAL 1 FUMBLE! Nat 1 ${modStr} = ${total}`
-        : `Rolled ${d20} ${modStr} = ${total} to Hit!`
+        : `Rolled ${d20} ${modStr} = ${total} to Hit!${hasAdv ? ` (Advantage [${d20_1}, ${d20_2}])` : ''}`
     });
-  }, [hudCharacterData, claimedToken, selectedDicePreset]);
+  }, [hudCharacterData, claimedToken, selectedDicePreset, martialRiders]);
 
   const handleRollDamage = useCallback((action: HudActionItem) => {
     const rawFormula = action.damageFormula;
@@ -10405,6 +10431,7 @@ export default function PlayerView() {
         <PlayerHeroDock
           characterData={hudCharacterData}
           claimedToken={claimedToken}
+          martialRidersController={martialRiders}
           onSelectAction={handleSelectHudAction}
           onRollToHit={handleRollToHit}
           onRollDamage={handleRollDamage}

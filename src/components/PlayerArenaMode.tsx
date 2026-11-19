@@ -64,6 +64,7 @@ import {
 } from '../types/hud';
 import { WallSegment, DoorState, AURA_PRESETS, AuraPreset } from '../types';
 import { PlayerHeroDock } from './PlayerHeroDock';
+import { useMartialDamageRiders } from '../hooks/useMartialDamageRiders';
 import { GridLayer } from './GridLayer';
 import { buildDmMonsterHudData } from '../services/monsterHudService';
 import { CombatModifier } from '../types/combatModifiers';
@@ -2441,6 +2442,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         setRound((r) => r + 1);
       }
       setTurnIndex(nextIdx);
+      martialRiders.startNewTurnRefresh();
       const nextTargetId = prev[nextIdx]?.id;
       if (nextTargetId) {
         setCombatModifiers((currMods) => {
@@ -2503,6 +2505,13 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
   // Manual Dice Prompt State when Auto Roll is OFF and player casts a spell/action
   const [pendingManualDicePrompt, setPendingManualDicePrompt] = useState<PendingCombatRoll | null>(null);
   const [combatModifiers, setCombatModifiers] = useState<CombatModifier[]>([]);
+
+  // D&D 2024 Martial Damage Riders & Weapon Mastery Manager for Battle Arena
+  const martialRiders = useMartialDamageRiders({
+    characterName: activeCombatant?.name,
+    classLevel: activeCombatant?.classOrCr,
+    claimedToken: activeCombatant
+  });
 
   // Player-specific Automatic Dice Rolling Toggle State (persisted per character/player in localStorage)
   const [autoRollByPlayerMap, setAutoRollByPlayerMap] = useState<Record<string, boolean>>(() =>
@@ -3116,10 +3125,19 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       }
 
       const lowerName = action.name.toLowerCase();
-      const markActorUsed = (c: ArenaCombatant) =>
-        action.type === 'bonus_action'
+      const isNickAttack =
+        action.weaponMastery === 'nick' ||
+        action.name.toLowerCase().includes('[nick]');
+
+      const markActorUsed = (c: ArenaCombatant) => {
+        if (isNickAttack && action.type === 'bonus_action') {
+          // D&D 2024 Nick Weapon Mastery: Extra attack of Light weapon is free part of Attack action
+          return { ...c, actionUsed: true };
+        }
+        return action.type === 'bonus_action'
           ? { ...c, bonusActionUsed: true }
           : { ...c, actionUsed: true };
+      };
 
       // Deduct spell slot if this was a leveled spell cast by a human combatant
       const spellSlotLevelToDeduct = action.castAtLevel ?? action.level ?? (action.spellSlotRequired ? Number(action.spellSlotRequired) : 0);
@@ -3948,20 +3966,63 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         });
       }
 
+      const isSapped = Boolean(actor.conditions?.includes('Sapped'));
+      const hasDisadvantage = isThreatened || isSapped;
+      const hasAdvantage = Boolean(action.hasAdvantage || martialRiders.vexAdvantagePrimed);
+
+      // Advantage & Disadvantage cancel out per D&D rules
+      const rollsWithAdvantage = hasAdvantage && !hasDisadvantage;
+      const rollsWithDisadvantage = hasDisadvantage && !hasAdvantage;
+
       const d20Roll1 = rollOverrides?.manualTotal !== undefined
         ? Math.max(1, Math.min(20, rollOverrides.manualTotal))
         : Math.floor(Math.random() * 20) + 1;
       const d20Roll2 = Math.floor(Math.random() * 20) + 1;
-      const d20 = isThreatened && rollOverrides?.manualTotal === undefined ? Math.min(d20Roll1, d20Roll2) : d20Roll1;
+
+      let d20 = d20Roll1;
+      if (rollOverrides?.manualTotal === undefined) {
+        if (rollsWithAdvantage) {
+          d20 = Math.max(d20Roll1, d20Roll2);
+        } else if (rollsWithDisadvantage) {
+          d20 = Math.min(d20Roll1, d20Roll2);
+        }
+      }
+
       const isCrit = d20 === 20;
       const isFumble = d20 === 1;
       const attackTotal = d20 + rawHitBonus;
 
+      if (isSapped) {
+        setCombatants((prev) =>
+          prev.map((c) =>
+            c.id === actor.id
+              ? { ...c, conditions: (c.conditions || []).filter((cond) => cond !== 'Sapped') }
+              : c
+          )
+        );
+      }
+
+      if (hasAdvantage) {
+        martialRiders.consumeVexAdvantageOnRoll();
+      }
+
       const rollFormula = rollOverrides?.manualTotal !== undefined
         ? `[Manual Table d20: ${d20}] + ${rawHitBonus} = ${attackTotal}`
-        : isThreatened
+        : rollsWithAdvantage
+        ? `1d20 Advantage [${d20Roll1}, ${d20Roll2}] (${d20}) + ${rawHitBonus} = ${attackTotal}`
+        : rollsWithDisadvantage
         ? `1d20 Disadvantage [${d20Roll1}, ${d20Roll2}] (${d20}) + ${rawHitBonus} = ${attackTotal}`
         : `1d20 (${d20}) + ${rawHitBonus} = ${attackTotal}`;
+
+      const rollAnnotation = rollsWithAdvantage
+        ? ' (Advantage: Vex)'
+        : rollsWithDisadvantage
+        ? isThreatened
+          ? ' (Disadvantage: Melee Reach)'
+          : ' (Disadvantage: Sapped)'
+        : (hasAdvantage && hasDisadvantage)
+        ? ' (Adv/Dis Cancelled)'
+        : '';
 
       const effectiveTargetStats = computeEffectiveCombatantStats(target, combatModifiers);
       const effectiveTargetAc = effectiveTargetStats.effectiveAc;
@@ -3972,11 +4033,11 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         onTrigger3dDice({
           id: `arena-atk-${Date.now()}`,
           characterName: actor.name,
-          action: `${action.name}${isThreatened ? ' (Disadvantage)' : ''} — ${isCrit ? 'CRITICAL HIT!' : hitsTarget ? `HIT (vs AC ${effectiveTargetAc})` : `MISS (vs AC ${effectiveTargetAc})`}`,
+          action: `${action.name}${rollAnnotation} — ${isCrit ? 'CRITICAL HIT!' : hitsTarget ? `HIT (vs AC ${effectiveTargetAc})` : `MISS (vs AC ${effectiveTargetAc})`}`,
           rollType: 'attack',
           formula: rollFormula,
-          diceNotation: isThreatened ? '2d20kl1' : '1d20',
-          dice: isThreatened
+          diceNotation: rollsWithAdvantage ? '2d20kh1' : rollsWithDisadvantage ? '2d20kl1' : '1d20',
+          dice: rollsWithAdvantage || rollsWithDisadvantage
             ? [
                 { sides: 20, result: d20Roll1, type: 'd20' },
                 { sides: 20, result: d20Roll2, type: 'd20' }
@@ -3992,11 +4053,12 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       }
 
       if (!hitsTarget) {
+        martialRiders.recordWeaponHitOutcome(action.name, false);
         setCombatants((prev) => prev.map((c) => (c.id === actor.id ? markActorUsed(c) : c)));
         addCombatLog(
           actor.name,
           actor.team,
-          `attacked ${target.name} with ${action.name}${isThreatened ? ' (Disadvantage: enemy in 5ft melee)' : ''} — MISS!`,
+          `attacked ${target.name} with ${action.name}${rollAnnotation} — MISS!`,
           `Rolled ${attackTotal} (${rollFormula}) vs AC ${target.ac}`
         );
         soundCatalog.play('shield_clash', 0.65);
@@ -4079,11 +4141,20 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         trackCombatStat(actor.id, 'kills', 1);
       }
 
+      const outcome = martialRiders.recordWeaponHitOutcome(action.name, true);
+      const isSapWeapon =
+        outcome.appliedSap ||
+        action.weaponMastery === 'sap' ||
+        action.name.toLowerCase().includes('[sap]');
+
       setCombatants((prev) =>
         prev.map((c) => {
           if (c.id === target.id) {
             const nextHp = Math.max(0, c.currentHp - finalDamage);
-            return { ...c, currentHp: nextHp };
+            const conds = isSapWeapon && !c.conditions?.includes('Sapped')
+              ? [...(c.conditions || []), 'Sapped']
+              : c.conditions;
+            return { ...c, currentHp: nextHp, conditions: conds };
           }
           if (c.id === actor.id) {
             return markActorUsed(c);
@@ -4092,10 +4163,34 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         })
       );
 
+      if (isSapWeapon) {
+        addCombatLog(
+          actor.name,
+          actor.team,
+          `🛡️ ${actor.name}'s Sap mastery imposed Disadvantage on ${target.name}'s next attack roll!`
+        );
+        spawnFloatingText(
+          target.id,
+          target.x + ((target.size || 1) * arenaGridSize) / 2,
+          target.y + ((target.size || 1) * arenaGridSize) / 2,
+          'SAPPED (Disadv)',
+          'damage'
+        );
+      }
+
+      if (outcome.primedVex) {
+        addCombatLog(
+          actor.name,
+          actor.team,
+          `⚡ Vex Weapon Mastery: Advantage primed on ${actor.name}'s next attack roll!`
+        );
+        toast.info(`⚡ Vex Weapon Mastery: Advantage primed for ${actor.name}!`);
+      }
+
       addCombatLog(
         actor.name,
         actor.team,
-        `${isCrit ? '💥 CRITICAL HIT!' : 'hit'} ${target.name} with ${action.name}${isThreatened ? ' (Disadvantage)' : ''} for ${finalDamage} ${action.damageType || ''} damage!`,
+        `${isCrit ? '💥 CRITICAL HIT!' : 'hit'} ${target.name} with ${action.name}${rollAnnotation} for ${finalDamage} ${action.damageType || ''} damage!`,
         `To Hit: ${attackTotal} (${rollFormula}) vs AC ${target.ac} • Damage: ${dmgRoll.breakdown}${dmgMult !== 1 ? ` (×${dmgMult} DM Scale)` : ''}`,
         isCrit
       );
@@ -6190,6 +6285,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         <PlayerHeroDock
           characterData={activeHeroHudData}
           isMobile={isMobile}
+          martialRidersController={martialRiders}
           claimedToken={
             {
               id: activeCombatant.id,

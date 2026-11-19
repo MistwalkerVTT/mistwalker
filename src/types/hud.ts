@@ -94,6 +94,9 @@ export interface HudActionItem {
   specialAbilities?: HudSpecialAbilityTrigger[]; // Inline special ability / trigger buttons on attack/spell/action cards
   isChannelDivinityHub?: boolean; // True if this card is the unified Channel Divinity selector hub
   subOptions?: HudActionItem[];   // Sub-actions selectable from the Channel Divinity choice menu
+  hasAdvantage?: boolean;         // D&D 2024 Advantage primed (e.g. Vex mastery, True Strike, Reckless)
+  weaponMastery?: 'vex' | 'nick' | 'sap' | 'slow' | 'push' | 'topple' | 'graze' | 'cleave'; // D&D 2024 Weapon Mastery property
+  activeRiderLabels?: string[];   // Active martial damage riders (Hunter's Mark, Sneak Attack, Dreadful Strike, etc.)
 }
 
 /**
