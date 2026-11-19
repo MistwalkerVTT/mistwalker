@@ -316,7 +316,7 @@ export function createD6Bundle(size = 1.8): DieGeometryBundle {
 }
 
 /**
- * d10 (Pentagonal Trapezohedron, numbers 1 - 10 / 0 - 9)
+ * d10 (Pentagonal Trapezohedron, numbers 1 - 10 / 00 - 90)
  */
 export function createD10Bundle(radius = 1.35, isPercentile = false): DieGeometryBundle {
   const geometry = new THREE.BufferGeometry();
@@ -325,55 +325,81 @@ export function createD10Bundle(radius = 1.35, isPercentile = false): DieGeometr
 
   const h = radius * 1.1;
   const r = radius * 0.95;
+  const cos36 = Math.cos(Math.PI / 5);
+  // Exact equatorial offset so all 4 vertices of every kite face are coplanar
+  const yEq = h * ((1 - cos36) / (1 + cos36));
   const topApex = new THREE.Vector3(0, h, 0);
   const bottomApex = new THREE.Vector3(0, -h, 0);
   const eq: THREE.Vector3[] = [];
 
   for (let i = 0; i < 10; i++) {
     const angle = (i * Math.PI * 2) / 10;
-    const y = (i % 2 === 0 ? 0.28 : -0.28) * radius;
+    const y = i % 2 === 0 ? yEq : -yEq;
     eq.push(new THREE.Vector3(Math.cos(angle) * r, y, Math.sin(angle) * r));
   }
 
   const cols = 5;
   const rows = 2;
+  const padU = (24 / 512) / cols;
+  const padV = (24 / 512) / rows;
+  const kiteCrossRatio = 0.76;
   const faceData: { normal: THREE.Vector3; up: THREE.Vector3 }[] = [];
 
-  for (let i = 0; i < 10; i++) {
-    const next = (i + 1) % 10;
-    let v0: THREE.Vector3, v1: THREE.Vector3, v2: THREE.Vector3;
+  for (let f = 0; f < 10; f++) {
+    const k = Math.floor(f / 2);
+    let top: THREE.Vector3;
+    let left: THREE.Vector3;
+    let bottom: THREE.Vector3;
+    let right: THREE.Vector3;
 
-    if (i % 2 === 0) {
-      // Upper pyramid
-      v0 = eq[i];
-      v1 = eq[next];
-      v2 = topApex;
+    if (f % 2 === 0) {
+      // Upper kite: apex at topApex, bottom at odd equatorial vertex
+      top = topApex;
+      left = eq[(2 * k + 2) % 10];
+      bottom = eq[2 * k + 1];
+      right = eq[2 * k];
     } else {
-      // Lower pyramid
-      v0 = eq[next];
-      v1 = eq[i];
-      v2 = bottomApex;
+      // Lower kite: apex at bottomApex, bottom at even equatorial vertex
+      top = bottomApex;
+      left = eq[(2 * k + 9) % 10];
+      bottom = eq[2 * k];
+      right = eq[2 * k + 1];
     }
 
-    vertices.push(v0.x, v0.y, v0.z, v1.x, v1.y, v1.z, v2.x, v2.y, v2.z);
+    // Emit 2 triangles with outward-facing CCW winding: (top, left, bottom) & (top, bottom, right)
+    vertices.push(
+      top.x, top.y, top.z,
+      left.x, left.y, left.z,
+      bottom.x, bottom.y, bottom.z,
+      top.x, top.y, top.z,
+      bottom.x, bottom.y, bottom.z,
+      right.x, right.y, right.z
+    );
 
     const normal = new THREE.Vector3()
-      .crossVectors(new THREE.Vector3().subVectors(v1, v0), new THREE.Vector3().subVectors(v2, v0))
+      .crossVectors(new THREE.Vector3().subVectors(left, top), new THREE.Vector3().subVectors(bottom, top))
       .normalize();
-    const baseMid = new THREE.Vector3().addVectors(v0, v1).multiplyScalar(0.5);
-    const up = new THREE.Vector3().subVectors(v2, baseMid).normalize();
+    const up = new THREE.Vector3().subVectors(top, bottom).normalize();
     faceData.push({ normal, up });
 
-    // UV mapping into 5x2 atlas
-    const col = i % cols;
-    const row = Math.floor(i / cols);
-    const uL = col / cols;
-    const uR = (col + 1) / cols;
+    // UV mapping into 5x2 kite atlas
+    const col = f % cols;
+    const row = Math.floor(f / cols);
+    const uL = col / cols + padU;
+    const uR = (col + 1) / cols - padU;
     const uM = (uL + uR) / 2;
-    const vB = 1 - (row + 1) / rows;
-    const vT = 1 - row / rows;
+    const vB = 1 - (row + 1) / rows + padV;
+    const vT = 1 - row / rows - padV;
+    const vCross = vT - (vT - vB) * kiteCrossRatio;
 
-    uvsArray.push(uL + 0.015, vB + 0.02, uR - 0.015, vB + 0.02, uM, vT - 0.02);
+    uvsArray.push(
+      uM, vT,
+      uL, vCross,
+      uM, vB,
+      uM, vT,
+      uM, vB,
+      uR, vCross
+    );
   }
 
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
@@ -402,7 +428,7 @@ export function createD10Bundle(radius = 1.35, isPercentile = false): DieGeometr
     cannonShape,
     getRestingQuaternion,
     radius,
-    inRadius: radius * 0.92
+    inRadius: Math.abs(topApex.dot(faceData[0].normal))
   };
 }
 

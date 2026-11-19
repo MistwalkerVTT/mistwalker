@@ -203,12 +203,15 @@ export function createPolyhedralAtlas(
         else ctx.lineTo(px, py);
       }
     } else {
-      // Kite / Deltoid (for d10)
-      const pad = 32;
-      ctx.moveTo(cx, y + pad);
-      ctx.lineTo(x + tileW - pad, cy + 40);
-      ctx.lineTo(cx, y + tileH - pad);
-      ctx.lineTo(x + pad, cy + 40);
+      // Kite / Deltoid (for d10) — matches 3D kite UV cross-bar at 76% from top to bottom
+      const pad = 24;
+      const topY = y + pad;
+      const bottomY = y + tileH - pad;
+      const midY = topY + (bottomY - topY) * 0.76;
+      ctx.moveTo(cx, topY);
+      ctx.lineTo(x + tileW - pad, midY);
+      ctx.lineTo(cx, bottomY);
+      ctx.lineTo(x + pad, midY);
     }
 
     ctx.closePath();
@@ -245,10 +248,14 @@ export function createPolyhedralAtlas(
         else ctx.lineTo(px, py);
       }
     } else {
-      ctx.moveTo(cx, y + 46);
-      ctx.lineTo(x + tileW - 44, cy + 36);
-      ctx.lineTo(cx, y + tileH - 46);
-      ctx.lineTo(x + 44, cy + 36);
+      const innerPad = 40;
+      const topY = y + innerPad;
+      const bottomY = y + tileH - innerPad;
+      const midY = topY + (bottomY - topY) * 0.76;
+      ctx.moveTo(cx, topY);
+      ctx.lineTo(x + tileW - innerPad, midY);
+      ctx.lineTo(cx, bottomY);
+      ctx.lineTo(x + innerPad, midY);
     }
     ctx.closePath();
     ctx.strokeStyle = theme.borderColor;
@@ -262,7 +269,7 @@ export function createPolyhedralAtlas(
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    const textY = shape === 'triangle' ? cy + 46 : (shape === 'kite' ? cy + 12 : cy);
+    const textY = shape === 'triangle' ? cy + 46 : (shape === 'kite' ? cy + 48 : cy);
 
     // Soft drop shadow
     ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';

@@ -256,11 +256,11 @@ export class ThreeDiceEngine {
     this.isFadingOut = false;
     this.fadeOpacity = 1.0;
 
-    // Expand any single percentile (d100) die into a tens (d100) + ones (d10) die pair so 1..100 rolls display accurately
+    // Expand every percentile (d100) die into a tens (d100) + ones (d10) die pair so 1..100 rolls display accurately
     const expandedRequests: DieRollRequest[] = [];
     for (const req of diceRequests) {
       const key = this.resolveDieKey(req.type);
-      if (key === 'd100' && diceRequests.length === 1) {
+      if (key === 'd100') {
         const val = Math.max(1, Math.min(100, req.result || 100));
         if (val === 100) {
           expandedRequests.push({ ...req, type: 'd100', result: 0 });
