@@ -2674,7 +2674,11 @@ export default function PlayerView() {
 
   // Stand-Alone Player Handouts, Visual Props & Shared Journal System
   const [showHandoutsJournalModal, setShowHandoutsJournalModal] = useState(false);
-  const [showArenaMode, setShowArenaMode] = useState(false);
+  const [showArenaMode, setShowArenaMode] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    const params = new URLSearchParams(window.location.search);
+    return params.get('arena') === '1' || params.get('arena') === 'true';
+  });
   const {
     handouts: partyHandouts,
     quests: partyQuests,

@@ -135,6 +135,14 @@ import {
   ScaledEncounterResult,
   ScaledMonsterEntry
 } from '../services/arenaScalingService';
+import { ArenaPvpLobby } from './ArenaPvpLobby';
+import {
+  ArenaPvpMode,
+  ArenaPvpRoomSummary,
+  ArenaPvpMatchSnapshot,
+  ArenaPvpFxEvent,
+  ArenaPvpTeam
+} from '../types/arenaPvp';
 
 export type ArenaMatchMode =
   | '1v1'
@@ -210,6 +218,7 @@ export interface ArenaCombatant {
   sourceCharacter?: Character;
   sourceMonster?: Monster;
   ownerPlayerName?: string;
+  ownerClientId?: string;
   rechargeStatus?: Record<string, boolean>;
 }
 
@@ -1422,7 +1431,15 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
 
   // Arena Phase: 'lobby' (Match Setup & Ready Room) vs 'battle' (Live Turn-Based Arena)
   const [phase, setPhase] = useState<'lobby' | 'battle'>('lobby');
-  const [matchMode, setMatchMode] = useState<ArenaMatchMode>(() => arenaConfig.defaultMatchMode || 'random_encounter');
+  const [matchMode, setMatchMode] = useState<ArenaMatchMode>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('arena') === '1' || params.get('arena') === 'true') {
+        return '1v1';
+      }
+    }
+    return arenaConfig.defaultMatchMode || 'random_encounter';
+  });
   const [difficulty, setDifficulty] = useState<ArenaDifficulty>(() => arenaConfig.defaultDifficulty || 'standard');
 
   const availableMaps = useMemo<PresetBattlemap[]>(() => getAvailableArenaMaps(arenaConfig), [arenaConfig]);
@@ -1555,7 +1572,57 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
 
   // Connected Players in Arena Lobby (Synced via Socket.IO ARENA_LOBBY_SYNC)
   const [lobbyPlayers, setLobbyPlayers] = useState<ArenaLobbyPlayer[]>([]);
-  const clientIdRef = useRef<string>(`arena_client_${Math.random().toString(36).slice(2, 8)}`);
+  const clientIdRef = useRef<string>(
+    (() => {
+      try {
+        if (typeof window !== 'undefined' && window.sessionStorage) {
+          const existing = window.sessionStorage.getItem('mistwalker_arena_pvp_client_id');
+          if (existing) return existing;
+          const generated = `arena_client_${Math.random().toString(36).slice(2, 10)}`;
+          window.sessionStorage.setItem('mistwalker_arena_pvp_client_id', generated);
+          return generated;
+        }
+      } catch {
+        // Ignore storage errors
+      }
+      return `arena_client_${Math.random().toString(36).slice(2, 10)}`;
+    })()
+  );
+
+  // Online Remote PvP Waiting Lobby & Match Sync State (1v1 / 2v2)
+  const [pvpModeKind, setPvpModeKind] = useState<'online' | 'local'>(() =>
+    arenaConfig.allowPvP !== false ? 'online' : 'local'
+  );
+  const [pvpRooms, setPvpRooms] = useState<ArenaPvpRoomSummary[]>([]);
+  const [activePvpRoom, setActivePvpRoom] = useState<ArenaPvpRoomSummary | null>(null);
+  const [pvpSocketConnected, setPvpSocketConnected] = useState<boolean>(() => Boolean(socketRef.current?.connected));
+  const [pvpPlayerName, setPvpPlayerName] = useState<string>(() => claimedCharacterName || '');
+  const activePvpRoomRef = useRef<ArenaPvpRoomSummary | null>(null);
+  activePvpRoomRef.current = activePvpRoom;
+  const isApplyingRemotePvpSyncRef = useRef<boolean>(false);
+  const localPvpDirtyRef = useRef<boolean>(false);
+  const lastSyncedPvpVersionRef = useRef<number>(0);
+
+  // Keep default PvP display name synced if claimedCharacterName arrives asynchronously
+  useEffect(() => {
+    if (claimedCharacterName && !pvpPlayerName) {
+      setPvpPlayerName(claimedCharacterName);
+    }
+  }, [claimedCharacterName, pvpPlayerName]);
+
+  const emitPvpFxEvent = useCallback(
+    (event: ArenaPvpFxEvent) => {
+      const room = activePvpRoomRef.current;
+      const socket = socketRef.current;
+      if (!room || room.status !== 'in_progress' || !socket || isApplyingRemotePvpSyncRef.current) return;
+      socket.emit('ARENA_PVP_FX_EVENT', {
+        roomId: room.roomId,
+        clientId: clientIdRef.current,
+        event
+      });
+    },
+    [socketRef]
+  );
 
   // Live Battle State
   const [combatants, setCombatants] = useState<ArenaCombatant[]>([]);
@@ -1597,14 +1664,16 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
     window.setTimeout(() => {
       setScreenShake(null);
     }, durationMs);
-  }, []);
+    emitPvpFxEvent({ type: 'screenShake', intensity, durationMs });
+  }, [emitPvpFxEvent]);
 
   const triggerVignette = useCallback((type: 'crit' | 'danger') => {
     setFlashVignette(type);
     window.setTimeout(() => {
       setFlashVignette(null);
     }, 700);
-  }, []);
+    emitPvpFxEvent({ type: 'vignette', style: type });
+  }, [emitPvpFxEvent]);
 
   const spawnFloatingText = useCallback(
     (
@@ -1637,8 +1706,9 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         };
         return [...prev, newItem];
       });
+      emitPvpFxEvent({ type: 'floatingText', combatantId, worldX, worldY, text, style: type });
     },
-    []
+    [emitPvpFxEvent]
   );
 
   const handleExpireFloatingText = useCallback((id: string) => {
@@ -2183,6 +2253,574 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
     };
   }, [isOpen, socketRef, goldHeroIds, heroPool, claimedCharacterName]);
 
+  // =========================================================================
+  // REAL-TIME REMOTE PVP ARENA (1v1 & 2v2 WAITING LOBBY + LIVE MATCH SYNC)
+  // =========================================================================
+  const buildMyPvpPlayerPayload = useCallback(
+    (heroOverride?: Character) => {
+      const hero =
+        heroOverride ||
+        heroPool.find((h) => h.id === goldHeroIds[0]) ||
+        heroPool[0];
+      const displayName =
+        pvpPlayerName.trim() ||
+        claimedCharacterName ||
+        hero?.playerName ||
+        hero?.name ||
+        'Challenger';
+      return {
+        clientId: clientIdRef.current,
+        playerName: displayName,
+        characterId: hero?.id || 'hero_1',
+        characterName: hero?.name || 'Hero',
+        avatarUrl: hero?.avatarUrl || getCharacterTokenUrl(hero?.name || ''),
+        raceOrType: hero?.race || 'Hero',
+        classLevel: hero?.classLevel || 'Level 5',
+        maxHp: hero?.maxHp || hero?.hp || 45,
+        ac: hero?.ac || 16,
+        characterSnapshot: hero
+      };
+    },
+    [heroPool, goldHeroIds, pvpPlayerName, claimedCharacterName]
+  );
+
+  // Subscribe to Server-Authoritative Arena PvP Socket Events
+  useEffect(() => {
+    const socket = socketRef.current;
+    if (!socket || !isOpen) return;
+
+    setPvpSocketConnected(Boolean(socket.connected));
+
+    const requestList = () => {
+      setPvpSocketConnected(true);
+      socket.emit('ARENA_PVP_LIST_REQUEST', { clientId: clientIdRef.current });
+    };
+    const onDisconnect = () => {
+      setPvpSocketConnected(false);
+    };
+
+    const onListUpdate = (payload: { rooms: ArenaPvpRoomSummary[] }) => {
+      if (Array.isArray(payload?.rooms)) {
+        setPvpRooms(payload.rooms);
+      }
+    };
+
+    const onRoomState = (payload: { room: ArenaPvpRoomSummary }) => {
+      if (!payload?.room) return;
+      setActivePvpRoom(payload.room);
+      setMatchMode(payload.room.mode);
+      setPvpModeKind('online');
+      const matchedMap = availableMaps.find((m) => m.id === payload.room.mapId);
+      if (matchedMap) {
+        setSelectedMap(matchedMap);
+      }
+    };
+
+    const onLeftRoom = () => {
+      setActivePvpRoom(null);
+    };
+
+    const onPvpError = (payload: { message?: string }) => {
+      if (payload?.message) {
+        toast.error(payload.message);
+      }
+    };
+
+    const onMatchStarted = (payload: {
+      room: ArenaPvpRoomSummary;
+      snapshot: ArenaPvpMatchSnapshot;
+      isReconnect?: boolean;
+    }) => {
+      if (!payload?.room || !payload?.snapshot) return;
+      isApplyingRemotePvpSyncRef.current = true;
+      localPvpDirtyRef.current = false;
+      lastSyncedPvpVersionRef.current = payload.snapshot.version || 1;
+
+      setActivePvpRoom(payload.room);
+      setMatchMode(payload.room.mode);
+      setPvpModeKind('online');
+      const matchedMap = availableMaps.find((m) => m.id === payload.snapshot.mapId);
+      if (matchedMap) {
+        setSelectedMap(matchedMap);
+      }
+
+      const roster = (payload.snapshot.combatants || []) as ArenaCombatant[];
+      setCombatants(roster);
+      setTurnIndex(payload.snapshot.turnIndex || 0);
+      setRound(payload.snapshot.round || 1);
+      setCombatLogs(payload.snapshot.combatLogs || []);
+      setWinnerTeam(payload.snapshot.winnerTeam || null);
+      setCombatStatsMap(payload.snapshot.combatStatsMap || {});
+      setActiveTargetingAction(null);
+      setArenaEffects([]);
+      setShowIntroModal(!payload.isReconnect);
+      setTurnBannerKey(`turn_${roster[payload.snapshot.turnIndex || 0]?.id || 'init'}_${Date.now()}`);
+
+      fitArenaCamera(dimensions.width, dimensions.height);
+      if (dimensions.width < 768) {
+        setShowCombatFeed(false);
+      }
+      setPhase('battle');
+
+      if (!payload.isReconnect) {
+        soundCatalog.play('thunder_boom', 0.85);
+        toast.success(
+          `⚔️ ${payload.room.mode.toUpperCase()} Online PvP Started! ${roster[0]?.name || 'Fighter'} leads Initiative!`
+        );
+      } else {
+        toast.info(`Reconnected to live ${payload.room.mode.toUpperCase()} PvP match!`);
+      }
+
+      window.setTimeout(() => {
+        isApplyingRemotePvpSyncRef.current = false;
+      }, 60);
+    };
+
+    const onStateSync = (payload: { roomId: string; snapshot: ArenaPvpMatchSnapshot }) => {
+      const currRoom = activePvpRoomRef.current;
+      if (!payload?.snapshot || !currRoom || payload.roomId !== currRoom.roomId) return;
+      if (payload.snapshot.updatedByClientId === clientIdRef.current) return;
+      if ((payload.snapshot.version || 0) < lastSyncedPvpVersionRef.current) return;
+
+      isApplyingRemotePvpSyncRef.current = true;
+      localPvpDirtyRef.current = false;
+      lastSyncedPvpVersionRef.current = payload.snapshot.version || lastSyncedPvpVersionRef.current + 1;
+
+      const nextCombatants = (payload.snapshot.combatants || []) as ArenaCombatant[];
+      setCombatants(nextCombatants);
+      setTurnIndex((prevIdx) => {
+        const nextIdx = payload.snapshot.turnIndex ?? 0;
+        if (nextIdx !== prevIdx) {
+          const nextActor = nextCombatants[nextIdx];
+          setTurnBannerKey(`turn_${nextActor?.id || nextIdx}_${Date.now()}`);
+          if (nextActor?.ownerClientId === clientIdRef.current) {
+            soundCatalog.play('magic_chime', 0.75);
+            toast.success(`⚔️ Your Turn! ${nextActor.name} is up!`);
+          }
+        }
+        return nextIdx;
+      });
+      setRound(payload.snapshot.round || 1);
+      setCombatLogs(payload.snapshot.combatLogs || []);
+      setWinnerTeam(payload.snapshot.winnerTeam || null);
+      setCombatStatsMap(payload.snapshot.combatStatsMap || {});
+      if (payload.snapshot.winnerTeam) {
+        setActivePvpRoom((prev) => (prev ? { ...prev, status: 'finished' } : prev));
+      }
+
+      window.setTimeout(() => {
+        isApplyingRemotePvpSyncRef.current = false;
+      }, 60);
+    };
+
+    const onFxEvent = (payload: { roomId: string; clientId: string; event: ArenaPvpFxEvent }) => {
+      const currRoom = activePvpRoomRef.current;
+      if (!payload?.event || !currRoom || payload.roomId !== currRoom.roomId) return;
+      if (payload.clientId === clientIdRef.current) return;
+
+      isApplyingRemotePvpSyncRef.current = true;
+      const ev = payload.event;
+      try {
+        if (ev.type === 'effect' && ev.effect) {
+          setArenaEffects((prev) => [...prev, ev.effect]);
+          if (ev.effect.soundKey) {
+            soundCatalog.play(ev.effect.soundKey, 0.8);
+          }
+        } else if (ev.type === 'floatingText') {
+          const now = Date.now();
+          setFloatingCombatTexts((prev) => [
+            ...prev,
+            {
+              id: `fct_rem_${now}_${Math.random().toString(36).slice(2, 6)}`,
+              combatantId: ev.combatantId,
+              worldX: ev.worldX,
+              worldY: ev.worldY,
+              text: ev.text,
+              type: ev.style,
+              createdAt: now,
+              jitterX: (Math.random() - 0.5) * 24,
+              verticalStagger: 0
+            }
+          ]);
+        } else if (ev.type === 'screenShake') {
+          setScreenShake({ intensity: ev.intensity, durationMs: ev.durationMs || 350 });
+          window.setTimeout(() => setScreenShake(null), ev.durationMs || 350);
+        } else if (ev.type === 'vignette') {
+          setFlashVignette(ev.style);
+          window.setTimeout(() => setFlashVignette(null), 700);
+        } else if (ev.type === 'sound') {
+          soundCatalog.play(ev.soundId, ev.volume ?? 0.75);
+        } else if (ev.type === 'diceRoll' && onTrigger3dDice) {
+          onTrigger3dDice(ev.rollEvent);
+        } else if (ev.type === 'toast') {
+          toast[ev.level](ev.message);
+        }
+      } finally {
+        window.setTimeout(() => {
+          isApplyingRemotePvpSyncRef.current = false;
+        }, 20);
+      }
+    };
+
+    const onReturnLobby = (payload: { room: ArenaPvpRoomSummary; triggeredBy?: string }) => {
+      if (payload?.room) {
+        setActivePvpRoom(payload.room);
+      }
+      setPhase('lobby');
+      setWinnerTeam(null);
+      setActiveTargetingAction(null);
+      setArenaEffects([]);
+      toast.info(
+        payload?.triggeredBy
+          ? `${payload.triggeredBy} returned the room to the PvP Waiting Lobby.`
+          : 'Returned to the PvP Waiting Lobby.'
+      );
+    };
+
+    const onPlayerDisconnected = (payload: {
+      roomId: string;
+      playerName?: string;
+      leftVoluntarily?: boolean;
+    }) => {
+      const currRoom = activePvpRoomRef.current;
+      if (!currRoom || payload.roomId !== currRoom.roomId) return;
+      toast.warning(
+        payload.leftVoluntarily
+          ? `⚠️ ${payload.playerName || 'A player'} left the PvP Arena.`
+          : `⚠️ ${payload.playerName || 'A player'} disconnected (they can refresh to rejoin).`
+      );
+    };
+
+    socket.on('connect', requestList);
+    socket.on('disconnect', onDisconnect);
+    socket.on('ARENA_PVP_LIST_UPDATE', onListUpdate);
+    socket.on('ARENA_PVP_ROOM_STATE', onRoomState);
+    socket.on('ARENA_PVP_LEFT_ROOM', onLeftRoom);
+    socket.on('ARENA_PVP_ERROR', onPvpError);
+    socket.on('ARENA_PVP_MATCH_STARTED', onMatchStarted);
+    socket.on('ARENA_PVP_STATE_SYNC', onStateSync);
+    socket.on('ARENA_PVP_FX_EVENT', onFxEvent);
+    socket.on('ARENA_PVP_RETURN_LOBBY', onReturnLobby);
+    socket.on('ARENA_PVP_PLAYER_DISCONNECTED', onPlayerDisconnected);
+
+    if (socket.connected) {
+      requestList();
+    }
+
+    return () => {
+      socket.off('connect', requestList);
+      socket.off('disconnect', onDisconnect);
+      socket.off('ARENA_PVP_LIST_UPDATE', onListUpdate);
+      socket.off('ARENA_PVP_ROOM_STATE', onRoomState);
+      socket.off('ARENA_PVP_LEFT_ROOM', onLeftRoom);
+      socket.off('ARENA_PVP_ERROR', onPvpError);
+      socket.off('ARENA_PVP_MATCH_STARTED', onMatchStarted);
+      socket.off('ARENA_PVP_STATE_SYNC', onStateSync);
+      socket.off('ARENA_PVP_FX_EVENT', onFxEvent);
+      socket.off('ARENA_PVP_RETURN_LOBBY', onReturnLobby);
+      socket.off('ARENA_PVP_PLAYER_DISCONNECTED', onPlayerDisconnected);
+    };
+  }, [isOpen, socketRef, availableMaps, dimensions.width, dimensions.height, onTrigger3dDice]);
+
+  // Cleanly leave waiting room when exiting Arena completely
+  const handleExitArenaClean = useCallback(() => {
+    const socket = socketRef.current;
+    if (socket && activePvpRoomRef.current) {
+      socket.emit('ARENA_PVP_LEAVE_ROOM', { clientId: clientIdRef.current });
+      setActivePvpRoom(null);
+    }
+    onExitArena();
+  }, [socketRef, onExitArena]);
+
+  const handlePvpCreateRoom = useCallback(
+    (mode: ArenaPvpMode) => {
+      const socket = socketRef.current;
+      if (!socket?.connected) {
+        toast.error('Not connected to MistWalker server yet.');
+        return;
+      }
+      setMatchMode(mode);
+      setPvpModeKind('online');
+      socket.emit('ARENA_PVP_CREATE_ROOM', {
+        clientId: clientIdRef.current,
+        mode,
+        mapId: selectedMap.id,
+        mapName: selectedMap.name,
+        player: buildMyPvpPlayerPayload()
+      });
+    },
+    [socketRef, selectedMap.id, selectedMap.name, buildMyPvpPlayerPayload]
+  );
+
+  const handlePvpJoinRoom = useCallback(
+    (roomId: string, preferredTeam?: ArenaPvpTeam) => {
+      const socket = socketRef.current;
+      if (!socket?.connected) {
+        toast.error('Not connected to MistWalker server yet.');
+        return;
+      }
+      socket.emit('ARENA_PVP_JOIN_ROOM', {
+        roomId,
+        clientId: clientIdRef.current,
+        preferredTeam,
+        player: buildMyPvpPlayerPayload()
+      });
+    },
+    [socketRef, buildMyPvpPlayerPayload]
+  );
+
+  const handlePvpLeaveRoom = useCallback(() => {
+    const socket = socketRef.current;
+    if (socket) {
+      socket.emit('ARENA_PVP_LEAVE_ROOM', { clientId: clientIdRef.current });
+    }
+    setActivePvpRoom(null);
+  }, [socketRef]);
+
+  const handlePvpSelectMyHero = useCallback(
+    (hero: Character) => {
+      setGoldHeroIds([hero.id]);
+      const room = activePvpRoomRef.current;
+      const socket = socketRef.current;
+      if (room && socket?.connected) {
+        const p = buildMyPvpPlayerPayload(hero);
+        socket.emit('ARENA_PVP_UPDATE_SLOT', {
+          roomId: room.roomId,
+          clientId: clientIdRef.current,
+          updates: {
+            playerName: p.playerName,
+            characterId: p.characterId,
+            characterName: p.characterName,
+            avatarUrl: p.avatarUrl,
+            raceOrType: p.raceOrType,
+            classLevel: p.classLevel,
+            maxHp: p.maxHp,
+            ac: p.ac,
+            characterSnapshot: hero,
+            ready: false
+          }
+        });
+      }
+    },
+    [socketRef, buildMyPvpPlayerPayload]
+  );
+
+  const handlePvpSwitchTeam = useCallback(
+    (team: ArenaPvpTeam) => {
+      const room = activePvpRoomRef.current;
+      const socket = socketRef.current;
+      if (!room || !socket?.connected) return;
+      socket.emit('ARENA_PVP_UPDATE_SLOT', {
+        roomId: room.roomId,
+        clientId: clientIdRef.current,
+        updates: { team, ready: false }
+      });
+    },
+    [socketRef]
+  );
+
+  const handlePvpToggleReady = useCallback(() => {
+    const room = activePvpRoomRef.current;
+    const socket = socketRef.current;
+    if (!room || !socket?.connected) return;
+    const mySlot = room.players.find((p) => p.clientId === clientIdRef.current);
+    if (!mySlot) return;
+    socket.emit('ARENA_PVP_UPDATE_SLOT', {
+      roomId: room.roomId,
+      clientId: clientIdRef.current,
+      updates: { ready: !mySlot.ready }
+    });
+  }, [socketRef]);
+
+  const handlePvpHostChangeMode = useCallback(
+    (mode: ArenaPvpMode) => {
+      const room = activePvpRoomRef.current;
+      const socket = socketRef.current;
+      if (!room || !socket?.connected || room.hostClientId !== clientIdRef.current) return;
+      setMatchMode(mode);
+      socket.emit('ARENA_PVP_UPDATE_SETTINGS', {
+        roomId: room.roomId,
+        clientId: clientIdRef.current,
+        mode
+      });
+    },
+    [socketRef]
+  );
+
+  const handlePvpHostChangeMap = useCallback(
+    (map: PresetBattlemap) => {
+      setSelectedMap(map);
+      const room = activePvpRoomRef.current;
+      const socket = socketRef.current;
+      if (room && socket?.connected && room.hostClientId === clientIdRef.current && room.status === 'waiting') {
+        socket.emit('ARENA_PVP_UPDATE_SETTINGS', {
+          roomId: room.roomId,
+          clientId: clientIdRef.current,
+          mapId: map.id,
+          mapName: map.name
+        });
+      }
+    },
+    [socketRef]
+  );
+
+  const handlePvpReturnToLobby = useCallback(() => {
+    const room = activePvpRoomRef.current;
+    const socket = socketRef.current;
+    if (room && socket?.connected) {
+      socket.emit('ARENA_PVP_RETURN_LOBBY', {
+        roomId: room.roomId,
+        clientId: clientIdRef.current
+      });
+    } else {
+      setPhase('lobby');
+    }
+  }, [socketRef]);
+
+  const handlePvpHostStartMatch = useCallback(() => {
+    const room = activePvpRoomRef.current;
+    const socket = socketRef.current;
+    if (!room || !socket?.connected) return;
+
+    const goldPlayers = room.players.filter((p) => p.team === 'gold');
+    const crimsonPlayers = room.players.filter((p) => p.team === 'crimson');
+
+    const goldSpawnSlots = [
+      { col: 3, row: 4 },
+      { col: 3, row: 8 },
+      { col: 2, row: 6 }
+    ];
+    const crimsonCol = Math.max(4, arenaCols - 4);
+    const crimsonSpawnSlots = [
+      { col: crimsonCol, row: Math.min(arenaRows - 2, 4) },
+      { col: crimsonCol, row: Math.min(arenaRows - 2, 8) },
+      { col: Math.min(arenaCols - 2, crimsonCol + 1), row: Math.min(arenaRows - 2, 6) }
+    ];
+
+    const roster: ArenaCombatant[] = [];
+    const ts = Date.now();
+
+    const buildCombatant = (
+      p: ArenaPvpRoomSummary['players'][number],
+      idx: number,
+      team: 'gold' | 'crimson'
+    ): ArenaCombatant => {
+      const hero =
+        p.characterSnapshot ||
+        heroPool.find((h) => h.id === p.characterId) ||
+        heroPool[0];
+      const d20 = Math.floor(Math.random() * 20) + 1;
+      const initBonus = typeof hero?.initiativeBonus === 'number' ? hero.initiativeBonus : 2;
+      const slots = team === 'gold' ? goldSpawnSlots : crimsonSpawnSlots;
+      const slot = slots[idx] || {
+        col: team === 'gold' ? 2 + (idx % 2) : Math.min(arenaCols - 2, crimsonCol + (idx % 2)),
+        row: Math.min(arenaRows - 2, Math.max(2, 3 + idx * 3))
+      };
+      const maxHp = hero?.maxHp || hero?.hp || p.maxHp || 45;
+      return {
+        id: `arena_pvp_${team}_${idx}_${ts}`,
+        name: hero?.name || p.characterName,
+        team,
+        isAI: false,
+        avatarUrl: hero?.avatarUrl || p.avatarUrl || getCharacterTokenUrl(p.characterName),
+        raceOrType: hero?.race || p.raceOrType || 'Hero',
+        classOrCr: hero?.classLevel || p.classLevel || 'Level 5',
+        ac: hero?.ac || p.ac || 16,
+        currentHp: maxHp,
+        maxHp,
+        tempHp: 0,
+        speedFt: 30,
+        remainingMoveFt: 30,
+        initiativeBonus: initBonus,
+        initiativeRoll: d20 + initBonus,
+        x: slot.col * arenaGridSize,
+        y: slot.row * arenaGridSize,
+        size: 1,
+        conditions: [],
+        actionUsed: false,
+        bonusActionUsed: false,
+        sourceCharacter: hero,
+        ownerPlayerName: p.playerName,
+        ownerClientId: p.clientId
+      };
+    };
+
+    goldPlayers.forEach((p, idx) => roster.push(buildCombatant(p, idx, 'gold')));
+    crimsonPlayers.forEach((p, idx) => roster.push(buildCombatant(p, idx, 'crimson')));
+    roster.sort((a, b) => b.initiativeRoll - a.initiativeRoll);
+
+    const initialLog: ArenaLogEntry = {
+      id: `init_pvp_${ts}`,
+      round: 1,
+      actorName: 'Arena Announcer',
+      team: 'gold',
+      message: `⚔️ ${room.mode.toUpperCase()} Online PvP Commenced! Initiative rolled for ${roster.length} players.`,
+      detail: roster.map((r) => `${r.name} (${r.ownerPlayerName}): ${r.initiativeRoll}`).join(' • '),
+      timestamp: ts
+    };
+
+    const snapshot: ArenaPvpMatchSnapshot = {
+      roomId: room.roomId,
+      version: 1,
+      mode: room.mode,
+      mapId: room.mapId || selectedMap.id,
+      combatants: roster,
+      turnIndex: 0,
+      round: 1,
+      combatLogs: [initialLog],
+      winnerTeam: null,
+      combatStatsMap: {},
+      updatedByClientId: clientIdRef.current,
+      updatedAt: ts
+    };
+
+    socket.emit('ARENA_PVP_START_MATCH', {
+      roomId: room.roomId,
+      clientId: clientIdRef.current,
+      snapshot
+    });
+  }, [socketRef, heroPool, selectedMap.id, arenaCols, arenaRows, arenaGridSize]);
+
+  // Reactive Authoritative State Broadcast whenever local player mutates battle state in Online PvP
+  useEffect(() => {
+    const room = activePvpRoomRef.current;
+    const socket = socketRef.current;
+    if (
+      phase !== 'battle' ||
+      !room ||
+      (room.status !== 'in_progress' && room.status !== 'finished') ||
+      !socket?.connected ||
+      isApplyingRemotePvpSyncRef.current ||
+      !localPvpDirtyRef.current
+    ) {
+      return;
+    }
+
+    localPvpDirtyRef.current = false;
+    lastSyncedPvpVersionRef.current += 1;
+
+    const snapshot: ArenaPvpMatchSnapshot = {
+      roomId: room.roomId,
+      version: lastSyncedPvpVersionRef.current,
+      mode: room.mode,
+      mapId: selectedMap.id,
+      combatants,
+      turnIndex,
+      round,
+      combatLogs,
+      winnerTeam,
+      combatStatsMap,
+      updatedByClientId: clientIdRef.current,
+      updatedAt: Date.now()
+    };
+
+    socket.emit('ARENA_PVP_STATE_SYNC', {
+      roomId: room.roomId,
+      clientId: clientIdRef.current,
+      snapshot
+    });
+  }, [phase, combatants, turnIndex, round, combatLogs, winnerTeam, combatStatsMap, selectedMap.id, socketRef]);
+
   const addCombatLog = useCallback(
     (actorName: string, team: 'gold' | 'crimson', message: string, detail?: string, isCrit?: boolean) => {
       setCombatLogs((prev) => [
@@ -2406,6 +3044,14 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
   };
 
   const activeCombatant = combatants[turnIndex] || null;
+  const isOnlinePvpMatch = Boolean(
+    activePvpRoom && (activePvpRoom.status === 'in_progress' || activePvpRoom.status === 'finished')
+  );
+  const isMyTurn = useMemo(() => {
+    if (!activeCombatant || activeCombatant.isAI || winnerTeam) return false;
+    if (!isOnlinePvpMatch) return true;
+    return activeCombatant.ownerClientId === clientIdRef.current;
+  }, [activeCombatant, winnerTeam, isOnlinePvpMatch]);
 
   // Check for Victory / Defeat whenever combatants HP changes
   useEffect(() => {
@@ -2414,18 +3060,31 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
     const crimsonAlive = combatants.some((c) => c.team === 'crimson' && c.currentHp > 0);
 
     if (!crimsonAlive && goldAlive) {
+      if (isOnlinePvpMatch && !isApplyingRemotePvpSyncRef.current) {
+        localPvpDirtyRef.current = true;
+      }
       setWinnerTeam('gold');
       soundCatalog.play('radiant_burst', 0.95);
       toast.success('🏆 Victory! Team Gold triumphs in the Arena!');
     } else if (!goldAlive && crimsonAlive) {
+      if (isOnlinePvpMatch && !isApplyingRemotePvpSyncRef.current) {
+        localPvpDirtyRef.current = true;
+      }
       setWinnerTeam('crimson');
       soundCatalog.play('thunder_boom', 0.9);
       toast.error('💀 Team Crimson claims victory in the Arena!');
     }
-  }, [combatants, phase, winnerTeam]);
+  }, [combatants, phase, winnerTeam, isOnlinePvpMatch]);
 
   // Advance to the next living combatant's turn
   const handleAdvanceTurn = useCallback(() => {
+    if (isOnlinePvpMatch && !isMyTurn) {
+      toast.info('Wait for your turn!');
+      return;
+    }
+    if (isOnlinePvpMatch) {
+      localPvpDirtyRef.current = true;
+    }
     setActiveTargetingAction(null);
     setCombatants((prev) => {
       if (prev.length === 0) return prev;
@@ -2478,7 +3137,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           : c
       );
     });
-  }, [turnIndex]);
+  }, [turnIndex, isOnlinePvpMatch, isMyTurn]);
 
   const [liveDdbHudMap, setLiveDdbHudMap] = useState<Record<string, HudCharacterData>>({});
   const [inspectedAuraRequest, setInspectedAuraRequest] = useState<{
@@ -2677,6 +3336,9 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
 
   // Update Combatant Properties (HP, AC, Conditions, etc.)
   const handleUpdateCombatant = useCallback((id: string, updates: Partial<ArenaCombatant>) => {
+    if (activePvpRoomRef.current?.status === 'in_progress' && !isApplyingRemotePvpSyncRef.current) {
+      localPvpDirtyRef.current = true;
+    }
     setCombatants((prev) => prev.map((c) => (c.id === id ? { ...c, ...updates } : c)));
   }, []);
 
@@ -3014,13 +3676,14 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           : prev;
         return [...filtered, newFx];
       });
+      emitPvpFxEvent({ type: 'effect', effect: newFx });
       if (asset.soundKey) {
         soundCatalog.play(asset.soundKey, 0.8);
       } else {
         soundCatalog.play(action.isHeal ? 'radiant_heal' : 'sword_slash', 0.75);
       }
     },
-    []
+    [emitPvpFxEvent]
   );
 
   // Active map walls from DM Battle Arena Config
@@ -3083,6 +3746,17 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         forceInGameRoll?: boolean;
       }
     ) => {
+      if (
+        activePvpRoomRef.current?.status === 'in_progress' &&
+        actor.ownerClientId &&
+        actor.ownerClientId !== clientIdRef.current
+      ) {
+        toast.info('Wait for your turn!');
+        return;
+      }
+      if (activePvpRoomRef.current?.status === 'in_progress' && !isApplyingRemotePvpSyncRef.current) {
+        localPvpDirtyRef.current = true;
+      }
       const actorCx = actor.x + ((actor.size || 1) * arenaGridSize) / 2;
       const actorCy = actor.y + ((actor.size || 1) * arenaGridSize) / 2;
       const targetCx = targetPointPx
@@ -4499,6 +5173,13 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
   const handleMoveArenaToken = useCallback(
     (tokenId: string, newX: number, newY: number, distanceMovedFt?: number) => {
       setTokenDragState(null);
+      if (isOnlinePvpMatch && !isMyTurn) {
+        toast.info('Wait for your turn to move!');
+        return;
+      }
+      if (isOnlinePvpMatch && !isApplyingRemotePvpSyncRef.current) {
+        localPvpDirtyRef.current = true;
+      }
       setCombatants((prev) =>
         prev.map((c) => {
           if (c.id !== tokenId) return c;
@@ -4586,7 +5267,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         })
       );
     },
-    [arenaConfig.enforceWalls, arenaConfig.enforceHazards, activeMapWalls, activeMapHazards, addCombatLog]
+    [arenaConfig.enforceWalls, arenaConfig.enforceHazards, activeMapWalls, activeMapHazards, addCombatLog, isOnlinePvpMatch, isMyTurn]
   );
 
   // Build `<PlayerHeroDock />` data for the currently active human-controlled fighter
@@ -4751,6 +5432,10 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
   // Handle manual HP adjustments (+/-) from PlayerHeroDock
   const handleAdjustHp = useCallback((delta: number) => {
     if (!delta || !activeCombatant) return;
+    if (isOnlinePvpMatch && !isMyTurn) return;
+    if (isOnlinePvpMatch && !isApplyingRemotePvpSyncRef.current) {
+      localPvpDirtyRef.current = true;
+    }
     const nextHp = Math.max(0, Math.min(activeCombatant.maxHp, activeCombatant.currentHp + delta));
     setCombatants((prev) =>
       prev.map((c) => (c.id === activeCombatant.id ? { ...c, currentHp: nextHp } : c))
@@ -4760,7 +5445,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
     } else {
       toast.info(`Adjusted HP ${delta} (${nextHp}/${activeCombatant.maxHp})`);
     }
-  }, [activeCombatant]);
+  }, [activeCombatant, isOnlinePvpMatch, isMyTurn]);
 
   // Handle manual Spell Slot adjustments (+/-) from PlayerHeroDock
   const handleAdjustSpellSlot = useCallback((level: number, delta: number) => {
@@ -4864,7 +5549,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             {hasLiveDmMap && (
               <button
                 type="button"
-                onClick={onExitArena}
+                onClick={handleExitArenaClean}
                 className="px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/50 text-[11px] sm:text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer animate-pulse"
               >
                 <Radio className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
@@ -4874,7 +5559,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             )}
             <button
               type="button"
-              onClick={onExitArena}
+              onClick={handleExitArenaClean}
               className="px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-[11px] sm:text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer"
             >
               <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
@@ -4923,9 +5608,14 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                 },
                 {
                   id: '1v1' as const,
-                  title: '1v1 / 2v2 Duel',
-                  badge: matchMode === '2v2' ? '2v2 Active' : '1v1 or 2v2',
-                  desc: 'Head-to-head single or tag-team combat with full D&D Beyond HUD.',
+                  title: '1v1 / 2v2 PvP Duel',
+                  badge:
+                    pvpRooms.filter((r) => r.status === 'waiting').length > 0
+                      ? `${pvpRooms.filter((r) => r.status === 'waiting').length} Open PvP Lobby`
+                      : matchMode === '2v2'
+                      ? '2v2 Online PvP'
+                      : '1v1 / 2v2 Online PvP',
+                  desc: 'Square off remotely against real players in a 1v1 or 2v2 waiting lobby — or practice vs AI.',
                   color: 'amber'
                 },
                 {
@@ -4980,7 +5670,79 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             </div>
           </div>
 
-          {/* Step 2: Fighter Roster & Random Encounter Scaler */}
+          {/* Step 2: Online PvP Waiting Lobby (1v1 / 2v2) OR Local Fighter Roster */}
+          {(matchMode === '1v1' || matchMode === '2v2') && arenaConfig.allowPvP !== false && (
+            <div className="flex flex-wrap items-center justify-between gap-2 bg-zinc-900/80 border border-zinc-800 rounded-2xl p-2">
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setPvpModeKind('online')}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-mono font-bold flex items-center gap-2 cursor-pointer transition-all ${
+                    pvpModeKind === 'online'
+                      ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-zinc-950 shadow-md'
+                      : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+                  }`}
+                >
+                  <Radio className="w-3.5 h-3.5" />
+                  <span>Online PvP Waiting Lobby (1v1 / 2v2)</span>
+                  {pvpRooms.filter((r) => r.status === 'waiting').length > 0 && (
+                    <span className="px-1.5 py-0.5 rounded-full bg-zinc-950/80 text-emerald-300 text-[10px] font-black">
+                      {pvpRooms.filter((r) => r.status === 'waiting').length}
+                    </span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (activePvpRoom) handlePvpLeaveRoom();
+                    setPvpModeKind('local');
+                  }}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-mono font-bold flex items-center gap-2 cursor-pointer transition-all ${
+                    pvpModeKind === 'local'
+                      ? 'bg-zinc-800 text-white border border-zinc-600'
+                      : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+                  }`}
+                >
+                  <Bot className="w-3.5 h-3.5" />
+                  <span>Local / AI Practice</span>
+                </button>
+              </div>
+              <span className="text-[11px] font-mono text-zinc-400 px-2">
+                {pvpModeKind === 'online'
+                  ? 'Players sign in on this same page to join your 1v1 or 2v2 lobby'
+                  : 'Single-device pass-and-play or AI rival skirmish'}
+              </span>
+            </div>
+          )}
+
+          {(matchMode === '1v1' || matchMode === '2v2') &&
+          arenaConfig.allowPvP !== false &&
+          pvpModeKind === 'online' ? (
+            <ArenaPvpLobby
+              myClientId={clientIdRef.current}
+              isConnected={pvpSocketConnected}
+              playerDisplayName={pvpPlayerName}
+              onChangePlayerDisplayName={setPvpPlayerName}
+              mySelectedHeroId={goldHeroIds[0] || heroPool[0]?.id || ''}
+              onSelectMyHero={handlePvpSelectMyHero}
+              heroPool={heroPool}
+              campaignGroups={arenaCampaignGroups}
+              campaignFilter={goldCampaignFilter}
+              onChangeCampaignFilter={setGoldCampaignFilter}
+              availableMaps={availableMaps}
+              selectedMap={selectedMap}
+              onSelectMap={handlePvpHostChangeMap}
+              rooms={pvpRooms}
+              activeRoom={activePvpRoom}
+              onCreateRoom={handlePvpCreateRoom}
+              onJoinRoom={handlePvpJoinRoom}
+              onLeaveRoom={handlePvpLeaveRoom}
+              onSwitchTeam={handlePvpSwitchTeam}
+              onToggleReady={handlePvpToggleReady}
+              onHostChangeMode={handlePvpHostChangeMode}
+              onHostStartMatch={handlePvpHostStartMatch}
+            />
+          ) : (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
             {/* Left Side: Team Gold (Player Challengers) */}
             <div className="lg:col-span-6 bg-zinc-900/75 border border-amber-500/30 rounded-3xl p-4 sm:p-5 space-y-3.5">
@@ -5372,6 +6134,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
               )}
             </div>
           </div>
+          )}
 
           {/* Step 3: Select Arena Battlemap & Launch Match */}
           <div className="bg-zinc-900/75 border border-zinc-800 rounded-3xl p-4 sm:p-5 flex flex-col md:flex-row items-center justify-between gap-5">
@@ -5379,6 +6142,9 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
               <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
                 <span className="text-xs font-mono uppercase tracking-wider text-zinc-400 font-bold">
                   3. Choose Colosseum Battlemap ({availableMaps.length} Available)
+                  {activePvpRoom && activePvpRoom.hostClientId !== clientIdRef.current && (
+                    <span className="ml-2 text-amber-400">(Controlled by Host)</span>
+                  )}
                 </span>
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-300">
@@ -5413,12 +6179,18 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                 {availableMaps.map((map) => {
                   const isSel = selectedMap.id === map.id;
                   const mapWallCount = (arenaConfig.mapWalls?.[map.id] || []).length;
+                  const mapDisabledByGuest = Boolean(
+                    activePvpRoom && activePvpRoom.hostClientId !== clientIdRef.current
+                  );
                   return (
                     <button
                       key={map.id}
                       type="button"
-                      onClick={() => setSelectedMap(map)}
-                      className={`group relative rounded-2xl overflow-hidden border h-16 sm:h-20 text-left transition-all cursor-pointer ${
+                      disabled={mapDisabledByGuest}
+                      onClick={() => handlePvpHostChangeMap(map)}
+                      className={`group relative rounded-2xl overflow-hidden border h-16 sm:h-20 text-left transition-all ${
+                        mapDisabledByGuest ? 'cursor-not-allowed' : 'cursor-pointer'
+                      } ${
                         isSel
                           ? 'border-amber-400 ring-2 ring-amber-400/40'
                           : 'border-zinc-800 opacity-75 hover:opacity-100'
@@ -5445,30 +6217,34 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={handleStartArenaMatch}
-              className="hidden md:flex px-8 py-5 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-400 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-zinc-950 font-mono font-black text-base shadow-[0_0_30px_rgba(245,158,11,0.4)] items-center justify-center gap-3 cursor-pointer active:scale-95 transition-all shrink-0"
-            >
-              <Swords className="w-6 h-6" />
-              <span>ROLL INITIATIVE & START ARENA</span>
-              <ChevronRight className="w-5 h-5" />
-            </button>
+            {!((matchMode === '1v1' || matchMode === '2v2') && arenaConfig.allowPvP !== false && pvpModeKind === 'online') && (
+              <button
+                type="button"
+                onClick={handleStartArenaMatch}
+                className="hidden md:flex px-8 py-5 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-400 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-zinc-950 font-mono font-black text-base shadow-[0_0_30px_rgba(245,158,11,0.4)] items-center justify-center gap-3 cursor-pointer active:scale-95 transition-all shrink-0"
+              >
+                <Swords className="w-6 h-6" />
+                <span>ROLL INITIATIVE & START ARENA</span>
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            )}
           </div>
         </div>
 
         {/* Sticky Mobile Bottom Launch Bar */}
-        <div className="fixed bottom-0 inset-x-0 z-30 p-3 bg-zinc-950/95 border-t border-amber-500/30 backdrop-blur-xl md:hidden">
-          <button
-            type="button"
-            onClick={handleStartArenaMatch}
-            className="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-400 to-orange-500 text-zinc-950 font-mono font-black text-sm shadow-[0_0_25px_rgba(245,158,11,0.4)] flex items-center justify-center gap-2.5 active:scale-95 transition-all cursor-pointer"
-          >
-            <Swords className="w-5 h-5" />
-            <span>ROLL INITIATIVE & START ARENA</span>
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
+        {!((matchMode === '1v1' || matchMode === '2v2') && arenaConfig.allowPvP !== false && pvpModeKind === 'online') && (
+          <div className="fixed bottom-0 inset-x-0 z-30 p-3 bg-zinc-950/95 border-t border-amber-500/30 backdrop-blur-xl md:hidden">
+            <button
+              type="button"
+              onClick={handleStartArenaMatch}
+              className="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-400 to-orange-500 text-zinc-950 font-mono font-black text-sm shadow-[0_0_25px_rgba(245,158,11,0.4)] flex items-center justify-center gap-2.5 active:scale-95 transition-all cursor-pointer"
+            >
+              <Swords className="w-5 h-5" />
+              <span>ROLL INITIATIVE & START ARENA</span>
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        )}
 
         {/* Save Arena Modal */}
         {renderSaveArenaModal()}
@@ -5554,7 +6330,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
 
         {/* Right Controls: End Turn & Return to Campaign */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          {activeCombatant && !activeCombatant.isAI && !winnerTeam && (
+          {isMyTurn && !winnerTeam && (
             <button
               type="button"
               onClick={handleAdvanceTurn}
@@ -5574,7 +6350,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           </button>
           <button
             type="button"
-            onClick={onExitArena}
+            onClick={handleExitArenaClean}
             className="p-1.5 sm:px-3 sm:py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer"
             title="Exit Arena and return to DM Campaign Table"
           >
@@ -5592,6 +6368,14 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
               <span className="text-rose-300 font-bold flex items-center justify-center gap-1.5">
                 <Bot className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin text-amber-400 shrink-0" />
                 <span className="line-clamp-2">{aiTacticalBanner || `${activeCombatant.name} (AI) is evaluating Behavior Tree & A* paths...`}</span>
+              </span>
+            ) : isOnlinePvpMatch && !isMyTurn ? (
+              <span className="text-sky-300 font-bold flex items-center justify-center gap-1.5">
+                <Radio className="w-3.5 h-3.5 text-sky-400 animate-pulse shrink-0" />
+                <span>
+                  Opponent&apos;s Turn: <strong className="text-white">{activeCombatant.name}</strong>
+                  {activeCombatant.ownerPlayerName ? ` (${activeCombatant.ownerPlayerName})` : ''} — Watching Live...
+                </span>
               </span>
             ) : activeTargetingAction ? (
               <span className="text-amber-300 font-bold flex flex-wrap items-center justify-center gap-1.5">
@@ -6133,7 +6917,11 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             )}
             {combatants.map((c, idx) => {
               const isCurr = idx === turnIndex;
-              const canDrag = isCurr && !c.isAI && !winnerTeam;
+              const canDrag =
+                isCurr &&
+                !c.isAI &&
+                !winnerTeam &&
+                (!isOnlinePvpMatch || c.ownerClientId === clientIdRef.current);
               const isTargetable = Boolean(activeTargetingAction) && c.currentHp > 0;
               return (
                 <ArenaTokenNode
@@ -6281,7 +7069,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       </div>
 
       {/* Copied D&D Beyond Tactical Character HUD (<PlayerHeroDock />) for Active Fighter */}
-      {activeCombatant && !activeCombatant.isAI && activeHeroHudData && !winnerTeam && (
+      {isMyTurn && activeCombatant && !activeCombatant.isAI && activeHeroHudData && !winnerTeam && (
         <PlayerHeroDock
           characterData={activeHeroHudData}
           isMobile={isMobile}
@@ -7133,6 +7921,28 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         matchModeLabel={matchMode.toUpperCase()}
       />
 
+      {/* Bottom Waiting Dock for Remote Online PvP Players */}
+      {isOnlinePvpMatch && !isMyTurn && activeCombatant && !winnerTeam && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 pointer-events-auto px-5 py-3 rounded-2xl bg-zinc-950/92 border border-sky-500/40 backdrop-blur-xl shadow-2xl flex items-center gap-3 max-w-[92vw]">
+          <img
+            src={activeCombatant.avatarUrl}
+            alt={activeCombatant.name}
+            className={`w-9 h-9 rounded-xl object-cover border-2 shrink-0 ${
+              activeCombatant.team === 'gold' ? 'border-amber-400' : 'border-rose-400'
+            }`}
+          />
+          <div className="min-w-0">
+            <div className="text-xs sm:text-sm font-mono font-bold text-white truncate">
+              Waiting for {activeCombatant.name}
+              {activeCombatant.ownerPlayerName ? ` (${activeCombatant.ownerPlayerName})` : ''}...
+            </div>
+            <div className="text-[10px] font-mono text-sky-300">
+              {activePvpRoom?.mode.toUpperCase()} Live PvP • Your HUD will unlock automatically on your turn
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Arcade Style Victory / Defeat Post-Match Modal with MVP & Stats */}
       <ArenaVictoryDefeatModal
         isOpen={Boolean(winnerTeam)}
@@ -7152,8 +7962,14 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             survived: c.currentHp > 0
           };
         })}
-        onRematch={handleStartArenaMatch}
-        onLobby={() => setPhase('lobby')}
+        onRematch={
+          isOnlinePvpMatch
+            ? activePvpRoom?.hostClientId === clientIdRef.current
+              ? handlePvpHostStartMatch
+              : handlePvpReturnToLobby
+            : handleStartArenaMatch
+        }
+        onLobby={isOnlinePvpMatch ? handlePvpReturnToLobby : () => setPhase('lobby')}
       />
 
       {/* Save Arena Modal */}

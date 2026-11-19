@@ -13,6 +13,7 @@ import compression from "compression";
 import { DdbHpSyncDaemon } from "./server/ddbCampaignService";
 import { DdbGameLogDaemon } from "./server/ddbGameLogDaemon";
 import { repairMonsterToken } from "./src/data/srdMonstersCatalog";
+import { registerArenaPvpSocketHandlers } from "./server/arenaPvpManager";
 
 
 
@@ -1033,9 +1034,8 @@ async function startServer() {
       io.emit("APPLY_TOKEN_MUTATION", payload);
     });
 
-    socket.on("ARENA_LOBBY_ANNOUNCE", (payload) => {
-      socket.broadcast.emit("ARENA_LOBBY_ANNOUNCE", payload);
-    });
+    // Real-time Remote PvP Arena Waiting Lobby & Match Sync (1v1 / 2v2)
+    registerArenaPvpSocketHandlers(io, socket);
 
     socket.on("ARENA_CONFIG_UPDATE", (payload) => {
       io.emit("ARENA_CONFIG_UPDATE", payload);
