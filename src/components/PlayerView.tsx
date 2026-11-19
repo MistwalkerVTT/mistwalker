@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import Konva from 'konva';
 import { Stage, Layer, Image as KonvaImage, Text, Group, Circle, Rect, Arc, Line } from 'react-konva';
-import { isMistwalker3DEnabled, Mistwalker3DModeToggle, Mistwalker3DViewportHost } from '../integrations/mistwalker3d/Mistwalker3DBridge';
 
 Konva.hitOnDragEnabled = false;
 if (typeof window !== 'undefined') {
@@ -1732,8 +1731,6 @@ const buildFallbackHudData = (token: Token, stats: any, customChars?: Character[
 };
 
 export default function PlayerView() {
-  const [renderMode, setRenderMode] = useState<'2d' | '3d'>('2d');
-  const [selected3DTokenId, setSelected3DTokenId] = useState<string | null>(null);
   const initialBackupRef = useRef(loadPlayerBackupState());
   const initialBackup = initialBackupRef.current;
 
@@ -8946,49 +8943,6 @@ export default function PlayerView() {
         <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[45] pointer-events-none flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-900/90 border border-emerald-500/50 backdrop-blur shadow-xl text-xs font-mono text-emerald-300 animate-in fade-in">
           <Hand className="w-3.5 h-3.5 text-emerald-400" />
           <span>Pan / Move Map (Spacebar Held)</span>
-        </div>
-      )}
-
-      {isMistwalker3DEnabled && (
-        <Mistwalker3DModeToggle
-          renderMode={renderMode}
-          onRenderModeChange={setRenderMode}
-          compact
-          className="fixed top-3 right-3 z-[60]"
-        />
-      )}
-
-      {isMistwalker3DEnabled && renderMode === '3d' && (
-        <div className="fixed inset-0 z-[25] bg-zinc-950 flex">
-          <Mistwalker3DViewportHost
-            sceneId={activeSceneInfo?.sceneId || 'player_scene'}
-            sceneTitle={activeSceneInfo?.sceneTitle || 'MistWalker 3D'}
-            mapUrl={imageFile || (activeSceneInfo as any)?.mapUrl || undefined}
-            mapWidth={activeSceneInfo?.mapWidth || mapDimensions.width || undefined}
-            mapHeight={activeSceneInfo?.mapHeight || mapDimensions.height || undefined}
-            gridSize={gridSize}
-            gridOffsetX={gridOffsetX}
-            gridOffsetY={gridOffsetY}
-            walls={walls}
-            tokens={tokens}
-            roomAnnotations={roomAnnotations}
-            boardAnimatedFeatures={boardAnimatedFeatures}
-            scene3d={(activeSceneInfo as any)?.scene3d}
-            selectedTokenId={selected3DTokenId}
-            panToolActive={isSpacePressed}
-            isDm={false}
-            activeEquippedAsset={activeEquippedAsset}
-            effects={effects}
-            isFogVisible={isFogVisible}
-            reveals={reveals}
-            polygonReveals={polygonReveals}
-            visionConfig={visionConfig}
-            fogResetKey={fogResetKey}
-            claimedTokenId={claimedTokenId}
-            setTokens={setTokens}
-            setWalls={setWalls}
-            onSelectToken={setSelected3DTokenId}
-          />
         </div>
       )}
 
