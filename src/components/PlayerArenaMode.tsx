@@ -59,7 +59,8 @@ import {
   loadPlayerAutoRollMap,
   savePlayerAutoRollPreference,
   resolveActionSpecialAbilities,
-  consolidateChannelDivinityLists
+  consolidateChannelDivinityLists,
+  isPassiveTraitOrFeature
 } from '../types/hud';
 import { WallSegment, DoorState, AURA_PRESETS, AuraPreset } from '../types';
 import { PlayerHeroDock } from './PlayerHeroDock';
@@ -349,6 +350,7 @@ function buildArenaCombatantHudData(
   const reactions: HudActionItem[] = [];
   const items: HudActionItem[] = [];
   const special: HudActionItem[] = [];
+  const traits: HudActionItem[] = Array.isArray(liveDdbHud?.traits) ? [...liveDdbHud!.traits!] : [];
 
   // Ingest Wild Shape Beast Attacks if combatant is currently transformed
   if (activeWildShape) {
@@ -676,9 +678,8 @@ function buildArenaCombatantHudData(
     // 6. Populate Special Features & Traits
     if (Array.isArray(char.specialFeatures)) {
       char.specialFeatures.forEach((sf, idx) => {
-        if (special.some((s) => s.name.toLowerCase() === sf.name.toLowerCase())) return;
         const matchedSf = findJb2aAsset(sf.name);
-        special.push({
+        const item: HudActionItem = {
           id: `arena-spec-sf-${idx}`,
           name: sf.name,
           category: 'special',
@@ -689,26 +690,39 @@ function buildArenaCombatantHudData(
           isSelfAction: true,
           description: sf.description,
           jb2aAssetId: matchedSf?.id
-        });
+        };
+        if (isPassiveTraitOrFeature(item)) {
+          if (!traits.some((t) => t.name.toLowerCase() === sf.name.toLowerCase())) {
+            traits.push({ ...item, id: `arena-trait-sf-${idx}`, type: 'passive', castingTime: 'Trait' });
+          }
+        } else if (!special.some((s) => s.name.toLowerCase() === sf.name.toLowerCase())) {
+          special.push(item);
+        }
       });
     }
     if (Array.isArray(char.features)) {
       char.features.forEach((f, idx) => {
         const fName = String(f);
-        if (special.some((s) => s.name.toLowerCase() === fName.toLowerCase())) return;
         const matchedFeat = findJb2aAsset(fName);
-        special.push({
-          id: `arena-spec-feat-${idx}`,
+        const item: HudActionItem = {
+          id: `arena-trait-feat-${idx}`,
           name: fName,
           category: 'special',
-          type: 'special',
+          type: 'passive',
           subCategory: 'class',
           sourceLabel: 'Feature & Trait',
-          castingTime: 'Special',
+          castingTime: 'Trait',
           isSelfAction: true,
           description: fName,
           jb2aAssetId: matchedFeat?.id
-        });
+        };
+        if (!isPassiveTraitOrFeature({ ...item, type: 'special', castingTime: 'Special' })) {
+          if (!special.some((s) => s.name.toLowerCase() === fName.toLowerCase())) {
+            special.push({ ...item, id: `arena-spec-feat-${idx}`, type: 'special', castingTime: 'Special' });
+          }
+        } else if (!traits.some((t) => t.name.toLowerCase() === fName.toLowerCase())) {
+          traits.push(item);
+        }
       });
     }
 
@@ -719,15 +733,15 @@ function buildArenaCombatantHudData(
       (char.classLevel || '').toLowerCase().includes('cleric');
 
     if (isStavrosOrCleric) {
-      if (!special.some((s) => s.id === 'special-blessed-healer' || s.name.toLowerCase().includes('blessed healer'))) {
-        special.push({
-          id: 'special-blessed-healer',
+      if (!traits.some((t) => t.id === 'trait-blessed-healer' || t.name.toLowerCase().includes('blessed healer'))) {
+        traits.push({
+          id: 'trait-blessed-healer',
           name: 'Blessed Healer',
           category: 'special',
           type: 'passive',
           subCategory: 'class',
           sourceLabel: 'PHB, pg. 60',
-          castingTime: '(No Action)',
+          castingTime: 'Trait',
           isSelfAction: true,
           description:
             'When you cast a spell of 1st level or higher that restores HP to a creature other than you, you regain HP equal to 2 + the spell’s level.'
@@ -958,17 +972,18 @@ function buildArenaCombatantHudData(
     }
   );
 
+  const allArenaFeaturesAndTraits = [...special, ...traits];
   const arenaSpecialCtx = {
     characterName: combatant.name,
     classLevel: combatant.classOrCr || char?.classLevel || '',
     totalLevel,
     spellSaveDc,
     spellMod,
-    hasDivineStrike: special.some((s) => s.name.toLowerCase().includes('divine strike')),
-    hasBlessedStrikes: special.some((s) => s.name.toLowerCase().includes('blessed strikes')),
-    hasFrenzy: special.some((s) => s.name.toLowerCase().includes('frenzy')),
-    hasMartialAdept: special.some((s) => s.name.toLowerCase().includes('martial adept') || s.name.toLowerCase().includes('disarming attack')),
-    hasRadiantStrikes: Boolean(activeWildShape?.canRadiantStrikes || special.some((s) => s.name.toLowerCase().includes('radiant strikes')))
+    hasDivineStrike: allArenaFeaturesAndTraits.some((s) => s.name.toLowerCase().includes('divine strike')),
+    hasBlessedStrikes: allArenaFeaturesAndTraits.some((s) => s.name.toLowerCase().includes('blessed strikes')),
+    hasFrenzy: allArenaFeaturesAndTraits.some((s) => s.name.toLowerCase().includes('frenzy')),
+    hasMartialAdept: allArenaFeaturesAndTraits.some((s) => s.name.toLowerCase().includes('martial adept') || s.name.toLowerCase().includes('disarming attack')),
+    hasRadiantStrikes: Boolean(activeWildShape?.canRadiantStrikes || allArenaFeaturesAndTraits.some((s) => s.name.toLowerCase().includes('radiant strikes')))
   };
 
   for (const list of [attacks, actions, bonusActions, spells]) {
@@ -1005,7 +1020,8 @@ function buildArenaCombatantHudData(
     spells,
     reactions,
     items,
-    special,
+    special: special.filter((s) => !isPassiveTraitOrFeature(s)),
+    traits,
     spellSlots,
     resources: liveDdbHud?.resources || [],
     canWildShape: Boolean(

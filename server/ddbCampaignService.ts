@@ -3,7 +3,7 @@ import { getDdbHeaders, getDdbAuthHeaders } from './ddbService';
 import { Character } from '../src/types/character';
 import { DdbGameLogDaemon } from './ddbGameLogDaemon';
 import { findJb2aAsset } from '../src/effects/db/jb2aRegistry';
-import { computeUpcastFormula, HudUpcastOption, resolveActionSpecialAbilities, resolveActionAutomaticExtraDamage, consolidateChannelDivinityLists } from '../src/types/hud';
+import { computeUpcastFormula, HudUpcastOption, resolveActionSpecialAbilities, resolveActionAutomaticExtraDamage, consolidateChannelDivinityLists, isPassiveTraitOrFeature } from '../src/types/hud';
 import { lookupDndRuleDetails } from '../src/data/dndRulesCompendium';
 
 export interface DdbCampaignSummary {
@@ -976,6 +976,8 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
   const items: any[] = [];
   const special: any[] = [];
   const seenSpecialNames = new Set<string>();
+  const traits: any[] = [];
+  const seenTraitNames = new Set<string>();
   const resources: Array<{ name: string; total: number; available: number; resetType?: string }> = [];
   const seenResourceNames = new Set<string>();
 
@@ -1441,14 +1443,26 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
           attacks.push({ ...hudAction, category: 'attacks' });
         }
       }
-      // Also populate the Special tab with all class/species/feat/item special actions (excluding internal DDB Circle Spell boilerplate)
-      if (!lowerName.includes('circle spell') && !seenSpecialNames.has(canonName)) {
-        seenSpecialNames.add(canonName);
-        special.push({
-          ...hudAction,
-          id: `special-act-${sourceCat}-${idx}-${act.id || idx}`,
-          category: 'special'
-        });
+      // Also populate the Special tab with active class/species/feat/item special actions (excluding passive traits & DDB Circle Spell boilerplate)
+      if (!lowerName.includes('circle spell')) {
+        if (isPassiveTraitOrFeature(hudAction)) {
+          if (!seenTraitNames.has(canonName)) {
+            seenTraitNames.add(canonName);
+            traits.push({
+              ...hudAction,
+              id: `trait-act-${sourceCat}-${idx}-${act.id || idx}`,
+              category: 'special',
+              type: 'passive'
+            });
+          }
+        } else if (!seenSpecialNames.has(canonName)) {
+          seenSpecialNames.add(canonName);
+          special.push({
+            ...hudAction,
+            id: `special-act-${sourceCat}-${idx}-${act.id || idx}`,
+            category: 'special'
+          });
+        }
       }
     });
   });
@@ -1536,20 +1550,20 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
   }
 
   if (hasBookOfExaltedDeeds) {
-    special.push({
-      id: 'special-enlightened-magic',
+    traits.push({
+      id: 'trait-enlightened-magic',
       name: 'Enlightened Magic (Book of Exalted Deeds)',
       category: 'special',
       type: 'passive',
       subCategory: 'item',
       sourceLabel: 'Artifact • Book of Exalted Deeds',
-      castingTime: 'Passive / Special',
+      castingTime: 'Passive Trait',
       isSelfAction: true,
       notes: '+1 Effective Spell Slot Level',
       description: 'Once you have read the Book of Exalted Deeds, any spell slot you expend to cast a Cleric or Paladin spell counts as a spell slot of one level higher.',
       jb2aAssetId: 'bless'
     });
-    seenSpecialNames.add('enlightened magic');
+    seenTraitNames.add('enlightened magic');
   }
 
   if (hasDevoteesCenser) {
@@ -1578,7 +1592,7 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
   // Extract Class Features, Subclass Features, Options (Invocations/Maneuvers/Infusions), Feats, and Species Traits
   const BOILERPLATE_FEATURE_REGEX = /^(ability score improvement|ability score increases?|proficiencies|bonus proficienc(y|ies)|hit points|equipment|spellcasting|expanded spell list|pact magic|core .+ traits|.+ subclass|divine domain|martial archetype|roguish archetype|monastic tradition|arcane tradition|otherworldly patron|druid circle|bard college|ranger conclave|primal path|blood hunter order|artificer subclass|languages|extra language|size|speed|age|alignment|creature type|darkvision|superior darkvision|increase two scores.*|increase one score.*|weapon mastery|\d+: weapon mastery|eldritch invocations|eldritch invocation options|fighting style|fighting style feat|blood curses|magic item plans|replicate magic item|tools of the trade|thieves['’] cant|druidic|expertise|jack of all trades|cantrip|ability score increase|.*ability score improvements?|strength|dexterity|constitution|intelligence|wisdom|charisma|activate rage)$/i;
 
-  const pushPassiveOrTraitToSpecial = (
+  const pushPassiveOrTraitToTraits = (
     rawTitle: string,
     rawDesc: string | undefined,
     sourceLabel: string,
@@ -1589,9 +1603,12 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
     const title = (rawTitle || '').trim();
     if (!title || BOILERPLATE_FEATURE_REGEX.test(title)) return;
     const canon = canonicalActionKey(title);
-    if (seenSpecialNames.has(canon)) return;
-    // Also skip if a prefixed version is already in seenSpecialNames (e.g. "Channel Divinity: Preserve Life" vs "Preserve Life")
+    if (seenTraitNames.has(canon) || seenSpecialNames.has(canon)) return;
+    // Also skip if a prefixed version is already in seenSpecialNames/seenTraitNames (e.g. "Channel Divinity: Preserve Life" vs "Preserve Life")
     for (const existing of seenSpecialNames) {
+      if (existing.endsWith(`: ${canon}`) || canon.endsWith(`: ${existing}`)) return;
+    }
+    for (const existing of seenTraitNames) {
       if (existing.endsWith(`: ${canon}`) || canon.endsWith(`: ${existing}`)) return;
     }
     const cleaned = cleanDdbText(rawDesc, {
@@ -1599,7 +1616,7 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
       scaleValue: canon.includes('divine strike') ? (computed.totalLevel >= 14 ? '2d8' : '1d8') : undefined
     });
     if (!cleaned) return;
-    seenSpecialNames.add(canon);
+    seenTraitNames.add(canon);
 
     let damageFormula: string | undefined;
     let damageType: string | undefined;
@@ -1613,14 +1630,14 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
       damageType = 'necrotic';
     }
 
-    special.push({
+    traits.push({
       id: `${idPrefix}-${idx}`,
       name: title,
       category: 'special',
-      type: 'special',
+      type: 'passive',
       subCategory,
       sourceLabel,
-      castingTime: 'Special / Trait',
+      castingTime: 'Trait',
       damageFormula,
       damageType,
       isSelfAction: true,
@@ -1640,12 +1657,12 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
         if (!def || !def.name) return;
         if (def.requiredLevel && def.requiredLevel > clsLvl) return;
         if (def.hideInSheet) return;
-        pushPassiveOrTraitToSpecial(
+        pushPassiveOrTraitToTraits(
           def.name,
           def.snippet || def.description,
           subName ? `${clsName} (${subName})` : `${clsName} Feature`,
           'class',
-          `special-cf-${cIdx}`,
+          `trait-cf-${cIdx}`,
           fIdx
         );
       });
@@ -1657,12 +1674,12 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
     optList.forEach((opt: any, oIdx: number) => {
       const def = opt?.definition;
       if (!def || !def.name) return;
-      pushPassiveOrTraitToSpecial(
+      pushPassiveOrTraitToTraits(
         def.name,
         def.snippet || def.description,
         optCat === 'class' ? 'Class Option / Invocation' : optCat === 'feat' ? 'Feat Option' : 'Species Option',
         optCat === 'race' ? 'species' : optCat,
-        `special-opt-${optCat}`,
+        `trait-opt-${optCat}`,
         oIdx
       );
     });
@@ -1672,12 +1689,12 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
     c.feats.forEach((f: any, fIdx: number) => {
       const def = f?.definition;
       if (!def || !def.name) return;
-      pushPassiveOrTraitToSpecial(
+      pushPassiveOrTraitToTraits(
         def.name,
         def.snippet || def.description,
         'Feat',
         'feat',
-        'special-feat',
+        'trait-feat',
         fIdx
       );
     });
@@ -1687,12 +1704,12 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
     c.race.racialTraits.forEach((rt: any, rIdx: number) => {
       const def = rt?.definition;
       if (!def || !def.name || def.hideInSheet) return;
-      pushPassiveOrTraitToSpecial(
+      pushPassiveOrTraitToTraits(
         def.name,
         def.snippet || def.description,
         `${c.race?.fullName || 'Species'} Trait`,
         'species',
-        'special-race',
+        'trait-race',
         rIdx
       );
     });
@@ -2049,6 +2066,52 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
     }
   });
 
+  // Guarantee Stavros always retains Spirit Guardians even if temporarily unprepared on D&D Beyond
+  if (lowerCharName.includes('stavros') && !seenSpellNames.has('spirit guardians')) {
+    seenSpellNames.add('spirit guardians');
+    const sgAsset = findJb2aAsset('spirit_guardians');
+    const sgUpcast: HudUpcastOption[] = [];
+    for (let sl = 3; sl <= 9; sl++) {
+      const scaled = computeUpcastFormula('3d8', 3, sl, 'Spirit Guardians');
+      sgUpcast.push({
+        slotLevel: sl,
+        damageFormula: scaled.damageFormula,
+        bonusEffect: scaled.bonusEffect,
+        summaryLabel: scaled.summaryLabel
+      });
+    }
+    spells.push({
+      id: 'spell-stavros-spirit-guardians',
+      name: 'Spirit Guardians',
+      category: 'spells',
+      type: 'action',
+      subCategory: 'spell',
+      sourceLabel: 'Level 3 Spell (Cleric)',
+      level: 3,
+      school: 'conjuration',
+      rangeFt: 0,
+      castingTime: '1 Action',
+      duration: 'Concentration, up to 10 minutes',
+      components: 'V, S, M (a holy symbol)',
+      atHigherLevels: 'The damage increases by 1d8 for each spell slot level above 3.',
+      canUpcast: true,
+      upcastOptions: sgUpcast,
+      saveDc: spellSaveDc,
+      saveAbility: 'WIS',
+      damageFormula: '3d8',
+      damageType: 'radiant',
+      spellSlotRequired: 3,
+      description:
+        'Protective spirits flit around you in a 15-foot Emanation for the duration. When you cast this spell, you can designate creatures to be unaffected by it. Any other creature’s Speed is halved in the Emanation, and whenever the Emanation enters a creature’s space or a creature enters or ends its turn there, it must make a Wisdom saving throw (3d8 radiant damage on fail, half on success).',
+      jb2aAssetId: 'spirit_guardians',
+      iconUrl: sgAsset?.thumb && !sgAsset.thumb.endsWith('.webm') ? sgAsset.thumb : undefined,
+      isHeal: false,
+      isAttack: false,
+      isSelfAction: true,
+      isPrepared: true
+    });
+  }
+
   // Sort spells by level ascending (Cantrips 0 first, then 1..9), then alphabetically
   spells.sort((a, b) => {
     const lvlA = a.level ?? 0;
@@ -2057,11 +2120,17 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
     return a.name.localeCompare(b.name);
   });
 
-  // Remove any entry from `special` if it is already in the character's `spells` list or is a spell-table header
+  // Remove any entry from `special` or `traits` if it is already in the character's `spells` list or is a spell-table header
   for (let i = special.length - 1; i >= 0; i--) {
     const specKey = canonicalActionKey(special[i].name);
     if (seenSpellNames.has(specKey) || /\bspells$/.test(specKey)) {
       special.splice(i, 1);
+    }
+  }
+  for (let i = traits.length - 1; i >= 0; i--) {
+    const traitKey = canonicalActionKey(traits[i].name);
+    if (seenSpellNames.has(traitKey) || /\bspells$/.test(traitKey)) {
+      traits.splice(i, 1);
     }
   }
 
@@ -2139,17 +2208,18 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
   );
 
   // Attach inline special ability / on-hit trigger buttons to all attacks, actions, bonus actions & spells
+  const allFeaturesAndTraits = [...special, ...traits];
   const specialCtx = {
     characterName: c.name || 'Character',
     classLevel,
     totalLevel: computed.totalLevel,
     spellSaveDc,
     spellMod: primarySpellMod,
-    hasDivineStrike: special.some(s => (s.name || '').toLowerCase().includes('divine strike')),
-    hasBlessedStrikes: special.some(s => (s.name || '').toLowerCase().includes('blessed strikes')),
-    hasFrenzy: special.some(s => (s.name || '').toLowerCase().includes('frenzy')),
-    hasMartialAdept: special.some(s => (s.name || '').toLowerCase().includes('martial adept') || (s.name || '').toLowerCase().includes('disarming attack')),
-    hasRadiantStrikes: special.some(s => (s.name || '').toLowerCase().includes('radiant strikes')),
+    hasDivineStrike: allFeaturesAndTraits.some(s => (s.name || '').toLowerCase().includes('divine strike')),
+    hasBlessedStrikes: allFeaturesAndTraits.some(s => (s.name || '').toLowerCase().includes('blessed strikes')),
+    hasFrenzy: allFeaturesAndTraits.some(s => (s.name || '').toLowerCase().includes('frenzy')),
+    hasMartialAdept: allFeaturesAndTraits.some(s => (s.name || '').toLowerCase().includes('martial adept') || (s.name || '').toLowerCase().includes('disarming attack')),
+    hasRadiantStrikes: allFeaturesAndTraits.some(s => (s.name || '').toLowerCase().includes('radiant strikes')),
     rogueLevel,
     monkLevel,
     barbarianLevel
@@ -2209,6 +2279,7 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
     reactions,
     items,
     special,
+    traits,
     spellSlots,
     resources,
     hasBookOfExaltedDeeds,

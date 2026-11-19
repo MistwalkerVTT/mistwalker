@@ -24,7 +24,8 @@ import {
   Users,
   GripHorizontal,
   PawPrint,
-  Dices
+  Dices,
+  ScrollText
 } from 'lucide-react';
 import {
   HudCharacterData,
@@ -37,6 +38,7 @@ import {
   resolveActionAutomaticExtraDamage,
   consolidateChannelDivinityLists,
   isChannelDivinityRelatedAction,
+  isPassiveTraitOrFeature,
   normalizePlayerAutoRollKey,
   loadPlayerAutoRollPromptedMap,
   markPlayerAutoRollPrompted
@@ -144,6 +146,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
   const [isHoveringWildShapeBtn, setIsHoveringWildShapeBtn] = useState<boolean>(false);
   const [showAutoRollOnboardingPrompt, setShowAutoRollOnboardingPrompt] = useState<boolean>(false);
   const [highlightAutoRollToggle, setHighlightAutoRollToggle] = useState<boolean>(false);
+  const [showTraitsModal, setShowTraitsModal] = useState<boolean>(false);
 
   // Prompt the player when they first sign on with a character to ask if they'd like to turn Auto Roll ON,
   // and highlight where the Auto Roll toggle switch lives in the HUD header.
@@ -186,6 +189,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
     setPinnedAction(null);
     setInspectedAction(null);
     setChannelDivinityMenuHub(null);
+    setShowTraitsModal(false);
   }, [collapseRequestTick]);
 
   const handleStartPopoverDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
@@ -260,7 +264,9 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (channelDivinityMenuHub) {
+        if (showTraitsModal) {
+          setShowTraitsModal(false);
+        } else if (channelDivinityMenuHub) {
           setChannelDivinityMenuHub(null);
         } else if (inspectedAction) {
           setInspectedAction(null);
@@ -273,7 +279,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [hoveredAction, pinnedAction, inspectedAction, onClearInspectedAura]);
+  }, [hoveredAction, pinnedAction, inspectedAction, channelDivinityMenuHub, showTraitsModal, onClearInspectedAura]);
 
   // Dedicated Damage / Healing Dice Roll Handler (e.g. clicking "9d8 radiant")
   const handleRollDamage = (action: HudActionItem) => {
@@ -458,9 +464,23 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
     const rawBonus: HudActionItem[] = Array.isArray(characterData?.bonusActions)
       ? characterData.bonusActions.map((a) => ({ ...a }))
       : [];
-    const rawSpecial: HudActionItem[] = Array.isArray(characterData?.special)
+    const rawSpecialAll: HudActionItem[] = Array.isArray(characterData?.special)
       ? characterData.special.map((a) => ({ ...a }))
       : [];
+    const rawTraits: HudActionItem[] = Array.isArray(characterData?.traits)
+      ? characterData.traits.map((a) => ({ ...a }))
+      : [];
+
+    const rawSpecial: HudActionItem[] = [];
+    for (const sp of rawSpecialAll) {
+      if (isPassiveTraitOrFeature(sp)) {
+        if (!rawTraits.some((t) => t.name.trim().toLowerCase() === sp.name.trim().toLowerCase())) {
+          rawTraits.push({ ...sp, type: 'passive', castingTime: 'Trait' });
+        }
+      } else {
+        rawSpecial.push(sp);
+      }
+    }
 
     // Ensure Channel Divinity is consolidated if not already done by the caller
     const alreadyConsolidated =
@@ -480,12 +500,14 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
     return {
       actions: rawActions,
       bonusActions: rawBonus,
-      special: rawSpecial
+      special: rawSpecial.filter((sp) => !isPassiveTraitOrFeature(sp)),
+      traits: rawTraits
     };
   }, [
     characterData?.actions,
     characterData?.bonusActions,
     characterData?.special,
+    characterData?.traits,
     characterData?.name,
     characterData?.classLevel,
     characterData?.totalLevel,
@@ -523,6 +545,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
   );
 
   const specialList = consolidatedHudLists.special;
+  const traitsList = consolidatedHudLists.traits;
 
   // Available spell levels for the Spells filter bar
   const availableSpellLevels = useMemo<number[]>(() => {
@@ -609,7 +632,10 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
 
   // Resolve the effective action (with any active upcast slot level applied and inline special abilities attached)
   const specialAbilitiesCtx = useMemo(() => {
-    const specialArr = Array.isArray(characterData?.special) ? characterData!.special! : [];
+    const specialArr = [
+      ...(Array.isArray(characterData?.special) ? characterData!.special! : []),
+      ...(Array.isArray(characterData?.traits) ? characterData!.traits! : [])
+    ];
     return {
       characterName: characterData?.name || claimedToken?.name || '',
       classLevel: characterData?.classLevel || '',
@@ -1669,6 +1695,19 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                   <span className="text-sky-300">AC {ac}</span>
                   <span>•</span>
                   <span>{speed}</span>
+                  {traitsList.length > 0 && (
+                    <>
+                      <span>•</span>
+                      <button
+                        type="button"
+                        onClick={() => setShowTraitsModal(true)}
+                        className="px-1.5 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-cyan-300 font-bold flex items-center gap-1 cursor-pointer"
+                      >
+                        <ScrollText className="w-2.5 h-2.5" />
+                        <span>Traits ({traitsList.length})</span>
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -2090,8 +2129,19 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                   </button>
                 )}
               </div>
-              <div className="text-[11px] font-mono text-zinc-400 truncate">
-                {[race, classLevel].filter(Boolean).join(' • ') || 'Player Character'}
+              <div className="flex items-center gap-2 text-[11px] font-mono text-zinc-400 truncate">
+                <span className="truncate">{[race, classLevel].filter(Boolean).join(' • ') || 'Player Character'}</span>
+                {traitsList.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowTraitsModal(true)}
+                    className="px-1.5 py-0.5 rounded bg-zinc-800/90 hover:bg-zinc-700/90 border border-zinc-700 hover:border-cyan-500/50 text-cyan-300 hover:text-cyan-200 text-[9px] font-mono font-bold shrink-0 flex items-center gap-1 transition-colors cursor-pointer"
+                    title="View passive species, class, and feat traits"
+                  >
+                    <ScrollText className="w-2.5 h-2.5" />
+                    <span>Traits ({traitsList.length})</span>
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -3450,6 +3500,89 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                   <span>Turn Auto Roll ON</span>
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* CHARACTER TRAITS & PASSIVE FEATURES MODAL                                 */}
+      {/* ========================================================================= */}
+      {showTraitsModal && (
+        <div
+          className="fixed inset-0 z-[265] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-in fade-in duration-150 pointer-events-auto"
+          onClick={() => setShowTraitsModal(false)}
+        >
+          <div
+            className="relative w-full max-w-2xl max-h-[82vh] bg-zinc-950/98 border border-cyan-500/50 rounded-2xl shadow-[0_20px_70px_rgba(0,0,0,0.95)] flex flex-col overflow-hidden text-left ring-1 ring-cyan-400/20"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="h-1 w-full bg-gradient-to-r from-cyan-500 via-sky-400 to-cyan-500" />
+            <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-zinc-800 bg-zinc-900/70 shrink-0">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-cyan-950/80 border border-cyan-500/50 flex items-center justify-center shrink-0">
+                  <ScrollText className="w-4 h-4 text-cyan-300" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-bold text-white font-mono truncate">
+                    {name} — Traits &amp; Passive Features
+                  </h3>
+                  <p className="text-[11px] font-mono text-zinc-400 truncate">
+                    {[race, classLevel].filter(Boolean).join(' • ')} ({traitsList.length} traits)
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowTraitsModal(false)}
+                className="p-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                title="Close Traits (Esc)"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-2.5 sidebar-scrollbar">
+              {traitsList.map((trait, idx) => (
+                <div
+                  key={trait.id || idx}
+                  className="p-3 rounded-xl bg-zinc-900/75 border border-zinc-800/90 space-y-1"
+                >
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <span className="text-xs font-bold text-white font-mono">{trait.name}</span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {trait.damageFormula && (
+                        <span className="px-1.5 py-0.5 rounded bg-amber-950/90 border border-amber-500/40 text-amber-300 font-mono text-[10px] font-bold">
+                          {trait.damageFormula}{trait.damageType ? ` ${trait.damageType}` : ''}
+                        </span>
+                      )}
+                      {trait.sourceLabel && (
+                        <span className="px-2 py-0.5 rounded bg-zinc-950 border border-zinc-700/80 text-cyan-300 font-mono text-[10px] font-bold">
+                          {trait.sourceLabel}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {trait.description && trait.description !== trait.name && (
+                    <div className="text-xs text-zinc-300 leading-relaxed prose prose-invert prose-xs max-w-none">
+                      <ReactMarkdown>{trait.description}</ReactMarkdown>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="px-4 py-2.5 border-t border-zinc-800 bg-zinc-900/60 flex items-center justify-between gap-2 shrink-0">
+              <span className="text-[11px] font-mono text-zinc-400">
+                Passive racial, class, feat, and artifact traits.
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowTraitsModal(false)}
+                className="px-3.5 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-mono text-xs font-bold cursor-pointer transition-colors"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

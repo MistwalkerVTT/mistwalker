@@ -408,6 +408,7 @@ export interface HudCharacterData {
   reactions?: HudActionItem[];
   items: HudActionItem[];
   special?: HudActionItem[];
+  traits?: HudActionItem[];
   spellSlots: Record<number, HudSpellSlot>;
   resources: Array<{
     name: string;
@@ -945,6 +946,102 @@ export interface ConsolidateChannelDivinityContext {
   totalLevel?: number;
   spellSaveDc?: number;
   profBonus?: number;
+}
+
+/**
+ * Returns true if a HudActionItem is a passive character trait, racial trait, feat, or passive class feature
+ * (which belongs in the Character Traits drawer rather than the active `Special` combat actions tab).
+ */
+export function isPassiveTraitOrFeature(item: HudActionItem | null | undefined): boolean {
+  if (!item) return false;
+  if (item.isChannelDivinityHub || item.isHaloToggle) return false;
+  const n = (item.name || '').toLowerCase().replace(/[\u2018\u2019`]/g, "'").trim();
+  const ct = (item.castingTime || '').toLowerCase().trim();
+  const src = (item.sourceLabel || '').toLowerCase().trim();
+
+  // Active usable special actions always stay in Special
+  if (
+    n.includes('channel divinity') ||
+    n.includes('divine intervention') ||
+    n.includes('healing incense') ||
+    n.includes('illuminate self') ||
+    n.includes('rite of the dawn') ||
+    n.includes('gem of brightness') ||
+    n.includes('lantern of revealing') ||
+    n.includes('wild shape') ||
+    n.includes('action surge') ||
+    n.includes('second wind') ||
+    n.includes('lay on hands') ||
+    n.includes('bardic inspiration') ||
+    n.includes('patient defense') ||
+    n.includes('step of the wind') ||
+    n.includes('flurry of blows') ||
+    n.includes('crimson rite') ||
+    n.includes('cunning action') ||
+    n.includes('steady aim') ||
+    n.includes('arcane recovery') ||
+    n.includes('harness divine power')
+  ) {
+    return false;
+  }
+
+  if (
+    item.type === 'passive' ||
+    ct === 'special / trait' ||
+    ct === 'special / feat' ||
+    ct === '(no action)' ||
+    ct === 'passive / special' ||
+    ct === 'passive'
+  ) {
+    return true;
+  }
+
+  if (
+    src === 'feature & trait' ||
+    src === 'feat' ||
+    src.endsWith(' trait') ||
+    src === 'species option' ||
+    src === 'feat option' ||
+    src === 'class option / invocation'
+  ) {
+    return true;
+  }
+
+  // Known passive features / racial traits / feats that may appear in fallback or arena data
+  return (
+    n.includes('dwarven resilience') ||
+    n.includes('dwarven combat training') ||
+    n.includes('dwarven toughness') ||
+    n.includes('stonecunning') ||
+    n.includes('tool proficiency') ||
+    n.includes('disciple of life') ||
+    n.includes('blessed healer') ||
+    n.includes('blessed strikes') ||
+    n.includes('divine strike') ||
+    n.includes('supreme healing') ||
+    n.includes('destroy undead') ||
+    n.includes('enlightened magic') ||
+    n.includes('book of exalted deeds') ||
+    n.includes('fey touched') ||
+    n.includes('war caster') ||
+    n.includes('fey ancestry') ||
+    n.includes('keen senses') ||
+    n.includes('darkvision') ||
+    n.includes('trance') ||
+    n.includes('unarmored defense') ||
+    n.includes('extra attack') ||
+    n.includes('danger sense') ||
+    n.includes('aura of protection') ||
+    n.includes('aura of courage') ||
+    n.includes('divine health') ||
+    n.includes('potent spellcasting') ||
+    n.includes('jack of all trades') ||
+    n.includes('expertise') ||
+    n.includes('evasion') ||
+    n.includes('timeless body') ||
+    n.includes('purity of body') ||
+    n.includes('diamond soul')
+  );
 }
 
 /**

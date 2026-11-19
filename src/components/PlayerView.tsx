@@ -141,7 +141,8 @@ import {
   loadPlayerAutoRollMap,
   savePlayerAutoRollPreference,
   resolveActionSpecialAbilities,
-  consolidateChannelDivinityLists
+  consolidateChannelDivinityLists,
+  isPassiveTraitOrFeature
 } from '../types/hud';
 import { classifySpellMechanics, resolveSpellSavingThrows } from '../services/spellResolutionEngine';
 import { TokenDragRuler, TokenDragState, parseSpeedFt } from './TokenDragRuler';
@@ -1098,6 +1099,7 @@ const buildFallbackHudData = (token: Token, stats: any, customChars?: Character[
   const reactions: HudActionItem[] = [];
   const items: HudActionItem[] = [];
   const special: HudActionItem[] = [];
+  const traits: HudActionItem[] = [];
 
   if (matchedChar && Array.isArray(matchedChar.actions) && matchedChar.actions.length > 0) {
     matchedChar.actions.forEach((act, idx) => {
@@ -1302,6 +1304,42 @@ const buildFallbackHudData = (token: Token, stats: any, customChars?: Character[
         attacks.push({ ...hudSpell, id: `char-atk-spell-${idx}`, category: 'attacks' });
       }
     });
+    if (name.toLowerCase().includes('stavros') && !spells.some(s => s.name.trim().toLowerCase() === 'spirit guardians')) {
+      const sgAsset = findJb2aAsset('spirit_guardians');
+      const sgRule = lookupDndRuleDetails('Spirit Guardians', 'spell');
+      spells.push({
+        id: 'char-spell-stavros-spirit-guardians',
+        name: 'Spirit Guardians',
+        category: 'spells',
+        type: 'action',
+        subCategory: 'spell',
+        sourceLabel: 'Level 3 Conjuration',
+        level: 3,
+        canUpcast: true,
+        upcastOptions: Array.from({ length: 7 }, (_, i) => ({
+          slotLevel: 3 + i,
+          ...computeUpcastFormula('3d8', 3, 3 + i, 'Spirit Guardians')
+        })),
+        school: 'conjuration' as any,
+        castingTime: '1 Action',
+        duration: sgRule?.duration || 'Concentration, up to 10 minutes',
+        components: sgRule?.components || 'V, S, M (a holy symbol)',
+        atHigherLevels: sgRule?.higherLevels || 'Damage increases by 1d8 for each slot level above 3.',
+        saveDc: spellSaveDc,
+        saveAbility: 'WIS',
+        damageFormula: '3d8',
+        damageType: 'radiant',
+        isHeal: false,
+        isAttack: false,
+        isSelfAction: true,
+        spellSlotRequired: 3,
+        description: sgRule?.description || 'Protective spirits flit around you in a 15-foot Emanation for the duration (3d8 radiant damage on a failed WIS save, half on success).',
+        rangeFt: 0,
+        jb2aAssetId: 'spirit_guardians',
+        iconUrl: sgAsset?.thumb && !sgAsset.thumb.endsWith('.webm') ? sgAsset.thumb : undefined,
+        isPrepared: true
+      });
+    }
     spells.sort((a, b) => ((a.level ?? 0) - (b.level ?? 0)) || a.name.localeCompare(b.name));
   }
 
@@ -1407,28 +1445,6 @@ const buildFallbackHudData = (token: Token, stats: any, customChars?: Character[
         jb2aAssetId: 'cure_wounds'
       },
       {
-        id: 'special-destroy-undead',
-        name: 'Destroy Undead (CR 3 or Lower)',
-        category: 'special',
-        type: 'special',
-        subCategory: 'class',
-        sourceLabel: 'PHB, pg. 59',
-        castingTime: 'Special',
-        isSelfAction: true,
-        description: 'When an undead fails its saving throw against your Turn Undead feature, it is instantly destroyed if its CR is 3 or lower.'
-      },
-      {
-        id: 'special-blessed-healer',
-        name: 'Blessed Healer',
-        category: 'special',
-        type: 'passive',
-        subCategory: 'class',
-        sourceLabel: 'PHB, pg. 60',
-        castingTime: '(No Action)',
-        isSelfAction: true,
-        description: 'When you cast a spell of 1st level or higher that restores HP to a creature other than you, you regain HP equal to 2 + the spell’s level.'
-      },
-      {
         id: 'special-devotees-censer',
         name: "Devotee's Censer: Healing Incense",
         category: 'special',
@@ -1447,19 +1463,6 @@ const buildFallbackHudData = (token: Token, stats: any, customChars?: Character[
         jb2aAssetId: 'healing_incense'
       },
       {
-        id: 'special-blessed-strikes',
-        name: 'Blessed Strikes',
-        category: 'special',
-        type: 'special',
-        subCategory: 'class',
-        sourceLabel: 'TCoE, pg. 31',
-        castingTime: 'Special',
-        damageFormula: '1d8',
-        damageType: 'radiant',
-        isSelfAction: true,
-        description: 'When a creature takes damage from one of your cantrips or weapon attacks, you can also deal 1d8 radiant damage to that creature. Once you deal this damage, you can’t use this feature again until the start of your next turn.'
-      },
-      {
         id: 'special-divine-intervention',
         name: 'Divine Intervention',
         category: 'special',
@@ -1471,6 +1474,43 @@ const buildFallbackHudData = (token: Token, stats: any, customChars?: Character[
         uses: { available: 1, total: 1, resetType: 'Long Rest' },
         isSelfAction: true,
         description: "As an action, you can request your deity's aid and roll percentile dice. If your roll is equal to or less than 15, your deity intervenes (your DM chooses the nature of the intervention). If successful, you can't use this feature again for 7 days, otherwise, you can use it again after a long rest."
+      }
+    );
+    traits.push(
+      {
+        id: 'trait-destroy-undead',
+        name: 'Destroy Undead (CR 3 or Lower)',
+        category: 'special',
+        type: 'passive',
+        subCategory: 'class',
+        sourceLabel: 'PHB, pg. 59',
+        castingTime: 'Trait',
+        isSelfAction: true,
+        description: 'When an undead fails its saving throw against your Turn Undead feature, it is instantly destroyed if its CR is 3 or lower.'
+      },
+      {
+        id: 'trait-blessed-healer',
+        name: 'Blessed Healer',
+        category: 'special',
+        type: 'passive',
+        subCategory: 'class',
+        sourceLabel: 'PHB, pg. 60',
+        castingTime: 'Trait',
+        isSelfAction: true,
+        description: 'When you cast a spell of 1st level or higher that restores HP to a creature other than you, you regain HP equal to 2 + the spell’s level.'
+      },
+      {
+        id: 'trait-blessed-strikes',
+        name: 'Blessed Strikes',
+        category: 'special',
+        type: 'passive',
+        subCategory: 'class',
+        sourceLabel: 'TCoE, pg. 31',
+        castingTime: 'Trait',
+        damageFormula: '1d8',
+        damageType: 'radiant',
+        isSelfAction: true,
+        description: 'When a creature takes damage from one of your cantrips or weapon attacks, you can also deal 1d8 radiant damage to that creature. Once you deal this damage, you can’t use this feature again until the start of your next turn.'
       }
     );
   } else if (lowerCharName.includes('sylas')) {
@@ -1539,51 +1579,63 @@ const buildFallbackHudData = (token: Token, stats: any, customChars?: Character[
   });
   if (matchedChar && Array.isArray((matchedChar as any).specialFeatures)) {
     (matchedChar as any).specialFeatures.forEach((sf: any, idx: number) => {
-      if (sf?.name && !special.some(s => s.name.toLowerCase() === String(sf.name).toLowerCase())) {
-        special.push({
-          id: `fallback-spec-sf-${idx}`,
-          name: sf.name,
-          category: 'special',
-          type: 'special',
-          subCategory: 'class',
-          sourceLabel: sf.category || 'Special Feature',
-          castingTime: 'Special',
-          isSelfAction: true,
-          description: sf.description || sf.name
-        });
+      if (!sf?.name) return;
+      const item: HudActionItem = {
+        id: `fallback-spec-sf-${idx}`,
+        name: sf.name,
+        category: 'special',
+        type: 'special',
+        subCategory: 'class',
+        sourceLabel: sf.category || 'Special Feature',
+        castingTime: 'Special',
+        isSelfAction: true,
+        description: sf.description || sf.name
+      };
+      if (isPassiveTraitOrFeature(item)) {
+        if (!traits.some(t => t.name.toLowerCase() === String(sf.name).toLowerCase())) {
+          traits.push({ ...item, id: `fallback-trait-sf-${idx}`, type: 'passive', castingTime: 'Trait' });
+        }
+      } else if (!special.some(s => s.name.toLowerCase() === String(sf.name).toLowerCase())) {
+        special.push(item);
       }
     });
   }
   if (matchedChar && Array.isArray((matchedChar as any).features)) {
     (matchedChar as any).features.forEach((f: any, idx: number) => {
       const fName = typeof f === 'string' ? f : f?.name;
-      if (fName && !special.some(s => s.name.toLowerCase() === String(fName).toLowerCase())) {
-        special.push({
-          id: `fallback-spec-feat-${idx}`,
-          name: String(fName),
-          category: 'special',
-          type: 'special',
-          subCategory: 'class',
-          sourceLabel: typeof f === 'object' && f?.source ? f.source : 'Feature & Trait',
-          castingTime: 'Special',
-          isSelfAction: true,
-          description: typeof f === 'object' && f?.description ? f.description : String(fName)
-        });
+      if (!fName) return;
+      const item: HudActionItem = {
+        id: `fallback-trait-feat-${idx}`,
+        name: String(fName),
+        category: 'special',
+        type: 'passive',
+        subCategory: 'class',
+        sourceLabel: typeof f === 'object' && f?.source ? f.source : 'Feature & Trait',
+        castingTime: 'Trait',
+        isSelfAction: true,
+        description: typeof f === 'object' && f?.description ? f.description : String(fName)
+      };
+      if (!isPassiveTraitOrFeature({ ...item, type: 'special', castingTime: 'Special' })) {
+        if (!special.some(s => s.name.toLowerCase() === String(fName).toLowerCase())) {
+          special.push({ ...item, id: `fallback-spec-feat-${idx}`, type: 'special', castingTime: 'Special' });
+        }
+      } else if (!traits.some(t => t.name.toLowerCase() === String(fName).toLowerCase())) {
+        traits.push(item);
       }
     });
   }
   if (matchedChar && Array.isArray((matchedChar as any).feats)) {
     (matchedChar as any).feats.forEach((f: any, idx: number) => {
       const fName = typeof f === 'string' ? f : f?.name;
-      if (fName && !special.some(s => s.name.toLowerCase() === String(fName).toLowerCase())) {
-        special.push({
-          id: `fallback-spec-ft-${idx}`,
+      if (fName && !traits.some(t => t.name.toLowerCase() === String(fName).toLowerCase())) {
+        traits.push({
+          id: `fallback-trait-ft-${idx}`,
           name: String(fName),
           category: 'special',
-          type: 'special',
+          type: 'passive',
           subCategory: 'feat',
           sourceLabel: 'Feat',
-          castingTime: 'Special / Feat',
+          castingTime: 'Trait',
           isSelfAction: true,
           description: typeof f === 'object' && f?.description ? f.description : `Feat: ${fName}`
         });
@@ -1602,17 +1654,18 @@ const buildFallbackHudData = (token: Token, stats: any, customChars?: Character[
     }
   );
 
+  const allFeaturesAndTraits = [...special, ...traits];
   const specialCtx = {
     characterName: name,
     classLevel: matchedChar?.classLevel || '',
     totalLevel,
     spellSaveDc,
     spellMod,
-    hasDivineStrike: special.some(s => s.name.toLowerCase().includes('divine strike')),
-    hasBlessedStrikes: special.some(s => s.name.toLowerCase().includes('blessed strikes')),
-    hasFrenzy: special.some(s => s.name.toLowerCase().includes('frenzy')),
-    hasMartialAdept: special.some(s => s.name.toLowerCase().includes('martial adept') || s.name.toLowerCase().includes('disarming attack')),
-    hasRadiantStrikes: special.some(s => s.name.toLowerCase().includes('radiant strikes'))
+    hasDivineStrike: allFeaturesAndTraits.some(s => s.name.toLowerCase().includes('divine strike')),
+    hasBlessedStrikes: allFeaturesAndTraits.some(s => s.name.toLowerCase().includes('blessed strikes')),
+    hasFrenzy: allFeaturesAndTraits.some(s => s.name.toLowerCase().includes('frenzy')),
+    hasMartialAdept: allFeaturesAndTraits.some(s => s.name.toLowerCase().includes('martial adept') || s.name.toLowerCase().includes('disarming attack')),
+    hasRadiantStrikes: allFeaturesAndTraits.some(s => s.name.toLowerCase().includes('radiant strikes'))
   };
 
   for (const list of [attacks, actions, bonusActions, spells]) {
@@ -1649,7 +1702,8 @@ const buildFallbackHudData = (token: Token, stats: any, customChars?: Character[
     spells,
     reactions,
     items,
-    special: special.filter(sp => !spells.some(s => s.name.trim().toLowerCase() === sp.name.trim().toLowerCase())),
+    special: special.filter(sp => !isPassiveTraitOrFeature(sp) && !spells.some(s => s.name.trim().toLowerCase() === sp.name.trim().toLowerCase())),
+    traits,
     spellSlots: (() => {
       if (spells.length === 0) return {};
       const maxSpellLvl = Math.max(2, ...spells.map(s => s.level || 0), totalLevel >= 15 ? 8 : totalLevel >= 13 ? 7 : totalLevel >= 11 ? 6 : totalLevel >= 9 ? 5 : totalLevel >= 7 ? 4 : totalLevel >= 5 ? 3 : 2);
