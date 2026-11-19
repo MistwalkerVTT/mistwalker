@@ -24,6 +24,33 @@ export const Attribution: React.FC<{ className?: string }> = ({ className = '' }
       >
         CC BY-NC-SA 4.0
       </a>{' '}
+      • Community VFX by{' '}
+      <a
+        href="https://github.com/boss-loot/boss-loot-assets-free"
+        target="_blank"
+        rel="noreferrer"
+        className="text-zinc-400 hover:text-zinc-200 underline"
+      >
+        Boss Loot
+      </a>
+      ,{' '}
+      <a
+        href="https://github.com/jinkergm/JAA"
+        target="_blank"
+        rel="noreferrer"
+        className="text-zinc-400 hover:text-zinc-200 underline"
+      >
+        JAA
+      </a>
+      , &amp;{' '}
+      <a
+        href="https://github.com/jackkerouac/animated-spell-effects"
+        target="_blank"
+        rel="noreferrer"
+        className="text-zinc-400 hover:text-zinc-200 underline"
+      >
+        Jack Kerouac
+      </a>{' '}
       • SFX by{' '}
       <a
         href="https://github.com/JimHPerry/psfx"

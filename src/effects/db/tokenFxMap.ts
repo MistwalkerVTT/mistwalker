@@ -16,82 +16,118 @@ export interface ConditionFxMapping {
 
 export const CONDITION_FX_MAP: Record<string, ConditionFxMapping> = {
   blinded: {
-    videoUrl: '/jb2a/Library/Generic/Template/Circle/TemplateFearCircle_01_Dark_Purple_800x800.webm',
+    videoUrl: '/jb2a/Community/JAA/Rings/blindedR.webm',
     defaultSizeFt: 5,
     soundKey: 'curse',
     color: '#a855f7'
   },
   charmed: {
-    videoUrl: '/jb2a/Library/Generic/Template/Circle/TemplateHeartCircle_01_Regular_Pink_800x800.webm',
+    videoUrl: '/jb2a/Community/JAA/Rings/charmedR.webm',
     defaultSizeFt: 5,
     soundKey: 'sleep_lullaby',
     color: '#ec4899'
   },
   frightened: {
-    videoUrl: '/jb2a/Library/Generic/Template/Circle/TemplateFearCircle_01_Dark_Purple_800x800.webm',
+    videoUrl: '/jb2a/Community/JAA/Rings/frightenedR.webm',
     defaultSizeFt: 5,
     soundKey: 'curse',
     color: '#7c3aed'
   },
   poisoned: {
-    videoUrl: '/jb2a/Library/Generic/Template/Circle/TemplatePoisonCircle_01_Dark_Green_800x800.webm',
+    videoUrl: '/jb2a/Community/JAA/Rings/poisonedR.webm',
     defaultSizeFt: 5,
     soundKey: 'acid_burn',
     color: '#22c55e'
   },
   paralyzed: {
-    videoUrl: '/jb2a/Library/Generic/Template/Circle/TemplateStunCircle_01_Regular_Purple_800x800.webm',
+    videoUrl: '/jb2a/Community/JAA/Rings/paralyzedR.webm',
     defaultSizeFt: 5,
     soundKey: 'binding_chains',
     color: '#c084fc'
   },
   petrified: {
-    videoUrl: '/jb2a/Library/Generic/Template/Circle/TemplateSkullCircle_01_Regular_Purple_800x800.webm',
+    videoUrl: '/jb2a/Community/JAA/Rings/petrifiedR.webm',
     defaultSizeFt: 5,
     soundKey: 'earth_rumble',
     color: '#78716c'
   },
   stunned: {
-    videoUrl: '/jb2a/Library/Generic/Template/Circle/TemplateStunCircle_01_Regular_Purple_800x800.webm',
+    videoUrl: '/jb2a/Community/JAA/Rings/stunnedR.webm',
     defaultSizeFt: 5,
     soundKey: 'thunder_crack',
     color: '#facc15'
   },
   unconscious: {
-    videoUrl: '/jb2a/Library/Generic/Template/Circle/TemplateSkullCircle_01_Regular_Purple_800x800.webm',
+    videoUrl: '/jb2a/Community/JAA/Rings/unconsciousR.webm',
     defaultSizeFt: 5,
     soundKey: 'necrotic_pulse',
     color: '#ef4444'
   },
   invisible: {
-    videoUrl: '/jb2a/Library/Generic/Template/Circle/TemplateSnowflakeCircle_01_Regular_Blue_800x800.webm',
+    videoUrl: '/jb2a/Community/JAA/Rings/invisibleR.webm',
     defaultSizeFt: 5,
     soundKey: 'fey_shimmer',
     color: '#38bdf8'
   },
   restrained: {
-    videoUrl: '/jb2a/Library/Generic/Template/Circle/Web/002/Template_Circle_WebLoop_002_001_White_5x5_1000.webm',
+    videoUrl: '/jb2a/Community/JAA/Rings/restrainedR.webm',
     defaultSizeFt: 5,
     soundKey: 'spider_web',
     color: '#e2e8f0'
   },
   grappled: {
-    videoUrl: '/jb2a/Library/Generic/Template/Circle/Web/002/Template_Circle_WebLoop_002_001_White_5x5_1000.webm',
+    videoUrl: '/jb2a/Community/JAA/Rings/grappledR.webm',
     defaultSizeFt: 5,
     soundKey: 'nature_rustle',
     color: '#f97316'
   },
   prone: {
-    videoUrl: '/jb2a/Library/Generic/Template/Circle/TemplateSkullCircle_01_Regular_Purple_800x800.webm',
+    videoUrl: '/jb2a/Community/JAA/Rings/proneR.webm',
     defaultSizeFt: 5,
     soundKey: 'unarmed_punch',
     color: '#71717a'
   },
   bloodied: {
-    videoUrl: '/jb2a/Library/Generic/Template/Circle/TemplateSkullCircle_01_Regular_Purple_800x800.webm',
+    videoUrl: '/jb2a/Community/JAA/Rings/bleedingR.webm',
     defaultSizeFt: 5,
     soundKey: 'beast_bite',
     color: '#ef4444'
+  },
+  bleeding: {
+    videoUrl: '/jb2a/Community/JAA/Rings/bleedingR.webm',
+    defaultSizeFt: 5,
+    soundKey: 'beast_bite',
+    color: '#dc2626'
+  },
+  raging: {
+    videoUrl: '/jb2a/Community/JAA/Rings/ragingR.webm',
+    defaultSizeFt: 5,
+    soundKey: 'fire_whoosh',
+    color: '#ef4444'
+  },
+  concentrating: {
+    videoUrl: '/jb2a/Community/JAA/Rings/concentratingR.webm',
+    defaultSizeFt: 5,
+    soundKey: 'magic_hum',
+    color: '#38bdf8'
+  },
+  burning: {
+    videoUrl: '/jb2a/Community/JAA/Rings/burningR.webm',
+    defaultSizeFt: 5,
+    soundKey: 'fire_whoosh',
+    color: '#f97316'
+  },
+  hexed: {
+    videoUrl: '/jb2a/Community/JAA/Rings/hexedR.webm',
+    defaultSizeFt: 5,
+    soundKey: 'curse',
+    color: '#a855f7'
+  },
+  flying: {
+    videoUrl: '/jb2a/Community/JAA/Rings/flyingR.webm',
+    defaultSizeFt: 5,
+    soundKey: 'wind_whoosh',
+    color: '#bae6fd'
   }
 };
 

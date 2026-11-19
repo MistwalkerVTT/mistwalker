@@ -11,6 +11,18 @@ export type EffectParadigm =
 
 export type BlendMode = 'screen' | 'lighter' | 'normal' | 'multiply';
 
+export type Effect3dProjection =
+  | 'ground_decal'     // Flat terrain plane (auras, runes, condition rings, ground hazards)
+  | 'billboard'        // Camera-facing sprite/quad (bursts, explosions, heals, impacts)
+  | 'vertical_pillar'  // Crossed vertical planes / cylinder (Flame Strike, Moonbeam, Call Lightning)
+  | 'beam_ribbon'      // Stretched 3D crossed-quad along caster -> target vector (rays, lines, bolts)
+  | 'token_aura';      // Ground ring + vertical halo attached to a 3D miniature/token
+
+export interface Effect3dConfig {
+  projection: Effect3dProjection;
+  elevationFt?: number;
+}
+
 export type SpellSchool =
   | 'evocation'
   | 'conjuration'
@@ -69,6 +81,7 @@ export interface VttEffectInstance {
   description?: string;      // Full spell/aura description
   atHigherLevels?: string;   // At Higher Levels scaling description
   actionSnapshot?: any;      // Full HudActionItem snapshot when cast from HUD
+  render3d?: Effect3dConfig; // Optional 3D projection hint for future MistWalker 3D engine
 }
 
 export interface EffectTrajectoryConfig {
@@ -109,6 +122,7 @@ export interface Jb2aAssetDefinition {
   arrivalWebm?: string;      // Optional arrival burst WebM for teleport spells
   targetType?: 'single' | 'aoe' | 'self' | 'aura' | 'cone' | 'line' | 'teleport';
   rangeFt?: number;          // Official 5e spell range in feet (0 = Self, 5 = Touch, etc.)
+  render3d?: Effect3dConfig; // Optional 3D projection hint for future MistWalker 3D engine
 }
 
 /**
