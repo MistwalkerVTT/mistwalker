@@ -7257,10 +7257,14 @@ export default function PlayerView() {
           return;
         }
 
-        if (isCreatureTargeted) {
-          toast.info(`Click on a token to target ${activeTargetingAction.name}${claimedToken ? ' (or click Target Self in the dock)' : ''}.`);
-          return;
-        }
+        // If there is no token clicked/targeted, execute the spell animation towards the clicked point without rolling dice or targeting a creature!
+        const casterCenter = claimedToken ? {
+          x: claimedToken.x + (((claimedToken.size || 1) * gridSize) / 2),
+          y: claimedToken.y + (((claimedToken.size || 1) * gridSize) / 2)
+        } : (aimOrigin || point);
+        hasCastOnMouseDownRef.current = true;
+        castSpellAt(casterCenter, point);
+        return;
       }
     }
 

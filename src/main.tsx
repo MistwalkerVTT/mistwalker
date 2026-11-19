@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import './index.css';
 import { CrashRecoveryBoundary } from './components/CrashRecoveryBoundary';
 import { IntroScreen } from './components/IntroScreen.tsx';
+import { isMistwalker3DEnabled, Mistwalker3DSandboxHost } from './integrations/mistwalker3d/Mistwalker3DBridge';
 
 const App = lazy(() => import('./App.tsx'));
 const PlayerView = lazy(() => import('./components/PlayerView.tsx'));
@@ -45,6 +46,7 @@ if (typeof window !== 'undefined' && window.CanvasRenderingContext2D) {
 
 const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
 const isPlayerView = searchParams ? (searchParams.get('view') === 'player' || searchParams.get('player') === 'true') : false;
+const isDungeon3D = isMistwalker3DEnabled && Boolean(searchParams && (searchParams.get('dungeon3d') === '1' || searchParams.get('view') === 'dungeon3d'));
 
 const INTRO_SEEN_KEY = 'mistwalker_intro_seen_session';
 
@@ -61,6 +63,13 @@ const shouldShowIntro = (): boolean => {
 };
 
 function Root() {
+  if (isDungeon3D) {
+    return (
+      <CrashRecoveryBoundary>
+        <Mistwalker3DSandboxHost />
+      </CrashRecoveryBoundary>
+    );
+  }
   const initialIntro = useState<boolean>(shouldShowIntro)[0];
   const [introMounted, setIntroMounted] = useState<boolean>(initialIntro);
   const [appRevealed, setAppRevealed] = useState<boolean>(!initialIntro);

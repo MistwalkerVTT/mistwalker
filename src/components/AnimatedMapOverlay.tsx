@@ -2450,6 +2450,14 @@ export const AnimatedFeaturesKonvaImage: React.FC<AnimatedFeaturesKonvaImageProp
 
     const render = (currentTime: number) => {
       if (!isMounted) return;
+      if (typeof document !== 'undefined' && document.hidden) {
+        animFrameIdRef.current = requestAnimationFrame(render);
+        return;
+      }
+      if (currentTime - lastTimeRef.current < 33) {
+        animFrameIdRef.current = requestAnimationFrame(render);
+        return;
+      }
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 

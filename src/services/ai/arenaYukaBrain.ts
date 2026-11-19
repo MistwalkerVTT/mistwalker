@@ -4,7 +4,11 @@
 import * as YUKA from 'yuka';
 import { HudActionItem, HudCharacterData } from '../../types/hud';
 import { HazardZone } from '../../types/hazard';
-import { WallSegment } from '../../types';
+import { RoomAnnotation, SceneToken, WallSegment } from '../../types';
+import {
+  evaluateTacticalNpcTurn,
+  TacticalTurnDecision
+} from './tacticalNpcBrain';
 import {
   TacticalCombatantView,
   AiArchetypeRole,
@@ -33,6 +37,11 @@ export interface EvaluatedTacticalGoal {
   useDash: boolean;
   finalPositionPx: { x: number; y: number };
   pathWaypointsPx: Array<{ x: number; y: number }>;
+  hasAdvantage?: boolean;
+  advantageReason?: string;
+  triggeredCharge?: boolean;
+  usedFlybyRetreat?: boolean;
+  retreatToPositionPx?: { x: number; y: number };
 }
 
 /**
@@ -156,7 +165,8 @@ export class YukaArenaMonsterBrain {
     rows: number,
     gridSize: number,
     rechargedAbilities: string[] = [],
-    hazards?: HazardZone[]
+    hazards?: HazardZone[],
+    annotations?: RoomAnnotation[]
   ): EvaluatedTacticalGoal {
     const enemies = allCombatants.filter((c) => c.team !== actor.team && c.currentHp > 0);
     const allies = allCombatants.filter((c) => c.team === actor.team && c.currentHp > 0);
@@ -165,6 +175,80 @@ export class YukaArenaMonsterBrain {
     const maxWalkSteps = Math.max(1, Math.floor(actor.speedFt / 5));
 
     const { threatened, nearestEnemy } = checkThreatenedInMelee(actor, enemies, gridSize);
+
+    // Run D&D 2024 Tactical NPC & Companion Brain (Pack Tactics, Charge, Flyby, Hazard Polygons)
+    const mapWidthPx = cols * gridSize;
+    const mapHeightPx = rows * gridSize;
+    const tacticalAnnotations: RoomAnnotation[] =
+      annotations && annotations.length > 0
+        ? annotations
+        : (hazards || []).map((hz) => {
+            const pts =
+              hz.polygonPoints && hz.polygonPoints.length >= 6
+                ? hz.polygonPoints.map((val, idx) =>
+                    idx % 2 === 0 ? (val / 100) * mapWidthPx : (val / 100) * mapHeightPx
+                  )
+                : [
+                    (hz.bounds.x / 100) * mapWidthPx,
+                    (hz.bounds.y / 100) * mapHeightPx,
+                    ((hz.bounds.x + hz.bounds.width) / 100) * mapWidthPx,
+                    (hz.bounds.y / 100) * mapHeightPx,
+                    ((hz.bounds.x + hz.bounds.width) / 100) * mapWidthPx,
+                    ((hz.bounds.y + hz.bounds.height) / 100) * mapHeightPx,
+                    (hz.bounds.x / 100) * mapWidthPx,
+                    ((hz.bounds.y + hz.bounds.height) / 100) * mapHeightPx,
+                  ];
+            return {
+              id: hz.id,
+              type: 'hazard',
+              isHazard: true,
+              label: hz.name || hz.type,
+              roomName: hz.type,
+              bounds: hz.bounds,
+              polygonPoints: pts,
+              boxedText: '',
+              dmNotes: '',
+            };
+          });
+
+    const toSceneToken = (c: TacticalCombatantView, isActor = false): SceneToken => ({
+      id: c.id,
+      name: c.name,
+      avatarUrl: '',
+      x: c.x,
+      y: c.y,
+      hp: c.maxHp,
+      maxHp: c.maxHp,
+      currentHp: c.currentHp,
+      ac: c.ac,
+      size: c.size,
+      speed: c.speedFt,
+      isFlying: c.isFlying,
+      elevation: c.elevation,
+      isPlayer: c.team === 'gold',
+      isMonster: c.team === 'crimson',
+      ...(isActor
+        ? {
+            customMonsterData: {
+              traits: [...(hud.special ?? []), ...(hud.actions ?? [])].map((a) => ({
+                name: a.name,
+                description: a.description,
+              })),
+              actions: hud.attacks ?? hud.actions ?? [],
+            },
+          }
+        : {}),
+    });
+
+    const actorSceneToken = toSceneToken(actor, true);
+    const allSceneTokens = allCombatants.map((c) => toSceneToken(c, c.id === actor.id));
+    const tacticalDecision: TacticalTurnDecision = evaluateTacticalNpcTurn({
+      actor: actorSceneToken,
+      allTokens: allSceneTokens,
+      annotations: tacticalAnnotations,
+      gridSize,
+      isAllyOfPlayers: actor.team === 'gold',
+    });
 
     // 1. Identify Recharge Breath Weapon
     const rechargeAction = hud.actions.find(
@@ -190,9 +274,45 @@ export class YukaArenaMonsterBrain {
       hud.items.find((i) => i.isHeal) ||
       null;
 
-    // Target Selection: Focus lowest HP enemy or nearest enemy
+    // Target Selection: Prefer Tactical Brain target (Pack Tactics / Charge / low HP), else lowest HP / nearest
+    const tacticalTarget = tacticalDecision.targetTokenId
+      ? enemies.find((e) => e.id === tacticalDecision.targetTokenId)
+      : undefined;
     const targetEnemy =
-      enemies.slice().sort((a, b) => a.currentHp - b.currentHp)[0] || nearestEnemy || enemies[0];
+      tacticalTarget ||
+      enemies.slice().sort((a, b) => a.currentHp - b.currentHp)[0] ||
+      nearestEnemy ||
+      enemies[0];
+
+    const tacticalTags: string[] = [];
+    if (tacticalDecision.hasAdvantage) tacticalTags.push(tacticalDecision.advantageReason || 'Pack Tactics Advantage');
+    if (tacticalDecision.triggeredCharge) tacticalTags.push('20ft Charge');
+    if (tacticalDecision.usedFlybyRetreat) tacticalTags.push('Flyby Retreat');
+    const tacticalSuffix = tacticalTags.length > 0 ? ` [${tacticalTags.join(' • ')}]` : '';
+
+    const clampToArenaPx = (pos: { x: number; y: number }) => ({
+      x: Math.max(0, Math.min((cols - (actor.size || 1)) * gridSize, pos.x)),
+      y: Math.max(0, Math.min((rows - (actor.size || 1)) * gridSize, pos.y)),
+    });
+
+    const applyTacticalOutcome = (goal: EvaluatedTacticalGoal, allowFlybyRetreat = false): EvaluatedTacticalGoal => {
+      const enriched: EvaluatedTacticalGoal = {
+        ...goal,
+        reason: `${goal.reason}${tacticalSuffix}`,
+        hasAdvantage: tacticalDecision.hasAdvantage,
+        advantageReason: tacticalDecision.advantageReason,
+        triggeredCharge: tacticalDecision.triggeredCharge,
+        usedFlybyRetreat: tacticalDecision.usedFlybyRetreat,
+      };
+      if (allowFlybyRetreat && tacticalDecision.usedFlybyRetreat && tacticalDecision.retreatToPosition) {
+        const clampedRetreat = clampToArenaPx(tacticalDecision.retreatToPosition);
+        enriched.retreatToPositionPx = clampedRetreat;
+        enriched.finalPositionPx = clampedRetreat;
+        enriched.pathWaypointsPx = [...goal.pathWaypointsPx, clampedRetreat];
+        enriched.useDisengage = true;
+      }
+      return enriched;
+    };
 
     if (!targetEnemy) {
       return {
@@ -318,7 +438,7 @@ export class YukaArenaMonsterBrain {
     if (multiattackStrikes.length > 1) {
       // If already in 5ft melee reach, unleash full sequence immediately
       if (currentDistFt <= 5) {
-        return {
+        return applyTacticalOutcome({
           type: 'multiattack',
           desirability: 0.89,
           reason: `⚔️ In melee range with ${targetEnemy.name}! Unleashing Multiattack (${multiattackStrikes.map((s) => s.name).join(' + ')})!`,
@@ -332,7 +452,7 @@ export class YukaArenaMonsterBrain {
           useDash: false,
           finalPositionPx: { x: actor.x, y: actor.y },
           pathWaypointsPx: []
-        };
+        }, true);
       }
 
       // Find adjacent cell to target that is reachable within this turn's walk speed
@@ -360,7 +480,7 @@ export class YukaArenaMonsterBrain {
         const waypoints = steps.map((s) => ({ x: s.col * gridSize, y: s.row * gridSize }));
         const finalCell = steps.length > 0 ? steps[steps.length - 1] : startCell;
 
-        return {
+        return applyTacticalOutcome({
           type: 'multiattack',
           desirability: 0.87,
           reason: `🏃 Closing distance to ${targetEnemy.name} (${steps.length * 5} ft) and executing Multiattack (${multiattackStrikes.length} strikes)!`,
@@ -374,7 +494,7 @@ export class YukaArenaMonsterBrain {
           useDash: false,
           finalPositionPx: { x: finalCell.col * gridSize, y: finalCell.row * gridSize },
           pathWaypointsPx: waypoints
-        };
+        }, true);
       }
     }
 
@@ -386,7 +506,7 @@ export class YukaArenaMonsterBrain {
       (a) => !a.isHeal && currentDistFt <= (a.rangeFt || 5)
     );
     if (immediateOffensive) {
-      return {
+      return applyTacticalOutcome({
         type: 'melee_charge',
         desirability: 0.8,
         reason: `🎯 In range of ${targetEnemy.name} (${currentDistFt} ft)! Attacking with ${immediateOffensive.name}!`,
@@ -400,7 +520,7 @@ export class YukaArenaMonsterBrain {
         useDash: false,
         finalPositionPx: { x: actor.x, y: actor.y },
         pathWaypointsPx: []
-      };
+      }, (immediateOffensive.rangeFt || 5) <= 10);
     }
 
     // 2. Check if moving normal walk speed allows casting a ranged attack/spell
@@ -413,7 +533,7 @@ export class YukaArenaMonsterBrain {
       const finalWalkCell = walkSteps.length > 0 ? walkSteps[walkSteps.length - 1] : startCell;
       const distAfterWalkFt = computeGridDistanceFt(finalWalkCell, targetCell);
       if (distAfterWalkFt <= rFt) {
-        return {
+        return applyTacticalOutcome({
           type: 'melee_charge',
           desirability: 0.78,
           reason: `🏹 Advancing ${walkSteps.length * 5} ft into range (${distAfterWalkFt} ft) and casting ${rangedOffensive.name} on ${targetEnemy.name}!`,
@@ -427,7 +547,7 @@ export class YukaArenaMonsterBrain {
           useDash: false,
           finalPositionPx: { x: finalWalkCell.col * gridSize, y: finalWalkCell.row * gridSize },
           pathWaypointsPx: walkSteps.map((s) => ({ x: s.col * gridSize, y: s.row * gridSize }))
-        };
+        }, false);
       }
     }
 
@@ -436,7 +556,7 @@ export class YukaArenaMonsterBrain {
     const waypoints = dashSteps.map((s) => ({ x: s.col * gridSize, y: s.row * gridSize }));
     const finalDashCell = dashSteps.length > 0 ? dashSteps[dashSteps.length - 1] : startCell;
 
-    return {
+    return applyTacticalOutcome({
       type: 'dash_advance',
       desirability: 0.65,
       reason: `⏩ Out of reach (${currentDistFt} ft). Using Dash action to advance ${dashSteps.length * 5} ft towards ${targetEnemy.name}!`,
@@ -450,6 +570,6 @@ export class YukaArenaMonsterBrain {
       useDash: true,
       finalPositionPx: { x: finalDashCell.col * gridSize, y: finalDashCell.row * gridSize },
       pathWaypointsPx: waypoints
-    };
+    }, false);
   }
 }

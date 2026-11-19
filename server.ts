@@ -1063,6 +1063,34 @@ async function startServer() {
     }));
   }
 
+  // Optional local @mistwalker/3d add-on mount (dormant on Render; active only when VITE_ENABLE_3D=true locally)
+  if (process.env.VITE_ENABLE_3D === 'true') {
+    const addon3DRoot = path.resolve(process.cwd(), '../Mistwalker 3D');
+    const dungeon3dAssetsDir = path.join(addon3DRoot, 'public', 'assets', 'dungeon3d');
+    const models3dAssetsDir = path.join(addon3DRoot, 'public', 'assets', 'models3d');
+    if (fs.existsSync(dungeon3dAssetsDir)) {
+      app.use('/assets/dungeon3d', express.static(dungeon3dAssetsDir));
+    }
+    if (fs.existsSync(models3dAssetsDir)) {
+      app.use('/assets/models3d', express.static(models3dAssetsDir));
+    }
+    const routes3DPath = path.join(addon3DRoot, 'server', '3dRoutes.ts');
+    if (fs.existsSync(routes3DPath)) {
+      try {
+        const { pathToFileURL } = await import('url');
+        const mod3d = await import(/* @vite-ignore */ pathToFileURL(routes3DPath).href);
+        if (typeof mod3d.create3DRouter === 'function') {
+          app.use('/api/3d', mod3d.create3DRouter({
+            aiAssetsDir: path.join(dungeon3dAssetsDir, 'ai'),
+          }));
+          console.log('[MistWalker 3D] Local add-on routes mounted at /api/3d');
+        }
+      } catch (err) {
+        console.warn('[MistWalker 3D] Could not mount local 3dRoutes.ts:', err);
+      }
+    }
+  }
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");

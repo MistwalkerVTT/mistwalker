@@ -552,6 +552,10 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
           if (effect.paradigm === 'line') {
             const lineLength = Math.max(gridSize * 4, (sizeFt / 5) * gridSize);
             const beamHeight = Math.max(gridSize * 2.2, lineLength * 0.22);
+            const isSunbeam = effect.assetKey === 'sunbeam' || effect.name?.toLowerCase().includes('sunbeam');
+            const beamFilter = isSunbeam
+              ? 'hue-rotate(-150deg) saturate(2.4) brightness(1.6) drop-shadow(0 0 16px rgba(253, 224, 71, 0.8))'
+              : 'drop-shadow(0 0 4px rgba(255, 255, 255, 0.25))';
             return (
               <video
                 key={effect.id}
@@ -578,7 +582,7 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                   transformOrigin: '10% 50%',
                   objectFit: 'fill',
                   opacity: effect.opacity ?? 1.0,
-                  filter: 'drop-shadow(0 0 4px rgba(255, 255, 255, 0.25))',
+                  filter: beamFilter,
                   pointerEvents: 'none'
                 }}
               />

@@ -1787,12 +1787,12 @@ export const JB2A_REGISTRY: Jb2aAssetDefinition[] = [
     "rangeFt": 60,
     "defaultSizeFt": 60,
     "color": "#fde047",
-    "webm": "/jb2a/Library/1st_Level/Guiding_Bolt/GuidingBolt_01_Regular_BlueYellow_05ft_600x400.webm",
+    "webm": "/jb2a/Library/3rd_Level/Lightning_Bolt/LightningBolt_01_Regular_Blue_4000x200.webm",
     "thumb": "/jb2a/Library/1st_Level/Guiding_Bolt/GuidingBolt_01_Regular_BlueYellow_Thumb.webp",
     "isPersistent": false,
     "blendMode": "screen",
     "soundKey": "sunbeam_laser",
-    "tags": ["sunbeam", "solar ray", "sunlight beam", "radiant ray"]
+    "tags": ["sunbeam", "solar ray", "sunlight beam", "radiant ray", "fire beam"]
   },
   {
     "id": "bonfire",

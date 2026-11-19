@@ -33,6 +33,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { Stage, Layer, Image as KonvaImage, Rect, Circle, Line, Text, Group, Wedge } from 'react-konva';
+import { isMistwalker3DEnabled, Mistwalker3DModeToggle, Mistwalker3DViewportHost } from './integrations/mistwalker3d/Mistwalker3DBridge';
 import Konva from 'konva';
 
 // High-performance canvas and drag defaults
@@ -327,6 +328,8 @@ const loadDmBackupState = () => {
 };
 
 export default function App() {
+  const [renderMode, setRenderMode] = useState<'2d' | '3d'>('2d');
+  const [scene3d, setScene3d] = useState<any>(undefined);
   const initialDmBackupRef = useRef(loadDmBackupState());
   const initialDmBackup = initialDmBackupRef.current;
 
@@ -4666,20 +4669,8 @@ export default function App() {
           return;
         }
       }
-      const isCreatureTargeted = Boolean(
-        activeDmMonsterAction.hitBonus !== undefined ||
-        activeDmMonsterAction.category === 'attacks' ||
-        activeDmMonsterAction.type === 'attack' ||
-        activeDmMonsterAction.isHeal ||
-        (activeDmMonsterAction.rangeFt !== undefined && activeDmMonsterAction.rangeFt <= 5)
-      );
-      if (isCreatureTargeted) {
-        toast.info(`Click on a creature token to target ${activeDmMonsterAction.name}.`);
-        return;
-      }
-      if (singleSelected) {
-        executeMonsterRoll(singleSelected, activeDmMonsterAction);
-      }
+      // If no creature was targeted, just trigger the visual effect animation without rolling dice
+      toast.success(`Cast ${activeDmMonsterAction.name}!`);
       setActiveDmMonsterAction(null);
     } else {
       toast.success(`Cast ${activeEquippedAsset.name}!`);
@@ -7597,16 +7588,9 @@ export default function App() {
           return;
         }
 
-        const isCreatureTargeted = Boolean(
-          activeDmMonsterAction.hitBonus !== undefined ||
-          activeDmMonsterAction.category === 'attacks' ||
-          activeDmMonsterAction.type === 'attack' ||
-          activeDmMonsterAction.isHeal ||
-          (activeDmMonsterAction.rangeFt !== undefined && activeDmMonsterAction.rangeFt <= 5)
-        );
-
-        if (isCreatureTargeted) {
-          toast.info(`Click on a creature token to target ${activeDmMonsterAction.name} (or click Target Self in the dock).`);
+        // If no target token, play spell/action animation at originPoint or from aimOrigin without requiring a target
+        if (aimOrigin && Math.hypot(originPoint.x - aimOrigin.x, originPoint.y - aimOrigin.y) > 20) {
+          castSpellAt(aimOrigin, originPoint);
           return;
         }
       }
@@ -8403,16 +8387,9 @@ export default function App() {
           return;
         }
 
-        const isCreatureTargeted = Boolean(
-          activeDmMonsterAction.hitBonus !== undefined ||
-          activeDmMonsterAction.category === 'attacks' ||
-          activeDmMonsterAction.type === 'attack' ||
-          activeDmMonsterAction.isHeal ||
-          (activeDmMonsterAction.rangeFt !== undefined && activeDmMonsterAction.rangeFt <= 5)
-        );
-
-        if (isCreatureTargeted) {
-          toast.info(`Click on a creature token to target ${activeDmMonsterAction.name} (or click Target Self in the dock).`);
+        const origin = aimOrigin || aimState.startPoint;
+        if (origin && Math.hypot(endPoint.x - origin.x, endPoint.y - origin.y) > 20) {
+          castSpellAt(origin, endPoint);
           return;
         }
       }
@@ -10091,6 +10068,73 @@ export default function App() {
               onChange={handleRelinkMapImage}
             />
 
+            {isMistwalker3DEnabled && (
+              <Mistwalker3DModeToggle
+                renderMode={renderMode}
+                onRenderModeChange={setRenderMode}
+                compact
+                className="fixed top-3 right-3 z-[60]"
+              />
+            )}
+
+            {isMistwalker3DEnabled && renderMode === '3d' && (
+              <div className="absolute inset-0 z-[25] bg-zinc-950 flex">
+                <Mistwalker3DViewportHost
+                  sceneId={activeSceneInfo?.sceneId || 'dm_scene'}
+                  sceneTitle={activeSceneInfo?.sceneTitle || 'MistWalker 3D'}
+                  mapUrl={imageFile || (activeSceneInfo as any)?.mapUrl || undefined}
+                  mapWidth={activeSceneInfo?.mapWidth || getMapDimensions().width || undefined}
+                  mapHeight={activeSceneInfo?.mapHeight || getMapDimensions().height || undefined}
+                  gridSize={gridSize}
+                  gridOffsetX={gridOffsetX}
+                  gridOffsetY={gridOffsetY}
+                  walls={walls}
+                  tokens={tokens}
+                  roomAnnotations={roomAnnotations}
+                  boardAnimatedFeatures={boardAnimatedFeatures}
+                  scene3d={scene3d}
+                  selectedTokenId={selectedToken?.id || null}
+                  panToolActive={isSpacePressed}
+                  isDm={true}
+                  campaignMode={campaignMode}
+                  activeEquippedAsset={activeEquippedAsset}
+                  effects={effects}
+                  isFogVisible={isFogVisible}
+                  reveals={reveals}
+                  polygonReveals={polygonReveals}
+                  visionConfig={visionConfig}
+                  fogResetKey={fogResetKey}
+                  setTokens={setTokens}
+                  setWalls={setWalls}
+                  setScene3d={setScene3d}
+                  onSaveScene={() => setShowSaveToCampaignModal(true)}
+                  onToggleFog={(vis) => setIsFogVisible(vis)}
+                  onResetFog={() => {
+                    setReveals([]);
+                    setPolygonReveals([]);
+                    setIsFogVisible(true);
+                    setFogResetKey((k) => k + 1);
+                  }}
+                  onAddReveal={(rev) => setReveals((prev) => [...prev, rev])}
+                  onRemoveRevealsAt={(px, py, rad) =>
+                    setReveals((prev) => prev.filter((r) => Math.hypot(r.x - px, r.y - py) > rad + r.radius * 0.5))
+                  }
+                  onAddPolygonReveal={(poly) => setPolygonReveals((prev) => [...prev, poly])}
+                  onVisionConfigChange={setVisionConfig}
+                  onSelectToken={(id) => {
+                    setSelectedTokenIds(id ? [id] : []);
+                    setSelectedToken(id ? tokens.find((t) => t.id === id) || null : null);
+                  }}
+                  onSelectZone={(zone) => {
+                    setSelectedRoomAnnotation(zone);
+                    setSelectedZoneForSidePanel(zone);
+                    setDrawerInitialTab('room');
+                    setIsRoomDrawerOpen(true);
+                  }}
+                />
+              </div>
+            )}
+
             <Stage
               width={Math.max(100, (dimensions.width || (typeof window !== 'undefined' ? window.innerWidth : 1920)) - 64)}
               height={Math.max(100, dimensions.height || (typeof window !== 'undefined' ? window.innerHeight : 1080))}
@@ -11139,7 +11183,7 @@ export default function App() {
               combatants={combatTrackerCombatants}
               activeEquippedAsset={activeEquippedAsset}
               aimOrigin={aimOrigin}
-              aimCurrent={aimCurrent}
+              aimCurrent={(activeEquippedAsset?.isPersistent || activeEquippedAsset?.paradigm === 'aura') ? aimCurrent : null}
               onEffectComplete={handleEffectComplete}
               onDispelEffect={handleDispelEffect}
               onClearTokenAura={handleClearTokenAura}

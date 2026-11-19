@@ -18,6 +18,9 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "@mistwalker/3d": [
+        "./src/integrations/mistwalker3d/stub.ts"
       ]
     },
     "allowImportingTsExtensions": true,
