@@ -14,7 +14,9 @@ MistWalker operates as a single-target, high-reliability live production cloud s
 
 ---
 
-## Production Deployment Workflow
+## Production Deployment Workflow (Mandatory Rule)
+
+**Rule**: Every update/change MUST be committed to `v1-stable`, pushed to `origin/v1-stable`, and deployed to Render (`https://mistwalker.onrender.com/`) automatically after build verification—do not leave verified updates local-only.
 
 1. **Active Branch**: All work is performed on `v1-stable`.
 2. **Build Verification**: Compile with `npm run build` (via `cmd.exe /c "npm run build"`) to verify zero TypeScript or bundling errors.

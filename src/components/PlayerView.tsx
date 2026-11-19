@@ -829,9 +829,6 @@ const PlayerToken = React.memo(({
             stroke="#10b981"
             strokeWidth={3}
             dash={[6, 4]}
-            shadowColor="#10b981"
-            shadowBlur={10}
-            shadowForStrokeEnabled={false}
             perfectDrawEnabled={false}
             listening={false}
           />
@@ -918,9 +915,6 @@ const PlayerToken = React.memo(({
           radius={radius}
           stroke={isCondition ? '#ef4444' : isClaimed ? '#10b981' : flightMetrics.isElevated ? flightMetrics.tierColor : isAlly ? '#eab308' : token.isPlayer ? '#38bdf8' : '#ef4444'}
           strokeWidth={isClaimed ? 3.5 : flightMetrics.isElevated ? 3.2 : isAlly ? 3 : 2.5}
-          shadowColor={isClaimed ? '#10b981' : flightMetrics.isElevated ? flightMetrics.tierColor : isAlly ? '#eab308' : undefined}
-          shadowBlur={isClaimed ? 8 : flightMetrics.isElevated ? 10 : isAlly ? 6 : 0}
-          shadowForStrokeEnabled={false}
           perfectDrawEnabled={false}
           listening={false}
         />
@@ -956,10 +950,6 @@ const PlayerToken = React.memo(({
               stroke={isAlly ? "#eab308" : (hpRatio <= 0.25 ? "#ef4444" : "#475569")}
               strokeWidth={isAlly ? 1.5 : (hpRatio <= 0.25 ? 1.5 : 1)}
               cornerRadius={Math.max(4, Math.round(pillHeight * 0.2))}
-              shadowColor="#000000"
-              shadowBlur={4}
-              shadowOpacity={0.7}
-              shadowOffsetY={2}
               perfectDrawEnabled={false}
             />
             {/* Background HP Track */}
@@ -994,8 +984,6 @@ const PlayerToken = React.memo(({
               fontStyle="bold"
               fontFamily="monospace"
               fill="#ffffff"
-              shadowColor="#000000"
-              shadowBlur={2}
               perfectDrawEnabled={false}
             />
           </Group>
@@ -1009,10 +997,11 @@ const PlayerToken = React.memo(({
             x={-30}
             align="center"
             fill="white"
+            stroke="#000000"
+            strokeWidth={2}
+            fillAfterStrokeEnabled={true}
             fontSize={nameFontSize}
             fontStyle="bold"
-            shadowColor="#000000"
-            shadowBlur={3}
             perfectDrawEnabled={false}
           />
           {mergedConditions.length > 0 && (
@@ -1712,7 +1701,9 @@ export default function PlayerView() {
   }, [stagePos]);
   const stageDragRafIdRef = useRef<number | null>(null);
   const wheelRafIdRef = useRef<number | null>(null);
+  const wheelDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingWheelStateRef = useRef<{ scale: number; pos: { x: number; y: number } } | null>(null);
+  const lastDragRulerUpdateRef = useRef<number>(0);
 
   // Connection & Active Scene
   const [isConnected, setIsConnected] = useState(false);
@@ -2721,6 +2712,12 @@ export default function PlayerView() {
           }
           return state.activeSceneInfo!;
         });
+        if (state.activeSceneInfo.campaignTitle) {
+          setActiveCampaignTitle(state.activeSceneInfo.campaignTitle);
+          if (state.activeSceneInfo.campaignId) {
+            setActiveCampaignId(state.activeSceneInfo.campaignId);
+          }
+        }
       }
 
       // Combat state fallback in SYNC_STATE
@@ -3194,6 +3191,14 @@ export default function PlayerView() {
     fetch('/api/ddb/campaigns/sync-status')
       .then(res => res.json())
       .then(data => {
+        const serverActiveCampId = data?.status?.activeCampaignId;
+        if (serverActiveCampId) {
+          const matchedCamp = (data?.status?.campaigns || []).find((c: any) => String(c.id) === String(serverActiveCampId));
+          setActiveCampaignId(prev => prev || String(serverActiveCampId));
+          if (matchedCamp?.name) {
+            setActiveCampaignTitle(prev => prev || matchedCamp.name);
+          }
+        }
         const chars = data?.status?.cachedCharacters;
         if (Array.isArray(chars) && chars.length > 0) {
           console.log(`[PlayerView] Syncing ${chars.length} D&D Beyond characters on load.`);
@@ -3577,28 +3582,28 @@ export default function PlayerView() {
 
   // Real-time dragged token movement handler (updates ruler distance & throttles socket emit)
   const handleDragMoveToken = useCallback((id: string, rawX: number, rawY: number) => {
-    setTokenDragState(prev => {
-      if (!prev || prev.tokenId !== id) return prev;
-      const dx = rawX - prev.originX;
-      const dy = rawY - prev.originY;
-      const distancePx = Math.hypot(dx, dy);
-      const distanceFt = Math.round(distancePx / gridSize) * 5;
-      const remainingFt = prev.baseSpeed - distanceFt;
-      return {
-        ...prev,
-        currentX: rawX,
-        currentY: rawY,
-        distancePx,
-        distanceFt,
-        remainingFt
-      };
-    });
-
     const now = Date.now();
-    // Keep local tokens array updated in real-time so attached auras track dragging smoothly
-    setTokens(prev => prev.map(t => t.id === id ? { ...t, x: rawX, y: rawY } : t));
+    if (now - lastDragRulerUpdateRef.current >= 32) {
+      lastDragRulerUpdateRef.current = now;
+      setTokenDragState(prev => {
+        if (!prev || prev.tokenId !== id) return prev;
+        const dx = rawX - prev.originX;
+        const dy = rawY - prev.originY;
+        const distancePx = Math.hypot(dx, dy);
+        const distanceFt = Math.round(distancePx / gridSize) * 5;
+        const remainingFt = prev.baseSpeed - distanceFt;
+        return {
+          ...prev,
+          currentX: rawX,
+          currentY: rawY,
+          distancePx,
+          distanceFt,
+          remainingFt
+        };
+      });
+    }
 
-    if (now - lastEmitTimeRef.current > 30) {
+    if (now - lastEmitTimeRef.current > 50) {
       lastEmitTimeRef.current = now;
       if (socketRef.current?.connected) {
         socketRef.current.emit('MOVE_TOKEN', { id, x: rawX, y: rawY });
@@ -8229,17 +8234,18 @@ export default function PlayerView() {
           }
 
           pendingWheelStateRef.current = { scale: clampedScale, pos: newPos };
-          if (!wheelRafIdRef.current) {
-            wheelRafIdRef.current = requestAnimationFrame(() => {
-              wheelRafIdRef.current = null;
-              if (pendingWheelStateRef.current) {
-                const { scale, pos } = pendingWheelStateRef.current;
-                pendingWheelStateRef.current = null;
-                setStageScale(scale);
-                setStagePos(pos);
-              }
-            });
+          if (wheelDebounceTimerRef.current) {
+            clearTimeout(wheelDebounceTimerRef.current);
           }
+          wheelDebounceTimerRef.current = setTimeout(() => {
+            wheelDebounceTimerRef.current = null;
+            if (pendingWheelStateRef.current) {
+              const { scale, pos } = pendingWheelStateRef.current;
+              pendingWheelStateRef.current = null;
+              setStageScale(scale);
+              setStagePos(pos);
+            }
+          }, 120);
         }}
       >
         {/* Layer 1: Background Map Image or Video */}
@@ -8315,6 +8321,8 @@ export default function PlayerView() {
           mousePos={STATIC_MOUSE_POS}
           fogResetKey={fogResetKey}
           animatedFeatures={boardAnimatedFeatures}
+          precomputedVisionSources={playerVisionSources}
+          precomputedFovPolygons={activeFovPolygons}
         />
 
         {/* Tactical Map Labels (Player Visible Navigation Points: Stairs, Ladders, Portals) */}
@@ -9624,6 +9632,8 @@ export default function PlayerView() {
             }}
             currentCampaignId={activeCampaignId}
             compendiumCharacters={compendiumCharacters}
+            tokens={tokens}
+            activeSceneInfo={activeSceneInfo}
             onConfirmCampaign={handleConfirmCampaignSelection}
           />
         </React.Suspense>
