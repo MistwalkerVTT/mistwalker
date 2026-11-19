@@ -279,3 +279,234 @@ html, body {
   animation: turn-banner-swoop 1.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* ============================================================================
+   Compositor-Thread GPU Misty Step / Arcane Blink FX
+   Strictly animates transform + opacity (0% CPU video decode, 60-120 FPS lock)
+   ============================================================================ */
+
+/* Departure: mist swirls inward, peaks in a silvery flash, then dissolves */
+@keyframes misty-depart-plume-cw {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(1.22) rotate(0deg);
+  }
+  32% {
+    opacity: 0.92;
+    transform: translate3d(0, 0, 0) scale(0.86) rotate(42deg);
+  }
+  58% {
+    opacity: 0.72;
+    transform: translate3d(0, 0, 0) scale(0.56) rotate(95deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(1.38) rotate(145deg);
+  }
+}
+
+@keyframes misty-depart-plume-ccw {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(1.1) rotate(25deg);
+  }
+  35% {
+    opacity: 0.85;
+    transform: translate3d(0, 0, 0) scale(0.75) rotate(-32deg);
+  }
+  65% {
+    opacity: 0.55;
+    transform: translate3d(0, 0, 0) scale(1.05) rotate(-80deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(1.48) rotate(-130deg);
+  }
+}
+
+@keyframes misty-depart-ring {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(1.18) rotate(0deg);
+  }
+  28% {
+    opacity: 0.95;
+    transform: translate3d(0, 0, 0) scale(0.88) rotate(28deg);
+  }
+  55% {
+    opacity: 0.85;
+    transform: translate3d(0, 0, 0) scale(0.45) rotate(68deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(0.18) rotate(110deg);
+  }
+}
+
+@keyframes misty-depart-flash {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(0.35);
+  }
+  38% {
+    opacity: 0.95;
+    transform: translate3d(0, 0, 0) scale(1.05);
+  }
+  62% {
+    opacity: 0.65;
+    transform: translate3d(0, 0, 0) scale(0.65);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(0.12);
+  }
+}
+
+/* Arrival: bright arcane flash blooms outward into billowing silvery mist */
+@keyframes misty-arrive-plume-cw {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(0.28) rotate(-30deg);
+  }
+  22% {
+    opacity: 0.96;
+    transform: translate3d(0, 0, 0) scale(0.95) rotate(24deg);
+  }
+  62% {
+    opacity: 0.62;
+    transform: translate3d(0, 0, 0) scale(1.36) rotate(78deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(1.68) rotate(128deg);
+  }
+}
+
+@keyframes misty-arrive-plume-ccw {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(0.36) rotate(20deg);
+  }
+  26% {
+    opacity: 0.88;
+    transform: translate3d(0, 0, 0) scale(1.08) rotate(-28deg);
+  }
+  68% {
+    opacity: 0.5;
+    transform: translate3d(0, 0, 0) scale(1.48) rotate(-82deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(1.82) rotate(-135deg);
+  }
+}
+
+@keyframes misty-arrive-ring {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(0.25) rotate(-15deg);
+  }
+  20% {
+    opacity: 0.98;
+    transform: translate3d(0, 0, 0) scale(0.86) rotate(20deg);
+  }
+  65% {
+    opacity: 0.52;
+    transform: translate3d(0, 0, 0) scale(1.32) rotate(68deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(1.56) rotate(105deg);
+  }
+}
+
+@keyframes misty-arrive-flash {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(0.2);
+  }
+  16% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1.18);
+  }
+  48% {
+    opacity: 0.55;
+    transform: translate3d(0, 0, 0) scale(0.92);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(0.4);
+  }
+}
+
+/* Ethereal drifting silver-blue spark motes (parameterized by CSS custom vars) */
+@keyframes misty-mote-drift {
+  0% {
+    opacity: 0;
+    transform: translate3d(var(--mx0, 0px), var(--my0, 0px), 0) scale(0.35);
+  }
+  24% {
+    opacity: 1;
+    transform: translate3d(var(--mx1, 0px), var(--my1, 0px), 0) scale(1.15);
+  }
+  72% {
+    opacity: 0.65;
+    transform: translate3d(var(--mx2, 0px), var(--my2, 0px), 0) scale(0.8);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--mx3, 0px), var(--my3, 0px), 0) scale(0.2);
+  }
+}
+
+.misty-gpu-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+}
+
+.misty-depart-plume-cw {
+  animation: misty-depart-plume-cw 500ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.misty-depart-plume-ccw {
+  animation: misty-depart-plume-ccw 500ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.misty-depart-ring {
+  animation: misty-depart-ring 460ms cubic-bezier(0.32, 0, 0.67, 0) forwards;
+}
+
+.misty-depart-flash {
+  animation: misty-depart-flash 420ms ease-out forwards;
+}
+
+.misty-arrive-plume-cw {
+  animation: misty-arrive-plume-cw 640ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.misty-arrive-plume-ccw {
+  animation: misty-arrive-plume-ccw 640ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.misty-arrive-ring {
+  animation: misty-arrive-ring 580ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.misty-arrive-flash {
+  animation: misty-arrive-flash 440ms ease-out forwards;
+}
+
+.misty-mote {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  border-radius: 9999px;
+  pointer-events: none;
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+  animation: misty-mote-drift var(--mdur, 560ms) cubic-bezier(0.16, 1, 0.3, 1) var(--mdel, 0ms) forwards;
+}
+
+

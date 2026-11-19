@@ -2970,6 +2970,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         loop: isPersistentAura,
         castTime: Date.now(),
         soundKey: asset.soundKey,
+        ownerId: caster.id,
         casterName: caster.name,
         attachedTokenId: attachToTokenId,
         castAtLevel: action.castAtLevel ?? action.level,
@@ -3347,15 +3348,14 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
         const destY = targetPointPx
           ? Math.floor(targetPointPx.y / arenaGridSize) * arenaGridSize
           : target.y;
-        // Step 1: Animate on the player at departure position first
-        spawnArenaVisualEffect(actor, actor, action);
-        // Step 2: Clear departure decoder before blinking & animating at destination so only 1 VP8+alpha decoder runs at a time
+        // Step 1: Departure mist swirls inward at starting position (Point A)
+        spawnArenaVisualEffect(actor, actor, { ...action, name: `${action.name} Departure` });
+        // Step 2: At the silvery departure flash peak (~220ms), bloom arrival mist at Point B and blink combatant
         window.setTimeout(() => {
-          setArenaEffects((prev) => prev.filter((ef) => ef.ownerId !== actor.id || ef.isPersistent || ef.loop));
           spawnArenaVisualEffect(
             { ...actor, x: destX, y: destY },
             { ...actor, x: destX, y: destY },
-            action
+            { ...action, name: `${action.name} Arrival` }
           );
           requestAnimationFrame(() => {
             setCombatants((prev) =>
@@ -3364,7 +3364,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
               )
             );
           });
-        }, 320);
+        }, 220);
         addCombatLog(
           actor.name,
           actor.team,
@@ -4683,6 +4683,14 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       toast.info(`Level ${level} slots: ${nextAvail}/${curSlot.total}`);
     }
   }, [activeCombatant, activeHeroHudData]);
+
+  const handleArenaEffectRemove = useCallback((id: string) => {
+    setArenaEffects((prev) => prev.filter((f) => f.id !== id));
+  }, []);
+
+  const handleArenaEffectInspect = useCallback((eff: VttEffectInstance) => {
+    setInspectedAuraRequest(eff.actionSnapshot ? { action: eff.actionSnapshot, tick: Date.now() } : null);
+  }, []);
 
   if (!isOpen) return null;
 
@@ -6171,9 +6179,9 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           activeEquippedAsset={null}
           aimOrigin={null}
           aimCurrent={null}
-          onEffectComplete={(id) => setArenaEffects((prev) => prev.filter((f) => f.id !== id))}
-          onDispelEffect={(id) => setArenaEffects((prev) => prev.filter((f) => f.id !== id))}
-          onInspectEffect={(eff) => setInspectedAuraRequest(eff.actionSnapshot ? { action: eff.actionSnapshot, tick: Date.now() } : null)}
+          onEffectComplete={handleArenaEffectRemove}
+          onDispelEffect={handleArenaEffectRemove}
+          onInspectEffect={handleArenaEffectInspect}
         />
       </div>
 

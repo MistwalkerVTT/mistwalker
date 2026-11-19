@@ -6199,6 +6199,22 @@ export default function App() {
     });
   }, []);
 
+  const handleInspectEffect = useCallback((effect: VttEffectInstance) => {
+    const lookedUp = lookupDndRuleDetails(effect.name, 'aura', effect.radiusFeet, effect.castAtLevel);
+    setInspectedRuleEntry({
+      ...lookedUp,
+      castAtLevel: effect.castAtLevel ?? lookedUp.castAtLevel,
+      baseLevel: effect.baseLevel ?? lookedUp.baseLevel,
+      damageFormula: effect.damageFormula ?? lookedUp.damageFormula,
+      damageType: effect.damageType ?? lookedUp.damageType,
+      saveDc: effect.saveDc ?? lookedUp.saveDc,
+      saveAbility: effect.saveAbility ?? lookedUp.saveAbility,
+      description: effect.description || lookedUp.description,
+      atHigherLevels: effect.atHigherLevels ?? lookedUp.atHigherLevels,
+      radiusFeet: effect.radiusFeet ?? lookedUp.radiusFeet
+    });
+  }, []);
+
   const handleEffectComplete = useCallback((effectId: string) => {
     setEffects(prev => prev.filter(e => e.id !== effectId));
     if (socketRef.current?.connected) {
@@ -11189,21 +11205,7 @@ export default function App() {
               onClearTokenAura={handleClearTokenAura}
               onRemoveTokenBubble={handleRemoveTokenBubble}
               isDM={true}
-              onInspectEffect={(effect) => {
-                const lookedUp = lookupDndRuleDetails(effect.name, 'aura', effect.radiusFeet, effect.castAtLevel);
-                setInspectedRuleEntry({
-                  ...lookedUp,
-                  castAtLevel: effect.castAtLevel ?? lookedUp.castAtLevel,
-                  baseLevel: effect.baseLevel ?? lookedUp.baseLevel,
-                  damageFormula: effect.damageFormula ?? lookedUp.damageFormula,
-                  damageType: effect.damageType ?? lookedUp.damageType,
-                  saveDc: effect.saveDc ?? lookedUp.saveDc,
-                  saveAbility: effect.saveAbility ?? lookedUp.saveAbility,
-                  description: effect.description || lookedUp.description,
-                  atHigherLevels: effect.atHigherLevels ?? lookedUp.atHigherLevels,
-                  radiusFeet: effect.radiusFeet ?? lookedUp.radiusFeet
-                });
-              }}
+              onInspectEffect={handleInspectEffect}
             />
 
             {/* Environmental & Animated Map FX Overlay (Uploaded & Generated Maps) */}

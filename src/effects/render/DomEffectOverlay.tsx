@@ -3,7 +3,7 @@
 // Features 60 FPS zero-overhead GPU compositing, native VP9 alpha transparency,
 // and live animated targeting preview under the cursor while aiming spells.
 
-import React, { useEffect, useCallback, useMemo } from 'react';
+import React, { useEffect, useCallback, useMemo, useRef } from 'react';
 import { X, Sparkles } from 'lucide-react';
 import { VttEffectInstance, Jb2aAssetDefinition } from '../types/effect';
 import { soundCatalog } from '../db/soundCatalog';
@@ -127,16 +127,222 @@ function resolveAttachedToken(
 }
 
 
+const isRapidGpuBlinkEffect = (effect?: VttEffectInstance): boolean => {
+  if (!effect || effect.isPersistent || effect.loop) return false;
+  const key = (effect.assetKey || '').toLowerCase();
+  const name = (effect.name || '').toLowerCase();
+  return (
+    key === 'misty_step' ||
+    key === 'fey_step' ||
+    key === 'shadow_step' ||
+    key === 'clouds_jaunt' ||
+    name.includes('misty step') ||
+    name.includes('fey step') ||
+    name.includes('shadow step') ||
+    name.includes("cloud's jaunt") ||
+    name.includes('clouds jaunt')
+  );
+};
+
+interface BlinkPalette {
+  core: string;
+  inner: string;
+  mid: string;
+  outer: string;
+  ring: string;
+  mote: string;
+}
+
+const getBlinkPalette = (effect: VttEffectInstance): BlinkPalette => {
+  const key = (effect.assetKey || '').toLowerCase();
+  const name = (effect.name || '').toLowerCase();
+  if (key === 'fey_step' || name.includes('fey step')) {
+    return {
+      core: 'rgba(253, 244, 255, 0.96)',
+      inner: 'rgba(232, 121, 249, 0.78)',
+      mid: 'rgba(192, 132, 252, 0.56)',
+      outer: 'rgba(139, 92, 246, 0.3)',
+      ring: '#e879f9',
+      mote: '#f5d0fe'
+    };
+  }
+  if (key === 'shadow_step' || name.includes('shadow step')) {
+    return {
+      core: 'rgba(224, 231, 255, 0.9)',
+      inner: 'rgba(99, 102, 241, 0.75)',
+      mid: 'rgba(67, 56, 202, 0.62)',
+      outer: 'rgba(30, 27, 75, 0.55)',
+      ring: '#818cf8',
+      mote: '#c7d2fe'
+    };
+  }
+  if (key === 'clouds_jaunt' || name.includes('jaunt')) {
+    return {
+      core: 'rgba(255, 255, 255, 0.98)',
+      inner: 'rgba(224, 242, 254, 0.84)',
+      mid: 'rgba(125, 211, 252, 0.55)',
+      outer: 'rgba(56, 189, 248, 0.28)',
+      ring: '#e0f2fe',
+      mote: '#ffffff'
+    };
+  }
+  // Default Misty Step: silvery-blue arcane mist
+  return {
+    core: 'rgba(240, 249, 255, 0.98)',
+    inner: 'rgba(186, 230, 253, 0.82)',
+    mid: 'rgba(129, 140, 248, 0.58)',
+    outer: 'rgba(99, 102, 241, 0.28)',
+    ring: '#bae6fd',
+    mote: '#e0f2fe'
+  };
+};
+
+// Precomputed 8 radial directions for ethereal silver-blue mist motes (zero per-render trig)
+const MISTY_MOTE_VECTORS = [
+  { cos: 1, sin: 0, size: 0.068, delay: 0 },
+  { cos: 0.707, sin: 0.707, size: 0.052, delay: 30 },
+  { cos: 0, sin: 1, size: 0.062, delay: 15 },
+  { cos: -0.707, sin: 0.707, size: 0.048, delay: 45 },
+  { cos: -1, sin: 0, size: 0.066, delay: 20 },
+  { cos: -0.707, sin: -0.707, size: 0.054, delay: 50 },
+  { cos: 0, sin: -1, size: 0.06, delay: 10 },
+  { cos: 0.707, sin: -0.707, size: 0.05, delay: 35 }
+];
+
+const MistyStepGpuEffect: React.FC<{
+  effect: VttEffectInstance;
+  posX: number;
+  posY: number;
+  diameter: number;
+  onComplete: (effect: VttEffectInstance) => void;
+}> = React.memo(({ effect, posX, posY, diameter, onComplete }) => {
+  const isDeparture =
+    effect.id.includes('depart') ||
+    (effect.name || '').toLowerCase().includes('departure');
+  const palette = getBlinkPalette(effect);
+  const effectDiameter = Math.max(diameter * 1.35, 110);
+  const radius = effectDiameter * 0.5;
+  const totalDurationMs = isDeparture ? 520 : 660;
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      onComplete(effect);
+    }, totalDurationMs);
+    return () => window.clearTimeout(timer);
+  }, [effect, onComplete, totalDurationMs]);
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: `${posX}px`,
+        top: `${posY}px`,
+        width: `${effectDiameter}px`,
+        height: `${effectDiameter}px`,
+        transform: 'translate3d(-50%, -50%, 0)',
+        pointerEvents: 'none',
+        contain: 'layout style'
+      }}
+    >
+      {/* Layer 1: Primary swirling silvery-blue mist plume (CW) */}
+      <div
+        className={`misty-gpu-layer ${isDeparture ? 'misty-depart-plume-cw' : 'misty-arrive-plume-cw'}`}
+        style={{
+          borderRadius: '50%',
+          background: [
+            `radial-gradient(circle at 36% 36%, ${palette.inner} 0%, ${palette.mid} 36%, transparent 66%)`,
+            `radial-gradient(circle at 66% 62%, ${palette.mid} 0%, ${palette.outer} 42%, transparent 72%)`,
+            `radial-gradient(circle at 50% 50%, ${palette.inner} 0%, ${palette.outer} 48%, transparent 76%)`
+          ].join(', ')
+        }}
+      />
+
+      {/* Layer 2: Counter-rotating vapor wisps (CCW) */}
+      <div
+        className={`misty-gpu-layer ${isDeparture ? 'misty-depart-plume-ccw' : 'misty-arrive-plume-ccw'}`}
+        style={{
+          borderRadius: '50%',
+          background: [
+            `radial-gradient(ellipse 65% 45% at 62% 34%, ${palette.inner} 0%, transparent 64%)`,
+            `radial-gradient(ellipse 55% 68% at 34% 64%, ${palette.mid} 0%, transparent 68%)`,
+            `radial-gradient(circle at 50% 50%, transparent 28%, ${palette.outer} 54%, transparent 78%)`
+          ].join(', ')
+        }}
+      />
+
+      {/* Layer 3: Crisp arcane rune shimmer ring (SVG vector, compositor transform only) */}
+      <svg
+        viewBox="0 0 100 100"
+        className={`misty-gpu-layer ${isDeparture ? 'misty-depart-ring' : 'misty-arrive-ring'}`}
+        style={{ width: '100%', height: '100%', overflow: 'visible' }}
+      >
+        <circle
+          cx="50"
+          cy="50"
+          r="38"
+          fill="none"
+          stroke={palette.ring}
+          strokeWidth="1.6"
+          strokeDasharray="11 6 3 6"
+          strokeLinecap="round"
+          opacity="0.9"
+        />
+        <circle
+          cx="50"
+          cy="50"
+          r="28"
+          fill="none"
+          stroke={palette.core}
+          strokeWidth="1.1"
+          strokeDasharray="5 9"
+          strokeLinecap="round"
+          opacity="0.78"
+        />
+      </svg>
+
+      {/* Layer 4: Peak silvery arcane flash core */}
+      <div
+        className={`misty-gpu-layer ${isDeparture ? 'misty-depart-flash' : 'misty-arrive-flash'}`}
+        style={{
+          borderRadius: '50%',
+          background: `radial-gradient(circle at 50% 50%, ${palette.core} 0%, ${palette.inner} 28%, ${palette.mid} 52%, transparent 74%)`
+        }}
+      />
+
+      {/* Layer 5: 8 Drifting silver-blue starlight motes */}
+      {MISTY_MOTE_VECTORS.map((m, idx) => {
+        const startR = isDeparture ? radius * 0.56 : radius * 0.14;
+        const midR1 = isDeparture ? radius * 0.3 : radius * 0.44;
+        const midR2 = isDeparture ? radius * 0.62 : radius * 0.72;
+        const endR = isDeparture ? radius * 0.82 : radius * 0.94;
+        const motePx = Math.max(4, effectDiameter * m.size);
+        const moteStyle = {
+          width: `${motePx}px`,
+          height: `${motePx}px`,
+          marginLeft: `${-motePx / 2}px`,
+          marginTop: `${-motePx / 2}px`,
+          background: `radial-gradient(circle, ${palette.core} 0%, ${palette.mote} 45%, transparent 78%)`,
+          '--mx0': `${(m.cos * startR).toFixed(1)}px`,
+          '--my0': `${(m.sin * startR).toFixed(1)}px`,
+          '--mx1': `${(m.cos * midR1).toFixed(1)}px`,
+          '--my1': `${(m.sin * midR1).toFixed(1)}px`,
+          '--mx2': `${(m.cos * midR2).toFixed(1)}px`,
+          '--my2': `${(m.sin * midR2).toFixed(1)}px`,
+          '--mx3': `${(m.cos * endR).toFixed(1)}px`,
+          '--my3': `${(m.sin * endR).toFixed(1)}px`,
+          '--mdur': `${isDeparture ? 460 : 600}ms`,
+          '--mdel': `${m.delay}ms`
+        } as React.CSSProperties;
+        return <div key={idx} className="misty-mote" style={moteStyle} />;
+      })}
+    </div>
+  );
+});
+
 const applySnappyPlayback = (el: HTMLVideoElement | null, effect?: VttEffectInstance) => {
   if (!el) return;
   try {
-    const isRapidTeleport =
-      effect?.assetKey === 'misty_step' ||
-      effect?.assetKey === 'fey_step' ||
-      effect?.assetKey === 'shadow_step' ||
-      effect?.assetKey === 'clouds_jaunt' ||
-      effect?.name?.toLowerCase().includes('misty step');
-    const targetRate = isRapidTeleport ? 2.0 : 1.35;
+    const targetRate = 1.35;
     if (el.playbackRate !== targetRate) {
       el.playbackRate = targetRate;
     }
@@ -148,25 +354,65 @@ const applySnappyPlayback = (el: HTMLVideoElement | null, effect?: VttEffectInst
   }
 };
 
-// Re-triggers playback at t=0 on an already-mounted <video> decoder when a two-phase
-// teleport updates castTime on the same effect.id (avoids spinning up a 2nd CPU VP8+alpha decoder).
-const syncMountedEffectVideo = (el: HTMLVideoElement | null, effect: VttEffectInstance) => {
-  if (!el) return;
-  const castKey = String(effect.castTime || 0);
-  if (el.dataset.castTime && el.dataset.castTime !== castKey) {
-    el.dataset.castTime = castKey;
-    try {
-      el.currentTime = 0;
-      applySnappyPlayback(el, effect);
-      el.play().catch(() => {});
-    } catch {
-      // ignore
+// Stable memoized video node so React doesn't detach/re-attach inline refs on every overlay render
+const EffectVideoNode: React.FC<{
+  effect: VttEffectInstance;
+  isAura: boolean;
+  finalOpacity: number;
+  onEnded: (effect: VttEffectInstance) => void;
+}> = React.memo(({ effect, isAura, finalOpacity, onEnded }) => {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const lastCastTimeRef = useRef<string>(String(effect.castTime || 0));
+
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    const castKey = String(effect.castTime || 0);
+    if (lastCastTimeRef.current !== castKey) {
+      lastCastTimeRef.current = castKey;
+      try {
+        el.currentTime = 0;
+      } catch {
+        // ignore
+      }
     }
-  } else if (!el.dataset.castTime) {
-    el.dataset.castTime = castKey;
     applySnappyPlayback(el, effect);
-  }
-};
+  }, [effect.castTime, effect.videoUrl]);
+
+  const isPortalFade = Boolean(
+    effect.fadeInMs ||
+    effect.fadeOutMs ||
+    effect.assetKey === 'dimension_door' ||
+    effect.assetKey === 'arcane_gate' ||
+    effect.name?.toLowerCase().includes('dimension door')
+  );
+
+  return (
+    <video
+      ref={videoRef}
+      src={videoCacheManager.getCachedBlobUrl(effect.videoUrl)}
+      autoPlay
+      muted
+      playsInline
+      preload="auto"
+      loop={Boolean(effect.loop || effect.isPersistent)}
+      className={isPortalFade ? 'animate-effect-fade-portal' : undefined}
+      onLoadedMetadata={(e) => applySnappyPlayback(e.target as HTMLVideoElement, effect)}
+      onLoadedData={(e) => applySnappyPlayback(e.target as HTMLVideoElement, effect)}
+      onError={(e) => console.warn('Effect video load failed:', effect.videoUrl, e)}
+      onEnded={() => onEnded(effect)}
+      style={{
+        width: '100%',
+        height: '100%',
+        maxWidth: 'none',
+        maxHeight: 'none',
+        objectFit: isAura ? 'cover' : 'fill',
+        opacity: finalOpacity,
+        pointerEvents: 'none'
+      }}
+    />
+  );
+});
 
 function getAuraVisualMeta(nameOrKey?: string) {
   const n = (nameOrKey || '').toLowerCase();
@@ -600,6 +846,20 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
             ? (attachedTokenRadius + (rawSizeFt / 5) * gridSize) * 2
             : Math.max(gridSize * 1.5, ((rawSizeFt * 2) / 5) * gridSize);
 
+          // Compositor-thread GPU Misty Step / Rapid Arcane Blink FX (0ms startup, 0% CPU video decode)
+          if (isRapidGpuBlinkEffect(effect)) {
+            return (
+              <MistyStepGpuEffect
+                key={effect.id}
+                effect={effect}
+                posX={posX}
+                posY={posY}
+                diameter={pixelDiameter}
+                onComplete={handleEnded}
+              />
+            );
+          }
+
           const meta = getAuraVisualMeta(effect.name || effect.assetKey);
           const isAura = effect.paradigm === 'aura' || Boolean(attachedToken) || meta.isCircleAura;
           const finalOpacity = (effect.opacity !== undefined && effect.opacity !== 1.0) ? effect.opacity : meta.opacity;
@@ -622,28 +882,11 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                 overflow: meta.isCircleAura ? 'hidden' : undefined
               }}
             >
-              <video
-                ref={(el) => syncMountedEffectVideo(el, effect)}
-                src={videoCacheManager.getCachedBlobUrl(effect.videoUrl)}
-                autoPlay
-                muted
-                playsInline
-                preload="auto"
-                loop={Boolean(effect.loop || effect.isPersistent)}
-                className={(effect.fadeInMs || effect.fadeOutMs || effect.assetKey === 'dimension_door' || effect.assetKey === 'arcane_gate' || effect.name?.toLowerCase().includes('dimension door')) ? 'animate-effect-fade-portal' : undefined}
-                onLoadedMetadata={(e) => applySnappyPlayback(e.target as HTMLVideoElement, effect)}
-                onLoadedData={(e) => applySnappyPlayback(e.target as HTMLVideoElement, effect)}
-                onError={(e) => console.warn('Effect video load failed:', effect.videoUrl, e)}
-                onEnded={() => handleEnded(effect)}
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  maxWidth: 'none',
-                  maxHeight: 'none',
-                  objectFit: isAura ? 'cover' : 'fill',
-                  opacity: finalOpacity,
-                  pointerEvents: 'none'
-                }}
+              <EffectVideoNode
+                effect={effect}
+                isAura={isAura}
+                finalOpacity={finalOpacity}
+                onEnded={handleEnded}
               />
             </div>
           );

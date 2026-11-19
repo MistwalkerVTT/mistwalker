@@ -4334,7 +4334,8 @@ export default function PlayerView() {
         }, 1300);
       } else {
         // Standard rapid teleportation (Misty Step, Fey Step, Shadow Step, Cloud's Jaunt):
-        // Step 1: Animate on the player at their starting position FIRST
+        // Rendered via compositor-thread GPU mist FX (0ms startup, 0% CPU video decode).
+        // Step 1: Departure mist swirls inward at starting position (Point A)
         const teleportTokenId = claimedToken.id;
         const teleportTokenName = claimedToken.name;
         const teleportSpellName = activeEquippedAsset.name;
@@ -4344,7 +4345,7 @@ export default function PlayerView() {
         const firstPhaseDepartEffect: VttEffectInstance = {
           ...departEffect,
           videoUrl: departVideoUrl,
-          durationMs: 900
+          durationMs: 650
         };
 
         setEffects(prev => [...prev, firstPhaseDepartEffect]);
@@ -4353,31 +4354,21 @@ export default function PlayerView() {
           socketRef.current.emit('EFFECT_SPAWN', firstPhaseDepartEffect);
         }
 
-        // Step 2: After the departure puff animates on the player (~320ms), blink token to destination
-        // Reuse the SAME effect.id when departVideoUrl === arriveVideoUrl so DomEffectOverlay reuses
-        // the already-decoded CPU VP8+alpha <video> instance (zero 2nd decoder spin-up!).
-        const reuseSameDecoder = departVideoUrl === arriveVideoUrl;
+        // Step 2: At the silvery departure flash peak (~220ms), bloom arrival mist at Point B
+        // and blink the token while Point A's lingering mist finishes dissipating naturally.
         window.setTimeout(() => {
           const secondPhaseArriveEffect: VttEffectInstance = {
             ...arriveEffect,
-            id: reuseSameDecoder ? firstPhaseDepartEffect.id : arriveEffect.id,
             videoUrl: arriveVideoUrl,
             castTime: Date.now(),
-            durationMs: 1500
+            durationMs: 850
           };
 
-          setEffects(prev =>
-            reuseSameDecoder
-              ? prev.map(e => (e.id === firstPhaseDepartEffect.id ? secondPhaseArriveEffect : e))
-              : [...prev.filter(e => e.id !== firstPhaseDepartEffect.id), secondPhaseArriveEffect]
-          );
+          setEffects(prev => [...prev, secondPhaseArriveEffect]);
           if (socketRef.current?.connected) {
-            socketRef.current.emit('EFFECT_REMOVE', { id: firstPhaseDepartEffect.id });
             socketRef.current.emit('EFFECT_SPAWN', secondPhaseArriveEffect);
           }
 
-          // Defer token move + vision raycasting by 1 animation frame so it doesn't contend
-          // with the arrival video frame reset on the exact same tick.
           requestAnimationFrame(() => {
             handleMoveToken(teleportTokenId, snappedTargetX, snappedTargetY, distFt);
           });
@@ -4385,7 +4376,7 @@ export default function PlayerView() {
           toast.success(`${teleportTokenName} cast ${teleportSpellName}!`, {
             description: `Teleported ${distFt} ft across the battlefield.`
           });
-        }, 320);
+        }, 220);
       }
 
       setAimOrigin(null);
@@ -6009,6 +6000,15 @@ export default function PlayerView() {
     });
     toast.info(`Removed ${auraName || 'aura'} from ${targetTok?.name || 'token'}`);
   }, [handleUpdateToken]);
+
+  const handleRemoveTokenBubble = useCallback((tokenId: string, bubbleId: string) => {
+    setTokens(prev => {
+      const next = prev.map(t => t.id === tokenId ? { ...t, bubbles: (t.bubbles || []).filter(b => b.id !== bubbleId) } : t);
+      tokensRef.current = next;
+      if (socketRef.current?.connected) socketRef.current.emit('SYNC_TOKENS', next);
+      return next;
+    });
+  }, []);
 
   // Spiritual Weapon bonus-action strike: move up to 20 ft, then make a melee spell attack + damage roll
   const handleSpiritualWeaponStrike = useCallback((targetToken: Token, action: HudActionItem) => {
@@ -9303,15 +9303,8 @@ export default function PlayerView() {
         onDispelEffect={handleDispelEffect}
         onInspectEffect={handleInspectEffect}
         onClearTokenAura={handleClearTokenAura}
-          onRemoveTokenBubble={(tokenId, bubbleId) => {
-            setTokens(prev => {
-              const next = prev.map(t => t.id === tokenId ? { ...t, bubbles: (t.bubbles || []).filter(b => b.id !== bubbleId) } : t);
-              tokensRef.current = next;
-              if (socketRef.current?.connected) socketRef.current.emit('SYNC_TOKENS', next);
-              return next;
-            });
-          }}
-        />
+        onRemoveTokenBubble={handleRemoveTokenBubble}
+      />
 
       {/* ========================================================= */}
       {/* Token Right-Click Context Menu Popup (Mirrored from DM)   */}
