@@ -87,7 +87,34 @@ export type SoundEffectType =
   | 'axe_cleave'
   | 'spear_thrust'
   | 'staff_strike'
-  | 'generic_cast';
+  | 'generic_cast'
+  // Expanded ElevenLabs Neural SFX Variety Pack (26 new keys)
+  | 'divine_smite'
+  | 'revivify_pulse'
+  | 'holy_decree'
+  | 'celestial_starlight'
+  | 'divine_restoration'
+  | 'flame_pillar'
+  | 'hypnotic_swirl'
+  | 'banish_rift'
+  | 'dispel_unravel'
+  | 'invisibility_cloak'
+  | 'haste_surge'
+  | 'polymorph_morph'
+  | 'void_hunger'
+  | 'arcane_ward'
+  | 'heat_metal_sizzle'
+  | 'ki_deflect'
+  | 'rapier_thrust'
+  | 'arcane_arrow'
+  | 'war_magic_cleave'
+  | 'censer_flail'
+  | 'barbarian_rage'
+  | 'cunning_dash'
+  | 'second_wind_breath'
+  | 'blood_curse'
+  | 'dragon_roar_breath'
+  | 'arcane_staff_blast';
 
 export interface SoundCatalogEntryMeta {
   key: SoundEffectType;
@@ -205,6 +232,34 @@ export const SOUND_FILE_MAP: Record<string, string> = {
   axe_cleave: 'axe_cleave.mp3',
   spear_thrust: 'spear_thrust.mp3',
   staff_strike: 'staff_strike.mp3',
+
+  // Expanded ElevenLabs Neural SFX Variety Pack
+  divine_smite: 'divine_smite.mp3',
+  revivify_pulse: 'revivify_pulse.mp3',
+  holy_decree: 'holy_decree.mp3',
+  celestial_starlight: 'celestial_starlight.mp3',
+  divine_restoration: 'divine_restoration.mp3',
+  flame_pillar: 'flame_pillar.mp3',
+  hypnotic_swirl: 'hypnotic_swirl.mp3',
+  banish_rift: 'banish_rift.mp3',
+  dispel_unravel: 'dispel_unravel.mp3',
+  invisibility_cloak: 'invisibility_cloak.mp3',
+  haste_surge: 'haste_surge.mp3',
+  polymorph_morph: 'polymorph_morph.mp3',
+  void_hunger: 'void_hunger.mp3',
+  arcane_ward: 'arcane_ward.mp3',
+  heat_metal_sizzle: 'heat_metal_sizzle.mp3',
+  ki_deflect: 'ki_deflect.mp3',
+  rapier_thrust: 'rapier_thrust.mp3',
+  arcane_arrow: 'arcane_arrow.mp3',
+  war_magic_cleave: 'war_magic_cleave.mp3',
+  censer_flail: 'censer_flail.mp3',
+  barbarian_rage: 'barbarian_rage.mp3',
+  cunning_dash: 'cunning_dash.mp3',
+  second_wind_breath: 'second_wind_breath.mp3',
+  blood_curse: 'blood_curse.mp3',
+  dragon_roar_breath: 'dragon_roar_breath.mp3',
+  arcane_staff_blast: 'arcane_staff_blast.mp3',
 
   // Fallback
   generic_cast: 'generic_cast.mp3'
@@ -913,7 +968,34 @@ export const SOUND_EFFECT_CATALOG_META: SoundCatalogEntryMeta[] = [
     fileName: SOUND_FILE_MAP.flurry_of_blows,
     sourceEngine: 'elevenlabs',
     defaultPrompt: 'Monk Flurry of Blows: rapid-fire combo of four lightning-fast martial arts punches and kicks with ki resonance'
-  }
+  },
+  // Expanded ElevenLabs Neural SFX Variety Pack
+  { key: 'divine_smite', label: 'Divine Smite / Mace of Disruption', category: 'radiant', fileName: SOUND_FILE_MAP.divine_smite, sourceEngine: 'elevenlabs', defaultPrompt: 'Crushing heavenly thunder bell and searing golden radiant hammer impact' },
+  { key: 'revivify_pulse', label: 'Revivify / Supreme Heal', category: 'radiant', fileName: SOUND_FILE_MAP.revivify_pulse, sourceEngine: 'elevenlabs', defaultPrompt: 'Dramatic celestial heartbeat pulse reviving a fallen hero with rising choir swell' },
+  { key: 'holy_decree', label: 'Divine Word / Command', category: 'radiant', fileName: SOUND_FILE_MAP.holy_decree, sourceEngine: 'elevenlabs', defaultPrompt: 'Deep echoing cathedral brass chord and commanding angelic shockwave' },
+  { key: 'celestial_starlight', label: 'Crown of Stars / Daylight', category: 'radiant', fileName: SOUND_FILE_MAP.celestial_starlight, sourceEngine: 'elevenlabs', defaultPrompt: 'Shimmering crystalline celestial harp arpeggio and twinkling cosmic comet chime' },
+  { key: 'divine_restoration', label: 'Restoration / Death Ward', category: 'radiant', fileName: SOUND_FILE_MAP.divine_restoration, sourceEngine: 'elevenlabs', defaultPrompt: 'Warm golden harmonic healing wave washing away corruption with gentle chimes' },
+  { key: 'flame_pillar', label: 'Flame Strike / Fire Storm', category: 'fire', fileName: SOUND_FILE_MAP.flame_pillar, sourceEngine: 'elevenlabs', defaultPrompt: 'Roaring descending column of heavenly fire and solar plasma slamming into earth' },
+  { key: 'hypnotic_swirl', label: 'Hypnotic Pattern / Mirror Image', category: 'arcane', fileName: SOUND_FILE_MAP.hypnotic_swirl, sourceEngine: 'elevenlabs', defaultPrompt: 'Mesmerizing psychedelic crystal chimes and dreamlike swirling astral resonance' },
+  { key: 'banish_rift', label: 'Banishment / Planar Rift', category: 'arcane', fileName: SOUND_FILE_MAP.banish_rift, sourceEngine: 'elevenlabs', defaultPrompt: 'Reality-tearing planar vacuum implosion with deep metallic dimensional warp snap' },
+  { key: 'dispel_unravel', label: 'Dispel Magic / Silvery Barbs', category: 'arcane', fileName: SOUND_FILE_MAP.dispel_unravel, sourceEngine: 'elevenlabs', defaultPrompt: 'Sharp descending arcane static unraveling and magical weave snapping apart' },
+  { key: 'invisibility_cloak', label: 'Invisibility / Silence', category: 'arcane', fileName: SOUND_FILE_MAP.invisibility_cloak, sourceEngine: 'elevenlabs', defaultPrompt: 'Ethereal glassy phase-shift whoosh softly fading into hushed ghostly silence' },
+  { key: 'haste_surge', label: 'Haste / Enlarge-Reduce', category: 'arcane', fileName: SOUND_FILE_MAP.haste_surge, sourceEngine: 'elevenlabs', defaultPrompt: 'Accelerating clockwork tempo whoosh and crisp temporal wind burst' },
+  { key: 'polymorph_morph', label: 'Polymorph / Wild Shape', category: 'arcane', fileName: SOUND_FILE_MAP.polymorph_morph, sourceEngine: 'elevenlabs', defaultPrompt: 'Bubbling alchemical transmutation shimmer with whimsical magical pop transformation' },
+  { key: 'void_hunger', label: 'Hunger of Hadar / Void', category: 'necrotic', fileName: SOUND_FILE_MAP.void_hunger, sourceEngine: 'elevenlabs', defaultPrompt: 'Horrifying abyssal sub-bass black hole vacuum opening with distant eldritch whispers' },
+  { key: 'arcane_ward', label: 'Mage Armor / Blade Ward', category: 'arcane', fileName: SOUND_FILE_MAP.arcane_ward, sourceEngine: 'elevenlabs', defaultPrompt: 'Crisp hexagonal arcane force field hum activating with crystalline abjuration chime' },
+  { key: 'heat_metal_sizzle', label: 'Heat Metal / Fire Shield', category: 'fire', fileName: SOUND_FILE_MAP.heat_metal_sizzle, sourceEngine: 'elevenlabs', defaultPrompt: 'White-hot glowing iron hiss and crackling forge embers searing metal armor' },
+  { key: 'ki_deflect', label: 'Patient Defense / Uncanny Dodge', category: 'martial', fileName: SOUND_FILE_MAP.ki_deflect, sourceEngine: 'elevenlabs', defaultPrompt: 'Calm resonant bronze zen chime followed by swift martial air parry swoosh' },
+  { key: 'rapier_thrust', label: 'Rapier Sneak Attack', category: 'martial', fileName: SOUND_FILE_MAP.rapier_thrust, sourceEngine: 'elevenlabs', defaultPrompt: 'Lightning-fast needle-sharp steel rapier fencing lunge and crisp shadow cloak whip' },
+  { key: 'arcane_arrow', label: 'Arcane Longbow / Shadow Shortbow', category: 'martial', fileName: SOUND_FILE_MAP.arcane_arrow, sourceEngine: 'elevenlabs', defaultPrompt: 'Taut longbow string twang releasing a whistling plasma-charged arcane arrow' },
+  { key: 'war_magic_cleave', label: 'Eldritch Longsword / War Magic', category: 'martial', fileName: SOUND_FILE_MAP.war_magic_cleave, sourceEngine: 'elevenlabs', defaultPrompt: 'Heavy enchanted steel longsword cleave trailing crackling blue arcane sparks' },
+  { key: 'censer_flail', label: "Devotee's Censer Flail", category: 'martial', fileName: SOUND_FILE_MAP.censer_flail, sourceEngine: 'elevenlabs', defaultPrompt: 'Rattling brass chains swinging a heavy burning incense censer flail with sacred bell chime' },
+  { key: 'barbarian_rage', label: 'Barbarian Rage / Frenzy', category: 'martial', fileName: SOUND_FILE_MAP.barbarian_rage, sourceEngine: 'elevenlabs', defaultPrompt: 'Visceral primal warrior battle roar with surging war drum bass and crackling fire' },
+  { key: 'cunning_dash', label: 'Cunning Action / Zephyr Strike', category: 'martial', fileName: SOUND_FILE_MAP.cunning_dash, sourceEngine: 'elevenlabs', defaultPrompt: 'Agile leather boot sprint burst and sharp billowing cloak snap' },
+  { key: 'second_wind_breath', label: 'Fighter Second Wind', category: 'martial', fileName: SOUND_FILE_MAP.second_wind_breath, sourceEngine: 'elevenlabs', defaultPrompt: 'Deep heroic warrior inhale followed by invigorating warm adrenaline rush' },
+  { key: 'blood_curse', label: 'Crimson Rite / Blood Curse', category: 'necrotic', fileName: SOUND_FILE_MAP.blood_curse, sourceEngine: 'elevenlabs', defaultPrompt: 'Visceral crimson hemocraft blade slash and eerie pulsing dark blood magic' },
+  { key: 'dragon_roar_breath', label: 'Dragon Elemental Breath', category: 'fire', fileName: SOUND_FILE_MAP.dragon_roar_breath, sourceEngine: 'elevenlabs', defaultPrompt: 'Ferocious monstrous dragon inhale erupting into a torrential elemental breath roar' },
+  { key: 'arcane_staff_blast', label: 'Staff of Power / Rod of Pact Keeper', category: 'arcane', fileName: SOUND_FILE_MAP.arcane_staff_blast, sourceEngine: 'elevenlabs', defaultPrompt: 'Resonant runic wizard staff slamming onto stone and releasing a booming arcane wave' }
 ];
 
 const OVERRIDES_STORAGE_KEY = 'mistwalker_sfx_overrides_v1';
