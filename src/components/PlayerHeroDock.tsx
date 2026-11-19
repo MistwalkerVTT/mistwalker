@@ -33,7 +33,9 @@ import {
   HudSpecialAbilityTrigger,
   computeUpcastFormula,
   evaluateDiceFormula,
-  resolveActionSpecialAbilities
+  resolveActionSpecialAbilities,
+  consolidateChannelDivinityLists,
+  isChannelDivinityRelatedAction
 } from '../types/hud';
 import { findJb2aAsset } from '../effects/db/jb2aRegistry';
 import { classifySpellMechanics } from '../services/spellResolutionEngine';
@@ -129,6 +131,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
   const [hoveredAction, setHoveredAction] = useState<HudActionItem | null>(null);
   const [pinnedAction, setPinnedAction] = useState<HudActionItem | null>(null);
   const [inspectedAction, setInspectedAction] = useState<HudActionItem | null>(null);
+  const [channelDivinityMenuHub, setChannelDivinityMenuHub] = useState<HudActionItem | null>(null);
   const [popoverDragOffset, setPopoverDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [modalDragOffset, setModalDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isTrayCollapsed, setIsTrayCollapsed] = useState<boolean>(false);
@@ -144,6 +147,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
     setHoveredAction(null);
     setPinnedAction(null);
     setInspectedAction(null);
+    setChannelDivinityMenuHub(null);
   }, [collapseRequestTick]);
 
   const handleStartPopoverDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
@@ -218,7 +222,9 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (inspectedAction) {
+        if (channelDivinityMenuHub) {
+          setChannelDivinityMenuHub(null);
+        } else if (inspectedAction) {
           setInspectedAction(null);
         } else if (hoveredAction || pinnedAction) {
           setHoveredAction(null);
@@ -380,53 +386,88 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
 
   const hpPercent = Math.max(0, Math.min(100, (currentHp / maxHp) * 100));
 
-  // Categorized lists from D&D Beyond character data
-  const actionsList = useMemo<HudActionItem[]>(() => {
-    if (Array.isArray(characterData?.actions) && characterData.actions.length > 0) {
-      return characterData.actions;
+  // Categorized lists from D&D Beyond character data (with Channel Divinity deduplicated & consolidated into 1 hub card)
+  const consolidatedHudLists = useMemo(() => {
+    const rawActions: HudActionItem[] =
+      Array.isArray(characterData?.actions) && characterData.actions.length > 0
+        ? characterData.actions.map((a) => ({ ...a }))
+        : [
+            {
+              id: 'default-attack',
+              name: 'Unarmed Strike',
+              category: 'actions',
+              type: 'action',
+              subCategory: 'unarmed',
+              isAttack: true,
+              hitBonus: '+5',
+              damageFormula: '1d4 + 3',
+              damageType: 'bludgeoning',
+              description: 'Standard melee unarmed strike.',
+              jb2aAssetId: 'attack_slash',
+              rangeFt: 5
+            },
+            {
+              id: 'default-dash',
+              name: 'Dash',
+              category: 'actions',
+              type: 'action',
+              subCategory: 'standard',
+              isSelfAction: true,
+              description: 'Gain extra movement for the current turn equal to your speed.',
+              rangeFt: 0
+            }
+          ];
+    const rawBonus: HudActionItem[] = Array.isArray(characterData?.bonusActions)
+      ? characterData.bonusActions.map((a) => ({ ...a }))
+      : [];
+    const rawSpecial: HudActionItem[] = Array.isArray(characterData?.special)
+      ? characterData.special.map((a) => ({ ...a }))
+      : [];
+
+    // Ensure Channel Divinity is consolidated if not already done by the caller
+    const alreadyConsolidated =
+      rawActions.some((a) => a.isChannelDivinityHub) || rawSpecial.some((a) => a.isChannelDivinityHub);
+    if (!alreadyConsolidated) {
+      consolidateChannelDivinityLists(
+        { actions: rawActions, bonusActions: rawBonus, special: rawSpecial },
+        {
+          characterName: characterData?.name || claimedToken?.name || '',
+          classLevel: characterData?.classLevel || '',
+          totalLevel: characterData?.totalLevel || 5,
+          spellSaveDc: characterData?.spellSaveDc
+        }
+      );
     }
-    return [
-      {
-        id: 'default-attack',
-        name: 'Unarmed Strike',
-        category: 'actions',
-        type: 'action',
-        subCategory: 'unarmed',
-        isAttack: true,
-        hitBonus: '+5',
-        damageFormula: '1d4 + 3',
-        damageType: 'bludgeoning',
-        description: 'Standard melee unarmed strike.',
-        jb2aAssetId: 'attack_slash',
-        rangeFt: 5
-      },
-      {
-        id: 'default-dash',
-        name: 'Dash',
-        category: 'actions',
-        type: 'action',
-        subCategory: 'standard',
-        isSelfAction: true,
-        description: 'Gain extra movement for the current turn equal to your speed.',
-        rangeFt: 0
-      }
-    ];
-  }, [characterData?.actions]);
+
+    return {
+      actions: rawActions,
+      bonusActions: rawBonus,
+      special: rawSpecial
+    };
+  }, [
+    characterData?.actions,
+    characterData?.bonusActions,
+    characterData?.special,
+    characterData?.name,
+    characterData?.classLevel,
+    characterData?.totalLevel,
+    characterData?.spellSaveDc,
+    claimedToken?.name
+  ]);
+
+  const actionsList = consolidatedHudLists.actions;
 
   const attacksList = useMemo<HudActionItem[]>(() => {
     if (Array.isArray(characterData?.attacks) && characterData.attacks.length > 0) {
       return characterData.attacks;
     }
     const derived = actionsList.filter(
-      a => a.isAttack || a.hitBonus !== undefined || a.damageFormula !== undefined
+      a => (a.isAttack || a.hitBonus !== undefined || a.damageFormula !== undefined) && !a.isChannelDivinityHub
     );
     return derived.length > 0 ? derived : actionsList;
   }, [characterData?.attacks, actionsList]);
 
-  const bonusActionsList = useMemo<HudActionItem[]>(
-    () => (Array.isArray(characterData?.bonusActions) ? characterData.bonusActions : []),
-    [characterData?.bonusActions]
-  );
+  const bonusActionsList = consolidatedHudLists.bonusActions;
 
   const spellsList = useMemo<HudActionItem[]>(
     () => (Array.isArray(characterData?.spells) ? characterData.spells : []),
@@ -443,10 +484,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
     [characterData?.items]
   );
 
-  const specialList = useMemo<HudActionItem[]>(
-    () => (Array.isArray(characterData?.special) ? characterData.special : []),
-    [characterData?.special]
-  );
+  const specialList = consolidatedHudLists.special;
 
   // Available spell levels for the Spells filter bar
   const availableSpellLevels = useMemo<number[]>(() => {
@@ -568,6 +606,26 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
     }
     const specialAbilities = resolveActionSpecialAbilities(resolved, specialAbilitiesCtx);
     return specialAbilities.length > 0 ? { ...resolved, specialAbilities } : resolved;
+  };
+
+  const handleClickActionCard = (action: HudActionItem, closeMobileDrawer = false) => {
+    if (
+      action.isChannelDivinityHub ||
+      (Array.isArray(action.subOptions) && action.subOptions.length > 0) ||
+      action.name.trim().toLowerCase() === 'channel divinity'
+    ) {
+      const hubWithOpts =
+        Array.isArray(action.subOptions) && action.subOptions.length > 0
+          ? action
+          : actionsList.find((a) => a.isChannelDivinityHub) ||
+            specialList.find((a) => a.isChannelDivinityHub) ||
+            action;
+      setChannelDivinityMenuHub(hubWithOpts);
+      if (closeMobileDrawer) setIsMobileDrawerOpen(false);
+      return;
+    }
+    onSelectAction(action);
+    if (closeMobileDrawer) setIsMobileDrawerOpen(false);
   };
 
   // Trigger a special ability button on an attack / action / spell card
@@ -1706,8 +1764,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                   role="button"
                   tabIndex={0}
                   onClick={() => {
-                    onSelectAction(action);
-                    setIsMobileDrawerOpen(false);
+                    handleClickActionCard(action, true);
                   }}
                   onContextMenu={(e) => {
                     e.preventDefault();
@@ -1717,8 +1774,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
-                      onSelectAction(action);
-                      setIsMobileDrawerOpen(false);
+                      handleClickActionCard(action, true);
                     }
                   }}
                   className={`w-full p-2.5 rounded-xl border text-left transition-all flex items-center justify-between gap-2.5 cursor-pointer select-none ${
@@ -2441,7 +2497,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                     key={action.id || idx}
                     role="button"
                     tabIndex={0}
-                    onClick={() => onSelectAction(action)}
+                    onClick={() => handleClickActionCard(action)}
                     onContextMenu={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
@@ -2450,7 +2506,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
-                        onSelectAction(action);
+                        handleClickActionCard(action);
                       }
                     }}
                     onMouseEnter={() => setHoveredAction(action)}
@@ -2559,6 +2615,21 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                             </>
                           )}
                         </div>
+                        {action.isChannelDivinityHub && action.subOptions && action.subOptions.length > 0 && (
+                          <div className="flex items-center gap-1 flex-wrap mt-1" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setChannelDivinityMenuHub(action);
+                              }}
+                              className="px-2 py-0.5 rounded-md border border-amber-400/70 bg-amber-950/90 hover:bg-amber-800 text-amber-200 hover:text-white font-mono text-[9px] font-bold leading-tight transition-all cursor-pointer active:scale-95 shadow-[0_0_8px_rgba(245,158,11,0.3)]"
+                              title="Click to open Channel Divinity Selection Menu"
+                            >
+                              ✨ Choose Channel Divinity ({action.subOptions.length}) ▾
+                            </button>
+                          </div>
+                        )}
                         {action.specialAbilities && action.specialAbilities.length > 0 && (
                           <div className="flex items-center gap-1 flex-wrap mt-1" onClick={(e) => e.stopPropagation()}>
                             {action.specialAbilities.map((trig) => (
@@ -2949,8 +3020,9 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    onSelectAction(inspectedAction);
+                    const targetAct = inspectedAction;
                     setInspectedAction(null);
+                    handleClickActionCard(targetAct);
                   }}
                   className={`px-4 py-1.5 rounded-xl font-bold text-xs font-mono transition-all shadow-md active:scale-95 cursor-pointer ${
                     inspectedAction.castAtLevel && inspectedAction.castAtLevel > (inspectedAction.level ?? 0)
@@ -2958,11 +3030,216 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
                       : 'bg-amber-500 hover:bg-amber-400 text-zinc-950'
                   }`}
                 >
-                  {inspectedAction.castAtLevel && inspectedAction.castAtLevel > (inspectedAction.level ?? 0)
+                  {inspectedAction.isChannelDivinityHub
+                    ? 'Choose Channel Divinity...'
+                    : inspectedAction.castAtLevel && inspectedAction.castAtLevel > (inspectedAction.level ?? 0)
                     ? `Cast at ${formatSpellLevelLabel(inspectedAction.castAtLevel)} Level${inspectedAction.damageFormula ? ` (${inspectedAction.damageFormula})` : ''}`
                     : 'Cast / Target'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* CHANNEL DIVINITY MULTI-OPTION SELECTION MODAL                             */}
+      {/* ========================================================================= */}
+      {channelDivinityMenuHub && (
+        <div
+          className="fixed inset-0 z-[260] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-150 pointer-events-auto"
+          onClick={() => setChannelDivinityMenuHub(null)}
+        >
+          <div
+            className="relative w-full max-w-2xl max-h-[88vh] bg-zinc-950/98 border border-amber-500/60 rounded-2xl shadow-[0_20px_70px_rgba(0,0,0,0.95)] flex flex-col overflow-hidden text-left ring-1 ring-amber-400/20"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Top Golden Divine Trim */}
+            <div className="h-1 w-full bg-gradient-to-r from-amber-500 via-yellow-300 to-amber-500" />
+
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-zinc-800 bg-zinc-900/75 flex items-start justify-between gap-3 shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-11 h-11 rounded-xl bg-amber-950/80 border border-amber-500/60 flex items-center justify-center shrink-0 shadow-[0_0_15px_rgba(245,158,11,0.3)]">
+                  <Sparkles className="w-6 h-6 text-amber-300" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-base sm:text-lg font-bold text-white font-mono">
+                      Choose Channel Divinity Effect
+                    </h3>
+                    {channelDivinityMenuHub.uses && (
+                      <span className="px-2.5 py-0.5 rounded-full bg-amber-950 border border-amber-500/60 text-amber-200 font-mono text-[11px] font-bold">
+                        Uses: {channelDivinityMenuHub.uses.available}/{channelDivinityMenuHub.uses.total} ({channelDivinityMenuHub.uses.resetType || 'Short Rest'})
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs font-mono text-zinc-400 mt-0.5">
+                    Select which divine power {name} channels. The chosen ability and its battlemap animation will trigger immediately.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setChannelDivinityMenuHub(null)}
+                className="p-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-700/80 transition-colors cursor-pointer shrink-0"
+                title="Close (Escape)"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Channel Divinity Sub-Options List */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3 sidebar-scrollbar">
+              {(channelDivinityMenuHub.subOptions || []).map((opt) => {
+                const lowerOpt = opt.name.toLowerCase();
+                const isHarness = lowerOpt.includes('harness divine power');
+                const isPreserve = lowerOpt.includes('preserve life') || opt.isHeal;
+                const isTurnUndead = lowerOpt.includes('turn undead') || lowerOpt.includes('turn the unholy');
+
+                // For Harness Divine Power, check which expended spell slots (Level 1..3) can be restored
+                const maxHarnessLvl = 3;
+                const harnessableSlots: Array<{ level: number; available: number; total: number }> = [];
+                if (isHarness && characterData?.spellSlots) {
+                  for (let l = 1; l <= maxHarnessLvl; l++) {
+                    const s = characterData.spellSlots[l];
+                    if (s && s.total > 0) {
+                      harnessableSlots.push({ level: l, available: s.available, total: s.total });
+                    }
+                  }
+                }
+
+                return (
+                  <div
+                    key={opt.id}
+                    className={`group rounded-xl border p-3.5 sm:p-4 transition-all flex flex-col gap-2.5 ${
+                      isPreserve
+                        ? 'bg-emerald-950/25 border-emerald-500/40 hover:border-emerald-400 hover:bg-emerald-950/40'
+                        : isHarness
+                        ? 'bg-blue-950/25 border-blue-500/40 hover:border-blue-400 hover:bg-blue-950/40'
+                        : 'bg-amber-950/25 border-amber-500/40 hover:border-amber-400 hover:bg-amber-950/40'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3 flex-wrap">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="w-10 h-10 rounded-xl bg-zinc-950 border border-zinc-800 flex items-center justify-center shrink-0 overflow-hidden shadow-inner">
+                          {renderActionGlyph(opt, 'w-5 h-5')}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-bold text-white font-mono">
+                              {opt.name.replace(/^Channel Divinity:\s*/i, '')}
+                            </span>
+                            <span className="px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-700 text-amber-300 font-mono text-[10px] font-bold">
+                              {opt.castingTime || '1 Action'}
+                            </span>
+                            {opt.rangeFt !== undefined && (
+                              <span className="px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-700 text-zinc-300 font-mono text-[10px]">
+                                {opt.rangeFt > 0 ? `${opt.rangeFt} ft.${isTurnUndead ? ' AoE' : ''}` : 'Self'}
+                              </span>
+                            )}
+                            {opt.saveDc && (
+                              <span className="px-2 py-0.5 rounded-md bg-amber-950 border border-amber-500/50 text-amber-300 font-mono text-[10px] font-bold">
+                                DC {opt.saveDc} {opt.saveAbility || 'WIS'} Save
+                              </span>
+                            )}
+                            {opt.damageFormula && (
+                              <span className="px-2 py-0.5 rounded-md bg-emerald-950 border border-emerald-500/50 text-emerald-300 font-mono text-[10px] font-bold">
+                                {opt.isHeal ? `Heal ${opt.damageFormula} HP` : `${opt.damageFormula} ${opt.damageType || ''}`}
+                              </span>
+                            )}
+                          </div>
+                          {opt.notes && (
+                            <div className="text-[11px] font-mono text-amber-300/90 mt-0.5">
+                              {opt.notes}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Primary Trigger Button */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setChannelDivinityMenuHub(null);
+                          onSelectAction(opt);
+                        }}
+                        className={`px-3.5 py-2 rounded-xl font-mono text-xs font-bold transition-all cursor-pointer active:scale-95 shrink-0 flex items-center gap-1.5 shadow-md ${
+                          isPreserve
+                            ? 'bg-emerald-500 hover:bg-emerald-400 text-zinc-950 shadow-emerald-500/25'
+                            : isHarness
+                            ? 'bg-blue-500 hover:bg-blue-400 text-zinc-950 shadow-blue-500/25'
+                            : 'bg-amber-500 hover:bg-amber-400 text-zinc-950 shadow-amber-500/25'
+                        }`}
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>
+                          {isTurnUndead
+                            ? 'Invoke Turn Undead (30ft AoE)'
+                            : isPreserve
+                            ? `Channel Preserve Life (+${opt.damageFormula || 75} HP)`
+                            : isHarness
+                            ? 'Harness Divine Power'
+                            : 'Channel Effect'}
+                        </span>
+                      </button>
+                    </div>
+
+                    <p className="text-xs text-zinc-300 font-sans leading-relaxed">
+                      {opt.description}
+                    </p>
+
+                    {/* If Harness Divine Power, also offer direct 1-click slot restoration buttons for 1st, 2nd, and 3rd level spell slots */}
+                    {isHarness && harnessableSlots.length > 0 && (
+                      <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-zinc-800/80">
+                        <span className="text-[10px] font-mono uppercase tracking-wider text-blue-300 font-bold">
+                          Choose Spell Slot to Regain:
+                        </span>
+                        {harnessableSlots.map((s) => {
+                          const isFull = s.available >= s.total;
+                          return (
+                            <button
+                              key={s.level}
+                              type="button"
+                              onClick={() => {
+                                setChannelDivinityMenuHub(null);
+                                onSelectAction({
+                                  ...opt,
+                                  castAtLevel: s.level
+                                });
+                              }}
+                              className={`px-2.5 py-1 rounded-lg border font-mono text-[11px] font-bold transition-all cursor-pointer active:scale-95 flex items-center gap-1.5 ${
+                                !isFull
+                                  ? 'bg-blue-950 hover:bg-blue-800 border-blue-400 text-blue-200 hover:text-white shadow-[0_0_8px_rgba(59,130,246,0.3)]'
+                                  : 'bg-zinc-900 hover:bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-zinc-200'
+                              }`}
+                              title={`Restore 1 ${formatSpellLevelLabel(s.level)} Level Spell Slot (${s.available}/${s.total} currently available)`}
+                            >
+                              <span>+1 {formatSpellLevelLabel(s.level)} Level Slot</span>
+                              <span className="text-[10px] opacity-80">({s.available}/{s.total})</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3 sm:p-4 border-t border-zinc-800 bg-zinc-900/60 flex items-center justify-between gap-2 shrink-0">
+              <span className="text-[11px] font-mono text-zinc-400">
+                Channel Divinity uses recharge on a Short or Long Rest.
+              </span>
+              <button
+                type="button"
+                onClick={() => setChannelDivinityMenuHub(null)}
+                className="px-3.5 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-mono text-xs font-bold cursor-pointer transition-colors"
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>

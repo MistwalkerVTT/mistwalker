@@ -3,7 +3,7 @@ import { getDdbHeaders, getDdbAuthHeaders } from './ddbService';
 import { Character } from '../src/types/character';
 import { DdbGameLogDaemon } from './ddbGameLogDaemon';
 import { findJb2aAsset } from '../src/effects/db/jb2aRegistry';
-import { computeUpcastFormula, HudUpcastOption, resolveActionSpecialAbilities } from '../src/types/hud';
+import { computeUpcastFormula, HudUpcastOption, resolveActionSpecialAbilities, consolidateChannelDivinityLists } from '../src/types/hud';
 import { lookupDndRuleDetails } from '../src/data/dndRulesCompendium';
 
 export interface DdbCampaignSummary {
@@ -2093,6 +2093,18 @@ export function normalizeDdbCharacterToHud(c: any, charId: string): any {
       }
     }
   }
+
+  // Consolidate all Channel Divinity options (Turn Undead, Preserve Life, Harness Divine Power, etc.) into a single unified Channel Divinity selector card and remove duplicate standalone cards
+  consolidateChannelDivinityLists(
+    { actions, bonusActions, special },
+    {
+      characterName: c.name || 'Character',
+      classLevel,
+      totalLevel: computed.totalLevel,
+      spellSaveDc,
+      profBonus
+    }
+  );
 
   // Attach inline special ability / on-hit trigger buttons to all attacks, actions, bonus actions & spells
   const specialCtx = {

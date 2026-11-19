@@ -58,7 +58,8 @@ import {
   normalizePlayerAutoRollKey,
   loadPlayerAutoRollMap,
   savePlayerAutoRollPreference,
-  resolveActionSpecialAbilities
+  resolveActionSpecialAbilities,
+  consolidateChannelDivinityLists
 } from '../types/hud';
 import { WallSegment, DoorState, AURA_PRESETS, AuraPreset } from '../types';
 import { PlayerHeroDock } from './PlayerHeroDock';
@@ -938,6 +939,17 @@ function buildArenaCombatantHudData(
     liveDdbHud?.hasBookOfExaltedDeeds ||
       combatant.name.toLowerCase().includes('stavros') ||
       char?.name?.toLowerCase().includes('stavros')
+  );
+
+  consolidateChannelDivinityLists(
+    { actions, bonusActions, special },
+    {
+      characterName: combatant.name,
+      classLevel: combatant.classOrCr || char?.classLevel || '',
+      totalLevel,
+      spellSaveDc,
+      profBonus
+    }
   );
 
   const arenaSpecialCtx = {
@@ -3213,6 +3225,89 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           `activated Devotee's Censer: Healing Incense (+${incenseRoll.total} HP to all within 10ft)!`,
           incenseRoll.breakdown
         );
+        return true;
+      }
+
+      // 1d. Channel Divinity: Turn Undead (30ft Radiant Censure AoE) & Harness Divine Power
+      if (lowerName.includes('turn undead') || lowerName.includes('turn the unholy')) {
+        soundCatalog.play('holy_radiance', 0.9);
+        const turnFx: VttEffectInstance = {
+          id: `eff_arena_turn_${Date.now()}`,
+          name: action.name,
+          label: 'Channel Divinity: Turn Undead (30ft Radiant Censure)',
+          assetKey: 'holy_aura',
+          videoUrl: '/jb2a/Community/JackKerouac/lathander_symbol_CIRCLE_01.webm',
+          paradigm: 'aura',
+          x: actorCx,
+          y: actorCy,
+          sizeFt: 30,
+          rotation: 0,
+          opacity: 0.95,
+          blendMode: 'screen',
+          isPersistent: false,
+          loop: false,
+          castTime: Date.now(),
+          durationMs: 4800,
+          soundKey: 'holy_radiance',
+          color: '#fef08a',
+          attachedTokenId: actor.id,
+          casterName: actor.name
+        };
+        setArenaEffects((prev) => [...prev, turnFx]);
+        const dc = Number(action.saveDc) || 19;
+        const turnedList: string[] = [];
+        setCombatants((prev) =>
+          prev.map((c) => {
+            if (c.id === actor.id) return markActorUsed(c);
+            if (c.team !== actor.team && c.currentHp > 0) {
+              const cx = c.x + ((c.size || 1) * arenaGridSize) / 2;
+              const cy = c.y + ((c.size || 1) * arenaGridSize) / 2;
+              const d = Math.round((Math.hypot(cx - actorCx, cy - actorCy) / arenaGridSize) * 5);
+              if (d <= 30) {
+                const saveRoll = Math.floor(Math.random() * 20) + 1 + 2;
+                if (saveRoll < dc) {
+                  turnedList.push(`${c.name} (Turned! Rolled ${saveRoll} vs DC ${dc})`);
+                  const nextConds = c.conditions.includes('Frightened') ? c.conditions : [...c.conditions, 'Frightened'];
+                  return { ...c, conditions: nextConds };
+                } else {
+                  turnedList.push(`${c.name} (Saved: ${saveRoll} vs DC ${dc})`);
+                }
+              }
+            }
+            return c;
+          })
+        );
+        toast.success(`☀️ ${actor.name} invoked ${action.name}!`, {
+          description: turnedList.length > 0 ? turnedList.join(' • ') : `30 ft. Radiant Censure AoE (DC ${dc} WIS Save)`
+        });
+        addCombatLog(
+          actor.name,
+          actor.team,
+          `invoked ${action.name} (30ft Radiant AoE • DC ${dc} WIS)!`,
+          turnedList.join(' • ') || action.description
+        );
+        return true;
+      }
+
+      if (lowerName.includes('harness divine power')) {
+        soundCatalog.play('divine_chime', 0.9);
+        spawnArenaVisualEffect(actor, actor, { ...action, jb2aAssetId: 'bless' });
+        const targetLvl = action.castAtLevel && action.castAtLevel >= 1 && action.castAtLevel <= 3 ? action.castAtLevel : 3;
+        const charKey = String(actor.sourceCharacter?.ddbCharacterId || actor.id || actor.name);
+        const existingSlots = manualSpellSlotsRef.current[charKey] || {};
+        const curSlot = activeHeroHudData?.spellSlots?.[targetLvl];
+        if (curSlot) {
+          const nextAvail = Math.min(curSlot.total, curSlot.available + 1);
+          manualSpellSlotsRef.current[charKey] = {
+            ...existingSlots,
+            [targetLvl]: { available: nextAvail, total: curSlot.total }
+          };
+          toast.success(`✨ ${actor.name}: Harness Divine Power! Regained 1 Level ${targetLvl} spell slot (${nextAvail}/${curSlot.total}).`);
+        } else {
+          toast.success(`✨ ${actor.name}: Harness Divine Power! Regained 1 spell slot (up to Level 3).`);
+        }
+        setCombatants((prev) => prev.map((c) => (c.id === actor.id ? markActorUsed(c) : c)));
+        addCombatLog(actor.name, actor.team, `used Channel Divinity: Harness Divine Power (+1 Level ${targetLvl} Spell Slot)!`);
         return true;
       }
 

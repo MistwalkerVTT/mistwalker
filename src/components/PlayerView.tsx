@@ -136,7 +136,8 @@ import {
   normalizePlayerAutoRollKey,
   loadPlayerAutoRollMap,
   savePlayerAutoRollPreference,
-  resolveActionSpecialAbilities
+  resolveActionSpecialAbilities,
+  consolidateChannelDivinityLists
 } from '../types/hud';
 import { classifySpellMechanics, resolveSpellSavingThrows } from '../services/spellResolutionEngine';
 import { TokenDragRuler, TokenDragState, parseSpeedFt } from './TokenDragRuler';
@@ -1585,6 +1586,17 @@ const buildFallbackHudData = (token: Token, stats: any, customChars?: Character[
       }
     });
   }
+
+  consolidateChannelDivinityLists(
+    { actions, bonusActions, special },
+    {
+      characterName: name,
+      classLevel: matchedChar?.classLevel || '',
+      totalLevel,
+      spellSaveDc,
+      profBonus
+    }
+  );
 
   const specialCtx = {
     characterName: name,
@@ -4927,6 +4939,179 @@ export default function PlayerView() {
       return;
     }
 
+    // Helper to decrement 1 Channel Divinity use across HUD actions/special
+    const consumeChannelDivinityUse = () => {
+      setHudCharacterData((prev) => {
+        if (!prev) return prev;
+        const decUses = (list?: HudActionItem[]) =>
+          Array.isArray(list)
+            ? list.map((item) => {
+                if (item.isChannelDivinityHub || item.name.toLowerCase().trim() === 'channel divinity') {
+                  if (item.uses && item.uses.available > 0) {
+                    return {
+                      ...item,
+                      uses: { ...item.uses, available: Math.max(0, item.uses.available - 1) }
+                    };
+                  }
+                }
+                return item;
+              })
+            : list;
+        return {
+          ...prev,
+          actions: decUses(prev.actions) || prev.actions,
+          special: decUses(prev.special)
+        };
+      });
+    };
+
+    // Intercept Channel Divinity: Turn Undead / Turn the Unholy (30 ft Radiant Censure AoE)
+    if ((lowerName.includes('turn undead') || lowerName.includes('turn the unholy')) && claimedToken) {
+      consumeChannelDivinityUse();
+      const tokenRadius = ((claimedToken.size || 1) * gridSize) / 2;
+      const casterCenter = { x: claimedToken.x + tokenRadius, y: claimedToken.y + tokenRadius };
+      const holyAsset = JB2A_REGISTRY.find((a) => a.id === 'holy_aura') || matchedAsset;
+      const turnEffect: VttEffectInstance = {
+        id: `eff_turn_undead_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        name: action.name,
+        label: 'Channel Divinity: Turn Undead (30ft Radiant Censure)',
+        assetKey: 'holy_aura',
+        videoUrl: holyAsset?.webm || '/jb2a/Community/JackKerouac/lathander_symbol_CIRCLE_01.webm',
+        thumbUrl: holyAsset?.thumb || '/jb2a/Community/JackKerouac/lathander_symbol_CIRCLE_01.webm',
+        paradigm: 'aura',
+        x: casterCenter.x,
+        y: casterCenter.y,
+        sizeFt: action.rangeFt || 30,
+        rotation: 0,
+        opacity: 0.95,
+        blendMode: 'screen',
+        isPersistent: false,
+        loop: false,
+        attachedTokenId: claimedToken.id,
+        castTime: Date.now(),
+        durationMs: 4800,
+        soundKey: 'holy_radiance',
+        color: '#fef08a',
+        ownerId: claimedToken.id,
+        casterName: claimedToken.name || 'Hero',
+        spellId: action.id,
+        saveDc: action.saveDc || hudCharacterData?.spellSaveDc || 20,
+        saveAbility: action.saveAbility || 'WIS',
+        description: action.description,
+        actionSnapshot: { ...action }
+      };
+      setEffects((prev) => [...prev, turnEffect]);
+      soundCatalog.play('holy_radiance');
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('EFFECT_SPAWN', turnEffect);
+      }
+      const dcVal = action.saveDc || hudCharacterData?.spellSaveDc || 20;
+      const destroyCr = (hudCharacterData?.totalLevel || 15) >= 17 ? '4' : (hudCharacterData?.totalLevel || 15) >= 14 ? '3' : (hudCharacterData?.totalLevel || 15) >= 11 ? '2' : (hudCharacterData?.totalLevel || 15) >= 8 ? '1' : '1/2';
+      toast.success(`☀️ ${claimedToken.name}: ${action.name}!`, {
+        description: `30 ft. Radiant Censure • Undead within 30 ft must make a DC ${dcVal} WIS Save (Undead CR ≤ ${destroyCr} are instantly Destroyed!).`
+      });
+      setActiveTargetingAction(null);
+      setActiveEquippedAsset(null);
+      setAimOrigin(null);
+      setAimCurrent(null);
+      return;
+    }
+
+    // Intercept Channel Divinity: Harness Divine Power (Restore 1 Expended Spell Slot up to 3rd Level)
+    if (lowerName.includes('harness divine power') && claimedToken) {
+      consumeChannelDivinityUse();
+      const tokenRadius = ((claimedToken.size || 1) * gridSize) / 2;
+      const casterCenter = { x: claimedToken.x + tokenRadius, y: claimedToken.y + tokenRadius };
+      const blessAsset = JB2A_REGISTRY.find((a) => a.id === 'bless') || matchedAsset;
+      const harnessEffect: VttEffectInstance = {
+        id: `eff_harness_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        name: 'Channel Divinity: Harness Divine Power',
+        label: 'Harness Divine Power (Spell Slot Restored)',
+        assetKey: 'bless',
+        videoUrl: blessAsset?.webm || '/jb2a/Library/1st_Level/Bless/Bless_01_Regular_Yellow_Intro_400x400.webm',
+        thumbUrl: blessAsset?.thumb || '/jb2a/Library/1st_Level/Bless/Bless_01_Regular_Yellow_Thumb.webp',
+        paradigm: 'aura',
+        x: casterCenter.x,
+        y: casterCenter.y,
+        sizeFt: 10,
+        rotation: 0,
+        opacity: 0.95,
+        blendMode: 'screen',
+        isPersistent: false,
+        loop: false,
+        attachedTokenId: claimedToken.id,
+        castTime: Date.now(),
+        durationMs: 3600,
+        soundKey: 'divine_chime',
+        color: '#fbbf24',
+        ownerId: claimedToken.id,
+        casterName: claimedToken.name || 'Hero',
+        spellId: action.id,
+        description: action.description,
+        actionSnapshot: { ...action }
+      };
+      setEffects((prev) => [...prev, harnessEffect]);
+      soundCatalog.play('divine_chime');
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('EFFECT_SPAWN', harnessEffect);
+      }
+
+      // Restore 1 expended spell slot up to Level 3 (or explicit action.castAtLevel if user clicked +1 1st/2nd/3rd button)
+      let restoredLvl: number | null = action.castAtLevel && action.castAtLevel >= 1 && action.castAtLevel <= 3 ? action.castAtLevel : null;
+      if (!restoredLvl && hudCharacterData?.spellSlots) {
+        for (const lvl of [3, 2, 1]) {
+          const s = hudCharacterData.spellSlots[lvl];
+          if (s && s.available < s.total) {
+            restoredLvl = lvl;
+            break;
+          }
+        }
+        if (!restoredLvl) restoredLvl = 3;
+      }
+
+      if (restoredLvl && hudCharacterData?.spellSlots?.[restoredLvl]) {
+        const curSlot = hudCharacterData.spellSlots[restoredLvl];
+        const nextAvail = Math.min(curSlot.total, curSlot.available + 1);
+        const charKey = String(hudCharacterData.ddbCharacterId || hudCharacterData.id || claimedToken.id || hudCharacterData.name);
+        manualSpellSlotsRef.current[charKey] = {
+          ...(manualSpellSlotsRef.current[charKey] || {}),
+          [restoredLvl]: { available: nextAvail, total: curSlot.total }
+        };
+        setHudCharacterData((prev) => {
+          if (!prev?.spellSlots?.[restoredLvl!]) return prev;
+          return {
+            ...prev,
+            spellSlots: {
+              ...prev.spellSlots,
+              [restoredLvl!]: {
+                ...prev.spellSlots[restoredLvl!],
+                available: nextAvail,
+                used: Math.max(0, prev.spellSlots[restoredLvl!].total - nextAvail)
+              }
+            }
+          };
+        });
+        toast.success(`✨ ${claimedToken.name}: Harness Divine Power!`, {
+          description: `Regained 1 Level ${restoredLvl} Spell Slot (${nextAvail}/${curSlot.total} available).`
+        });
+      } else {
+        toast.success(`✨ ${claimedToken.name}: Harness Divine Power!`, {
+          description: `Channel Divinity invoked to restore a spell slot (up to Level 3).`
+        });
+      }
+
+      setActiveTargetingAction(null);
+      setActiveEquippedAsset(null);
+      setAimOrigin(null);
+      setAimCurrent(null);
+      return;
+    }
+
+    // Intercept Channel Divinity: Preserve Life (consume 1 Channel Divinity use when entering targeting)
+    if (lowerName.includes('preserve life')) {
+      consumeChannelDivinityUse();
+    }
+
     // Intercept Wild Shape activation
     if (lowerName.includes('wild shape') || action.id === 'druid-wild-shape') {
       if (activeWildShape && claimedToken) {
@@ -4991,12 +5176,12 @@ export default function PlayerView() {
 
     const isManeuver = [
       'dash', 'dodge', 'disengage', 'hide', 'rage', 'action surge', 'second wind',
-      'harness divine power', 'channel divinity', 'divine intervention', 'blessed strikes',
+      'divine intervention', 'blessed strikes',
       'blessed healer', 'destroy undead', 'enlightened magic', 'relentless endurance',
       'ki points', 'patient defense', 'step of the wind', 'wholeness of body',
       'quickened healing', 'indomitable', 'arcane recovery', 'portent', 'lucky',
       'wild shape', 'wild resurgence', 'crimson rite', 'magical cunning', 'cunning action', 'steady aim'
-    ].some(k => lowerName.includes(k)) || (action.category === 'special' && action.isSelfAction);
+    ].some(k => lowerName.includes(k)) || (action.category === 'special' && action.isSelfAction && !action.isChannelDivinityHub);
     const isSpellOrTargeted = action.category === 'spells' || action.subCategory === 'spell' || action.isHeal || lowerName.includes('shield');
     if (action.isSelfAction && isManeuver && !isSpellOrTargeted && claimedToken) {
       const tokenRadius = ((claimedToken.size || 1) * gridSize) / 2;

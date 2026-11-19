@@ -89,6 +89,8 @@ export interface HudActionItem {
   canUpcast?: boolean;        // True if spell scales when cast with a higher-level slot
   upcastOptions?: HudUpcastOption[]; // Pre-computed scaling per slot level (level..9)
   specialAbilities?: HudSpecialAbilityTrigger[]; // Inline special ability / trigger buttons on attack/spell/action cards
+  isChannelDivinityHub?: boolean; // True if this card is the unified Channel Divinity selector hub
+  subOptions?: HudActionItem[];   // Sub-actions selectable from the Channel Divinity choice menu
 }
 
 /**
@@ -893,4 +895,330 @@ export function resolveActionSpecialAbilities(
   }
 
   return existing;
+}
+
+export interface ConsolidateChannelDivinityContext {
+  characterName?: string;
+  classLevel?: string;
+  totalLevel?: number;
+  spellSaveDc?: number;
+  profBonus?: number;
+}
+
+/**
+ * Checks whether an action or feature belongs to the Channel Divinity family
+ * (so redundant standalone entries can be consolidated into one unified Channel Divinity hub card).
+ */
+export function isChannelDivinityRelatedAction(name: string | undefined): boolean {
+  if (!name) return false;
+  const n = name.toLowerCase().replace(/[\u2018\u2019`]/g, "'").trim();
+  return (
+    n === 'channel divinity' ||
+    n.startsWith('channel divinity') ||
+    n.includes('turn undead') ||
+    n.includes('destroy undead') ||
+    n.includes('preserve life') ||
+    n.includes('harness divine power') ||
+    n.includes('turn the unholy') ||
+    n.includes('sacred weapon') ||
+    n.includes('abjure enemy') ||
+    n.includes('vow of enmity') ||
+    n.includes('radiance of the dawn') ||
+    n.includes('twilight sanctuary') ||
+    n.includes('guided strike') ||
+    n.includes("war god's blessing") ||
+    n.includes('invoke duplicity') ||
+    n.includes("artisan's blessing") ||
+    n.includes('charm animals and plants') ||
+    n.includes('destructive wrath') ||
+    n.includes('knowledge of the ages') ||
+    n.includes('read thoughts') ||
+    n.includes('balm of peace')
+  );
+}
+
+/**
+ * Consolidates all Channel Divinity options (Turn Undead + Destroy Undead, Preserve Life,
+ * Harness Divine Power, and any Paladin/Cleric subclass Channel Divinity features) into a
+ * single unified `Channel Divinity` hub card with `isChannelDivinityHub: true` and `subOptions`,
+ * while removing all redundant duplicate Channel Divinity cards from `actions`, `bonusActions`, and `special`.
+ */
+export function consolidateChannelDivinityLists(
+  lists: {
+    actions: HudActionItem[];
+    bonusActions: HudActionItem[];
+    special: HudActionItem[];
+  },
+  ctx: ConsolidateChannelDivinityContext = {}
+): void {
+  const lowerChar = (ctx.characterName || '').toLowerCase();
+  const lowerClass = (ctx.classLevel || '').toLowerCase();
+  const totalLvl = ctx.totalLevel || 5;
+  const saveDc = ctx.spellSaveDc || 15;
+  const profBonus = ctx.profBonus || (Math.ceil(totalLvl / 4) + 1);
+
+  const isCleric = lowerClass.includes('cleric') || lowerChar.includes('stavros');
+  const isPaladin = lowerClass.includes('paladin') || lowerChar.includes('brannoc');
+
+  const allPool = [...lists.actions, ...lists.bonusActions, ...lists.special];
+  const hasAnyCdInLists = allPool.some((a) => isChannelDivinityRelatedAction(a.name));
+
+  if (!isCleric && !isPaladin && !hasAnyCdInLists) {
+    return;
+  }
+
+  // Determine Channel Divinity uses (Clerics get 1 at Lv2, 2 at Lv6, 3 at Lv18; Paladins get 1 at Lv3, 2 at Lv11 in 2024)
+  const existingHubWithUses = allPool.find(
+    (a) => a.name.toLowerCase().trim() === 'channel divinity' && a.uses && a.uses.total > 0
+  );
+  const defaultTotalUses = isCleric ? (totalLvl >= 18 ? 3 : totalLvl >= 6 ? 2 : 1) : 1;
+  const cdUses: HudActionUses = existingHubWithUses?.uses || {
+    available: defaultTotalUses,
+    total: defaultTotalUses,
+    resetType: 'Short Rest'
+  };
+
+  const destroyUndeadCr =
+    totalLvl >= 17 ? '4' : totalLvl >= 14 ? '3' : totalLvl >= 11 ? '2' : totalLvl >= 8 ? '1' : totalLvl >= 5 ? '1/2' : undefined;
+  const maxHarnessSlotLvl = Math.min(3, Math.ceil(profBonus / 2));
+
+  const subOptionsMap = new Map<string, HudActionItem>();
+
+  // 1. Collect any specific Channel Divinity sub-options already extracted from D&D Beyond
+  for (const item of allPool) {
+    const rawName = (item.name || '').trim();
+    const lower = rawName.toLowerCase();
+    if (!isChannelDivinityRelatedAction(rawName)) continue;
+    // Skip generic parent "Channel Divinity" or passive "Destroy Undead" (merged into Turn Undead)
+    if (lower === 'channel divinity' || /^channel divinity\s*\(/i.test(rawName)) continue;
+    if (lower.startsWith('destroy undead')) continue;
+
+    if (lower.includes('turn undead')) {
+      subOptionsMap.set('turn_undead', {
+        ...item,
+        id: 'cd-opt-turn-undead',
+        name: destroyUndeadCr
+          ? `Channel Divinity: Turn Undead (Destroy CR ${destroyUndeadCr} or Lower)`
+          : 'Channel Divinity: Turn Undead',
+        category: 'actions',
+        type: 'action',
+        subCategory: 'class',
+        sourceLabel: destroyUndeadCr ? `Cleric • Destroy Undead (CR ≤ ${destroyUndeadCr})` : 'Cleric • Channel Divinity',
+        castingTime: '1 Action',
+        rangeFt: 30,
+        saveDc: item.saveDc || saveDc,
+        saveAbility: 'WIS',
+        isSelfAction: false,
+        jb2aAssetId: 'holy_aura',
+        notes: destroyUndeadCr ? `30 ft. Radius AoE • Undead CR ≤ ${destroyUndeadCr} Instantly Destroyed` : '30 ft. Radius AoE',
+        description: destroyUndeadCr
+          ? `As an action, you present your holy symbol and speak a prayer censuring the undead. Each undead that can see or hear you within 30 feet of you must make a DC ${item.saveDc || saveDc} WIS saving throw. On a failed save, an undead of CR ${destroyUndeadCr} or lower is instantly destroyed (Destroy Undead); otherwise it is turned for 1 minute or until it takes damage.`
+          : item.description
+      });
+    } else if (lower.includes('preserve life')) {
+      const preservePool = totalLvl * 5;
+      subOptionsMap.set('preserve_life', {
+        ...item,
+        id: 'cd-opt-preserve-life',
+        name: `Channel Divinity: Preserve Life (${preservePool} HP Pool)`,
+        category: 'actions',
+        type: 'action',
+        subCategory: 'class',
+        sourceLabel: 'Life Domain • Channel Divinity',
+        castingTime: '1 Action',
+        rangeFt: 30,
+        damageFormula: `${preservePool}`,
+        damageType: 'healing',
+        isHeal: true,
+        isSelfAction: false,
+        jb2aAssetId: 'cure_wounds',
+        notes: `Restore up to ${preservePool} HP within 30 ft. (up to half max HP)`,
+        description: `As an action, you present your holy symbol and evoke healing energy that can restore ${preservePool} hit points (5 × Cleric level). Choose any creatures within 30 feet of you, and divide those hit points among them. This feature can restore a creature to no more than half of its hit point maximum.`
+      });
+    } else if (lower.includes('harness divine power')) {
+      subOptionsMap.set('harness_divine_power', {
+        ...item,
+        id: 'cd-opt-harness-divine-power',
+        name: `Channel Divinity: Harness Divine Power (Restore ≤ Lv ${maxHarnessSlotLvl} Slot)`,
+        category: 'bonus_actions',
+        type: 'bonus_action',
+        subCategory: 'class',
+        sourceLabel: 'TCoE • Channel Divinity',
+        castingTime: '1 Bonus Action',
+        rangeFt: 0,
+        isSelfAction: true,
+        jb2aAssetId: 'bless',
+        notes: `Regain 1 Expended Spell Slot up to Level ${maxHarnessSlotLvl}`,
+        description: `You can expend a use of your Channel Divinity to fuel your spells. As a bonus action, you touch your holy symbol, utter a prayer, and regain one expended spell slot, the level of which can be no higher than ${maxHarnessSlotLvl} (half your proficiency bonus, rounded up).`
+      });
+    } else {
+      const cleanKey = lower.replace(/^channel divinity:\s*/i, '').trim();
+      if (!subOptionsMap.has(cleanKey)) {
+        subOptionsMap.set(cleanKey, {
+          ...item,
+          id: `cd-opt-${cleanKey.replace(/[^a-z0-9]+/g, '-')}`,
+          name: rawName.toLowerCase().startsWith('channel divinity') ? rawName : `Channel Divinity: ${rawName}`,
+          jb2aAssetId: item.jb2aAssetId || 'holy_aura'
+        });
+      }
+    }
+  }
+
+  // 2. Ensure core Cleric / Stavros Channel Divinity options exist even on fallback sheets
+  if (isCleric) {
+    if (!subOptionsMap.has('turn_undead')) {
+      subOptionsMap.set('turn_undead', {
+        id: 'cd-opt-turn-undead',
+        name: destroyUndeadCr
+          ? `Channel Divinity: Turn Undead (Destroy CR ${destroyUndeadCr} or Lower)`
+          : 'Channel Divinity: Turn Undead',
+        category: 'actions',
+        type: 'action',
+        subCategory: 'class',
+        sourceLabel: destroyUndeadCr ? `Cleric • Destroy Undead (CR ≤ ${destroyUndeadCr})` : 'Cleric • Channel Divinity',
+        castingTime: '1 Action',
+        rangeFt: 30,
+        saveDc,
+        saveAbility: 'WIS',
+        isSelfAction: false,
+        jb2aAssetId: 'holy_aura',
+        notes: destroyUndeadCr ? `30 ft. Radius AoE • Undead CR ≤ ${destroyUndeadCr} Instantly Destroyed` : '30 ft. Radius AoE',
+        description: `As an action, you present your holy symbol and speak a prayer censuring the undead. Each undead that can see or hear you within 30 feet of you must make a DC ${saveDc} WIS saving throw. On a failed save, an undead of CR ${destroyUndeadCr || '1/2'} or lower is instantly destroyed; otherwise it is turned for 1 minute or until it takes damage.`
+      });
+    }
+    if (
+      !subOptionsMap.has('preserve_life') &&
+      (lowerChar.includes('stavros') || lowerClass.includes('life') || allPool.some((a) => a.name.toLowerCase().includes('blessed healer')))
+    ) {
+      const preservePool = totalLvl * 5;
+      subOptionsMap.set('preserve_life', {
+        id: 'cd-opt-preserve-life',
+        name: `Channel Divinity: Preserve Life (${preservePool} HP Pool)`,
+        category: 'actions',
+        type: 'action',
+        subCategory: 'class',
+        sourceLabel: 'Life Domain • Channel Divinity',
+        castingTime: '1 Action',
+        rangeFt: 30,
+        damageFormula: `${preservePool}`,
+        damageType: 'healing',
+        isHeal: true,
+        isSelfAction: false,
+        jb2aAssetId: 'cure_wounds',
+        notes: `Restore up to ${preservePool} HP within 30 ft. (up to half max HP)`,
+        description: `As an action, you present your holy symbol and evoke healing energy that can restore ${preservePool} hit points (5 × Cleric level). Choose any creatures within 30 feet of you, and divide those hit points among them. This feature can restore a creature to no more than half of its hit point maximum.`
+      });
+    }
+    if (!subOptionsMap.has('harness_divine_power')) {
+      subOptionsMap.set('harness_divine_power', {
+        id: 'cd-opt-harness-divine-power',
+        name: `Channel Divinity: Harness Divine Power (Restore ≤ Lv ${maxHarnessSlotLvl} Slot)`,
+        category: 'bonus_actions',
+        type: 'bonus_action',
+        subCategory: 'class',
+        sourceLabel: 'TCoE • Channel Divinity',
+        castingTime: '1 Bonus Action',
+        rangeFt: 0,
+        isSelfAction: true,
+        jb2aAssetId: 'bless',
+        notes: `Regain 1 Expended Spell Slot up to Level ${maxHarnessSlotLvl}`,
+        description: `You can expend a use of your Channel Divinity to fuel your spells. As a bonus action, you touch your holy symbol, utter a prayer, and regain one expended spell slot of up to level ${maxHarnessSlotLvl}.`
+      });
+    }
+  } else if (isPaladin && subOptionsMap.size === 0) {
+    subOptionsMap.set('sacred_weapon', {
+      id: 'cd-opt-sacred-weapon',
+      name: 'Channel Divinity: Sacred Weapon',
+      category: 'actions',
+      type: 'action',
+      subCategory: 'class',
+      sourceLabel: 'Paladin • Channel Divinity',
+      castingTime: '1 Action',
+      rangeFt: 0,
+      isSelfAction: true,
+      jb2aAssetId: 'divine_smite',
+      notes: '+CHA to Attack Rolls • 20 ft. Bright Light (1 Minute)',
+      description: 'Imbue one weapon that you are holding with positive energy. For 1 minute, you add your Charisma modifier to attack rolls made with that weapon (minimum bonus of +1), the weapon emits bright light in a 20-foot radius, and it becomes magical.'
+    });
+    subOptionsMap.set('turn_the_unholy', {
+      id: 'cd-opt-turn-unholy',
+      name: 'Channel Divinity: Turn the Unholy',
+      category: 'actions',
+      type: 'action',
+      subCategory: 'class',
+      sourceLabel: 'Paladin • Channel Divinity',
+      castingTime: '1 Action',
+      rangeFt: 30,
+      saveDc,
+      saveAbility: 'WIS',
+      isSelfAction: false,
+      jb2aAssetId: 'holy_aura',
+      notes: '30 ft. Radius AoE • Turns Fiends & Undead',
+      description: `As an action, you present your holy symbol and speak a prayer censuring fiends and undead. Each fiend or undead that can see or hear you within 30 feet of you must make a DC ${saveDc} Wisdom saving throw or be turned for 1 minute.`
+    });
+    subOptionsMap.set('harness_divine_power', {
+      id: 'cd-opt-harness-divine-power',
+      name: `Channel Divinity: Harness Divine Power (Restore ≤ Lv ${maxHarnessSlotLvl} Slot)`,
+      category: 'bonus_actions',
+      type: 'bonus_action',
+      subCategory: 'class',
+      sourceLabel: 'TCoE • Channel Divinity',
+      castingTime: '1 Bonus Action',
+      rangeFt: 0,
+      isSelfAction: true,
+      jb2aAssetId: 'bless',
+      notes: `Regain 1 Expended Spell Slot up to Level ${maxHarnessSlotLvl}`,
+      description: `Expend a use of your Channel Divinity as a bonus action to regain one expended spell slot of up to level ${maxHarnessSlotLvl}.`
+    });
+  }
+
+  const subOptions = Array.from(subOptionsMap.values());
+  if (subOptions.length === 0) return;
+
+  // 3. Remove all individual/duplicate Channel Divinity entries from actions, bonusActions, and special
+  const stripCdDuplicates = (arr: HudActionItem[]) => {
+    for (let i = arr.length - 1; i >= 0; i--) {
+      if (isChannelDivinityRelatedAction(arr[i].name)) {
+        arr.splice(i, 1);
+      }
+    }
+  };
+  stripCdDuplicates(lists.actions);
+  stripCdDuplicates(lists.bonusActions);
+  stripCdDuplicates(lists.special);
+
+  const optionLabels = subOptions
+    .map((o) => o.name.replace(/^Channel Divinity:\s*/i, '').replace(/\s*\([^)]*\)/g, '').trim())
+    .join(' • ');
+
+  const unifiedCdHub: HudActionItem = {
+    id: 'hub-channel-divinity',
+    name: 'Channel Divinity',
+    category: 'actions',
+    type: 'action',
+    subCategory: 'class',
+    sourceLabel: `Channel Divinity (${subOptions.length} Options)`,
+    castingTime: 'Choose Effect',
+    rangeFt: 30,
+    uses: cdUses,
+    isChannelDivinityHub: true,
+    subOptions,
+    notes: optionLabels,
+    description: `Channel divine energy from your deity to fuel magical effects (${cdUses.available}/${cdUses.total} uses per Short or Long Rest). Click to choose: ${optionLabels}.`,
+    jb2aAssetId: 'holy_aura'
+  };
+
+  // Insert unified Channel Divinity card at the top of Actions (right after weapon attacks) and in Special
+  const firstNonWeaponIdx = lists.actions.findIndex((a) => a.subCategory !== 'weapon' && a.subCategory !== 'unarmed');
+  if (firstNonWeaponIdx >= 0) {
+    lists.actions.splice(firstNonWeaponIdx, 0, unifiedCdHub);
+  } else {
+    lists.actions.push(unifiedCdHub);
+  }
+
+  lists.special.unshift({
+    ...unifiedCdHub,
+    id: 'special-hub-channel-divinity',
+    category: 'special'
+  });
 }
