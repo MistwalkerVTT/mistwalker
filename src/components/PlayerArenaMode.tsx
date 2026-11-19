@@ -2516,7 +2516,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
   );
 
   const isAutoRollDiceEnabled = useMemo(
-    () => autoRollByPlayerMap[activePlayerAutoRollKey] !== false,
+    () => autoRollByPlayerMap[activePlayerAutoRollKey] === true,
     [autoRollByPlayerMap, activePlayerAutoRollKey]
   );
 
@@ -2526,7 +2526,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       combatant.sourceCharacter?.ddbCharacterId,
       combatant.id
     );
-    return autoRollByPlayerMapRef.current[key] !== false;
+    return autoRollByPlayerMapRef.current[key] === true;
   }, []);
 
   const handleToggleAutoRollDice = useCallback(

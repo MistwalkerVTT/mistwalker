@@ -36,7 +36,10 @@ import {
   resolveActionSpecialAbilities,
   resolveActionAutomaticExtraDamage,
   consolidateChannelDivinityLists,
-  isChannelDivinityRelatedAction
+  isChannelDivinityRelatedAction,
+  normalizePlayerAutoRollKey,
+  loadPlayerAutoRollPromptedMap,
+  markPlayerAutoRollPrompted
 } from '../types/hud';
 import { findJb2aAsset } from '../effects/db/jb2aRegistry';
 import { classifySpellMechanics } from '../services/spellResolutionEngine';
@@ -100,7 +103,7 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
   isSyncingDdb = false,
   isDdbSyncEnabled = true,
   onToggleDdbSync,
-  isAutoRollDiceEnabled = true,
+  isAutoRollDiceEnabled = false,
   onToggleAutoRollDice,
   onTargetSelf,
   activeEffects = [],
@@ -139,6 +142,40 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState<boolean>(false);
   const [isDockMinimizedWhileAiming, setIsDockMinimizedWhileAiming] = useState<boolean>(false);
   const [isHoveringWildShapeBtn, setIsHoveringWildShapeBtn] = useState<boolean>(false);
+  const [showAutoRollOnboardingPrompt, setShowAutoRollOnboardingPrompt] = useState<boolean>(false);
+  const [highlightAutoRollToggle, setHighlightAutoRollToggle] = useState<boolean>(false);
+
+  // Prompt the player when they first sign on with a character to ask if they'd like to turn Auto Roll ON,
+  // and highlight where the Auto Roll toggle switch lives in the HUD header.
+  const activeHeroPromptKey = useMemo(
+    () =>
+      normalizePlayerAutoRollKey(
+        characterData?.name || claimedToken?.name,
+        characterData?.ddbCharacterId,
+        characterData?.id || claimedToken?.id
+      ),
+    [characterData?.name, characterData?.ddbCharacterId, characterData?.id, claimedToken?.name, claimedToken?.id]
+  );
+
+  useEffect(() => {
+    if (!onToggleAutoRollDice) return;
+    if (!activeHeroPromptKey || activeHeroPromptKey === 'default') return;
+    const promptedMap = loadPlayerAutoRollPromptedMap();
+    if (!promptedMap[activeHeroPromptKey]) {
+      setShowAutoRollOnboardingPrompt(true);
+    }
+  }, [activeHeroPromptKey, onToggleAutoRollDice]);
+
+  const handleChooseAutoRollOnboarding = (enableAutoRoll: boolean) => {
+    markPlayerAutoRollPrompted(activeHeroPromptKey);
+    setShowAutoRollOnboardingPrompt(false);
+    setIsTrayCollapsed(false);
+    onToggleAutoRollDice?.(enableAutoRoll);
+    setHighlightAutoRollToggle(true);
+    window.setTimeout(() => {
+      setHighlightAutoRollToggle(false);
+    }, 6500);
+  };
 
   // Minimize HUD tray and any open action popups when requested (e.g. upon Wild Shape transformation)
   useEffect(() => {
@@ -1478,34 +1515,52 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
             )}
 
             {onToggleAutoRollDice && (
-              <button
-                type="button"
-                onClick={() => onToggleAutoRollDice(!isAutoRollDiceEnabled)}
-                role="switch"
-                aria-checked={isAutoRollDiceEnabled}
-                className={`px-2.5 py-1.5 rounded-xl border transition-all cursor-pointer flex items-center gap-2 text-[11px] font-mono font-bold ${
-                  isAutoRollDiceEnabled
-                    ? 'bg-amber-950/70 hover:bg-amber-900/80 text-amber-300 border-amber-500/50 shadow-sm'
-                    : 'bg-zinc-950 hover:bg-zinc-900 text-zinc-400 hover:text-zinc-200 border-zinc-800'
-                }`}
-                title={
-                  isAutoRollDiceEnabled
-                    ? 'Automatic Dice Rolling is ON — casting spells/actions rolls 3D dice automatically (Click to turn OFF for spell animations only)'
-                    : 'Automatic Dice Rolling is OFF — casting spells/actions plays spell animations only without rolling dice (Click to turn ON)'
-                }
-              >
-                <Dices className={`w-3.5 h-3.5 ${isAutoRollDiceEnabled ? 'text-amber-400' : 'text-zinc-500'}`} />
-                <div
-                  className={`w-6 h-3.5 rounded-full p-0.5 transition-colors flex items-center ${
-                    isAutoRollDiceEnabled ? 'bg-amber-500 justify-end' : 'bg-zinc-700 justify-start'
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHighlightAutoRollToggle(false);
+                    onToggleAutoRollDice(!isAutoRollDiceEnabled);
+                  }}
+                  role="switch"
+                  aria-checked={isAutoRollDiceEnabled}
+                  className={`px-2.5 py-1.5 rounded-xl border transition-all cursor-pointer flex items-center gap-2 text-[11px] font-mono font-bold ${
+                    highlightAutoRollToggle
+                      ? 'ring-2 ring-amber-400 shadow-[0_0_22px_rgba(245,158,11,0.85)] animate-pulse '
+                      : ''
+                  }${
+                    isAutoRollDiceEnabled
+                      ? 'bg-amber-950/70 hover:bg-amber-900/80 text-amber-300 border-amber-500/50 shadow-sm'
+                      : 'bg-zinc-950 hover:bg-zinc-900 text-zinc-400 hover:text-zinc-200 border-zinc-800'
                   }`}
+                  title={
+                    isAutoRollDiceEnabled
+                      ? 'Automatic Dice Rolling is ON — casting spells/actions rolls 3D dice automatically (Click to turn OFF for spell animations only)'
+                      : 'Automatic Dice Rolling is OFF — casting spells/actions plays spell animations only without rolling dice (Click to turn ON)'
+                  }
                 >
-                  <div className="w-2.5 h-2.5 rounded-full bg-white shadow-xs" />
-                </div>
-                <span className="hidden lg:inline">
-                  Auto Roll: {isAutoRollDiceEnabled ? 'ON' : 'OFF'}
-                </span>
-              </button>
+                  <Dices className={`w-3.5 h-3.5 ${isAutoRollDiceEnabled ? 'text-amber-400' : 'text-zinc-500'}`} />
+                  <div
+                    className={`w-6 h-3.5 rounded-full p-0.5 transition-colors flex items-center ${
+                      isAutoRollDiceEnabled ? 'bg-amber-500 justify-end' : 'bg-zinc-700 justify-start'
+                    }`}
+                  >
+                    <div className="w-2.5 h-2.5 rounded-full bg-white shadow-xs" />
+                  </div>
+                  <span className="hidden lg:inline">
+                    Auto Roll: {isAutoRollDiceEnabled ? 'ON' : 'OFF'}
+                  </span>
+                </button>
+                {highlightAutoRollToggle && (
+                  <div
+                    onClick={() => setHighlightAutoRollToggle(false)}
+                    className="absolute -top-11 left-1/2 -translate-x-1/2 whitespace-nowrap px-3 py-1 rounded-xl bg-amber-500 text-zinc-950 font-mono text-[10px] font-extrabold shadow-[0_6px_20px_rgba(245,158,11,0.65)] flex items-center gap-1.5 z-50 animate-bounce cursor-pointer"
+                  >
+                    <span>🎲 Toggle Auto Roll ON/OFF here anytime!</span>
+                    <span className="text-xs leading-none">▼</span>
+                  </div>
+                )}
+              </div>
             )}
 
             {onToggleDdbSync && (
@@ -2180,34 +2235,52 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
             )}
 
             {onToggleAutoRollDice && (
-              <button
-                type="button"
-                onClick={() => onToggleAutoRollDice(!isAutoRollDiceEnabled)}
-                role="switch"
-                aria-checked={isAutoRollDiceEnabled}
-                className={`px-2.5 py-1.5 rounded-xl border transition-all cursor-pointer flex items-center gap-2 text-[11px] font-mono font-bold ${
-                  isAutoRollDiceEnabled
-                    ? 'bg-amber-950/70 hover:bg-amber-900/80 text-amber-300 border-amber-500/50 shadow-sm'
-                    : 'bg-zinc-950 hover:bg-zinc-900 text-zinc-400 hover:text-zinc-200 border-zinc-800'
-                }`}
-                title={
-                  isAutoRollDiceEnabled
-                    ? 'Automatic Dice Rolling is ON — casting spells/actions rolls 3D dice automatically (Click to turn OFF for spell animations only)'
-                    : 'Automatic Dice Rolling is OFF — casting spells/actions plays spell animations only without rolling dice (Click to turn ON)'
-                }
-              >
-                <Dices className={`w-3.5 h-3.5 ${isAutoRollDiceEnabled ? 'text-amber-400' : 'text-zinc-500'}`} />
-                <div
-                  className={`w-6 h-3.5 rounded-full p-0.5 transition-colors flex items-center ${
-                    isAutoRollDiceEnabled ? 'bg-amber-500 justify-end' : 'bg-zinc-700 justify-start'
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHighlightAutoRollToggle(false);
+                    onToggleAutoRollDice(!isAutoRollDiceEnabled);
+                  }}
+                  role="switch"
+                  aria-checked={isAutoRollDiceEnabled}
+                  className={`px-2.5 py-1.5 rounded-xl border transition-all cursor-pointer flex items-center gap-2 text-[11px] font-mono font-bold ${
+                    highlightAutoRollToggle
+                      ? 'ring-2 ring-amber-400 shadow-[0_0_22px_rgba(245,158,11,0.85)] animate-pulse '
+                      : ''
+                  }${
+                    isAutoRollDiceEnabled
+                      ? 'bg-amber-950/70 hover:bg-amber-900/80 text-amber-300 border-amber-500/50 shadow-sm'
+                      : 'bg-zinc-950 hover:bg-zinc-900 text-zinc-400 hover:text-zinc-200 border-zinc-800'
                   }`}
+                  title={
+                    isAutoRollDiceEnabled
+                      ? 'Automatic Dice Rolling is ON — casting spells/actions rolls 3D dice automatically (Click to turn OFF for spell animations only)'
+                      : 'Automatic Dice Rolling is OFF — casting spells/actions plays spell animations only without rolling dice (Click to turn ON)'
+                  }
                 >
-                  <div className="w-2.5 h-2.5 rounded-full bg-white shadow-xs" />
-                </div>
-                <span className="hidden lg:inline">
-                  Auto Roll: {isAutoRollDiceEnabled ? 'ON' : 'OFF'}
-                </span>
-              </button>
+                  <Dices className={`w-3.5 h-3.5 ${isAutoRollDiceEnabled ? 'text-amber-400' : 'text-zinc-500'}`} />
+                  <div
+                    className={`w-6 h-3.5 rounded-full p-0.5 transition-colors flex items-center ${
+                      isAutoRollDiceEnabled ? 'bg-amber-500 justify-end' : 'bg-zinc-700 justify-start'
+                    }`}
+                  >
+                    <div className="w-2.5 h-2.5 rounded-full bg-white shadow-xs" />
+                  </div>
+                  <span className="hidden lg:inline">
+                    Auto Roll: {isAutoRollDiceEnabled ? 'ON' : 'OFF'}
+                  </span>
+                </button>
+                {highlightAutoRollToggle && (
+                  <div
+                    onClick={() => setHighlightAutoRollToggle(false)}
+                    className="absolute -top-11 left-1/2 -translate-x-1/2 whitespace-nowrap px-3 py-1 rounded-xl bg-amber-500 text-zinc-950 font-mono text-[10px] font-extrabold shadow-[0_6px_20px_rgba(245,158,11,0.65)] flex items-center gap-1.5 z-50 animate-bounce cursor-pointer"
+                  >
+                    <span>🎲 Toggle Auto Roll ON/OFF here anytime!</span>
+                    <span className="text-xs leading-none">▼</span>
+                  </div>
+                )}
+              </div>
             )}
 
             {onToggleDdbSync && (
@@ -3296,6 +3369,87 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
               >
                 Cancel
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* FIRST SIGN-ON AUTO DICE ROLL ONBOARDING PROMPT MODAL                      */}
+      {/* ========================================================================= */}
+      {showAutoRollOnboardingPrompt && onToggleAutoRollDice && (
+        <div
+          className="fixed inset-0 z-[270] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-150 pointer-events-auto"
+          onClick={() => handleChooseAutoRollOnboarding(false)}
+        >
+          <div
+            className="relative w-full max-w-md bg-zinc-950/98 border border-amber-500/60 rounded-2xl shadow-[0_20px_70px_rgba(0,0,0,0.95)] flex flex-col overflow-hidden text-left ring-1 ring-amber-400/20"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Top Amber Accent Bar */}
+            <div className="h-1 w-full bg-gradient-to-r from-amber-500 via-yellow-300 to-amber-500" />
+
+            <div className="p-5 sm:p-6 space-y-4">
+              <div className="flex items-start gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-amber-950/80 border border-amber-500/60 flex items-center justify-center shrink-0 shadow-[0_0_16px_rgba(245,158,11,0.3)]">
+                  <Dices className="w-6 h-6 text-amber-400" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-amber-400 font-bold">
+                    Dice Rolling Preference • {name}
+                  </span>
+                  <h3 className="text-base sm:text-lg font-bold text-white font-mono mt-0.5">
+                    Turn On Automatic Dice Rolling?
+                  </h3>
+                  <p className="text-xs text-zinc-300 mt-1 leading-relaxed">
+                    By default, <strong className="text-zinc-100">Auto Roll starts OFF</strong> so you can roll physical dice at the table or play spell animations without automatic rolls. Would you like MistWalker to automatically roll 3D dice when you use attacks, spells, and heals?
+                  </p>
+                </div>
+              </div>
+
+              {/* Visual Diagram Showing Where to Toggle It in the HUD */}
+              <div className="rounded-xl bg-zinc-900/90 border border-zinc-800 p-3.5 space-y-2">
+                <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold flex items-center justify-between">
+                  <span>Where to change your mind anytime:</span>
+                  <span className="text-amber-300">Top Bar of Your HUD</span>
+                </div>
+                <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-zinc-950 border border-zinc-800/90">
+                  <div className="flex items-center gap-2">
+                    <div className="px-2.5 py-1.5 rounded-xl border border-amber-500/60 bg-amber-950/70 text-amber-300 flex items-center gap-2 text-[11px] font-mono font-bold shadow-[0_0_12px_rgba(245,158,11,0.25)]">
+                      <Dices className="w-3.5 h-3.5 text-amber-400" />
+                      <div className="w-6 h-3.5 rounded-full p-0.5 bg-amber-500 flex items-center justify-end">
+                        <div className="w-2.5 h-2.5 rounded-full bg-white" />
+                      </div>
+                      <span>Auto Roll: ON / OFF</span>
+                    </div>
+                  </div>
+                  <span className="text-[11px] font-mono text-amber-300 font-bold">
+                    ← Click in HUD header
+                  </span>
+                </div>
+                <p className="text-[11px] text-zinc-400 leading-snug">
+                  Look for the <strong className="text-amber-300">Auto Roll: ON / OFF</strong> switch in the top bar of your character dock (right next to the search box and <strong className="text-emerald-300">DDB Sync</strong>).
+                </p>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                <button
+                  type="button"
+                  onClick={() => handleChooseAutoRollOnboarding(false)}
+                  className="py-2.5 px-3.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 hover:border-zinc-600 text-zinc-200 font-mono text-xs font-bold transition-all cursor-pointer active:scale-95 flex items-center justify-center gap-2"
+                >
+                  <span>Keep OFF (Manual / Animations)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleChooseAutoRollOnboarding(true)}
+                  className="py-2.5 px-3.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-mono text-xs font-extrabold transition-all cursor-pointer active:scale-95 shadow-lg shadow-amber-500/25 flex items-center justify-center gap-2"
+                >
+                  <Dices className="w-4 h-4" />
+                  <span>Turn Auto Roll ON</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

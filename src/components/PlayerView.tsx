@@ -1809,7 +1809,7 @@ export default function PlayerView() {
   const [autoRollByPlayerMap, setAutoRollByPlayerMap] = useState<Record<string, boolean>>(() =>
     loadPlayerAutoRollMap()
   );
-  const isAutoRollDiceEnabledRef = useRef<boolean>(true);
+  const isAutoRollDiceEnabledRef = useRef<boolean>(false);
   const [autoApplyMonsterDamage, setAutoApplyMonsterDamage] = useState<boolean>(true);
   const [pendingCombatRoll, setPendingCombatRoll] = useState<PendingCombatRoll | null>(null);
   const [showCharacterSelectModal, setShowCharacterSelectModal] = useState<boolean>(false);
@@ -1965,7 +1965,7 @@ export default function PlayerView() {
   );
 
   const isAutoRollDiceEnabled = useMemo(
-    () => autoRollByPlayerMap[activePlayerAutoRollKey] !== false,
+    () => autoRollByPlayerMap[activePlayerAutoRollKey] === true,
     [autoRollByPlayerMap, activePlayerAutoRollKey]
   );
 
@@ -6800,6 +6800,8 @@ export default function PlayerView() {
         activeEquippedAsset?.shape === 'circle' ||
         activeEquippedAsset?.shape === 'cone' ||
         activeEquippedAsset?.shape === 'line' ||
+        activeEquippedAsset?.id === 'scorching_ray' ||
+        lowerActName.includes('scorching ray') ||
         lowerActName.includes('burning hands') ||
         lowerActName.includes('cone of cold') ||
         lowerActName.includes('lightning bolt') ||
@@ -6816,9 +6818,9 @@ export default function PlayerView() {
         lowerActName.includes('shield')
       );
 
-      if (isCreatureTargeted) {
+      if (isCreatureTargeted || lowerActName.includes('scorching ray') || activeEquippedAsset?.id === 'scorching_ray') {
         // Magnetic token snap for touchscreens / fat fingers:
-        // If clicking/tapping within 28px of any token center, target that token!
+        // If clicking/tapping within threshold of any token center, target that token!
         let nearestToken: Token | null = null;
         let nearestDist = Infinity;
         for (const t of tokens) {
@@ -6836,8 +6838,10 @@ export default function PlayerView() {
           return;
         }
 
-        toast.info(`Click on a token to target ${activeTargetingAction.name}${claimedToken ? ' (or click Target Self in the dock)' : ''}.`);
-        return;
+        if (isCreatureTargeted) {
+          toast.info(`Click on a token to target ${activeTargetingAction.name}${claimedToken ? ' (or click Target Self in the dock)' : ''}.`);
+          return;
+        }
       }
     }
 

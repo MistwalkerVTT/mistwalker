@@ -297,7 +297,8 @@ export function evaluateDiceFormula(
   }
 }
 
-const AUTO_ROLL_STORAGE_KEY = 'mistwalker_player_auto_roll_by_hero';
+const AUTO_ROLL_STORAGE_KEY = 'mistwalker_player_auto_roll_by_hero_v2';
+const AUTO_ROLL_PROMPTED_STORAGE_KEY = 'mistwalker_player_auto_roll_prompted_v2';
 
 /**
  * Normalizes a character/player name or ID into a stable per-player preference key
@@ -336,6 +337,29 @@ export function savePlayerAutoRollPreference(playerKey: string, enabled: boolean
   if (typeof window !== 'undefined') {
     try {
       localStorage.setItem(AUTO_ROLL_STORAGE_KEY, JSON.stringify(next));
+    } catch {}
+  }
+  return next;
+}
+
+export function loadPlayerAutoRollPromptedMap(): Record<string, boolean> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(AUTO_ROLL_PROMPTED_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') return parsed;
+    }
+  } catch {}
+  return {};
+}
+
+export function markPlayerAutoRollPrompted(playerKey: string): Record<string, boolean> {
+  const current = loadPlayerAutoRollPromptedMap();
+  const next = { ...current, [playerKey]: true };
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(AUTO_ROLL_PROMPTED_STORAGE_KEY, JSON.stringify(next));
     } catch {}
   }
   return next;
