@@ -25,16 +25,23 @@ process.on('unhandledRejection', (reason) => {
   console.error('[Server Unhandled Rejection]:', reason);
 });
 
-// Ensure uploads directory exists
+// Ensure uploads directory exists (supports optional Railway persistent volume at UPLOADS_PERSISTENT_DIR)
 const uploadsDir = path.resolve(process.cwd(), 'uploads');
+const persistentUploadsDir = process.env.UPLOADS_PERSISTENT_DIR
+  ? path.resolve(process.env.UPLOADS_PERSISTENT_DIR)
+  : null;
+const activeUploadsWriteDir = persistentUploadsDir || uploadsDir;
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
+}
+if (persistentUploadsDir && !fs.existsSync(persistentUploadsDir)) {
+  fs.mkdirSync(persistentUploadsDir, { recursive: true });
 }
 
 // Multer storage config
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, uploadsDir);
+    cb(null, activeUploadsWriteDir);
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
@@ -199,7 +206,7 @@ async function startServer() {
 
       const cleanName = (filename || `${type}_${Date.now()}`).replace(/[^a-zA-Z0-9_\-]/g, '_');
       const uniqueName = `${cleanName}-${Date.now()}-${Math.round(Math.random() * 1E6)}${ext}`;
-      const destPath = path.join(uploadsDir, uniqueName);
+      const destPath = path.join(activeUploadsWriteDir, uniqueName);
 
       fs.writeFileSync(destPath, dataBuffer);
       const fileUrl = `/uploads/${uniqueName}`;
@@ -301,6 +308,7 @@ async function startServer() {
   if (!fs.existsSync(tokenCacheDir)) {
     fs.mkdirSync(tokenCacheDir, { recursive: true });
   }
+  const tokenProxyInFlight = new Map<string, Promise<{ buffer: Buffer; contentType: string } | null>>();
 
   apiRouter.get("/token-proxy", async (req, res) => {
     try {
@@ -323,30 +331,112 @@ async function startServer() {
         return fs.createReadStream(localFilePath).pipe(res);
       }
 
-      const upstreamRes = await fetch(rawUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
-        }
-      });
-
-      if (!upstreamRes.ok) {
-        return res.status(upstreamRes.status).send('Upstream image error');
+      // Deduplicate concurrent upstream fetches when 7+ players join simultaneously
+      let pending = tokenProxyInFlight.get(cacheKey);
+      if (!pending) {
+        pending = (async () => {
+          const upstreamRes = await fetch(rawUrl, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
+            }
+          });
+          if (!upstreamRes.ok) return null;
+          const contentType = upstreamRes.headers.get('content-type') || 'image/png';
+          const buffer = Buffer.from(await upstreamRes.arrayBuffer());
+          fs.writeFile(localFilePath, buffer, (err) => {
+            if (err) console.warn('[Token Proxy Cache] Write failed:', err.message);
+          });
+          return { buffer, contentType };
+        })().finally(() => {
+          tokenProxyInFlight.delete(cacheKey);
+        });
+        tokenProxyInFlight.set(cacheKey, pending);
       }
 
-      const contentType = upstreamRes.headers.get('content-type') || 'image/png';
-      const buffer = Buffer.from(await upstreamRes.arrayBuffer());
+      const result = await pending;
+      if (!result) {
+        return res.status(502).send('Upstream image error');
+      }
 
-      fs.writeFile(localFilePath, buffer, (err) => {
-        if (err) console.warn('[Token Proxy Cache] Write failed:', err.message);
-      });
-
-      res.setHeader('Content-Type', contentType);
-      res.setHeader('Content-Length', buffer.length);
-      res.send(buffer);
+      res.setHeader('Content-Type', result.contentType);
+      res.setHeader('Content-Length', result.buffer.length);
+      res.send(result.buffer);
     } catch (err: any) {
       console.error('[Token Proxy Error]:', err.message);
       res.status(500).send('Error proxying token image');
+    }
+  });
+
+  // On-demand WebP Battlemap Optimizer for Players (shrinks 8-23MB JPEGs -> ~1-2MB WebP, cached on disk & Edge CDN)
+  const optimizedMapCacheDir = path.resolve(process.cwd(), 'uploads', 'optimized_cache');
+  if (!fs.existsSync(optimizedMapCacheDir)) {
+    fs.mkdirSync(optimizedMapCacheDir, { recursive: true });
+  }
+  const mapOptimizeInFlight = new Map<string, Promise<string | null>>();
+
+  apiRouter.get("/map-optimized", async (req, res) => {
+    try {
+      const rawUrl = String(req.query.url || '').trim();
+      const maxDim = Math.max(1024, Math.min(4096, parseInt(String(req.query.max || '2560'), 10) || 2560));
+      if (!rawUrl.startsWith('/uploads/')) {
+        return res.status(400).json({ error: 'Only /uploads/ paths can be optimized' });
+      }
+      const filename = path.basename(rawUrl.split('?')[0]);
+      if (!filename || filename === '.' || filename === '..' || !/\.(jpe?g|png|webp|jfif)$/i.test(filename)) {
+        return res.redirect(302, rawUrl);
+      }
+
+      const candidates = [
+        ...(persistentUploadsDir ? [path.join(persistentUploadsDir, filename)] : []),
+        path.join(uploadsDir, filename),
+        path.resolve(process.cwd(), 'dist', 'uploads', filename),
+        path.resolve(process.cwd(), 'public', 'uploads', filename)
+      ];
+      const sourcePath = candidates.find(p => fs.existsSync(p));
+      if (!sourcePath) {
+        return res.redirect(302, rawUrl);
+      }
+
+      const cacheFile = path.join(optimizedMapCacheDir, `${filename.replace(/[^a-zA-Z0-9._-]/g, '_')}_${maxDim}.webp`);
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      res.setHeader('Content-Type', 'image/webp');
+
+      if (fs.existsSync(cacheFile)) {
+        return res.sendFile(cacheFile, { maxAge: '365d', immutable: true });
+      }
+
+      let job = mapOptimizeInFlight.get(cacheFile);
+      if (!job) {
+        job = (async () => {
+          try {
+            const sharpMod: any = await import('sharp');
+            const sharp = sharpMod.default || sharpMod;
+            await sharp(sourcePath)
+              .rotate()
+              .resize({ width: maxDim, height: maxDim, fit: 'inside', withoutEnlargement: true })
+              .webp({ quality: 82, effort: 3 })
+              .toFile(cacheFile);
+            return cacheFile;
+          } catch (err: any) {
+            console.warn('[Map Optimizer] Falling back to original:', err?.message || err);
+            return null;
+          }
+        })().finally(() => {
+          mapOptimizeInFlight.delete(cacheFile);
+        });
+        mapOptimizeInFlight.set(cacheFile, job);
+      }
+
+      const outPath = await job;
+      if (outPath && fs.existsSync(outPath)) {
+        return res.sendFile(outPath, { maxAge: '365d', immutable: true });
+      }
+      return res.redirect(302, rawUrl);
+    } catch (err: any) {
+      console.warn('[Map Optimizer] Error:', err?.message || err);
+      return res.status(500).json({ error: 'Map optimization error' });
     }
   });
 
@@ -364,13 +454,18 @@ async function startServer() {
     if (!filename || filename === '.' || filename === '..') {
       return res.status(400).json({ error: 'Invalid upload filename' });
     }
-    let filePath = path.join(uploadsDir, filename);
+    let filePath = persistentUploadsDir
+      ? path.join(persistentUploadsDir, filename)
+      : path.join(uploadsDir, filename);
 
-    // If not in uploadsDir, check dist/uploads and public/uploads
+    // Check uploadsDir, dist/uploads, and public/uploads
     if (!fs.existsSync(filePath)) {
+      const repoUploads = path.join(uploadsDir, filename);
       const distUploads = path.resolve(process.cwd(), 'dist', 'uploads', filename);
       const publicUploads = path.resolve(process.cwd(), 'public', 'uploads', filename);
-      if (fs.existsSync(distUploads)) {
+      if (fs.existsSync(repoUploads)) {
+        filePath = repoUploads;
+      } else if (fs.existsSync(distUploads)) {
         filePath = distUploads;
       } else if (fs.existsSync(publicUploads)) {
         filePath = publicUploads;
@@ -405,6 +500,11 @@ async function startServer() {
 
     if (fs.existsSync(filePath)) {
       return res.sendFile(filePath, { maxAge: '30d', immutable: true });
+    }
+
+    // Fast path for HEAD probes: never run a multi-second Firestore collection scan on HEAD
+    if (req.method === 'HEAD') {
+      return res.status(404).end();
     }
 
     const isVideo = /\.(mp4|webm|m4v|mov|ogv)$/i.test(filename);

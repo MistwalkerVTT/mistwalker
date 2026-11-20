@@ -2561,7 +2561,11 @@ export default function App() {
 
   // Dedicated permanent socket connection & event handlers for DM view
   useEffect(() => {
-    const socket = io();
+    const socket = io({
+      transports: ['websocket', 'polling'],
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000
+    });
     socketRef.current = socket;
     (window as any).__mistwalkerSocket = socket;
     setSocketInstance(socket);

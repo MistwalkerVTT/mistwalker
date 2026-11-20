@@ -2310,6 +2310,7 @@ export class DdbHpSyncDaemon {
   private io: Server | null = null;
   private timer: NodeJS.Timeout | null = null;
   private monitoredCharacters: Map<string, ActiveHpState> = new Map();
+  private inFlightCharFetches: Map<string, Promise<Partial<DdbCampaignCharacter> | null>> = new Map();
   private cachedCharacters: DdbCampaignCharacter[] = [];
   private cachedCampaigns: DdbCampaignSummary[] = [];
   private activeCampaignId: string | null = '6738033';
@@ -2511,43 +2512,81 @@ export class DdbHpSyncDaemon {
 
     this.ensurePollingStarted();
 
-    try {
-      const live = await fetchDdbCharacterData(charId);
-      if (live && live.currentHp !== undefined && live.maxHp !== undefined) {
-        this.monitoredCharacters.set(charId, {
-          currentHp: live.currentHp,
-          maxHp: live.maxHp,
-          tempHp: live.tempHp ?? 0,
-          name: live.name || initialName || `Character ${charId}`
-        });
-
-        const existingIdx = this.cachedCharacters.findIndex(c => c.id === charId);
-        if (existingIdx !== -1) {
-          this.cachedCharacters[existingIdx] = {
-            ...this.cachedCharacters[existingIdx],
-            ...live
-          } as DdbCampaignCharacter;
-        } else {
-          this.cachedCharacters.push(live as DdbCampaignCharacter);
-        }
-
-        return live;
-      }
-    } catch (err) {
-      console.warn(`[DdbHpSyncDaemon] Error fetching initial data for character ${charId}:`, err);
+    // Deduplicate concurrent fetches for the same character ID
+    const existingFetch = this.inFlightCharFetches.get(charId);
+    if (existingFetch) {
+      return existingFetch;
     }
-    return null;
+
+    const fetchPromise = (async () => {
+      try {
+        const live = await fetchDdbCharacterData(charId);
+        if (live && live.currentHp !== undefined && live.maxHp !== undefined) {
+          this.monitoredCharacters.set(charId, {
+            currentHp: live.currentHp,
+            maxHp: live.maxHp,
+            tempHp: live.tempHp ?? 0,
+            name: live.name || initialName || `Character ${charId}`
+          });
+
+          const existingIdx = this.cachedCharacters.findIndex(c => c.id === charId);
+          if (existingIdx !== -1) {
+            this.cachedCharacters[existingIdx] = {
+              ...this.cachedCharacters[existingIdx],
+              ...live
+            } as DdbCampaignCharacter;
+          } else {
+            this.cachedCharacters.push(live as DdbCampaignCharacter);
+          }
+
+          return live;
+        }
+      } catch (err) {
+        console.warn(`[DdbHpSyncDaemon] Error fetching initial data for character ${charId}:`, err);
+      }
+      return null;
+    })().finally(() => {
+      this.inFlightCharFetches.delete(charId);
+    });
+
+    this.inFlightCharFetches.set(charId, fetchPromise);
+    return fetchPromise;
   }
 
   public async addMonitoredCharacters(characterIds: (string | number)[]): Promise<any[]> {
-    const results: any[] = [];
-    if (!Array.isArray(characterIds)) return results;
-    for (const rawId of characterIds) {
-      const live = await this.addMonitoredCharacter(rawId);
-      if (live) results.push(live);
+    if (!Array.isArray(characterIds) || characterIds.length === 0) return [];
+    const uniqueIds = Array.from(new Set(
+      characterIds.map(id => String(id).replace(/^char_ddb_/, '').trim()).filter(id => id && !isNaN(Number(id)))
+    ));
+
+    // Register immediately & return cached characters fast; warm uncached ones in background in parallel
+    const immediateResults: any[] = [];
+    const toWarm: string[] = [];
+    for (const charId of uniqueIds) {
+      if (!this.monitoredCharacters.has(charId)) {
+        this.monitoredCharacters.set(charId, {
+          currentHp: 20,
+          maxHp: 20,
+          tempHp: 0,
+          name: `Character ${charId}`
+        });
+      }
+      const cached = this.cachedCharacters.find(c => c.id === charId);
+      if (cached && (Date.now() - (cached.lastUpdated || 0) < 60000)) {
+        immediateResults.push(cached);
+      } else {
+        toWarm.push(charId);
+      }
     }
+
     this.ensurePollingStarted();
-    return results;
+
+    if (toWarm.length > 0) {
+      // Warm missing/stale characters in parallel in background without blocking HTTP response
+      Promise.allSettled(toWarm.map(id => this.addMonitoredCharacter(id))).catch(() => {});
+    }
+
+    return immediateResults;
   }
 
   public getCachedCharacter(characterId: string): DdbCampaignCharacter | undefined {

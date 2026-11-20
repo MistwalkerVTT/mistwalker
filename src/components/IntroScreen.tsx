@@ -88,29 +88,8 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onSelectDm, onSelectPl
   const mutedRef = useRef(muted);
   mutedRef.current = muted;
 
-  // Cinematic sequence timing + deferred portal transition video warmup (after core JS bundles finish loading)
+  // Cinematic sequence timing (removed eager 7-video .webm preload storm on boot to save player bandwidth)
   useEffect(() => {
-    const preloadUrls = [
-      '/jb2a/Community/JAA/glyphOfWarding.webm',
-      '/jb2a/Community/JackKerouac/magic_circle_CIRCLE_01.webm',
-      '/jb2a/Community/JackKerouac/runes_CIRCLE_02.webm',
-      '/jb2a/Community/JAA/MordenkainensMagnificentMansion.webm',
-      '/jb2a/Library/1st_Level/Detect_Magic/DetectMagicCircle_01_Regular_Blue_1200x1200.webm',
-      '/jb2a/Community/JAA/circleOfDeath.webm',
-      '/jb2a/Community/JackKerouac/energy_quickburst_CIRCLE_01.webm'
-    ];
-    let videos: HTMLVideoElement[] = [];
-    const preloadTimer = setTimeout(() => {
-      if (mutedRef.current) return;
-      videos = preloadUrls.map((url) => {
-        const v = document.createElement('video');
-        v.preload = 'metadata';
-        v.muted = true;
-        v.src = url;
-        return v;
-      });
-    }, 2500);
-
     const timers = [
       setTimeout(() => setStage(1), 400),
       setTimeout(() => setStage(2), 1500),
@@ -118,11 +97,7 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onSelectDm, onSelectPl
       setTimeout(() => setStage(4), 3900)
     ];
     return () => {
-      clearTimeout(preloadTimer);
       timers.forEach(clearTimeout);
-      videos.forEach((v) => {
-        v.src = '';
-      });
     };
   }, []);
 

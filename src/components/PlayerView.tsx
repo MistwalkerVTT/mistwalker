@@ -1748,9 +1748,70 @@ export default function PlayerView() {
     height: typeof window !== 'undefined' ? window.innerHeight : 1080,
   });
 
-  // Map Background State & Dual-strategy battlemap image loading (anonymous CORS with fallback)
+  // MistWalker 3.1 Player Performance Mode (performance = 1x pixelRatio + 2048px WebP map, balanced = 1.5x + 2560px WebP, ultra = 2x + original full-res)
+  type PerformanceMode = 'performance' | 'balanced' | 'ultra';
+  const [performanceMode, setPerformanceMode] = useState<PerformanceMode>(() => {
+    try {
+      const saved = localStorage.getItem('mistwalker_perf_mode') as PerformanceMode | null;
+      if (saved === 'performance' || saved === 'balanced' || saved === 'ultra') return saved;
+      const isSmallDevice = typeof window !== 'undefined' && (window.innerWidth <= 1024 || /Android|iPhone|iPad|iPod|CrOS/i.test(navigator.userAgent));
+      return isSmallDevice ? 'performance' : 'balanced';
+    } catch {
+      return 'balanced';
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('mistwalker_perf_mode', performanceMode);
+    } catch {
+      // ignore storage errors
+    }
+    if (typeof window !== 'undefined') {
+      const dpr = window.devicePixelRatio || 1;
+      Konva.pixelRatio = performanceMode === 'performance'
+        ? 1
+        : performanceMode === 'balanced'
+          ? Math.min(dpr, 1.5)
+          : Math.min(dpr, 2);
+    }
+  }, [performanceMode]);
+
+  const cyclePerformanceMode = useCallback(() => {
+    setPerformanceMode(prev => prev === 'performance' ? 'balanced' : prev === 'balanced' ? 'ultra' : 'performance');
+  }, []);
+
+  // Map Background State & Dual-strategy battlemap image loading (with MistWalker 3.1 smart WebP optimization for players)
   const [imageFile, setImageFile] = useState<string | null>(() => initialBackup?.imageFile || null);
-  const [imgWithCors, statusWithCors] = useImage(imageFile || '', 'anonymous');
+  const [activeSceneInfo, setActiveSceneInfo] = useState<{
+    campaignId?: string;
+    chapterId?: string;
+    sceneId?: string;
+    sceneTitle?: string;
+    mapWidth?: number;
+    mapHeight?: number;
+    mapUrl?: string;
+  } | null>(() => initialBackup?.activeSceneInfo || null);
+
+  const effectiveMapImageUrl = useMemo(() => {
+    if (!imageFile) return '';
+    // Only use resized WebP when true scene dimensions are known so token/wall/fog coordinates remain 100% locked
+    const hasTrueDims = Boolean(activeSceneInfo?.mapWidth && activeSceneInfo?.mapHeight);
+    if (
+      performanceMode !== 'ultra' &&
+      hasTrueDims &&
+      imageFile.startsWith('/uploads/') &&
+      /\.(jpe?g|png|webp|jfif)(\?.*)?$/i.test(imageFile)
+    ) {
+      const maxDim = performanceMode === 'performance' ? 2048 : 2560;
+      return `/api/map-optimized?url=${encodeURIComponent(imageFile)}&max=${maxDim}`;
+    }
+    return imageFile;
+  }, [imageFile, performanceMode, activeSceneInfo?.mapWidth, activeSceneInfo?.mapHeight]);
+
+  const isUsingOptimizedMap = Boolean(effectiveMapImageUrl && effectiveMapImageUrl.startsWith('/api/map-optimized'));
+
+  const [imgWithCors, statusWithCors] = useImage(effectiveMapImageUrl, 'anonymous');
   const [imgNoCors, statusNoCors] = useImage(statusWithCors === 'failed' ? (imageFile || '') : '');
   const image = statusWithCors === 'loaded' ? imgWithCors : (statusNoCors === 'loaded' ? imgNoCors : (imgWithCors || imgNoCors));
   const imageStatus = statusWithCors === 'loaded' ? 'loaded' : (statusNoCors === 'loaded' ? 'loaded' : (statusWithCors === 'failed' && statusNoCors === 'failed' ? 'failed' : 'loading'));
@@ -1814,15 +1875,6 @@ export default function PlayerView() {
 
   // Connection & Active Scene
   const [isConnected, setIsConnected] = useState(false);
-  const [activeSceneInfo, setActiveSceneInfo] = useState<{
-    campaignId?: string;
-    chapterId?: string;
-    sceneId?: string;
-    sceneTitle?: string;
-    mapWidth?: number;
-    mapHeight?: number;
-    mapUrl?: string;
-  } | null>(() => initialBackup?.activeSceneInfo || null);
   const activeMapShaderPreset = useMemo(
     () => getMapShaderPreset(imageFile, activeSceneInfo),
     [imageFile, activeSceneInfo]
@@ -2744,7 +2796,11 @@ export default function PlayerView() {
   // Socket.io Pure Consumer Setup
   // ==========================================
   useEffect(() => {
-    const socket = io();
+    const socket = io({
+      transports: ['websocket', 'polling'],
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000
+    });
     socketRef.current = socket;
     (window as any).__mistwalkerSocket = socket;
     setSocketInstance(socket);
@@ -3973,17 +4029,21 @@ export default function PlayerView() {
     });
   }, []);
 
-  // Natural Map Dimensions - Use true natural dimensions of full-res maps, or scene dimensions while loading / for <1000px thumbnails
+  // Natural Map Dimensions - Use true scene dimensions when serving optimized WebP maps so tokens/walls/fog align 100%
   const naturalW = image?.width || (image as any)?.naturalWidth || 0;
   const naturalH = image?.height || (image as any)?.naturalHeight || 0;
   const sceneW = activeSceneInfo?.mapWidth || 0;
   const sceneH = activeSceneInfo?.mapHeight || 0;
-  let baseMapW = naturalW > 0
-    ? ((naturalW < 1000 && sceneW > naturalW) ? sceneW : naturalW)
-    : (sceneW || dimensions.width);
-  let baseMapH = naturalH > 0
-    ? ((naturalH < 1000 && sceneH > naturalH) ? sceneH : naturalH)
-    : (sceneH || dimensions.height);
+  let baseMapW = (isUsingOptimizedMap && sceneW > 0)
+    ? sceneW
+    : (naturalW > 0
+      ? ((naturalW < 1000 && sceneW > naturalW) ? sceneW : naturalW)
+      : (sceneW || dimensions.width));
+  let baseMapH = (isUsingOptimizedMap && sceneH > 0)
+    ? sceneH
+    : (naturalH > 0
+      ? ((naturalH < 1000 && sceneH > naturalH) ? sceneH : naturalH)
+      : (sceneH || dimensions.height));
 
   // If no explicit scene dimensions exist and walls extend beyond a thumbnail, scale proportionally
   if (sceneW <= 0 && sceneH <= 0 && walls.length > 0 && baseMapW > 0 && baseMapH > 0) {
@@ -8109,7 +8169,7 @@ export default function PlayerView() {
                 <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
                 <div className="flex flex-col min-w-0">
                   <span className="text-[11px] font-mono font-bold tracking-wider text-zinc-200 uppercase truncate">
-                    {isConnected ? 'LIVE SESSION' : 'CONNECTING...'}
+                    {isConnected ? 'LIVE SESSION' : 'CONNECTING...'} <span className="text-[9px] text-emerald-400/90 font-normal">v3.1</span>
                   </span>
                   {activeSceneInfo?.sceneTitle && (
                     <span className="text-[10px] font-mono text-emerald-400 font-bold truncate" title={activeSceneInfo.sceneTitle}>
@@ -8141,6 +8201,20 @@ export default function PlayerView() {
                     >
                       <Folder className="w-2.5 h-2.5 text-amber-400" />
                       <span className="truncate max-w-[85px]">{activeCampaignTitle}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={cyclePerformanceMode}
+                      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-900 border transition-colors cursor-pointer w-fit text-[9px] font-mono ${
+                        performanceMode === 'performance'
+                          ? 'border-emerald-500/60 text-emerald-300'
+                          : performanceMode === 'balanced'
+                            ? 'border-sky-500/50 text-sky-300'
+                            : 'border-purple-500/50 text-purple-300'
+                      }`}
+                      title="Graphics & Bandwidth Mode (click to cycle: Perf = 1x DPR + 2K WebP map, Balanced = 1.5x + 2.5K WebP, Ultra = 2x + Full Original Map)"
+                    >
+                      <span>{performanceMode === 'performance' ? '⚡ Perf' : performanceMode === 'balanced' ? '⚖️ Bal' : '✨ Ultra'}</span>
                     </button>
                   </div>
                 </div>
