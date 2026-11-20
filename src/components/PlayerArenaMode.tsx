@@ -1554,7 +1554,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
   }, [selectedGoldHeroes]);
 
   const [draftedMonsters, setDraftedMonsters] = useState<Monster[]>(() => {
-    if (arenaConfig.pinnedEncounterMonsters && arenaConfig.pinnedEncounterMonsters.length > 0) {
+    if (arenaConfig.lockDmEncounter && arenaConfig.pinnedEncounterMonsters?.length > 0) {
       return arenaConfig.pinnedEncounterMonsters;
     }
     const initialHeroes = (claimedCharacterName
@@ -1568,12 +1568,12 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
     );
   });
 
-  // Sync DM Pinned Encounter Squad when DM updates it in Campaign Manager
+  // Sync DM Pinned Encounter Squad ONLY when DM explicitly locks the encounter in Campaign Manager
   useEffect(() => {
-    if (arenaConfig.pinnedEncounterMonsters && arenaConfig.pinnedEncounterMonsters.length > 0) {
+    if (arenaConfig.lockDmEncounter && arenaConfig.pinnedEncounterMonsters?.length > 0) {
       setDraftedMonsters(arenaConfig.pinnedEncounterMonsters);
     }
-  }, [arenaConfig.pinnedEncounterMonsters]);
+  }, [arenaConfig.lockDmEncounter, arenaConfig.pinnedEncounterMonsters]);
 
   // Connected Players in Arena Lobby (Synced via Socket.IO ARENA_LOBBY_SYNC)
   const [lobbyPlayers, setLobbyPlayers] = useState<ArenaLobbyPlayer[]>([]);
@@ -2182,7 +2182,7 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
       setDraftedMonsters(arenaConfig.pinnedEncounterMonsters);
       return;
     }
-    if (matchMode === 'random_encounter' && (!arenaConfig.pinnedEncounterMonsters || arenaConfig.pinnedEncounterMonsters.length === 0)) {
+    if (matchMode === 'random_encounter') {
       const selectedGoldHeroes = goldHeroIds
         .map((id) => heroPool.find((h) => h.id === id))
         .filter(Boolean) as Character[];
@@ -5602,8 +5602,8 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
           },
           {
             id: 'skirmish' as const,
-            label: 'Quick Skirmish',
-            icon: Flame,
+            label: 'Random Battle',
+            icon: Dices,
             onClick: () => {
               if (activePvpRoom) handlePvpLeaveRoom();
               setMatchMode('random_encounter');
@@ -5930,18 +5930,18 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                 {/* Right: Scaled Enemy Encounter */}
                 <div className="bg-zinc-900/80 border border-rose-500/30 rounded-3xl p-4 sm:p-5 space-y-3.5">
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-2.5">
-                    <div className="flex items-center gap-2">
-                      <Skull className="w-4 h-4 text-rose-400" />
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Dices className="w-4 h-4 text-rose-400" />
                       <h3 className="text-xs sm:text-sm font-mono font-bold text-rose-300">
-                        {arenaConfig.lockDmEncounter ? '🔒 DM Encounter' : 'Scaled Encounter'}
+                        {arenaConfig.lockDmEncounter ? '🔒 DM Encounter' : 'Random Battle'}
                       </h3>
                       <span className="px-2 py-0.5 rounded-lg bg-zinc-950 border border-zinc-800 text-[10px] font-mono text-zinc-400">
-                        APL {currentPartyProfile?.averagePartyLevel || 1}
+                        Scaled to {selectedGoldHeroes.length}P • APL {currentPartyProfile?.averagePartyLevel || 1}
                       </span>
                     </div>
 
                     {!arenaConfig.lockDmEncounter && (
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 flex-wrap">
                         {(['standard', 'hard', 'deadly'] as const).map((diff) => (
                           <button
                             key={diff}
@@ -5968,10 +5968,11 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                               )
                             )
                           }
-                          className="p-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 cursor-pointer"
-                          title="Re-roll encounter"
+                          className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[10px] font-mono font-bold flex items-center gap-1 cursor-pointer"
+                          title="Roll a fresh random monster group scaled to your party"
                         >
-                          <Shuffle className="w-3.5 h-3.5" />
+                          <Shuffle className="w-3 h-3" />
+                          <span>Re-Roll</span>
                         </button>
                       </div>
                     )}
