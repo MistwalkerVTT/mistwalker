@@ -1,25 +1,31 @@
-# MistWalker Project Guidelines & Production Architecture
+# MistWalker Project Guidelines & Architecture (v3.1)
 
-## Production Architecture (Stable v1.0.0)
+## Environments
 
-MistWalker operates as a single-target, high-reliability live production cloud service:
+| Role | Platform | URL / Service | When |
+|------|----------|---------------|------|
+| **Test Lab** | Render | `https://mistwalker.onrender.com/` (`srv-db93bu3bc2fs73cn795g`) | Every update, automatically |
+| **Production** | Railway | Railway project (`railway-prod`) | **ONLY when the user explicitly says so** |
 
-- **Branch**: `v1-stable`
-- **Live URL**: `https://mistwalker.onrender.com/`
-- **Render Service ID**: `srv-db93bu3bc2fs73cn795g`
-- **Audience**: Active DMs and players currently using MistWalker for their live campaigns.
+- **Active Branch**: `v3.1` (branched from `railway-prod`). All work is performed on `v3.1`.
 
 > [!NOTE]
-> The Enterprise Beta multi-tenant edition (`enterprise-multi-dm`) and its cloud service (`srv-dbhqc7afngtc73cau1i0`) have been decommissioned and archived. All history is permanently preserved in the Git tag `archive/enterprise-beta-snapshot` and `docs/archive/PENDING_ENTERPRISE_PATCHES_ARCHIVE.md`.
+> The Enterprise Beta multi-tenant edition (`enterprise-multi-dm`) and its cloud service (`srv-dbhqc7afngtc73cau1i0`) have been decommissioned and archived. History is preserved in Git tag `archive/enterprise-beta-snapshot` and `docs/archive/PENDING_ENTERPRISE_PATCHES_ARCHIVE.md`.
 
 ---
 
-## Production Deployment Workflow (Mandatory Rule)
+## Test Lab Deployment Workflow (Mandatory Rule)
 
-**Rule**: Every update/change MUST be committed to `v1-stable`, pushed to `origin/v1-stable`, and deployed to Render (`https://mistwalker.onrender.com/`) automatically after build verification—do not leave verified updates local-only.
+**Rule**: Every update/change MUST be committed to `v3.1`, pushed to `origin/v3.1`, and deployed to the Render test lab (`https://mistwalker.onrender.com/`) automatically after build verification. Do not leave verified updates local-only.
 
-1. **Active Branch**: All work is performed on `v1-stable`.
-2. **Build Verification**: Compile with `npm run build` (via `cmd.exe /c "npm run build"`) to verify zero TypeScript or bundling errors.
-3. **Commit & Push**: Commit changes to `v1-stable` and push to `origin/v1-stable`.
-4. **Deploy to Render**: Deploy directly to Production: `node scripts/deploy.js --prod`.
-5. **Live Health Check**: Confirm `https://mistwalker.onrender.com/` returns HTTP 200.
+1. **Active Branch**: `v3.1`.
+2. **Build Verification**: `cmd.exe /c "npm run build"` must succeed with zero TypeScript or bundling errors.
+3. **Commit & Push**: Commit to `v3.1` and push to `origin/v3.1`.
+4. **Deploy to Render (Test Lab)**: `node scripts/deploy.js --prod` (targets the Render service, which is now the test lab).
+5. **Health Check**: Confirm `https://mistwalker.onrender.com/` returns HTTP 200.
+
+---
+
+## Railway Production Rule (Mandatory)
+
+**NEVER deploy to Railway, push to `railway-prod`, or trigger any Railway deployment/redeploy unless the user explicitly instructs it in that moment.** Passing tests on Render is not permission. When the user says to release, merge/push the approved `v3.1` state to production on Railway and verify health.
