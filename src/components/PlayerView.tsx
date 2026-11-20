@@ -1841,6 +1841,8 @@ export default function PlayerView() {
   });
   const [showStationModal, setShowStationModal] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('arena') === '1' || params.get('arena') === 'true') return false;
     return !sessionStorage.getItem('mistwalker_player_station_mode');
   });
 
@@ -10557,8 +10559,7 @@ export default function PlayerView() {
             }}
             onEnterArena={() => {
               setShowStationModal(false);
-              setPendingCampaignTargetMode('arena');
-              setShowCampaignSelectModal(true);
+              setShowArenaMode(true);
             }}
             characterName={claimedToken?.name}
           />
