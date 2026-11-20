@@ -670,10 +670,12 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
       ctx.closePath();
       ctx.clip();
 
+      // Draw at full-range alpha on the offscreen buffer and cap the final layer opacity on KonvaImage
+      // so overlapping party vision cones never compound into a washed-out haze.
       const grad = ctx.createRadialGradient(src.x, src.y, 0, src.x, src.y, src.radiusPx);
-      grad.addColorStop(0, 'rgba(255, 220, 140, 0.18)');
-      grad.addColorStop(0.5, 'rgba(255, 180, 80, 0.08)');
-      grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      grad.addColorStop(0, 'rgba(255, 220, 140, 1)');
+      grad.addColorStop(0.5, 'rgba(255, 190, 95, 0.45)');
+      grad.addColorStop(1, 'rgba(255, 180, 80, 0)');
 
       ctx.fillStyle = grad;
       ctx.beginPath();
@@ -695,6 +697,7 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
           y={0}
           width={mapDimensions.width}
           height={mapDimensions.height}
+          opacity={0.12}
           listening={false}
           perfectDrawEnabled={false}
         />
