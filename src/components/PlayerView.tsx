@@ -399,8 +399,60 @@ const PlayerToken = React.memo(({
   const tokenPx = gridSize * (token.size || 1);
   const radius = tokenPx / 2;
   const groupRef = useRef<any>(null);
+  const moveTweenRef = useRef<Konva.Tween | null>(null);
+  const prevPosRef = useRef<{ x: number; y: number }>({ x: token.x, y: token.y });
   const lastEmitTimeRef = useRef<number>(0);
   const isCurrentlyDraggingRef = useRef<boolean>(false);
+
+  // Smooth 60 FPS Konva glide for remote token moves & WASD steps (never fights active local drag)
+  useEffect(() => {
+    const node = groupRef.current;
+    if (!node || isCurrentlyDraggingRef.current) {
+      prevPosRef.current = { x: token.x, y: token.y };
+      return;
+    }
+    const prev = prevPosRef.current;
+    const dist = Math.hypot(token.x - prev.x, token.y - prev.y);
+    prevPosRef.current = { x: token.x, y: token.y };
+
+    // Only glide reasonable tactical distances (avoid swooping across entire map on scene switch)
+    if (dist < 1 || dist > gridSize * 12) {
+      if (moveTweenRef.current) {
+        moveTweenRef.current.destroy();
+        moveTweenRef.current = null;
+      }
+      node.position({ x: token.x, y: token.y });
+      return;
+    }
+
+    if (moveTweenRef.current) {
+      moveTweenRef.current.destroy();
+      moveTweenRef.current = null;
+    }
+    // Start from previous visual position and glide to new target over 95ms
+    node.position({ x: prev.x, y: prev.y });
+    const tween = new Konva.Tween({
+      node,
+      duration: 0.095,
+      x: token.x,
+      y: token.y,
+      easing: Konva.Easings.EaseOut,
+      onFinish: () => {
+        if (moveTweenRef.current === tween) {
+          moveTweenRef.current = null;
+        }
+      }
+    });
+    moveTweenRef.current = tween;
+    tween.play();
+
+    return () => {
+      if (moveTweenRef.current === tween) {
+        tween.destroy();
+        moveTweenRef.current = null;
+      }
+    };
+  }, [token.x, token.y, gridSize]);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressFiredRef = useRef<boolean>(false);
   const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
@@ -431,6 +483,10 @@ const PlayerToken = React.memo(({
     }
 
     isCurrentlyDraggingRef.current = true;
+    if (moveTweenRef.current) {
+      moveTweenRef.current.destroy();
+      moveTweenRef.current = null;
+    }
     const container = e.target.getStage()?.container();
     if (container) {
       container.style.cursor = 'grabbing';
@@ -1875,6 +1931,8 @@ export default function PlayerView() {
 
   // Connection & Active Scene
   const [isConnected, setIsConnected] = useState(false);
+  const [pingMs, setPingMs] = useState<number | null>(null);
+  const lastMoveUndoRef = useRef<{ tokenId: string; x: number; y: number } | null>(null);
   const activeMapShaderPreset = useMemo(
     () => getMapShaderPreset(imageFile, activeSceneInfo),
     [imageFile, activeSceneInfo]
@@ -2694,12 +2752,12 @@ export default function PlayerView() {
     return video;
   }, [imageFile, isVideo]);
 
-  // Redraw video frames on Konva Stage
+  // Redraw video frames on Konva Stage (pauses automatically when tab is hidden)
   useEffect(() => {
     if (!videoElement) return;
     let animId: number;
     const render = () => {
-      if (bgLayerRef.current && !videoElement.paused && !videoElement.ended) {
+      if (!document.hidden && bgLayerRef.current && !videoElement.paused && !videoElement.ended) {
         bgLayerRef.current.batchDraw();
       }
       animId = requestAnimationFrame(render);
@@ -3818,6 +3876,10 @@ export default function PlayerView() {
     locallyMovedTokensRef.current.set(id, { x: newX, y: newY, timestamp: Date.now() });
 
     const currentTokens = tokensRef.current;
+    const prevToken = currentTokens.find(t => t.id === id);
+    if (prevToken && (Math.abs(prevToken.x - newX) > 1 || Math.abs(prevToken.y - newY) > 1)) {
+      lastMoveUndoRef.current = { tokenId: id, x: prevToken.x, y: prevToken.y };
+    }
     const nextTokens = currentTokens.map(t => t.id === id ? { ...t, x: newX, y: newY } : t);
     tokensRef.current = nextTokens;
     setTokens(nextTokens);
@@ -3915,7 +3977,69 @@ export default function PlayerView() {
 
 
 
-  // Arrow-Key & WASD Movement for Seized Token + Escape key handling
+  // Live WebSocket ping probe (every 15s while tab is visible) + 1-click Re-Sync helper
+  useEffect(() => {
+    if (!isConnected) {
+      setPingMs(null);
+      return;
+    }
+    const measurePing = () => {
+      if (document.hidden || !socketRef.current?.connected) return;
+      const start = performance.now();
+      socketRef.current.emit('PING_CHECK', () => {
+        setPingMs(Math.round(performance.now() - start));
+      });
+    };
+    measurePing();
+    const timer = setInterval(measurePing, 15000);
+    return () => clearInterval(timer);
+  }, [isConnected]);
+
+  const handleQuickResync = useCallback(() => {
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('REQUEST_INITIAL_STATE');
+      toast.success('Re-synced table state!', { duration: 1500 });
+    } else {
+      socketRef.current?.connect();
+      toast.info('Reconnecting to table...', { duration: 2000 });
+    }
+  }, []);
+
+  // Smooth 280ms camera glide to center on the player's claimed token
+  const centerOnClaimedToken = useCallback(() => {
+    if (!claimedTokenId) return;
+    const token = tokensRef.current.find(t => t.id === claimedTokenId);
+    const stage = stageRef.current;
+    if (!token || !stage) return;
+
+    const scale = stage.scaleX() || stageScaleRef.current || 1;
+    const halfPx = ((token.size || 1) * gridSize) / 2;
+    const targetX = dimensions.width / 2 - (token.x + halfPx) * scale;
+    const targetY = dimensions.height / 2 - (token.y + halfPx) * scale;
+
+    new Konva.Tween({
+      node: stage,
+      duration: 0.28,
+      x: targetX,
+      y: targetY,
+      easing: Konva.Easings.EaseOut,
+      onUpdate: () => {
+        const cx = stage.x();
+        const cy = stage.y();
+        stagePosRef.current = { x: cx, y: cy };
+        const fxWorld = document.getElementById('mistwalker-dom-effects-overlay-world');
+        if (fxWorld) {
+          fxWorld.style.transform = `translate3d(${cx}px, ${cy}px, 0) scale(${scale})`;
+        }
+      },
+      onFinish: () => {
+        stagePosRef.current = { x: targetX, y: targetY };
+        setStagePos({ x: targetX, y: targetY });
+      }
+    }).play();
+  }, [claimedTokenId, gridSize, dimensions.width, dimensions.height]);
+
+  // Arrow-Key & WASD Movement for Seized Token + C Center + Ctrl+Z Undo + Escape key handling
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Handle Escape key to close modals/menus
@@ -3936,6 +4060,27 @@ export default function PlayerView() {
 
       // Don't trigger movement or shortcuts if user is typing in an input
       if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) return;
+
+      // Ctrl+Z / Cmd+Z: Undo last token move
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        const undo = lastMoveUndoRef.current;
+        if (undo) {
+          e.preventDefault();
+          lastMoveUndoRef.current = null;
+          handleMoveToken(undo.tokenId, undo.x, undo.y, 0);
+          toast.info('Undid last move', { duration: 1500 });
+        }
+        return;
+      }
+
+      // C: Smoothly center camera on claimed token
+      if ((e.key === 'c' || e.key === 'C') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (claimedTokenId) {
+          e.preventDefault();
+          centerOnClaimedToken();
+        }
+        return;
+      }
 
       // Toggle UI minimize with 'h' or 'H'
       if (e.key === 'h' || e.key === 'H') {
@@ -3985,7 +4130,7 @@ export default function PlayerView() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [claimedTokenId, tokens, gridSize, handleMoveToken]);
+  }, [claimedTokenId, tokens, gridSize, handleMoveToken, centerOnClaimedToken]);
 
   // Quick 3D Physics Dice Roll (d20)
   const handleQuickRollDice = useCallback(() => {
@@ -8169,7 +8314,10 @@ export default function PlayerView() {
                 <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
                 <div className="flex flex-col min-w-0">
                   <span className="text-[11px] font-mono font-bold tracking-wider text-zinc-200 uppercase truncate">
-                    {isConnected ? 'LIVE SESSION' : 'CONNECTING...'} <span className="text-[9px] text-emerald-400/90 font-normal">v3.1</span>
+                    {isConnected ? 'LIVE SESSION' : 'CONNECTING...'}{' '}
+                    <span className="text-[9px] text-emerald-400/90 font-normal">
+                      v3.1{pingMs !== null ? ` · ${pingMs}ms` : ''}
+                    </span>
                   </span>
                   {activeSceneInfo?.sceneTitle && (
                     <span className="text-[10px] font-mono text-emerald-400 font-bold truncate" title={activeSceneInfo.sceneTitle}>
@@ -8215,6 +8363,14 @@ export default function PlayerView() {
                       title="Graphics & Bandwidth Mode (click to cycle: Perf = 1x DPR + 2K WebP map, Balanced = 1.5x + 2.5K WebP, Ultra = 2x + Full Original Map)"
                     >
                       <span>{performanceMode === 'performance' ? '⚡ Perf' : performanceMode === 'balanced' ? '⚖️ Bal' : '✨ Ultra'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleQuickResync}
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-700/80 hover:border-emerald-500/50 text-[9px] font-mono text-zinc-300 hover:text-emerald-300 transition-colors cursor-pointer w-fit"
+                      title="Re-sync live map & tokens without reloading the page"
+                    >
+                      <span>↻ Sync</span>
                     </button>
                   </div>
                 </div>
@@ -9153,7 +9309,6 @@ export default function PlayerView() {
         }}
         onWheel={(e) => {
           e.evt.preventDefault();
-          const scaleBy = 1.08;
           const stage = e.target.getStage();
           if (!stage) return;
           const oldScale = stage.scaleX();
@@ -9165,7 +9320,10 @@ export default function PlayerView() {
             y: (pointer.y - stage.y()) / oldScale,
           };
 
-          const newScale = e.evt.deltaY < 0 ? oldScale * scaleBy : oldScale / scaleBy;
+          // Smooth normalized zoom factor for both trackpads (small deltaY) and mouse wheels (large deltaY)
+          const clampedDelta = Math.max(-120, Math.min(120, e.evt.deltaY));
+          const zoomFactor = Math.exp(-clampedDelta * 0.0014);
+          const newScale = oldScale * zoomFactor;
           const clampedScale = Math.max(0.1, Math.min(newScale, 5));
           const newPos = {
             x: pointer.x - mousePointTo.x * clampedScale,
@@ -9210,7 +9368,7 @@ export default function PlayerView() {
               {...getImageTransform(targetMapW, targetMapH, mapRotation)}
             />
           ) : image ? (
-            activeMapShaderPreset && mapShaderEnabled ? (
+            activeMapShaderPreset && mapShaderEnabled && performanceMode !== 'performance' ? (
               <WebGLMapShaderKonvaImage
                 image={image}
                 preset={activeMapShaderPreset}
@@ -9244,8 +9402,8 @@ export default function PlayerView() {
           />
         )}
 
-        {/* Layer 2.5: Board Animated Features & Environmental FX (Rendered UNDERNEATH Fog of War so unrevealed areas stay completely dark) */}
-        {boardAnimatedEnabled && targetMapW > 0 && targetMapH > 0 && (
+        {/* Layer 2.5: Board Animated Features & Environmental FX (Auto-paused in Perf mode for 60 FPS on laptops/tablets) */}
+        {boardAnimatedEnabled && performanceMode !== 'performance' && targetMapW > 0 && targetMapH > 0 && (
           <Layer listening={false}>
             <Group {...getImageTransform(targetMapW, targetMapH, mapRotation)}>
               <AnimatedFeaturesKonvaImage
@@ -9348,7 +9506,8 @@ export default function PlayerView() {
                   strokeWidth={3}
                   dash={[8, 4]}
                   shadowColor="#10b981"
-                  shadowBlur={10}
+                  shadowBlur={performanceMode === 'performance' ? 0 : 10}
+                  perfectDrawEnabled={false}
                 />
                 <Circle x={rad - 4} y={-rad + 4} radius={11} fill="#065f46" stroke="#34d399" strokeWidth={1.5} />
                 <Text
@@ -9366,40 +9525,34 @@ export default function PlayerView() {
           })}
         </Layer>
 
-        {/* Real-time Token Drag Ruler & Ghost Token HUD Layer */}
-        {tokenDragState && (
+        {/* Consolidated Transient HUD Overlay Layer (Drag Ruler + Aim Reticle + Positional Audio) */}
+        {(tokenDragState || (activeEquippedAsset && aimOrigin && aimCurrent) || playerJukeboxState.mapAudioSources.length > 0) && (
           <Layer listening={false}>
-            <TokenDragRuler
-              dragState={tokenDragState}
-              gridSize={gridSize}
-              stageScale={stageScale}
-            />
-          </Layer>
-        )}
-
-        {/* Dynamic JB2A Reticle Layer (Targeting Preview while Aiming) */}
-        {activeEquippedAsset && aimOrigin && aimCurrent && (
-          <Layer listening={false}>
-            <AimReticle
-              asset={activeEquippedAsset}
-              origin={aimOrigin}
-              current={aimCurrent}
-              gridSize={gridSize}
-              stageScale={stageScale}
-              tokens={tokens}
-              preferredToken={claimedToken}
-            />
-          </Layer>
-        )}
-
-        {/* Positional / Map Audio Sources Layer (only renders if visibleToPlayers is enabled) */}
-        {playerJukeboxState.mapAudioSources.length > 0 && (
-          <Layer listening={false}>
-            <MapAudioSourcesLayer
-              sources={playerJukeboxState.mapAudioSources}
-              gridSize={gridSize}
-              isDM={false}
-            />
+            {tokenDragState && (
+              <TokenDragRuler
+                dragState={tokenDragState}
+                gridSize={gridSize}
+                stageScale={stageScale}
+              />
+            )}
+            {activeEquippedAsset && aimOrigin && aimCurrent && (
+              <AimReticle
+                asset={activeEquippedAsset}
+                origin={aimOrigin}
+                current={aimCurrent}
+                gridSize={gridSize}
+                stageScale={stageScale}
+                tokens={tokens}
+                preferredToken={claimedToken}
+              />
+            )}
+            {playerJukeboxState.mapAudioSources.length > 0 && (
+              <MapAudioSourcesLayer
+                sources={playerJukeboxState.mapAudioSources}
+                gridSize={gridSize}
+                isDM={false}
+              />
+            )}
           </Layer>
         )}
 

@@ -101,9 +101,11 @@ export const Jb2aCanvasNode: React.FC<Jb2aCanvasNodeProps> = React.memo(({
 
     const render = () => {
       if (!isMounted) return;
-      const layer = imageRef.current?.getLayer();
-      if (layer && !videoElement.paused && !videoElement.ended) {
-        layer.batchDraw();
+      if (!document.hidden) {
+        const layer = imageRef.current?.getLayer();
+        if (layer && !videoElement.paused && !videoElement.ended) {
+          layer.batchDraw();
+        }
       }
       animId = requestAnimationFrame(render);
     };

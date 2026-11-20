@@ -1166,6 +1166,11 @@ async function startServer() {
       io.emit("ARENA_CONFIG_UPDATE", payload);
     });
 
+    // Lightweight WebSocket latency probe for MistWalker 3.1 live ping badge
+    socket.on("PING_CHECK", (cb?: () => void) => {
+      if (typeof cb === 'function') cb();
+    });
+
     socket.on("disconnect", (reason) => {
       console.log(`[Server] User disconnected: ${socket.id} (reason: ${reason})`);
     });
