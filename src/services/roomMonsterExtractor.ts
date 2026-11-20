@@ -82,25 +82,80 @@ export function isValidExplicitMonsterEntry(raw: any): boolean {
 }
 
 /**
+ * Extracts a parenthetical base statblock name from a named NPC string,
+ * e.g. "Guerthel (Wraith)" -> "wraith", "1x Guerthel (Wraith)" -> "wraith".
+ */
+function extractParentheticalStatblock(name: string): string {
+  const match = (name || '').match(/\(([^()]+)\)\s*$/);
+  return match ? match[1].trim().toLowerCase() : '';
+}
+
+/**
+ * Parses an optional leading count from a raw monster string,
+ * e.g. "3x Thug" -> { count: 3, baseName: "Thug" }, "two ghouls" -> { count: 2, baseName: "ghouls" }.
+ */
+function parseMonsterCountAndName(raw: string): { count: number; baseName: string; hasExplicitCount: boolean } {
+  const trimmed = (raw || '').trim();
+  const numMatch = trimmed.match(/^(\d+)\s*x?\s+(.+)$/i);
+  if (numMatch) {
+    return {
+      count: Math.max(1, parseInt(numMatch[1], 10) || 1),
+      baseName: numMatch[2].trim(),
+      hasExplicitCount: true
+    };
+  }
+  const wordMatch = trimmed.match(/^(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|a|an)\s+(.+)$/i);
+  if (wordMatch) {
+    const count = WORD_NUMBERS[wordMatch[1].toLowerCase()] || 1;
+    return {
+      count,
+      baseName: wordMatch[2].trim(),
+      hasExplicitCount: true
+    };
+  }
+  return { count: 1, baseName: trimmed, hasExplicitCount: false };
+}
+
+/**
  * Sanitizes an array of raw monster strings (e.g. from Gemini PDF digestion)
- * and removes any weapons, items, ability checks, or duplicate entries.
+ * and removes any weapons, items, ability checks, or duplicate entries
+ * (including repeated references with different counts or named NPC vs base statblock).
  */
 export function sanitizeMonsterStringList(rawList: any[]): string[] {
   if (!Array.isArray(rawList)) return [];
-  const seen = new Set<string>();
-  const valid: string[] = [];
+  const entries: Array<{ str: string; count: number; baseName: string; statblock: string }> = [];
 
   for (const item of rawList) {
     if (!isValidExplicitMonsterEntry(item)) continue;
     const str = (typeof item === 'string' ? item : String(item?.name || '')).trim();
-    const key = str.toLowerCase().replace(/\s+/g, ' ');
-    if (!seen.has(key)) {
-      seen.add(key);
-      valid.push(str);
+    const { count, baseName } = parseMonsterCountAndName(str);
+    const statblock = extractParentheticalStatblock(baseName);
+
+    const existingIdx = entries.findIndex(e =>
+      isExactMonsterMatch(e.baseName, baseName) ||
+      (e.statblock && isExactMonsterMatch(e.statblock, baseName)) ||
+      (statblock && isExactMonsterMatch(e.baseName, statblock))
+    );
+
+    if (existingIdx === -1) {
+      entries.push({ str, count, baseName, statblock });
+    } else {
+      const existing = entries[existingIdx];
+      // Prefer named NPC entry over bare statblock, or the entry with the higher explicit count
+      if (statblock && !existing.statblock) {
+        entries[existingIdx] = {
+          str: count >= existing.count ? str : `${existing.count}x ${baseName}`,
+          count: Math.max(existing.count, count),
+          baseName,
+          statblock
+        };
+      } else if (count > existing.count) {
+        entries[existingIdx] = { ...existing, str, count };
+      }
     }
   }
 
-  return valid;
+  return entries.map(e => e.str);
 }
 
 /**
@@ -353,13 +408,67 @@ export function extractMonstersFromDmNotes(
     }
   }
 
-  return results;
+  // Deduplicate repeated mentions of the same monster in dmNotes
+  // (e.g. describing its actions, movements, or referencing it in later sentences).
+  // Keep the highest explicit count rather than summing repeated references.
+  const deduplicated: ExtractedRoomMonster[] = [];
+  for (const item of results) {
+    const itemName = item.monster.name.trim();
+    const itemStatblock = extractParentheticalStatblock(itemName);
+
+    const existing = deduplicated.find(d => {
+      const dName = d.monster.name.trim();
+      const dStatblock = extractParentheticalStatblock(dName);
+      if (isExactMonsterMatch(dName, itemName)) return true;
+      // If one is a named NPC like "Guerthel (Wraith)" and the other is a bare "Wraith" reference, treat as same creature
+      if (dStatblock && !itemStatblock && isExactMonsterMatch(dStatblock, itemName)) return true;
+      if (itemStatblock && !dStatblock && isExactMonsterMatch(dName, itemStatblock)) return true;
+      return false;
+    });
+
+    if (!existing) {
+      deduplicated.push({ ...item });
+    } else {
+      existing.count = Math.max(existing.count, item.count);
+      // Prefer the named NPC entry if the existing one was a bare statblock
+      if (itemStatblock && !extractParentheticalStatblock(existing.monster.name)) {
+        existing.monster = item.monster;
+      }
+    }
+  }
+
+  return deduplicated;
+}
+
+/**
+ * Checks whether `candidate` is already represented by an entry in `existingEntries`,
+ * accounting for exact/plural matches and named NPCs vs. bare statblock references
+ * (e.g. "Guerthel (Wraith)" already covers "Wraith", while "Alice (Spy)" and "Bob (Spy)" stay distinct).
+ */
+function findMatchingMonsterEntry(
+  candidateName: string,
+  existingEntries: Iterable<ExtractedRoomMonster>
+): ExtractedRoomMonster | undefined {
+  const candClean = candidateName.trim();
+  const candStatblock = extractParentheticalStatblock(candClean);
+
+  for (const existing of existingEntries) {
+    const existClean = existing.monster.name.trim();
+    const existStatblock = extractParentheticalStatblock(existClean);
+    const existBase = (existing.monster.baseMonsterName || '').trim();
+
+    if (isExactMonsterMatch(existClean, candClean)) return existing;
+    if (existStatblock && !candStatblock && isExactMonsterMatch(existStatblock, candClean)) return existing;
+    if (candStatblock && !existStatblock && isExactMonsterMatch(existClean, candStatblock)) return existing;
+    if (existBase && !candStatblock && isExactMonsterMatch(existBase, candClean)) return existing;
+  }
+  return undefined;
 }
 
 /**
  * High-level resolver for a room's monsters:
  * 1. If manualMonsters is non-empty, resolves those directly.
- * 2. Otherwise resolves explicit monsters from `roomMonsters` / `digestMonsters` (deduplicated so identical lists don't double-count).
+ * 2. Otherwise resolves explicit monsters from `roomMonsters` / `digestMonsters` (deduplicated so repeated mentions don't double-count).
  * 3. Scans `dmNotes` (never `boxedText`!) for any monsters mentioned in the DM encounter notes.
  * 4. Merges and deduplicates by monster name.
  */
@@ -397,11 +506,14 @@ export function extractAndResolveRoomMonsters(params: {
     const key = entry.monster.name.trim().toLowerCase();
     if (hiddenSet.has(key)) return;
 
-    const existing = monsterMap.get(key);
+    const existing = findMatchingMonsterEntry(entry.monster.name, monsterMap.values());
     if (!existing) {
       monsterMap.set(key, { ...entry, count: Math.max(1, entry.count || 1) });
     } else if (sumIfSameSource && existing.source === entry.source) {
       existing.count += Math.max(1, entry.count || 1);
+    } else if (existing.source === entry.source) {
+      // For PDF/digest sources, repeated references take the max count rather than summing
+      existing.count = Math.max(existing.count, Math.max(1, entry.count || 1));
     }
   };
 
@@ -416,8 +528,7 @@ export function extractAndResolveRoomMonsters(params: {
     }
   } else {
     // 2. Resolve explicit monsters from room.monsters and digestRoom.monsters
-    // Deduplicate raw strings between roomMonsters and digestMonsters first so an identical
-    // copied array doesn't double the monster count!
+    // Deduplicate without summing so repeated references in PDF output never deploy extra copies.
     const explicitSourceList =
       Array.isArray(roomMonsters) && roomMonsters.length > 0
         ? roomMonsters
@@ -429,7 +540,7 @@ export function extractAndResolveRoomMonsters(params: {
       if (!isValidExplicitMonsterEntry(raw)) continue;
       const res = resolveMonster(raw, allAvailableMonsters);
       if (res?.monster?.name && !isNonCreatureStatOrItem(res.monster.name)) {
-        addOrMerge({ monster: res.monster, count: res.count, source: 'digest' }, true);
+        addOrMerge({ monster: res.monster, count: res.count, source: 'digest' }, false);
       }
     }
   }
@@ -450,36 +561,8 @@ export function extractAndResolveRoomMonsters(params: {
       hiddenMonsterNames
     );
 
-    // Aggregate counts within dmNotes first, then add any monster not already in monsterMap
-    const dmNotesAggregated = new Map<string, ExtractedRoomMonster>();
     for (const item of notesExtracted) {
-      const baseKey = item.monster.name.trim().toLowerCase();
-      // Also check if a named NPC's base statblock or exact name is already present
-      const existingInNotes = dmNotesAggregated.get(baseKey);
-      if (existingInNotes) {
-        existingInNotes.count += item.count;
-      } else {
-        dmNotesAggregated.set(baseKey, { ...item });
-      }
-    }
-
-    for (const [key, item] of dmNotesAggregated.entries()) {
-      // Only add if not already defined by the explicit digest/manual list
-      const baseStatblockName = item.monster.name.replace(/^.*?\((.*?)\)$/, '$1').trim().toLowerCase();
-      const alreadyExists =
-        monsterMap.has(key) ||
-        monsterMap.has(baseStatblockName) ||
-        Array.from(monsterMap.values()).some(existing => {
-          const existingKey = existing.monster.name.trim().toLowerCase();
-          const existingBase = (existing.monster.baseMonsterName || '').trim().toLowerCase();
-          return (
-            isExactMonsterMatch(existingKey, key) ||
-            isExactMonsterMatch(existingKey, baseStatblockName) ||
-            (existingBase && (isExactMonsterMatch(existingBase, key) || isExactMonsterMatch(existingBase, baseStatblockName)))
-          );
-        });
-
-      if (!alreadyExists) {
+      if (!findMatchingMonsterEntry(item.monster.name, monsterMap.values())) {
         addOrMerge(item, false);
       }
     }

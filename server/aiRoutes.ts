@@ -2670,7 +2670,7 @@ Analyze the document with deep precision to extract:
    - "roomName": The official name of the room/area (e.g. "The Parlor", "Guard Barracks", "Vault of the Sinner")
    - "boxedText": This MUST be the EXACT, verbatim read-aloud player boxed text transcribed word-for-word from the PDF source document. Do NOT summarize, paraphrase, or interpret. Must be 100% exact text.
    - "dmNotes": This MUST be the EXACT, verbatim room notes, descriptions, secrets, traps, DCs, tactics, and statistics transcribed word-for-word from the PDF source document. Do NOT summarize, synthesize, paraphrase, or interpret. We need EXACTLY what is written in the PDF, with zero interpretation or summary.
-   - "monsters": Array of ONLY actual D&D 5e creatures, monsters, or NPC combatants physically present in this room, formatted as "<Count>x <Canonical 5e Statblock Name>" (e.g. ["3x Thug", "1x Spy"] or ["1x Guerthel (Wraith)"]). CRITICAL: NEVER include weapons (like "+1 longsword"), magic items, treasure, traps, decorative statues/paintings, or ability/skill checks (like "DC 20 Intelligence"). If no creatures are present, return [].
+   - "monsters": Array of ONLY actual D&D 5e creatures, monsters, or NPC combatants physically present in this room, formatted as "<Count>x <Canonical 5e Statblock Name>" (e.g. ["3x Thug", "1x Spy"] or ["1x Guerthel (Wraith)"]). DEDUPLICATE strictly: if the same monster or NPC is mentioned multiple times in the room text to describe its actions, movements, tactics, or as a callback reference, count ONLY the actual creatures physically present—never add extra entries or inflate the count for repeated mentions, and never list a named NPC's base statblock separately (e.g. do NOT list both "1x Guerthel (Wraith)" and "1x Wraith"). CRITICAL: NEVER include weapons (like "+1 longsword"), magic items, treasure, traps, decorative statues/paintings, or ability/skill checks (like "DC 20 Intelligence"). If no creatures are present, return [].
    - "treasure": Array of treasure, weapons, or magic items in this room
    - "sceneTitle": Which scene this room best belongs to
 
@@ -2868,7 +2868,7 @@ Extract a structured guide for the Dungeon Master covering all non-room content 
    - "trigger": when this happens (e.g. "Start of Session", "Approaching the Estate", "If Alarm is Triggered", "Quest Complete")
    - "boxedText": exact read-aloud player text (or empty string if none)
    - "dmNotes": detailed markdown DM guidance, DCs, consequences, and rewards
-   - "monsters": ONLY actual 5e creature statblocks spawned by this event (e.g. ["2x Guard", "1x Veteran"]), never items or checks
+   - "monsters": ONLY actual 5e creature statblocks spawned by this event (e.g. ["2x Guard", "1x Veteran"]), never items or checks. Deduplicate strictly: do not list or count the same creature multiple times if it is referenced repeatedly for its actions or movement.
    - "relatedRooms": room codes referenced by this beat (e.g. ["G1", "G14"])
 
 2. "generalFeatures": Dungeon-wide / area-wide environmental & mechanical rules that apply across multiple rooms:
@@ -2882,7 +2882,7 @@ Extract a structured guide for the Dungeon Master covering all non-room content 
    - "name": e.g. "House Guard Patrol", "Clockwork Reinforcements"
    - "routeOrTrigger": patrol path or trigger condition (e.g. "Moves G2 -> G5 -> G8 every 15 minutes" or "Arrives 2 rounds after alarm")
    - "description": tactical behavior, attitude, and what they do on sight
-   - "monsters": array of ONLY canonical 5e creatures (e.g. ["2x Guard", "1x Guard Drake"])
+   - "monsters": array of ONLY canonical 5e creatures (e.g. ["2x Guard", "1x Guard Drake"]). Deduplicate strictly: do not count repeated mentions of the same creature's actions or movement as extra creatures.
    - "relatedRooms": array of room codes along their route (e.g. ["G2", "G5", "G8"])
 
 4. "npcs": Key named NPCs in this chapter (patrons, villains, social encounters, captives, or undercover agents):
@@ -3046,7 +3046,7 @@ Carefully inspect the entire document (pages, text, and battlemaps) to identify:
      - "roomName": descriptive room name (e.g. "Entry Hall", "Guard Barracks", "Torture Chamber").
      - "boxedText": EXACT, verbatim read-aloud boxed text intended to be read aloud to players when entering.
      - "dmNotes": verbatim or detailed DM instructions, traps, DC perception/investigation checks, secrets, puzzle clues, and enemy combat tactics.
-     - "monsters": array of ONLY actual D&D 5e creatures/monsters/NPC combatants present in this room (e.g. ["2x Bugbear", "4x Goblin"]). NEVER include weapons (e.g. "+1 longsword"), magic items, traps, statues, or ability checks (e.g. "DC 20 Intelligence"). Return [] if no creatures are present.
+     - "monsters": array of ONLY actual D&D 5e creatures/monsters/NPC combatants present in this room (e.g. ["2x Bugbear", "4x Goblin"]). DEDUPLICATE strictly: if the same monster or NPC is mentioned multiple times in the text (describing its actions, movements, tactics, or referencing it again), count ONLY the actual creatures physically present—never add duplicate entries or inflate counts for repeated mentions, and never list both a named NPC and its base statblock separately. NEVER include weapons (e.g. "+1 longsword"), magic items, traps, statues, or ability checks (e.g. "DC 20 Intelligence"). Return [] if no creatures are present.
      - "approximateNormalizedBounds": normalized bounding rectangle { "x": number, "y": number, "width": number, "height": number } (values from 0 to 100 percentage) estimating where this room is located on the tactical battlemap image for this scene:
        - x: percentage from left edge (0 to 100)
        - y: percentage from top edge (0 to 100)
