@@ -249,6 +249,122 @@ export interface SceneShaderMatchInfo {
   chapterTitle?: string | null;
 }
 
+export const ISLE_OF_SERPENTS_LAGOON_SHADER_PRESET: MapShaderPreset = {
+  id: 'isle-of-serpents-lagoon',
+  name: 'Isle of Serpents Lagoon (Coastal Water)',
+  spores: false,
+  globalWater: true,
+  features: [
+    {
+      id: 'lagoon-deep-shimmer',
+      label: 'Deep Lagoon Shimmer',
+      type: 'water',
+      enabled: true,
+      x: 50,
+      y: 72,
+      radius: 36,
+      aspect: 1.5,
+      color: '#0ea5e9',
+      intensity: 0.9,
+      speed: 0.65,
+      opacity: 0.75,
+    },
+    {
+      id: 'sigil-portal-glow',
+      label: 'Cliffside Sigil Portal',
+      type: 'pulse_glow',
+      enabled: true,
+      x: 62,
+      y: 18,
+      radius: 4.5,
+      aspect: 1.0,
+      color: '#a855f7',
+      intensity: 1.0,
+      speed: 0.75,
+      opacity: 0.7,
+    }
+  ]
+};
+
+export const TOMB_OF_WAYWARD_SOULS_SHADER_PRESET: MapShaderPreset = {
+  id: 'tomb-of-wayward-souls',
+  name: 'Tomb of Wayward Souls (Green Sconces)',
+  spores: true,
+  globalWater: false,
+  features: [
+    {
+      id: 't4-blue-devil-aura',
+      label: 'Great Blue Devil Mouth Portal',
+      type: 'pulse_glow',
+      enabled: true,
+      x: 34.5,
+      y: 80.5,
+      radius: 3.5,
+      aspect: 1.0,
+      color: '#38bdf8',
+      intensity: 1.1,
+      speed: 0.85,
+      opacity: 0.85,
+    },
+    {
+      id: 't9-forest-mirage-wisps',
+      label: 'Forest of Spirits Mirage',
+      type: 'shimmer',
+      enabled: true,
+      x: 18.0,
+      y: 45.0,
+      radius: 6.5,
+      aspect: 1.0,
+      color: '#4ade80',
+      intensity: 0.9,
+      speed: 0.7,
+      opacity: 0.75,
+    },
+    {
+      id: 't16-acid-pit',
+      label: 'Acid Pit Fumes',
+      type: 'pulse_glow',
+      enabled: true,
+      x: 52.0,
+      y: 86.0,
+      radius: 5.0,
+      aspect: 1.3,
+      color: '#84cc16',
+      intensity: 0.95,
+      speed: 0.6,
+      opacity: 0.75,
+    },
+    {
+      id: 't22-vortex-bridge',
+      label: 'Gravity Vortex Churn',
+      type: 'shimmer',
+      enabled: true,
+      x: 84.0,
+      y: 41.0,
+      radius: 5.5,
+      aspect: 0.7,
+      color: '#a855f7',
+      intensity: 1.05,
+      speed: 0.9,
+      opacity: 0.85,
+    },
+    {
+      id: 't26-rerak-throne',
+      label: 'Rerak Crypt Necrotic Glow',
+      type: 'pulse_glow',
+      enabled: true,
+      x: 58.0,
+      y: 16.0,
+      radius: 6.0,
+      aspect: 1.4,
+      color: '#22c55e',
+      intensity: 0.85,
+      speed: 0.55,
+      opacity: 0.7,
+    }
+  ]
+};
+
 export function isCoastalKeepSceneTitle(title?: string | null): boolean {
   if (!title) return false;
   return /coastal\s*keep|three\s*moons.*(vault|keep|upper|tower)/i.test(title);
@@ -278,6 +394,12 @@ export function getMapShaderPreset(
     if (url.includes('file-1792161850867-913230359.jpg')) {
       return THREE_MOONS_DUNGEON_SHADER_PRESET;
     }
+    if (url.includes('rd_ch7_lagoon.jpg')) {
+      return ISLE_OF_SERPENTS_LAGOON_SHADER_PRESET;
+    }
+    if (url.includes('Tomb_Light_NoGrid_NoAssets_44x54_100ppi.webp') || url.includes('Tomb_Dark_NoGrid_NoAssets_44x54_100ppi.webp')) {
+      return TOMB_OF_WAYWARD_SOULS_SHADER_PRESET;
+    }
   }
 
   // 2. Scene title fallback (Coastal Keep / Upper Vault checked before generic Three Moons Dungeon)
@@ -287,6 +409,12 @@ export function getMapShaderPreset(
   }
   if (/three\s*moons/i.test(title)) {
     return THREE_MOONS_DUNGEON_SHADER_PRESET;
+  }
+  if (/isle\s*of\s*serpents\s*lagoon/i.test(title)) {
+    return ISLE_OF_SERPENTS_LAGOON_SHADER_PRESET;
+  }
+  if (/tomb\s*of\s*wayward\s*souls/i.test(title)) {
+    return TOMB_OF_WAYWARD_SOULS_SHADER_PRESET;
   }
 
   return null;
