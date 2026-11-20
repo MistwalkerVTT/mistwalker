@@ -21,6 +21,7 @@ const TYPE_CODE: Record<MapShaderFeatureType, number> = {
   water: 3,
   fog: 4,
   glint: 5,
+  cloud_sheen: 6,
 };
 
 const VS_SOURCE = `#version 300 es
@@ -41,6 +42,7 @@ const FS_SOURCE = `#version 300 es
   uniform vec2 u_res;
   uniform float u_time;
   uniform int u_spores;
+  uniform int u_globalWater;
 
   uniform int u_featCount;
   uniform int u_featType[MAX_FEATS];
@@ -114,6 +116,23 @@ const FS_SOURCE = `#version 300 es
     vec3 accumMixCol = vec3(0.0);
     float accumMixAmt = 0.0;
 
+    // Global Chroma-Keyed Water Mask (cyan/turquoise/sky-blue water, excluding central rotunda)
+    float globalWaterMask = 0.0;
+    if (u_globalWater == 1) {
+      float cyanScore = min(baseCol.b - baseCol.r, baseCol.g - baseCol.r * 0.72);
+      globalWaterMask = smoothstep(0.055, 0.16, cyanScore);
+      vec2 rotD = (v_uv - vec2(0.523, 0.482)) * aspectScale;
+      float rotMask = smoothstep(0.145, 0.165, length(rotD));
+      globalWaterMask *= rotMask;
+    }
+
+    if (globalWaterMask > 0.01) {
+      vec2 gwUv = v_uv * aspectScale * 38.0;
+      float r1 = sin(gwUv.x * 1.1 + fbm(gwUv * 0.6 + u_time * 0.35) * 4.5);
+      float r2 = cos(gwUv.y * 1.1 + fbm(gwUv * 0.6 - u_time * 0.30 + 2.4) * 4.5);
+      uvSample += vec2(r1, r2) * 0.0012 * globalWaterMask;
+    }
+
     // --- Pass 1: UV Refraction / Ripple Displacement ---
     for (int i = 0; i < MAX_FEATS; i++) {
       if (i >= u_featCount) break;
@@ -152,6 +171,19 @@ const FS_SOURCE = `#version 300 es
     }
 
     vec3 col = texture(u_mapTex, clamp(uvSample, 0.0, 1.0)).rgb;
+    // Re-check displaced pixel isn't dry stone so shorelines stay crisp
+    if (u_globalWater == 1 && globalWaterMask > 0.01) {
+      float dispCyan = min(col.b - col.r, col.g - col.r * 0.72);
+      float safeWater = smoothstep(0.04, 0.14, dispCyan) * globalWaterMask;
+      col = mix(baseCol, col, safeWater);
+
+      // Voronoi Caustics + Subtle Sunlit Water Glints
+      vec2 cUv = v_uv * aspectScale * 26.0;
+      float c1 = voronoi(cUv + vec2(u_time * 0.18, u_time * 0.11));
+      float c2 = voronoi(cUv * 1.25 - vec2(u_time * 0.14, -u_time * 0.16));
+      float caustic = pow(clamp(1.0 - min(c1, c2), 0.0, 1.0), 3.4);
+      accumAdd += vec3(0.55, 0.88, 1.0) * caustic * 0.28 * safeWater;
+    }
     float lum = luminance(col);
 
     // --- Pass 2: Lighting, Caustics, Shimmer, Fog & Glints ---
@@ -240,6 +272,13 @@ const FS_SOURCE = `#version 300 es
           float star = (core * 0.9 + (rayX + rayY) * 0.75) * env * inten * opac;
           accumAdd += mix(fCol, vec3(1.0), 0.7) * star;
         }
+      } else if (fType == 6) {
+        // CLOUD_SHEEN: Slow open-air skylight / cloud shadow drift
+        float edge = smoothstep(geom.z, geom.z * 0.65, dist);
+        vec2 cUv = d * 7.5 + vec2(u_time * 0.06 * spd, u_time * 0.03 * spd);
+        float cloud = fbm(cUv);
+        float sheen = smoothstep(0.42, 0.82, cloud);
+        accumAdd += fCol * sheen * 0.18 * inten * opac * edge;
       }
     }
 
@@ -451,6 +490,7 @@ export const WebGLMapShaderKonvaImage: React.FC<WebGLMapShaderKonvaImageProps> =
       res: gl.getUniformLocation(prog, 'u_res'),
       time: gl.getUniformLocation(prog, 'u_time'),
       spores: gl.getUniformLocation(prog, 'u_spores'),
+      globalWater: gl.getUniformLocation(prog, 'u_globalWater'),
       featCount: gl.getUniformLocation(prog, 'u_featCount'),
       featType: gl.getUniformLocation(prog, 'u_featType'),
       featGeom: gl.getUniformLocation(prog, 'u_featGeom'),
@@ -494,6 +534,7 @@ export const WebGLMapShaderKonvaImage: React.FC<WebGLMapShaderKonvaImageProps> =
       gl.uniform2f(uLoc.res, canvas.width, canvas.height);
       gl.uniform1f(uLoc.time, simTime);
       gl.uniform1i(uLoc.spores, curPreset.spores ? 1 : 0);
+      gl.uniform1i(uLoc.globalWater, curPreset.globalWater ? 1 : 0);
       gl.uniform1i(uLoc.featCount, active.length);
       gl.uniform1iv(uLoc.featType, types);
       gl.uniform4fv(uLoc.featGeom, geom);

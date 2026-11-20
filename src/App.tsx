@@ -51,7 +51,7 @@ import { CombatTracker } from './components/CombatTracker';
 import { LeftSidebar } from './components/LeftSidebar';
 import { AnimatedMapOverlay, AnimatedFeaturesKonvaImage } from './components/AnimatedMapOverlay';
 import { WebGLMapShaderKonvaImage } from './components/WebGLMapShaderKonvaImage';
-import { getMapShaderPreset } from './data/mapShaderPresets';
+import { getMapShaderPreset, isCoastalKeepSceneTitle } from './data/mapShaderPresets';
 import { DiceTableOverlay } from './components/DiceTableOverlay';
 import { DdbDiceRollEvent } from './types/dice';
 import { evaluateDiceFormula } from './types/hud';
@@ -1670,22 +1670,33 @@ export default function App() {
 
   // Battlemap load failure handler (recovers high-res from IndexedDB and avoids blurry thumbnail poisoning)
   useEffect(() => {
-    // Immediate recovery if Three Moons Dungeon is currently showing the fallback error SVG
-    if (
-      mapType === 'image' &&
-      typeof imageFile === 'string' &&
-      imageFile.startsWith('data:image/svg+xml') &&
-      activeSceneInfo?.sceneTitle?.toLowerCase().includes('three moons')
-    ) {
-      const fallbackUrl = '/uploads/file-1792161850867-913230359.jpg';
-      console.log('[VTT] Auto-recovering Three Moons Dungeon from placeholder SVG to static file:', fallbackUrl);
-      setImageFile(fallbackUrl);
-      return;
+    // Immediate recovery if Coastal Keep or Three Moons Dungeon is currently showing the fallback error SVG
+    if (mapType === 'image' && typeof imageFile === 'string' && imageFile.startsWith('data:image/svg+xml')) {
+      if (isCoastalKeepSceneTitle(activeSceneInfo?.sceneTitle)) {
+        const fallbackUrl = '/uploads/file-1792161751494-463331435.jpg';
+        console.log('[VTT] Auto-recovering Coastal Keep from placeholder SVG to static file:', fallbackUrl);
+        setImageFile(fallbackUrl);
+        return;
+      }
+      if (activeSceneInfo?.sceneTitle?.toLowerCase().includes('three moons')) {
+        const fallbackUrl = '/uploads/file-1792161850867-913230359.jpg';
+        console.log('[VTT] Auto-recovering Three Moons Dungeon from placeholder SVG to static file:', fallbackUrl);
+        setImageFile(fallbackUrl);
+        return;
+      }
     }
 
     if (imageStatus === 'failed' && imageFile && mapType === 'image') {
       console.warn('[VTT] Active battlemap failed to load:', imageFile);
-      // Auto-recovery for known maps (Three Moons Dungeon, Guildhouse & Tomb of Valin Sarnaster)
+      // Auto-recovery for known maps (Coastal Keep, Three Moons Dungeon, Guildhouse & Tomb of Valin Sarnaster)
+      if (isCoastalKeepSceneTitle(activeSceneInfo?.sceneTitle)) {
+        const fallbackUrl = '/uploads/file-1792161751494-463331435.jpg';
+        if (imageFile !== fallbackUrl) {
+          console.log('[VTT] Auto-recovering Coastal Keep map with static file:', fallbackUrl);
+          setImageFile(fallbackUrl);
+          return;
+        }
+      }
       if (activeSceneInfo?.sceneTitle?.toLowerCase().includes('three moons')) {
         const fallbackUrl = '/uploads/file-1792161850867-913230359.jpg';
         if (imageFile !== fallbackUrl) {
