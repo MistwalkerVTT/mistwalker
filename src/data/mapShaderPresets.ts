@@ -125,10 +125,10 @@ export const THREE_MOONS_DUNGEON_SHADER_PRESET: MapShaderPreset = {
       y: 78.0,
       radius: 16.0,
       aspect: 0.65,
-      color: '#cbd5e1',
-      intensity: 0.9,
+      color: '#94a3b8',
+      intensity: 0.7,
       speed: 0.55,
-      opacity: 0.55,
+      opacity: 0.22,
     },
   ],
 };

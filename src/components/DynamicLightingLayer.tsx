@@ -660,6 +660,9 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
     for (const fov of activeFovPolygons) {
       const src = visionSources.find(s => s.id === fov.sourceId);
       if (!src || !fov.points || fov.points.length < 6) continue;
+      // Only actual light emitters (Glow Light tokens & placed torches) cast warm ambient light;
+      // standard player vision purely carves away Fog of War so map contrast stays 100% crisp.
+      if (!src.id.startsWith('glow-') && !src.id.startsWith('torch-')) continue;
 
       ctx.save();
       ctx.beginPath();
@@ -671,7 +674,7 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
       ctx.clip();
 
       // Draw at full-range alpha on the offscreen buffer and cap the final layer opacity on KonvaImage
-      // so overlapping party vision cones never compound into a washed-out haze.
+      // so overlapping light sources never compound into a washed-out haze.
       const grad = ctx.createRadialGradient(src.x, src.y, 0, src.x, src.y, src.radiusPx);
       grad.addColorStop(0, 'rgba(255, 220, 140, 1)');
       grad.addColorStop(0.5, 'rgba(255, 190, 95, 0.45)');
@@ -697,7 +700,8 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
           y={0}
           width={mapDimensions.width}
           height={mapDimensions.height}
-          opacity={0.12}
+          opacity={0.18}
+          globalCompositeOperation="soft-light"
           listening={false}
           perfectDrawEnabled={false}
         />
