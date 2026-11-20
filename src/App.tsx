@@ -413,8 +413,14 @@ export default function App() {
     const unsub = subscribeToConnectionState((connected) => {
       setIsFirebaseConnected(connected);
     });
-    soundCatalog.preloadCommonSounds();
-    return () => unsub();
+    // Defer audio SFX preloading so initial login doesn't fire 20+ concurrent HTTP requests
+    const preloadTimer = setTimeout(() => {
+      soundCatalog.preloadCommonSounds();
+    }, 10000);
+    return () => {
+      clearTimeout(preloadTimer);
+      unsub();
+    };
   }, []);
   const [fireballImg] = useImage('https://cdn.pixabay.com/animation/2024/06/15/20/34/20-34-39-5_512.gif', 'anonymous');
   const [spiritImg] = useImage('https://img1.wsimg.com/isteam/ip/ae0194f8-656a-49f5-ac8e-6a453300a6df/spiritgaurdians.png/:/rs=w:1440,h:1440', 'anonymous');
@@ -2567,27 +2573,12 @@ export default function App() {
       if (activeMapIdRef.current === liveMapIdRef.current) {
         broadcastFullStateRef.current?.();
       }
-
-      // Check if DM refreshed their browser
-      const wasReloaded = (() => {
-        try {
-          if (sessionStorage.getItem('dm_page_reloaded') === 'true') {
-            sessionStorage.removeItem('dm_page_reloaded');
-            return true;
-          }
-          const navEntries = performance.getEntriesByType('navigation');
-          if (navEntries.length > 0 && (navEntries[0] as PerformanceNavigationTiming).type === 'reload') {
-            return true;
-          }
-          return (performance as any).navigation?.type === 1;
-        } catch {
-          return false;
-        }
-      })();
-
-      if (wasReloaded) {
-        console.log('[DM Socket] DM browser refresh detected. Emitting DM_BROWSER_REFRESHED to reload player browsers...');
-        socket.emit('DM_BROWSER_REFRESHED');
+      // Clear any stale reload flag without triggering a thundering-herd FORCE_PLAYER_RELOAD
+      // on reconnect; live state is already synchronized cleanly via broadcastFullStateRef above.
+      try {
+        sessionStorage.removeItem('dm_page_reloaded');
+      } catch {
+        // ignore storage errors
       }
     });
 
@@ -3229,13 +3220,8 @@ export default function App() {
     }
   }, [tokens, compendiumCharacters, socketReconnectTick]);
 
-  // Periodic heartbeat poll to trigger D&D Beyond HP refresh cycle every 4 seconds
-  useEffect(() => {
-    const interval = setInterval(() => {
-      fetch('/api/ddb/campaigns/poll-now', { method: 'POST' }).catch(() => {});
-    }, 4000);
-    return () => clearInterval(interval);
-  }, []);
+  // D&D Beyond HP refresh is handled server-side by DdbHpSyncDaemon and pushed via Socket.IO
+  // (removed redundant 4s client POST /api/ddb/campaigns/poll-now storm).
 
   // Automated debounced live-streaming of fog reveals, dynamic lighting, walls, and scene state
   const isInitialMountRef = useRef<boolean>(true);

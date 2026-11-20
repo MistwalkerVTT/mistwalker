@@ -7,7 +7,7 @@ import { CHARACTER_TOKEN_IMAGES, getCharacterTokenUrl } from '../src/data/defaul
 export class DdbGameLogDaemon {
   private static instance: DdbGameLogDaemon;
   private io: Server | null = null;
-  private monitoredCampaignIds = new Set<string>(['3290944', '6738033']);
+  private monitoredCampaignIds = new Set<string>(['6738033']);
   private firstSyncCampaigns = new Set<string>();
   private isPolling = false;
   private pollTimer: NodeJS.Timeout | null = null;
@@ -27,49 +27,49 @@ export class DdbGameLogDaemon {
     this.io = io;
     console.log('[DdbGameLogDaemon] Initialized with Socket.io server.');
     
-    // Automatically monitor environment campaigns or default campaigns
+    // Monitor only explicitly configured active campaigns (not all 16 historical campaigns on account)
     if (process.env.DND_BEYOND_CAMPAIGN_ID) {
       const ids = process.env.DND_BEYOND_CAMPAIGN_ID.split(',').map(s => s.trim()).filter(Boolean);
-      ids.forEach(id => this.monitoredCampaignIds.add(id));
+      if (ids.length > 0) {
+        this.monitoredCampaignIds = new Set(ids);
+      }
     }
 
-    console.log(`[DdbGameLogDaemon] Initialized monitoring for campaigns: ${Array.from(this.monitoredCampaignIds).join(', ')}`);
+    console.log(`[DdbGameLogDaemon] Initialized monitoring for active campaign(s): ${Array.from(this.monitoredCampaignIds).join(', ')}`);
 
     this.startPolling();
-    this.autoDiscoverCampaigns();
   }
 
   public addCampaign(campaignId: string) {
     if (!campaignId) return;
+    if (this.monitoredCampaignIds.has(campaignId)) return;
+    // Keep at most 2 active monitored campaigns to prevent D&D Beyond polling storms
+    if (this.monitoredCampaignIds.size >= 2) {
+      const oldest = this.monitoredCampaignIds.values().next().value;
+      if (oldest) this.monitoredCampaignIds.delete(oldest);
+    }
     this.monitoredCampaignIds.add(campaignId);
     console.log(`[DdbGameLogDaemon] Added campaign ${campaignId} to live monitoring. Active campaigns: ${Array.from(this.monitoredCampaignIds).join(', ')}`);
     this.startPolling();
   }
 
   public setMonitoredCampaign(campaignId: string) {
-    this.addCampaign(campaignId);
+    if (!campaignId) return;
+    this.monitoredCampaignIds = new Set([campaignId]);
+    console.log(`[DdbGameLogDaemon] Focused live monitoring on active campaign: ${campaignId}`);
+    this.startPolling();
   }
 
   public async autoDiscoverCampaigns() {
-    try {
-      const campaigns = await fetchDdbCampaigns();
-      for (const c of campaigns) {
-        if (c.id && !this.monitoredCampaignIds.has(c.id)) {
-          console.log(`[DdbGameLogDaemon] Discovered & adding D&D Beyond Campaign: "${c.title}" (${c.id})`);
-          this.monitoredCampaignIds.add(c.id);
-        }
-      }
-    } catch (err: any) {
-      console.warn('[DdbGameLogDaemon] Auto-discovery note:', err.message);
-    }
+    // Disabled automatic polling of all historical campaigns on startup to save CPU/RAM.
   }
 
   public startPolling() {
     if (this.pollTimer) {
       clearInterval(this.pollTimer);
     }
-    // High-responsiveness polling interval: 1.5 seconds for instant roll feedback
-    this.pollTimer = setInterval(() => this.pollCycle(), 1500);
+    // Poll active campaign(s) every 2.5 seconds when clients are connected
+    this.pollTimer = setInterval(() => this.pollCycle(), 2500);
     this.pollCycle();
   }
 
@@ -121,6 +121,7 @@ export class DdbGameLogDaemon {
 
   private async pollCycle() {
     if (this.monitoredCampaignIds.size === 0 || this.isPolling || !this.io) return;
+    if (this.io.engine.clientsCount === 0) return;
     this.isPolling = true;
 
     try {

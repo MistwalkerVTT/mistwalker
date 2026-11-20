@@ -2493,6 +2493,13 @@ export class DdbHpSyncDaemon {
     const charId = String(rawId).replace(/^char_ddb_/, '').trim();
     if (!charId || isNaN(Number(charId))) return null;
 
+    // Return cached character immediately if fetched within the last 60s (avoids 7-player login storm)
+    const existingCached = this.cachedCharacters.find(c => c.id === charId);
+    if (existingCached && this.monitoredCharacters.has(charId) && (Date.now() - (existingCached.lastUpdated || 0) < 60000)) {
+      this.ensurePollingStarted();
+      return existingCached;
+    }
+
     if (!this.monitoredCharacters.has(charId)) {
       this.monitoredCharacters.set(charId, {
         currentHp: 20,
@@ -2548,16 +2555,19 @@ export class DdbHpSyncDaemon {
   }
 
   private async startBackgroundMonitoring() {
-    // 1. Auto-discover user campaigns
-    const campaignIds = new Set<string>(['6738033', '3290944']);
+    // 1. Discover campaign list for DM UI dropdown, but ONLY auto-attach the active campaign
+    // (polling all 16 historical campaigns on startup saturates CPU and RAM).
+    const activeIds = new Set<string>();
     if (process.env.DND_BEYOND_CAMPAIGN_ID) {
-      process.env.DND_BEYOND_CAMPAIGN_ID.split(',').map(s => s.trim()).filter(Boolean).forEach(id => campaignIds.add(id));
+      process.env.DND_BEYOND_CAMPAIGN_ID.split(',').map(s => s.trim()).filter(Boolean).forEach(id => activeIds.add(id));
+    } else if (this.activeCampaignId) {
+      activeIds.add(this.activeCampaignId);
     }
+
     try {
       const campaigns = await fetchDdbCampaigns();
       for (const c of campaigns) {
         if (c.id) {
-          campaignIds.add(c.id);
           const idx = this.cachedCampaigns.findIndex(cp => cp.id === c.id);
           if (idx === -1) this.cachedCampaigns.push(c);
           else this.cachedCampaigns[idx] = c;
@@ -2567,8 +2577,8 @@ export class DdbHpSyncDaemon {
       console.warn('[DdbHpSyncDaemon] Auto-fetch campaigns note:', err.message);
     }
 
-    console.log(`[DdbHpSyncDaemon] Auto-attaching to D&D Beyond Campaigns: ${Array.from(campaignIds).join(', ')}`);
-    for (const campId of campaignIds) {
+    console.log(`[DdbHpSyncDaemon] Auto-attaching to active D&D Beyond Campaign(s): ${Array.from(activeIds).join(', ')} (discovered ${this.cachedCampaigns.length} total)`);
+    for (const campId of activeIds) {
       await this.attachCampaign(campId);
     }
 
@@ -2576,7 +2586,7 @@ export class DdbHpSyncDaemon {
 
     if (this.io && this.cachedCharacters.length > 0) {
       this.io.emit('DDB_CAMPAIGN_SYNC_INIT', {
-        campaignId: this.activeCampaignId || Array.from(campaignIds)[0],
+        campaignId: this.activeCampaignId || Array.from(activeIds)[0],
         campaigns: this.cachedCampaigns,
         characters: this.cachedCharacters
       });
@@ -2585,12 +2595,13 @@ export class DdbHpSyncDaemon {
 
   private ensurePollingStarted() {
     if (this.timer) return;
-    console.log('[DdbHpSyncDaemon] Starting 3.5s real-time HP polling loop...');
-    this.timer = setInterval(() => this.pollCycle(), 3500);
+    console.log('[DdbHpSyncDaemon] Starting 8s real-time HP polling loop...');
+    this.timer = setInterval(() => this.pollCycle(), 8000);
   }
 
   public async pollCycle() {
     if (this.isPolling || this.monitoredCharacters.size === 0) return;
+    if (this.io && this.io.engine.clientsCount === 0) return;
     this.isPolling = true;
 
     try {

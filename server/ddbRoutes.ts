@@ -246,12 +246,17 @@ ddbRouter.get('/campaigns/sync-status', (req: Request, res: Response) => {
   res.json({ status });
 });
 
-// POST /api/ddb/campaigns/poll-now - Force an immediate HP poll cycle
+// POST /api/ddb/campaigns/poll-now - Rate-limited manual HP poll trigger
+let lastManualPollAt = 0;
 ddbRouter.post('/campaigns/poll-now', async (req: Request, res: Response) => {
   try {
-    await DdbHpSyncDaemon.getInstance().pollCycle();
-    const status = DdbHpSyncDaemon.getInstance().getStatus();
-    res.json({ success: true, status });
+    const now = Date.now();
+    const daemon = DdbHpSyncDaemon.getInstance();
+    if (now - lastManualPollAt >= 5000) {
+      lastManualPollAt = now;
+      await daemon.pollCycle();
+    }
+    res.json({ success: true, lastPolledAt: lastManualPollAt });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

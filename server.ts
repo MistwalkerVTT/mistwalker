@@ -66,8 +66,18 @@ async function startServer() {
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 
-  // Enable gzip/deflate compression for API JSON and static responses
-  app.use(compression());
+  // Enable fast, low-CPU gzip compression (level 1 uses ~5x less CPU than default level 6)
+  // and skip already-compressed media files
+  app.use(compression({
+    level: 1,
+    threshold: 1024,
+    filter: (req, res) => {
+      if (/\.(mp3|ogg|wav|webm|mp4|jpg|jpeg|png|webp|gif|woff2?)$/i.test(req.path)) {
+        return false;
+      }
+      return compression.filter(req, res);
+    }
+  }));
 
   // Enable CORS with credentials support
   app.use(cors({
@@ -75,9 +85,17 @@ async function startServer() {
     credentials: true
   }));
 
-  // Logging middleware for all requests
+  // Lightweight request logging (skip high-frequency health checks and static assets)
   app.use((req, res, next) => {
-    console.log(`[Server] ${req.method} ${req.url}`);
+    if (
+      req.url !== '/api/health' &&
+      !req.url.startsWith('/assets/') &&
+      !req.url.startsWith('/audio/') &&
+      !req.url.startsWith('/jb2a/') &&
+      req.url !== '/favicon.ico'
+    ) {
+      console.log(`[Server] ${req.method} ${req.url}`);
+    }
     next();
   });
 
@@ -649,6 +667,9 @@ async function startServer() {
     }
   })();
 
+  // Throttle REQUEST_INITIAL_STATE broadcasts to DM so 7+ simultaneous player joins don't cause 7x full-state storms
+  let lastDmInitialStateRequestAt = 0;
+
   // Socket.io connection & synchronization handlers
   io.on("connection", (socket) => {
     console.log(`[Server] User connected: ${socket.id}`);
@@ -668,8 +689,12 @@ async function startServer() {
       if (activeVttState.imageFile) {
         socket.emit("SYNC_IMAGE", activeVttState.imageFile);
       }
-      // Always notify connected DM clients so they can push their freshest live state
-      socket.broadcast.emit("REQUEST_INITIAL_STATE");
+      // Only ask DM to re-push full state if server has no map yet, or at most once every 5s
+      const now = Date.now();
+      if (!activeVttState.imageFile || (now - lastDmInitialStateRequestAt > 5000)) {
+        lastDmInitialStateRequestAt = now;
+        socket.broadcast.emit("REQUEST_INITIAL_STATE");
+      }
     });
 
     // DM refreshed browser - synchronize all connected players by reloading their windows
@@ -1101,8 +1126,22 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
+    // Vite content-hashed bundles under /assets/ are immutable for 1 year
+    app.use('/assets', express.static(path.join(distPath, 'assets'), {
+      maxAge: '365d',
+      immutable: true
+    }));
+    // Other static files (audio, icons, data) cached for 1 day; index.html never cached
+    app.use(express.static(distPath, {
+      maxAge: '1d',
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('index.html')) {
+          res.setHeader('Cache-Control', 'no-cache');
+        }
+      }
+    }));
     app.get('*', (req, res) => {
+      res.setHeader('Cache-Control', 'no-cache');
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }

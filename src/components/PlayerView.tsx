@@ -2760,15 +2760,16 @@ export default function PlayerView() {
       setIsConnected(false);
     });
 
-    // Automatically refresh player browser when DM mode refreshes
+    // Staggered refresh when DM explicitly triggers a player table reload
     socket.on('FORCE_PLAYER_RELOAD', () => {
-      console.log('[PlayerView] Dungeon Master refreshed the browser. Reloading player table...');
-      toast.info('Dungeon Master refreshed the browser. Reloading table...', {
+      const jitterMs = 500 + Math.floor(Math.random() * 3000);
+      console.log(`[PlayerView] Dungeon Master requested table reload. Reloading in ${jitterMs}ms...`);
+      toast.info('Dungeon Master requested a table refresh. Reloading...', {
         duration: 3000
       });
       setTimeout(() => {
         window.location.reload();
-      }, 500);
+      }, jitterMs);
     });
 
     // 1. SYNC_IMAGE
@@ -3498,13 +3499,8 @@ export default function PlayerView() {
     }
   }, [tokens, compendiumCharacters, isConnected]);
 
-  // Fallback heartbeat poll for D&D Beyond HP refresh in Player View (server daemon + DM already poll every 4s)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      fetch('/api/ddb/campaigns/poll-now', { method: 'POST' }).catch(() => {});
-    }, 15000);
-    return () => clearInterval(interval);
-  }, []);
+  // D&D Beyond HP updates are pushed automatically via Socket.IO by DdbHpSyncDaemon
+  // (removed redundant per-client POST /api/ddb/campaigns/poll-now loop).
 
   // Real-time Firestore activeSession/current subscription so remote Player Views always receive state across server restarts or different networks
   const lastFirestoreSceneRef = useRef<string | null>(null);
