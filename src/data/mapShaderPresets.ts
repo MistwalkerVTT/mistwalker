@@ -394,10 +394,10 @@ export function getMapShaderPreset(
     if (url.includes('file-1792161850867-913230359.jpg')) {
       return THREE_MOONS_DUNGEON_SHADER_PRESET;
     }
-    if (url.includes('rd_ch7_lagoon.jpg')) {
+    if (url.includes('ch7_lagoon.jpg') || url.includes('rd_ch7_lagoon.jpg')) {
       return ISLE_OF_SERPENTS_LAGOON_SHADER_PRESET;
     }
-    if (url.includes('Tomb_Light_NoGrid_NoAssets_44x54_100ppi.webp') || url.includes('Tomb_Dark_NoGrid_NoAssets_44x54_100ppi.webp')) {
+    if (url.includes('ch7_tomb_wayward_souls.webp') || url.includes('Tomb_Light_NoGrid_NoAssets_44x54_100ppi.webp') || url.includes('Tomb_Dark_NoGrid_NoAssets_44x54_100ppi.webp')) {
       return TOMB_OF_WAYWARD_SOULS_SHADER_PRESET;
     }
   }
