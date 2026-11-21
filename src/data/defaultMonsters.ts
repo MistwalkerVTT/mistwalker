@@ -272,6 +272,7 @@ export const DEFAULT_MONSTERS: Monster[] = [
     languages: 'The languages it knew in life (Common, Sylvan in T9)',
     challenge: '2 (450 XP)',
     proficiencyBonus: 2,
+    avatarUrl: '/assets/tokens/vecna/will_o_wisp.jpg',
     traits: [
       {
         name: 'Consume Life',
