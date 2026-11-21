@@ -50,6 +50,8 @@ export interface Mistwalker3DViewportBridgeProps {
   setTokens: React.Dispatch<React.SetStateAction<any[]>>;
   setWalls: React.Dispatch<React.SetStateAction<any[]>>;
   setScene3d?: (next: any) => void;
+  onMoveToken?: (id: string, px: number, py: number) => void;
+  onDragMoveToken?: (id: string, px: number, py: number) => void;
   onSelectToken?: (id: string | null) => void;
   onSelectZone?: (zone: any) => void;
   onSaveScene?: () => void;
@@ -60,6 +62,22 @@ export interface Mistwalker3DViewportBridgeProps {
   onRemoveRevealsAt?: (px: number, py: number, rad: number) => void;
   onAddPolygonReveal?: (poly: number[]) => void;
   onVisionConfigChange?: (next: any) => void;
+  // v3.1 Combat Targeting, Context Menu, Map Pings, Weather & Camera Hooks
+  activeTargetingAction?: any;
+  multiTargetTokens?: any[];
+  onTargetToken?: (tokenId: string) => void;
+  onCancelTargeting?: () => void;
+  onOpenTokenContextMenu?: (tokenId: string, clientX: number, clientY: number) => void;
+  mapPings?: any[];
+  onTriggerPing?: (worldPxX: number, worldPxY: number, pullCamera: boolean) => void;
+  cameraFocusTarget?: { x: number; y: number; tick: number } | null;
+  performanceMode?: 'performance' | 'balanced' | 'ultra';
+  showHpDisplay?: boolean;
+  boardWeatherEffect?: string;
+  mapRotation?: number;
+  isShaking?: boolean;
+  exploredPolygons?: number[][];
+  onExploredPolygonsChange?: React.Dispatch<React.SetStateAction<number[][]>>;
 }
 
 /**
@@ -70,14 +88,19 @@ export const Mistwalker3DViewportHost: React.FC<Mistwalker3DViewportBridgeProps>
   setTokens,
   setWalls,
   setScene3d,
+  onMoveToken,
   isDm,
   ...rest
 }) => {
   const handleMoveToken = useCallback(
     (id: string, px: number, py: number) => {
-      setTokens((prev) => prev.map((t) => (t.id === id ? { ...t, x: px, y: py } : t)));
+      if (onMoveToken) {
+        onMoveToken(id, px, py);
+      } else {
+        setTokens((prev) => prev.map((t) => (t.id === id ? { ...t, x: px, y: py } : t)));
+      }
     },
-    [setTokens]
+    [onMoveToken, setTokens]
   );
 
   const handleRotateToken = useCallback(

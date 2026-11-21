@@ -2,6 +2,7 @@ import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { db, cleanForFirestore, handleFirestoreError, OperationType, Campaign, IS_ENTERPRISE_BETA } from './firebase';
 import { RoomAnnotation } from '../types';
 import { DEMO_GV_CAMPAIGN } from '../data/demoCampaignGv';
+import { getPrebuiltGoldenVaultCampaign, getPrebuiltVecnaCampaign } from '../data/prebuilt3dCampaigns';
 
 export interface UpdateRoomAnnotationParams {
   campaignId?: string;
@@ -81,10 +82,14 @@ export async function updateRoomAnnotation({
     try {
       const campRef = doc(db, 'campaigns', targetCampaignId);
       const campSnap = await getDoc(campRef);
+      const veorPrebuilt = getPrebuiltVecnaCampaign();
+      const gvPrebuilt = getPrebuiltGoldenVaultCampaign();
       const campData: Campaign | null = campSnap.exists()
         ? (campSnap.data() as Campaign)
         : targetCampaignId === DEMO_GV_CAMPAIGN.campaignId
-        ? { ...DEMO_GV_CAMPAIGN }
+        ? { ...gvPrebuilt }
+        : veorPrebuilt && targetCampaignId === veorPrebuilt.campaignId
+        ? { ...veorPrebuilt }
         : null;
       if (campData) {
         let modified = false;

@@ -379,20 +379,29 @@ async function startServer() {
     try {
       const rawUrl = String(req.query.url || '').trim();
       const maxDim = Math.max(1024, Math.min(4096, parseInt(String(req.query.max || '2560'), 10) || 2560));
-      if (!rawUrl.startsWith('/uploads/')) {
-        return res.status(400).json({ error: 'Only /uploads/ paths can be optimized' });
+      const isUploadUrl = rawUrl.startsWith('/uploads/');
+      const isCampaign3dUrl = rawUrl.startsWith('/assets/dungeon3d/campaigns/');
+      if (!isUploadUrl && !isCampaign3dUrl) {
+        return res.status(400).json({ error: 'Only /uploads/ or /assets/dungeon3d/campaigns/ paths can be optimized' });
       }
       const filename = path.basename(rawUrl.split('?')[0]);
       if (!filename || filename === '.' || filename === '..' || !/\.(jpe?g|png|webp|jfif)$/i.test(filename)) {
         return res.redirect(302, rawUrl);
       }
 
-      const candidates = [
-        ...(persistentUploadsDir ? [path.join(persistentUploadsDir, filename)] : []),
-        path.join(uploadsDir, filename),
-        path.resolve(process.cwd(), 'dist', 'uploads', filename),
-        path.resolve(process.cwd(), 'public', 'uploads', filename)
-      ];
+      const addon3dCampaignsDir = path.resolve(process.cwd(), '../Mistwalker 3D/public/assets/dungeon3d/campaigns');
+      const candidates = isCampaign3dUrl
+        ? [
+            path.join(addon3dCampaignsDir, filename),
+            path.resolve(process.cwd(), 'public', 'assets', 'dungeon3d', 'campaigns', filename),
+            path.resolve(process.cwd(), 'dist', 'assets', 'dungeon3d', 'campaigns', filename),
+          ]
+        : [
+            ...(persistentUploadsDir ? [path.join(persistentUploadsDir, filename)] : []),
+            path.join(uploadsDir, filename),
+            path.resolve(process.cwd(), 'dist', 'uploads', filename),
+            path.resolve(process.cwd(), 'public', 'uploads', filename)
+          ];
       const sourcePath = candidates.find(p => fs.existsSync(p));
       if (!sourcePath) {
         return res.redirect(302, rawUrl);
@@ -672,6 +681,7 @@ async function startServer() {
     gridOffsetY: number;
     visionConfig: any;
     roomAnnotations: any[];
+    scene3d?: any;
     mapRotation: number;
     activeSceneInfo: any;
     characters: any[];
@@ -744,6 +754,7 @@ async function startServer() {
               gridOpacity: sess.gridOpacity ?? 0.3,
               visionConfig: sess.visionConfig || activeVttState.visionConfig,
               roomAnnotations: Array.isArray(sess.roomAnnotations) ? sess.roomAnnotations : [],
+              scene3d: sess.scene3d,
               activeSceneInfo: {
                 campaignId: sess.campaignId,
                 chapterId: sess.chapterId,
@@ -838,6 +849,7 @@ async function startServer() {
           state.mapRotation !== undefined ||
           state.isFogVisible !== undefined ||
           state.visionConfig !== undefined ||
+          state.scene3d !== undefined ||
           state.fogResetKey !== undefined);
 
       // Prevent an empty/uninitialized client from overwriting an active loaded map in memory
@@ -1193,17 +1205,30 @@ async function startServer() {
     }));
   }
 
-  // Optional local @mistwalker/3d add-on mount (dormant on Render; active only when VITE_ENABLE_3D=true locally)
+  // Mount static 3D campaign battlemaps & models whenever the sibling ../Mistwalker 3D folder exists on disk
+  // so 2D and 3D modes can seamlessly share the 16 high-res Vecna & Golden Vault maps
+  const addon3DRoot = path.resolve(process.cwd(), '../Mistwalker 3D');
+  const dungeon3dAssetsDir = path.join(addon3DRoot, 'public', 'assets', 'dungeon3d');
+  const models3dAssetsDir = path.join(addon3DRoot, 'public', 'assets', 'models3d');
+  if (fs.existsSync(dungeon3dAssetsDir)) {
+    app.use('/assets/dungeon3d', express.static(dungeon3dAssetsDir, {
+      maxAge: '7d',
+      setHeaders: (res) => {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+      }
+    }));
+  }
+  if (fs.existsSync(models3dAssetsDir)) {
+    app.use('/assets/models3d', express.static(models3dAssetsDir, {
+      maxAge: '7d',
+      setHeaders: (res) => {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+      }
+    }));
+  }
+
+  // Optional local @mistwalker/3d AI tile generator routes (active when VITE_ENABLE_3D=true locally)
   if (process.env.VITE_ENABLE_3D === 'true') {
-    const addon3DRoot = path.resolve(process.cwd(), '../Mistwalker 3D');
-    const dungeon3dAssetsDir = path.join(addon3DRoot, 'public', 'assets', 'dungeon3d');
-    const models3dAssetsDir = path.join(addon3DRoot, 'public', 'assets', 'models3d');
-    if (fs.existsSync(dungeon3dAssetsDir)) {
-      app.use('/assets/dungeon3d', express.static(dungeon3dAssetsDir));
-    }
-    if (fs.existsSync(models3dAssetsDir)) {
-      app.use('/assets/models3d', express.static(models3dAssetsDir));
-    }
     const routes3DPath = path.join(addon3DRoot, 'server', '3dRoutes.ts');
     if (fs.existsSync(routes3DPath)) {
       try {

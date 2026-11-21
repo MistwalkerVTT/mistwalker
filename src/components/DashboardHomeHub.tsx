@@ -21,7 +21,9 @@ import {
   Clock,
   Scroll,
   Music,
-  Swords
+  Swords,
+  GraduationCap,
+  X
 } from 'lucide-react';
 import { Campaign, Scene, ActiveSessionData, prewarmSceneMap } from '../lib/firebase';
 import { DEMO_GV_CAMPAIGN, DEMO_GV_SCENE, DEMO_GV_CHAPTER } from '../data/demoCampaignGv';
@@ -51,6 +53,9 @@ interface DashboardHomeHubProps {
   onResumeActiveMap?: () => void;
   activeMapSlotName?: string;
   isHydratingScene?: boolean;
+  onStartTutorial?: () => void;
+  completedTutorialCount?: number;
+  totalTutorialCount?: number;
 }
 
 export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
@@ -77,9 +82,26 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
   hasActiveMapSession,
   onResumeActiveMap,
   activeMapSlotName,
-  isHydratingScene = false
+  isHydratingScene = false,
+  onStartTutorial,
+  completedTutorialCount = 0,
+  totalTutorialCount = 9
 }) => {
   const [isDragOverDropzone, setIsDragOverDropzone] = useState(false);
+  const [isTutorialBannerDismissed, setIsTutorialBannerDismissed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('mistwalker_tutorial_banner_dismissed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const handleDismissTutorialBanner = () => {
+    setIsTutorialBannerDismissed(true);
+    try {
+      localStorage.setItem('mistwalker_tutorial_banner_dismissed', 'true');
+    } catch {}
+  };
 
   // Retrieve last active scene info from localStorage as fast fallback
   const cachedLastActive = useMemo(() => {
@@ -354,8 +376,62 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
                 <span>Cloud Sync</span>
               </span>
             )}
+            {onStartTutorial && (
+              <button
+                type="button"
+                id="btn-home-start-tutorial"
+                onClick={onStartTutorial}
+                className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 hover:text-amber-200 text-[11px] font-mono font-bold transition-all cursor-pointer shadow-sm"
+                title="Launch the interactive 9-track DM Tutorial"
+              >
+                <GraduationCap className="w-3.5 h-3.5 text-amber-400" />
+                <span>
+                  DM Tutorial{completedTutorialCount > 0 ? ` (${completedTutorialCount}/${totalTutorialCount})` : ''}
+                </span>
+              </button>
+            )}
           </div>
         </div>
+
+        {/* SUBTLE FIRST-TIME DM TUTORIAL WELCOME BANNER */}
+        {onStartTutorial && !isTutorialBannerDismissed && completedTutorialCount === 0 && (
+          <div className="w-full mb-4 px-4 py-3 rounded-2xl bg-gradient-to-r from-amber-950/50 via-zinc-900/90 to-zinc-950/90 border border-amber-500/40 shadow-xl backdrop-blur-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
+                <GraduationCap className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-xs font-mono font-bold text-amber-200">
+                  New to MistWalker? Take the Interactive DM Walkthrough
+                </div>
+                <p className="text-[11px] text-zinc-400 leading-snug">
+                  Step-by-step live guide covering Campaigns, Chapters, Scenes, Maps, Walls, Doors, Adventure PDFs &amp; Room Zones.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+              <button
+                type="button"
+                onClick={() => {
+                  handleDismissTutorialBanner();
+                  onStartTutorial();
+                }}
+                className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-mono font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-md shadow-amber-950/40"
+              >
+                <Play className="w-3 h-3 fill-current" />
+                <span>Start Walkthrough</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleDismissTutorialBanner}
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition cursor-pointer"
+                title="Dismiss welcome banner"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* UNSAVED SCENE RECOVERY ALERT BANNER (If present) */}
         {unsavedSceneBackup && (
@@ -782,6 +858,18 @@ export const DashboardHomeHub: React.FC<DashboardHomeHubProps> = ({
             >
               Scenes & Chapters
             </button>
+            {onStartTutorial && (
+              <>
+                <span>•</span>
+                <button
+                  onClick={onStartTutorial}
+                  className="text-amber-400/90 hover:text-amber-300 transition-colors cursor-pointer flex items-center gap-1"
+                >
+                  <GraduationCap className="w-3.5 h-3.5" />
+                  <span>Interactive DM Tutorial</span>
+                </button>
+              </>
+            )}
           </div>
 
           {onOpenBugReport && (

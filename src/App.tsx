@@ -81,6 +81,7 @@ import { JB2A_REGISTRY, findJb2aAsset } from './effects/db/jb2aRegistry';
 import { getAuraVideoUrl } from './effects/db/tokenFxMap';
 import { MainCampaignBar } from './components/MainCampaignBar';
 import { DashboardHomeHub } from './components/DashboardHomeHub';
+import { mergePrebuiltCampaigns } from './data/prebuilt3dCampaigns';
 import { MapLoadingSpinDial, MapLoadingState } from './components/MapLoadingSpinDial';
 import { AVAILABLE_TOKENS, type AvailableTokenItem, CONDITIONS, DND_CONDITIONS } from './data/defaultTokens';
 import { getImageTransform } from './lib/canvasTransforms';
@@ -186,7 +187,10 @@ import {
   MonsterActionItem,
   ScenePlayInstance
 } from './types';
-import { PresetBattlemap } from './data/presetBattlemaps';
+import { PresetBattlemap, PRESET_BATTLEMAPS } from './data/presetBattlemaps';
+import { TutorialOverlay } from './components/TutorialOverlay';
+import { TUTORIAL_TRACKS, getTutorialTrackById } from './data/tutorialTracks';
+import { TutorialTrackId, TutorialActionKey } from './types/tutorial';
 import { DynamicLightingLayer } from './components/DynamicLightingLayer';
 import { WallEditorToolbar } from './components/WallEditorToolbar';
 import { RoomHotspotLayer } from './components/RoomHotspotLayer';
@@ -766,6 +770,50 @@ export default function App() {
   }, []);
   const [showDndChatbot, setShowDndChatbot] = useState(false);
   const [showCampaignBuilder, setShowCampaignBuilder] = useState(false);
+
+  // Interactive DM Tutorial State
+  const [activeTutorialTrackId, setActiveTutorialTrackId] = useState<TutorialTrackId | null>(null);
+  const [activeTutorialStepIndex, setActiveTutorialStepIndex] = useState<number>(0);
+  const [isTutorialMinimized, setIsTutorialMinimized] = useState<boolean>(false);
+  const [completedTutorialTracks, setCompletedTutorialTracks] = useState<TutorialTrackId[]>(() => {
+    try {
+      const saved = localStorage.getItem('mistwalker_tutorial_progress_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  });
+
+  const handleStartTutorialTrack = (trackId: TutorialTrackId) => {
+    setActiveTutorialTrackId(trackId);
+    setActiveTutorialStepIndex(0);
+    setIsTutorialMinimized(false);
+  };
+
+  const handleCompleteTutorialTrack = (trackId: TutorialTrackId) => {
+    setCompletedTutorialTracks((prev) => {
+      if (prev.includes(trackId)) return prev;
+      const next = [...prev, trackId];
+      try {
+        localStorage.setItem('mistwalker_tutorial_progress_v1', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+    const track = getTutorialTrackById(trackId);
+    if (track) {
+      toast.success(`Completed Tutorial Track ${track.order}: ${track.title}!`);
+    }
+  };
+
+  const handleResetTutorialProgress = () => {
+    setCompletedTutorialTracks([]);
+    try {
+      localStorage.removeItem('mistwalker_tutorial_progress_v1');
+    } catch {}
+    toast.info('Tutorial progress reset.');
+  };
   const [campaignBuilderInitialTab, setCampaignBuilderInitialTab] = useState<'campaigns' | 'arena'>('campaigns');
   const [showDmArenaPreview, setShowDmArenaPreview] = useState(false);
   const [showSaveToCampaignModal, setShowSaveToCampaignModal] = useState(false);
@@ -2461,6 +2509,7 @@ export default function App() {
       boardAnimatedEnabled: boardAnimatedEnabled,
       boardWeatherEffect: boardWeatherEffect,
       mapShaderEnabled: mapShaderEnabled,
+      scene3d: scene3d,
       characters: compendiumCharacters,
       combatants: sortedCombatTrackerCombatants,
       combatRound: combatTrackerRound,
@@ -2477,7 +2526,7 @@ export default function App() {
         mapHeight: dims.height,
       }
     });
-  }, [getMapDimensions, imageFile, activeSceneInfo, tokens, compendiumMonsters, combatTrackerCombatants, prepareTokensForSync, walls, gridSize, gridOpacity, gridVisible, gridOffsetX, gridOffsetY, isFogVisible, fogResetKey, reveals, polygonReveals, visionConfig, roomAnnotations, mapRotation, boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect, mapShaderEnabled, compendiumCharacters, sortedCombatTrackerCombatants, combatTrackerRound, combatTrackerTurnIndex, showCombatTracker]);
+  }, [getMapDimensions, imageFile, activeSceneInfo, tokens, compendiumMonsters, combatTrackerCombatants, prepareTokensForSync, walls, gridSize, gridOpacity, gridVisible, gridOffsetX, gridOffsetY, isFogVisible, fogResetKey, reveals, polygonReveals, visionConfig, roomAnnotations, mapRotation, boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect, mapShaderEnabled, scene3d, compendiumCharacters, sortedCombatTrackerCombatants, combatTrackerRound, combatTrackerTurnIndex, showCombatTracker]);
 
   const broadcastFullStateRef = useRef<() => void>(() => {});
   useEffect(() => {
@@ -2617,12 +2666,17 @@ export default function App() {
             boardAnimatedFeatures: liveData.boardAnimatedFeatures || [],
             boardAnimatedEnabled: liveData.boardAnimatedEnabled ?? true,
             boardWeatherEffect: liveData.boardWeatherEffect || 'none',
+            scene3d: liveData.scene3d,
             characters: compendiumCharacters,
             activeSceneInfo: liveData.activeSceneInfo ? {
               ...liveData.activeSceneInfo,
-              mapUrl: authUrl
+              mapUrl: authUrl,
+              mapWidth: liveData.activeSceneInfo.mapWidth || liveData.videoSize?.width,
+              mapHeight: liveData.activeSceneInfo.mapHeight || liveData.videoSize?.height,
             } : {
-              mapUrl: authUrl
+              mapUrl: authUrl,
+              mapWidth: liveData.videoSize?.width,
+              mapHeight: liveData.videoSize?.height,
             }
           });
         }
@@ -3253,7 +3307,7 @@ export default function App() {
     }, 150);
 
     return () => clearTimeout(timer);
-  }, [reveals, polygonReveals, isFogVisible, fogResetKey, visionConfig, walls, gridSize, gridOpacity, gridVisible, mapRotation]);
+  }, [reveals, polygonReveals, isFogVisible, fogResetKey, visionConfig, walls, gridSize, gridOpacity, gridVisible, mapRotation, scene3d]);
 
   // Manual "Force Sync to Players" action
   const handleForceSyncToPlayers = useCallback(() => {
@@ -3291,6 +3345,7 @@ export default function App() {
       walls,
       visionConfig,
       roomAnnotations,
+      scene3d,
       activeSceneInfo,
       activeDmNotes
     };
@@ -3327,11 +3382,12 @@ export default function App() {
         walls: walls,
         visionConfig: visionConfig,
         roomAnnotations: roomAnnotations,
+        scene3d: scene3d,
         updatedAt: Date.now()
       }).catch(console.warn);
     }
     toast.success(`Force-synced ${currentSlot} to Player View!`);
-  }, [broadcastFullState, getMapDimensions, imageFile, activeSceneInfo, activeDmNotes, tokens, compendiumMonsters, combatTrackerCombatants, prepareTokensForSync, sortedCombatTrackerCombatants, combatTrackerRound, combatTrackerTurnIndex, showCombatTracker, gridSize, gridOpacity, isFogVisible, walls, visionConfig, roomAnnotations, mapType, videoSize, mapRotation, stageScale, stagePos, reveals, polygonReveals, gridVisible, gridOffsetX, gridOffsetY, boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect]);
+  }, [broadcastFullState, getMapDimensions, imageFile, activeSceneInfo, activeDmNotes, tokens, compendiumMonsters, combatTrackerCombatants, prepareTokensForSync, sortedCombatTrackerCombatants, combatTrackerRound, combatTrackerTurnIndex, showCombatTracker, gridSize, gridOpacity, isFogVisible, walls, visionConfig, roomAnnotations, scene3d, mapType, videoSize, mapRotation, stageScale, stagePos, reveals, polygonReveals, gridVisible, gridOffsetX, gridOffsetY, boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect]);
 
   // Track DM browser refresh so player browsers are automatically reloaded
   useEffect(() => {
@@ -3512,8 +3568,7 @@ export default function App() {
   // Subscribe to Campaigns list in real-time
   useEffect(() => {
     const unsub = subscribeToCampaigns((list) => {
-      const hasDemo = list.some(c => c.campaignId === DEMO_GV_CAMPAIGN.campaignId);
-      setCampaignsList(hasDemo ? list : [DEMO_GV_CAMPAIGN, ...list]);
+      setCampaignsList(mergePrebuiltCampaigns(list));
       setIsHydratingScene(false);
     });
     return () => unsub();
@@ -3584,10 +3639,11 @@ export default function App() {
       fullResUrl = '/uploads/tomb_of_valin_sarnaster.jpg';
     }
 
+    const isDataThumbnailUrl = (u?: string) => Boolean(u && u.startsWith('data:') && u.length < 150000);
     const isPotentiallyDeadOrLocal = !fullResUrl && (!scene.mapUrl ||
       scene.mapUrl.startsWith('blob:') ||
       scene.mapUrl.startsWith('local:') ||
-      Boolean(scene.mapThumbnailUrl && scene.mapUrl === scene.mapThumbnailUrl));
+      (isDataThumbnailUrl(scene.mapThumbnailUrl) && scene.mapUrl === scene.mapThumbnailUrl));
 
     if (isPotentiallyDeadOrLocal) {
       // Resolve authoritative map source first so we never flash a dead blob or pixelated thumbnail
@@ -3598,11 +3654,11 @@ export default function App() {
       }
     }
 
-    // STRICT: Never fall back to scene.mapThumbnailUrl as full battlemap!
+    // STRICT: Never fall back to a low-res base64 mapThumbnailUrl as full battlemap!
     const candidateUrl = fullResUrl || scene.mapUrl || '';
     const isThumbnail = Boolean(
-      (scene.mapThumbnailUrl && candidateUrl === scene.mapThumbnailUrl) ||
-      (candidateUrl.startsWith('data:') && candidateUrl.length < 150000)
+      (isDataThumbnailUrl(scene.mapThumbnailUrl) && candidateUrl === scene.mapThumbnailUrl) ||
+      isDataThumbnailUrl(candidateUrl)
     );
     const effectiveMapUrl = (!isThumbnail && !candidateUrl.startsWith('local:')) ? candidateUrl : '';
 
@@ -3638,8 +3694,8 @@ export default function App() {
         const resolvedMapUrl = await resolveMapSource(scene, uploadedMaps);
         const bestUrl = resolvedMapUrl || scene.mapUrl || '';
         const isBestThumb = Boolean(
-          (scene.mapThumbnailUrl && bestUrl === scene.mapThumbnailUrl) ||
-          (bestUrl.startsWith('data:') && bestUrl.length < 150000)
+          (isDataThumbnailUrl(scene.mapThumbnailUrl) && bestUrl === scene.mapThumbnailUrl) ||
+          isDataThumbnailUrl(bestUrl)
         );
         // CRITICAL: Never replace effectiveMapUrl with a thumbnail or data URL!
         if (bestUrl && bestUrl !== effectiveMapUrl && !bestUrl.startsWith('local:') && !isBestThumb) {
@@ -3796,11 +3852,13 @@ export default function App() {
     setBoardAnimatedFeatures(loadedFeatures);
     setBoardAnimatedEnabled(loadedFeaturesEnabled);
     setBoardWeatherEffect(loadedWeather);
+    setScene3d((scene as any).scene3d);
 
     if (mapsDataRef.current[targetSlot]) {
       mapsDataRef.current[targetSlot].boardAnimatedFeatures = loadedFeatures;
       mapsDataRef.current[targetSlot].boardAnimatedEnabled = loadedFeaturesEnabled;
       mapsDataRef.current[targetSlot].boardWeatherEffect = loadedWeather;
+      mapsDataRef.current[targetSlot].scene3d = (scene as any).scene3d;
     }
 
     // 6. Update tracking & notes with authoritative full-res URL
@@ -3852,6 +3910,7 @@ export default function App() {
       walls: scene.walls || [],
       visionConfig: scene.visionConfig || visionConfig,
       roomAnnotations: loadedAnnotations,
+      scene3d: (scene as any).scene3d,
       activeSceneInfo: {
         campaignId,
         chapterId,
@@ -4094,6 +4153,7 @@ export default function App() {
         boardAnimatedFeatures: boardAnimatedFeatures,
         boardAnimatedEnabled: boardAnimatedEnabled,
         boardWeatherEffect: boardWeatherEffect,
+        ...(scene3d ? { scene3d } : {}),
         updatedAt: Date.now()
       };
 
@@ -4160,6 +4220,7 @@ export default function App() {
           boardAnimatedFeatures: updatedScene.boardAnimatedFeatures,
           boardAnimatedEnabled: updatedScene.boardAnimatedEnabled,
           boardWeatherEffect: updatedScene.boardWeatherEffect,
+          scene3d: (updatedScene as any).scene3d,
           updatedAt: Date.now()
         });
       }
@@ -4180,6 +4241,7 @@ export default function App() {
           boardAnimatedFeatures: boardAnimatedFeatures,
           boardAnimatedEnabled: boardAnimatedEnabled,
           boardWeatherEffect: boardWeatherEffect,
+          scene3d: (updatedScene as any).scene3d,
           activeSceneInfo: {
             ...activeSceneInfo,
             mapUrl: targetMapUrl,
@@ -9236,6 +9298,7 @@ export default function App() {
       walls,
       visionConfig,
       roomAnnotations,
+      scene3d,
       activeSceneInfo,
       activeDmNotes
     };
@@ -9274,6 +9337,7 @@ export default function App() {
       setBoardWeatherEffect(next.boardWeatherEffect || 'none');
       setWalls(next.walls || []);
       setRoomAnnotations(next.roomAnnotations || []);
+      setScene3d(next.scene3d);
       if (next.visionConfig) setVisionConfig(next.visionConfig);
       setActiveSceneInfo(next.activeSceneInfo || null);
       setActiveDmNotes(next.activeDmNotes || '');
@@ -9294,6 +9358,7 @@ export default function App() {
       setBoardWeatherEffect('none');
       setWalls([]);
       setRoomAnnotations([]);
+      setScene3d(undefined);
       setActiveSceneInfo(null);
       setActiveDmNotes('');
       setVisionConfig({
@@ -9934,6 +9999,9 @@ export default function App() {
           hasUnreadHandouts={hasUnreadHandouts}
           onOpenAudioMixer={() => setShowAudioMixerModal(true)}
           activeAudioLoopCount={activeAudioLoopCount}
+          onStartTutorialTrack={handleStartTutorialTrack}
+          completedTutorialTracks={completedTutorialTracks}
+          onResetTutorialProgress={handleResetTutorialProgress}
         />
 
         {/* Active Room Polygon Redraw Floating HUD Banner */}
@@ -10087,6 +10155,14 @@ export default function App() {
             onResumeActiveMap={handleResumeActiveMap}
             activeMapSlotName={activeMapId}
             isHydratingScene={isHydratingScene}
+            onStartTutorial={() => {
+              const nextTrack =
+                TUTORIAL_TRACKS.find((t) => !completedTutorialTracks.includes(t.id)) ||
+                TUTORIAL_TRACKS[0];
+              handleStartTutorialTrack(nextTrack.id);
+            }}
+            completedTutorialCount={completedTutorialTracks.length}
+            totalTutorialCount={TUTORIAL_TRACKS.length}
           />
         ) : (
           <div
@@ -10183,7 +10259,12 @@ export default function App() {
                   roomAnnotations={roomAnnotations}
                   boardAnimatedFeatures={boardAnimatedFeatures}
                   scene3d={scene3d}
-                  selectedTokenId={selectedToken?.id || null}
+                  activeCombatantId={
+                    sortedCombatTrackerCombatants[combatTrackerTurnIndex]?.tokenId ||
+                    sortedCombatTrackerCombatants[combatTrackerTurnIndex]?.id ||
+                    null
+                  }
+                  selectedTokenId={selectedTokenIds[0] || selectedToken?.id || null}
                   panToolActive={isSpacePressed}
                   isDm={true}
                   campaignMode={campaignMode}
@@ -10197,6 +10278,50 @@ export default function App() {
                   setTokens={setTokens}
                   setWalls={setWalls}
                   setScene3d={setScene3d}
+                  onMoveToken={(id, px, py) => {
+                    setTokens((prev) => {
+                      const next = prev.map((t) => (t.id === id ? { ...t, x: px, y: py } : t));
+                      tokensRef.current = next;
+                      const moved = next.find((t) => t.id === id);
+                      if (moved) evaluateTokenMoveRef.current(moved, px, py);
+                      if (mapsDataRef.current[activeMapIdRef.current]) {
+                        mapsDataRef.current[activeMapIdRef.current].tokens = next;
+                      }
+                      if (socketRef.current?.connected && activeMapIdRef.current === liveMapIdRef.current) {
+                        socketRef.current.emit('MOVE_TOKEN', { id, x: px, y: py });
+                        const synced = prepareTokensForSync(next, compendiumMonsters, combatTrackerCombatants);
+                        socketRef.current.emit('SYNC_TOKENS', synced);
+                      }
+                      return next;
+                    });
+                  }}
+                  onDragMoveToken={(id, px, py) => {
+                    if (socketRef.current?.connected && activeMapIdRef.current === liveMapIdRef.current) {
+                      socketRef.current.emit('MOVE_TOKEN', { id, x: px, y: py });
+                    }
+                  }}
+                  onCastSpell={castSpellAt}
+                  activeTargetingAction={activeDmMonsterAction}
+                  onTargetToken={(id) => {
+                    const targetTok = tokens.find((tk) => tk.id === id);
+                    if (targetTok && activeDmMonsterAction && handleDmTargetTokenRef.current) {
+                      handleDmTargetTokenRef.current(targetTok, activeDmMonsterAction, false);
+                    }
+                  }}
+                  onCancelTargeting={advanceOrClearDmMonsterTargeting}
+                  onOpenTokenContextMenu={(id, cx, cy) => {
+                    setSelectedTokenIds([id]);
+                    setSelectedToken(tokens.find((t) => t.id === id) || null);
+                    setTokenMenuPos({ x: cx, y: cy });
+                    setActiveTokenMenu({ id, x: cx, y: cy });
+                  }}
+                  mapPings={mapPings}
+                  onTriggerPing={(wx, wy, pull) =>
+                    startHoldPing(wx, wy, window.innerWidth / 2, window.innerHeight / 2, pull)
+                  }
+                  boardWeatherEffect={boardWeatherEffect}
+                  mapRotation={mapRotation}
+                  isShaking={isShaking}
                   onSaveScene={() => setShowSaveToCampaignModal(true)}
                   onToggleFog={(vis) => setIsFogVisible(vis)}
                   onResetFog={() => {
@@ -13334,6 +13459,7 @@ export default function App() {
             currentBoardAnimatedFeatures={boardAnimatedFeatures}
             currentBoardAnimatedEnabled={boardAnimatedEnabled}
             currentBoardWeatherEffect={boardWeatherEffect}
+            currentScene3d={scene3d}
             activeSceneInfo={activeSceneInfo}
             activeDmNotes={activeDmNotes}
             onSceneSaved={handleSceneSaved}
@@ -13916,6 +14042,102 @@ export default function App() {
         variant="dm"
         onCancel={() => setMapLoadingState(prev => ({ ...prev, isLoading: false }))}
       />
+
+      {activeTutorialTrackId && (() => {
+        const activeTrack = getTutorialTrackById(activeTutorialTrackId);
+        if (!activeTrack) return null;
+
+        const doorCount = walls.filter((w) => w.type === 'door' || w.type === 'secret_door').length;
+        const handleExecuteTutorialAction = (action: TutorialActionKey) => {
+          switch (action) {
+            case 'open_campaign_manager':
+              setCampaignBuilderInitialTab('campaigns');
+              setShowCampaignBuilder(true);
+              break;
+            case 'close_campaign_manager':
+              setShowCampaignBuilder(false);
+              break;
+            case 'load_practice_map': {
+              const practicePreset =
+                PRESET_BATTLEMAPS.find((m) => m.id === 'subterranean-maze') || PRESET_BATTLEMAPS[0];
+              if (practicePreset) {
+                setShowCampaignBuilder(false);
+                handleSelectPresetMap(practicePreset);
+                handleModeChange('creator');
+              }
+              break;
+            }
+            case 'switch_creator_mode':
+              setShowCampaignBuilder(false);
+              handleModeChange('creator');
+              break;
+            case 'switch_run_mode':
+              setShowCampaignBuilder(false);
+              handleModeChange('run');
+              break;
+            case 'select_wall_tool':
+              setShowCampaignBuilder(false);
+              handleModeChange('creator');
+              setActiveWallType('normal');
+              setTool('wall');
+              break;
+            case 'select_solid_wall_type':
+              setShowCampaignBuilder(false);
+              handleModeChange('creator');
+              setActiveWallType('normal');
+              setTool('wall');
+              break;
+            case 'select_door_wall_type':
+              setShowCampaignBuilder(false);
+              handleModeChange('creator');
+              setActiveWallType('door');
+              setTool('wall');
+              break;
+            case 'select_zone_tool':
+              setShowCampaignBuilder(false);
+              handleModeChange('creator');
+              setTool('zone');
+              break;
+            case 'open_chapter_guide':
+              setShowCampaignBuilder(false);
+              setDrawerInitialTab('flow');
+              setIsRoomDrawerOpen(true);
+              break;
+          }
+        };
+
+        return (
+          <TutorialOverlay
+            activeTrack={activeTrack}
+            stepIndex={activeTutorialStepIndex}
+            isMinimized={isTutorialMinimized}
+            completedTracks={completedTutorialTracks}
+            liveState={{
+              isCampaignManagerOpen: showCampaignBuilder,
+              hasActiveMap: Boolean(imageFile),
+              campaignMode,
+              tool,
+              activeWallType,
+              wallCount: walls.length,
+              doorCount,
+              zoneCount: roomAnnotations.length
+            }}
+            onStepChange={setActiveTutorialStepIndex}
+            onSelectTrack={(nextId) => {
+              setActiveTutorialTrackId(nextId);
+              setActiveTutorialStepIndex(0);
+              setIsTutorialMinimized(false);
+            }}
+            onCompleteTrack={handleCompleteTutorialTrack}
+            onToggleMinimize={() => setIsTutorialMinimized((prev) => !prev)}
+            onClose={() => {
+              setActiveTutorialTrackId(null);
+              setIsTutorialMinimized(false);
+            }}
+            onExecuteAction={handleExecuteTutorialAction}
+          />
+        );
+      })()}
 
       </main>
     </div>

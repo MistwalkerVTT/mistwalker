@@ -2,34 +2,32 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   HelpCircle,
   X,
-  Sparkles,
   BookOpen,
   Search,
   ChevronDown,
   ChevronUp,
-  MessageSquare,
   Send,
   RotateCcw,
   Bug,
-  Shield,
-  Layers,
-  DoorOpen,
-  Radio,
-  Users,
-  Eye,
   Bot,
-  User,
-  ExternalLink,
   CheckCircle2,
-  AlertCircle
+  GraduationCap,
+  Play,
+  Sparkles,
+  Clock
 } from 'lucide-react';
 import { chatWithDndBot, DndChatMessage } from '../services/aiService';
+import { TUTORIAL_TRACKS } from '../data/tutorialTracks';
+import { TutorialTrackId } from '../types/tutorial';
 
 interface HelpDrawerProps {
   pinnedGroup: string | null;
   handleDragStart?: (e: React.MouseEvent) => void;
   onClose: () => void;
   onOpenBugReport?: () => void;
+  onStartTutorialTrack?: (trackId: TutorialTrackId) => void;
+  completedTutorialTracks?: TutorialTrackId[];
+  onResetTutorialProgress?: () => void;
 }
 
 interface FAQItem {
@@ -38,9 +36,26 @@ interface FAQItem {
   question: string;
   answer: string;
   actionHint?: string;
+  tutorialTrackId?: TutorialTrackId;
 }
 
 const FAQ_DATA: FAQItem[] = [
+  {
+    id: 'campaign-create-hierarchy',
+    category: 'campaign',
+    question: 'How do I create a Campaign, Chapter, and Scene?',
+    answer: 'Open Campaign Manager from the Dashboard or top bar. Click "+ New Campaign" to create your adventure container, click "+ Add Chapter" next to it to group a story arc or dungeon, and click "+ Add Scene" under that chapter to create an individual battlemap encounter. Each Scene stores its own map, grid, walls, doors, tokens, and room zones.',
+    actionHint: 'Campaign Manager › + New Campaign › + Add Chapter › + Add Scene.',
+    tutorialTrackId: 'campaign'
+  },
+  {
+    id: 'campaign-load-maps',
+    category: 'campaign',
+    question: 'How do I load battlemaps (Images, Video, Presets, or UVTT)?',
+    answer: 'Inside Campaign Manager, select a Scene and use the Map Media section to upload a JPG/PNG/WebP/MP4/WebM map, choose from the Preset Battlemap Gallery, pick from your Saved Maps Library, or import a Universal VTT (.dd2vtt / .uvtt) file which automatically brings in walls and doors! Click "Launch Scene to VTT" to play.',
+    actionHint: 'Scene Inspector › Upload Map / Preset Gallery / Import UVTT › Launch Scene to VTT.',
+    tutorialTrackId: 'load_map'
+  },
   {
     id: 'campaign-run-vs-creator',
     category: 'campaign',
@@ -49,53 +64,52 @@ const FAQ_DATA: FAQItem[] = [
     actionHint: 'Toggle between modes using the buttons on the top campaign bar.'
   },
   {
-    id: 'campaign-scenes-saving',
-    category: 'campaign',
-    question: 'How do I organize chapters and save tactical scenes?',
-    answer: 'Click the "Manager" button in the top bar (or Maps on the sidebar) to open Campaign Manager. Create campaigns, add chapters, and create scenes with custom or preset battlemaps. When editing on the canvas, click "Save Scene" in the top bar to immediately update token positions, lighting, and walls in the cloud.',
-    actionHint: 'Top bar: Manager › Add Chapter › Add Scene › Save Scene.'
-  },
-  {
     id: 'walls-drawing',
     category: 'walls_doors',
     question: 'How do I draw dynamic lighting walls?',
-    answer: 'Select Tactical Layers from the sidebar, then click the Wall Tool (or click "Walls" on the top bar). Left-click on the battlemap to place the first node, click to place additional corners, and double-click to finish the wall line. Solid walls physically obstruct Line of Sight and prevent players from seeing through barriers.',
-    actionHint: 'Sidebar › Tactical Layers › Wall Tool › Left-click nodes › Double-click to finish.'
+    answer: 'Switch to Creator Mode and select "Walls" on the top bar (or "Draw Walls" in the Creator Toolbar). Left-click on the battlemap to place the first corner, click to chain additional corners, and double-click (or press Esc) to finish. Toggle Grid Snapping ON for straight dungeon corridors or OFF for organic caves.',
+    actionHint: 'Creator Mode › Draw Walls › Left-click corners › Double-click / Esc to finish.',
+    tutorialTrackId: 'walls'
   },
   {
     id: 'doors-operating',
     category: 'walls_doors',
-    question: 'How do I place and operate doors?',
-    answer: 'Under Tactical Layers, switch the wall segment type to "Door". When a door is closed, it blocks player vision and fog just like a solid wall. In Run Campaign mode, clicking on a door toggles it open, immediately allowing vision and lighting to flood into the adjoining chamber!',
-    actionHint: 'Tactical Layers › Wall Tool › Type: Door › Click door icon on map to open/close.'
+    question: 'How do I place and operate Doors, Secret Doors & Windows?',
+    answer: 'With the Wall Tool active, change Segment Type to "Door" (amber), "Secret" (purple — looks like a solid wall to players until opened), or "Window" (cyan — lets vision through). In Run Campaign mode, clicking any door toggles it open, immediately allowing vision and lighting to flood into the adjoining room!',
+    actionHint: 'Creator Mode › Draw Walls › Segment Type: Door / Secret / Window.',
+    tutorialTrackId: 'doors'
   },
   {
-    id: 'walls-erasing',
+    id: 'walls-split-erasing',
     category: 'walls_doors',
-    question: 'How do I delete or erase walls and doors?',
-    answer: 'Select the Wall Eraser tool under Tactical Layers. Click any individual wall segment to delete it instantly, or click-and-drag across wall lines to slice through multiple walls at once.',
-    actionHint: 'Tactical Layers › Wall Eraser tool › Drag across wall lines to delete.'
+    question: 'How do I split or erase walls and doors?',
+    answer: 'In the Wall Editor Toolbar, select "Split" to click any point along an existing wall and cut it into two segments (ideal for carving out doorways). Select "Erase" to click an individual wall or drag-slice across multiple wall lines to delete them instantly.',
+    actionHint: 'Wall Editor Toolbar › Split (cut doorways) or Erase (click/drag to delete).',
+    tutorialTrackId: 'walls'
+  },
+  {
+    id: 'pdf-upload-ingest',
+    category: 'zones_pdf',
+    question: 'How do I upload and ingest an Adventure PDF?',
+    answer: 'Open Campaign Manager and click directly on a Chapter (not a Scene). In the "Adventure Chapter PDF & Document Digest" panel, click "Upload PDF" (.pdf, .txt, or .md). Gemini AI automatically indexes all scenes, numbered room keys (boxed read-aloud text, DM notes, traps, monsters), and Chapter Flow (story hooks, patrols, NPCs). For best accuracy, upload individual chapters rather than an entire anthology book.',
+    actionHint: 'Campaign Manager › Select Chapter › Upload PDF › Wait for Gemini AI digest.',
+    tutorialTrackId: 'upload_pdf'
+  },
+  {
+    id: 'zones-draw-and-link',
+    category: 'zones_pdf',
+    question: 'How do I draw Room Zones and link them to ingested PDF rooms?',
+    answer: 'In Creator Mode, click "Draw Room Zone", left-click at least 3 corners around a room, then double-click or click "Save & Label Room". In the Room Editor modal, type a room number (like "G10") or pick from your Chapter PDF Digest dropdown to auto-fill boxed read-aloud text, secret DM notes, and monsters.',
+    actionHint: 'Creator Mode › Draw Room Zone › Outline room › Link to PDF Room Key.',
+    tutorialTrackId: 'room_zones'
   },
   {
     id: 'zones-right-click',
     category: 'zones_pdf',
-    question: 'How do I right-click room zones to view PDF lore and secret notes?',
-    answer: 'Right-click directly on any drawn room polygon zone on the canvas (such as Area G10 or G21 in the Golden Vault demo). This immediately opens the Room Briefing drawer, displaying the parsed PDF boxed read-aloud description, trap DCs, secret DM lore, and monster lists.',
-    actionHint: 'Right-click on any drawn room polygon zone on the map.'
-  },
-  {
-    id: 'zones-broadcast',
-    category: 'zones_pdf',
-    question: 'How do I broadcast boxed room descriptions to player screens?',
-    answer: 'Open the Room Briefing drawer (by right-clicking a room zone) and click "Broadcast to Players". The boxed description immediately displays across all connected Player View screens with real-time text and optional AI narration.',
-    actionHint: 'Room Briefing drawer › Click "Broadcast to Players".'
-  },
-  {
-    id: 'zones-spawn-monsters',
-    category: 'tokens',
-    question: 'How do I spawn monsters mentioned in the room PDF description?',
-    answer: 'In the Room Briefing drawer, the "Identified Creatures" section lists all monsters parsed from the adventure text. Click "Spawn" next to any creature (e.g. Bandit, Spy, Oni) to drop their interactive token with full HP, AC, and stats directly onto the tactical map.',
-    actionHint: 'Room Briefing drawer › Identified Creatures › Click "Spawn".'
+    question: 'How do I right-click room zones to broadcast text & spawn monsters?',
+    answer: 'Right-click directly on any drawn room polygon zone on the canvas. This opens the Room Briefing drawer displaying the boxed read-aloud text, trap DCs, secret DM lore, and monster list. Click "Broadcast to Players" to push boxed text to player screens, or click "Spawn" next to any creature to drop its statblocked token onto the map.',
+    actionHint: 'Right-click any room zone › Broadcast to Players / Spawn Monsters.',
+    tutorialTrackId: 'room_zones'
   },
   {
     id: 'vision-fog-edge',
@@ -108,8 +122,8 @@ const FAQ_DATA: FAQItem[] = [
     id: 'ddb-sync',
     category: 'ddb',
     question: 'How do I connect D&D Beyond campaigns and sync character HP in real time?',
-    answer: 'Click "D&D Beyond" on the top campaign bar. Enter your D&D Beyond Campaign ID or character sheet URL. MistWalker continuously synchronizes live HP, conditions, and spell slots directly to the corresponding token on the battlemap.',
-    actionHint: 'Top bar: D&D Beyond › Connect Campaign › Auto-syncs live HP.'
+    answer: 'Click "D&D Beyond" in the Library menu on the top campaign bar (or from the Dashboard). Enter your D&D Beyond Campaign ID or character sheet URL. MistWalker continuously synchronizes live HP, conditions, and spell slots directly to the corresponding token on the battlemap.',
+    actionHint: 'Top bar: Library › D&D Beyond › Connect Campaign › Auto-syncs live HP.'
   },
   {
     id: 'bugs-screenshots',
@@ -124,18 +138,21 @@ export const HelpDrawer: React.FC<HelpDrawerProps> = ({
   pinnedGroup,
   handleDragStart,
   onClose,
-  onOpenBugReport
+  onOpenBugReport,
+  onStartTutorialTrack,
+  completedTutorialTracks = [],
+  onResetTutorialProgress
 }) => {
-  const [activeTab, setActiveTab] = useState<'faq' | 'chat'>('faq');
+  const [activeTab, setActiveTab] = useState<'tutorials' | 'faq' | 'chat'>('tutorials');
   const [searchQuery, setSearchQuery] = useState('');
-  const [expandedFaqId, setExpandedFaqId] = useState<string | null>('campaign-run-vs-creator');
+  const [expandedFaqId, setExpandedFaqId] = useState<string | null>('campaign-create-hierarchy');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
   // AI Chatbot State
   const [chatMessages, setChatMessages] = useState<DndChatMessage[]>([
     {
       role: 'model',
-      text: 'Greetings Dungeon Master! I am your MistWalker VTT assistant. Ask me anything about drawing walls, interactive doors, room polygon zones, player vision, or D&D 5e rules.',
+      text: 'Greetings Dungeon Master! I am your MistWalker VTT assistant. Ask me anything about creating campaigns, chapters & scenes, loading maps, drawing walls & doors, uploading/ingesting adventure PDFs, room zones, or D&D 5e rules.',
       timestamp: Date.now()
     }
   ]);
@@ -148,6 +165,17 @@ export const HelpDrawer: React.FC<HelpDrawerProps> = ({
       chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, [chatMessages, activeTab]);
+
+  const nextUnfinishedTrack =
+    TUTORIAL_TRACKS.find((t) => !completedTutorialTracks.includes(t.id)) || TUTORIAL_TRACKS[0];
+  const completionPct = Math.round((completedTutorialTracks.length / TUTORIAL_TRACKS.length) * 100);
+
+  const handleLaunchTrack = (trackId: TutorialTrackId) => {
+    if (onStartTutorialTrack) {
+      onStartTutorialTrack(trackId);
+      onClose();
+    }
+  };
 
   const handleSendQuery = async (queryText?: string) => {
     const text = (queryText || chatInput).trim();
@@ -166,8 +194,12 @@ export const HelpDrawer: React.FC<HelpDrawerProps> = ({
 
     try {
       const extraContext = `User is using MistWalker VTT:
-- Web-based VTT with dynamic lighting walls, interactive doors (block/allow vision when open), room polygon zones with PDF briefings, player view fog of war, and D&D Beyond sync.
-- Prebuilt demo: The Guild House - Main Level from Keys to the Golden Vault (Masterpiece Imbroglio) with 64 walls/doors, 5 tokens, and 13 room zones (G1 to G13).`;
+- Campaign Hierarchy: Campaign Manager > + New Campaign > + Add Chapter > + Add Scene.
+- Map Loading: Upload JPG/PNG/WebP/MP4/WebM, Choose Preset Battlemap Gallery, Saved Maps Library, or Import Universal VTT (.dd2vtt/.uvtt) with auto walls/doors. Click "Launch Scene to VTT" to play.
+- Walls & Doors: Switch to Creator Mode > Draw Walls. Left-click corners, double-click or Esc to finish. Grid Snapping toggle. Segment Types: Solid, Door (clickable in Run Campaign mode), Secret Door (hidden from players), Window (vision passes). Includes Split Wall (cut doorways) and Erase Wall tools.
+- Adventure PDF Upload & AI Ingestion: In Campaign Manager, select a Chapter > Adventure Chapter PDF panel > Upload PDF (.pdf, .txt, .md — individual chapters work best). Gemini AI digests scenes, numbered room keys (boxed text, DM notes, traps, monsters), and Chapter Flow (hooks, patrols, NPCs).
+- Room Zones: Creator Mode > Draw Room Zone > click >= 3 corners > Save & Label Room > link to ingested PDF Room Key. Right-click any drawn room zone on the map to open Room Briefing Drawer, Broadcast boxed text to players, or Spawn monsters.
+- Saving: Click "Save Scene" in the top bar to persist walls, doors, tokens, and zones to the cloud.`;
 
       const response = await chatWithDndBot(
         newHistory,
@@ -177,7 +209,7 @@ export const HelpDrawer: React.FC<HelpDrawerProps> = ({
         extraContext
       );
 
-      setChatMessages(prev => [
+      setChatMessages((prev) => [
         ...prev,
         {
           role: 'model',
@@ -185,23 +217,24 @@ export const HelpDrawer: React.FC<HelpDrawerProps> = ({
           timestamp: Date.now()
         }
       ]);
-    } catch (err) {
-      // Local fallback answering common MistWalker features directly
+    } catch {
       let fallbackText = `Here is guidance for **"${text}"**:\n\n`;
       const lower = text.toLowerCase();
-      if (lower.includes('wall') || lower.includes('draw')) {
-        fallbackText += `• **Drawing Walls**: Under Tactical Layers, select the Wall Tool. Left-click to place wall nodes, click corners, and double-click to finish. Solid walls physically block player line-of-sight and fog of war.`;
+      if (lower.includes('campaign') || lower.includes('chapter') || lower.includes('scene')) {
+        fallbackText += `• **Campaigns, Chapters & Scenes**: Open Campaign Manager from the Dashboard or top bar, click "+ New Campaign", then "+ Add Chapter", then "+ Add Scene". Attach a battlemap and click "Launch Scene to VTT".`;
+      } else if (lower.includes('pdf') || lower.includes('ingest') || lower.includes('digest')) {
+        fallbackText += `• **PDF Upload & Ingestion**: In Campaign Manager, click a **Chapter** (not a scene), scroll to the **Adventure Chapter PDF** panel, and click **Upload PDF**. Gemini AI automatically indexes rooms, boxed text, monsters, and Chapter Flow.`;
+      } else if (lower.includes('wall') || lower.includes('draw')) {
+        fallbackText += `• **Drawing Walls**: Switch to Creator Mode, select **Draw Walls**, left-click corners on the map, and double-click (or press Esc) to finish. Use **Split** to cut doorways and **Erase** to delete segments.`;
       } else if (lower.includes('door')) {
-        fallbackText += `• **Doors**: In Tactical Layers, set the wall segment type to "Door". When closed, it blocks vision. In Run Campaign mode, clicking the door toggles it open, allowing vision and light to flood into the adjacent room.`;
-      } else if (lower.includes('zone') || lower.includes('brief') || lower.includes('pdf')) {
-        fallbackText += `• **Room Polygon Zones**: Right-click directly on any drawn room zone (such as Area G10) on the map to open the Room Briefing drawer with parsed PDF read-aloud text, secret DM notes, and monster spawn buttons.`;
-      } else if (lower.includes('fog') || lower.includes('player') || lower.includes('vision')) {
-        fallbackText += `• **Player Vision**: Click "Share Player View" in the top bar. Players only see what their tokens illuminate, and vision strictly respects walls and closed doors.`;
+        fallbackText += `• **Doors**: With the Wall Tool active, switch Segment Type to **Door** (or **Secret** / **Window**). In Run Campaign mode, click any door on the map to swing it open and flood light/vision into the room.`;
+      } else if (lower.includes('zone') || lower.includes('room')) {
+        fallbackText += `• **Room Zones**: In Creator Mode, click **Draw Room Zone**, click ≥ 3 corners around a room, then click **Save & Label Room** to link it to an ingested PDF room key. Right-click any zone live to broadcast boxed text or spawn monsters.`;
       } else {
-        fallbackText += `You can explore these features anytime by browsing the searchable FAQ tab or asking me a question below!`;
+        fallbackText += `Try launching one of the 9 step-by-step interactive walkthroughs in the **Tutorials** tab above!`;
       }
 
-      setChatMessages(prev => [
+      setChatMessages((prev) => [
         ...prev,
         {
           role: 'model',
@@ -214,7 +247,7 @@ export const HelpDrawer: React.FC<HelpDrawerProps> = ({
     }
   };
 
-  const filteredFaqs = FAQ_DATA.filter(item => {
+  const filteredFaqs = FAQ_DATA.filter((item) => {
     if (selectedCategory !== 'all' && item.category !== selectedCategory) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -228,59 +261,183 @@ export const HelpDrawer: React.FC<HelpDrawerProps> = ({
       {/* Header */}
       <div
         onMouseDown={pinnedGroup ? handleDragStart : undefined}
-        className={`flex items-center justify-between border-b border-zinc-800 pb-2.5 ${pinnedGroup ? 'cursor-grab active:cursor-grabbing select-none' : ''}`}
+        className={`flex items-center justify-between border-b border-zinc-800 pb-2.5 ${
+          pinnedGroup ? 'cursor-grab active:cursor-grabbing select-none' : ''
+        }`}
       >
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-sky-500/20 border border-sky-500/40 flex items-center justify-center text-sky-400">
+          <div className="w-7 h-7 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
             <HelpCircle className="w-4 h-4" />
           </div>
           <div>
             <h3 className="text-xs font-bold text-white font-mono tracking-wide flex items-center gap-1.5">
-              Help & DM Guide
+              Help & DM Academy
             </h3>
-            <p className="text-[10px] text-zinc-400">Knowledge base & AI assistant</p>
+            <p className="text-[10px] text-zinc-400">Interactive tutorials, FAQ & AI assistant</p>
           </div>
         </div>
 
         <button
           type="button"
           onClick={onClose}
-          className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition"
+          className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition cursor-pointer"
           title="Close Help"
         >
           <X className="w-4 h-4" />
         </button>
       </div>
 
-      {/* Mode Navigation Tabs: FAQ vs AI Assistant */}
-      <div className="flex items-center p-0.5 rounded-xl bg-zinc-950 border border-zinc-800">
+      {/* Mode Navigation Tabs: Tutorials | FAQ | AI Assistant */}
+      <div className="grid grid-cols-3 p-0.5 rounded-xl bg-zinc-950 border border-zinc-800 gap-0.5">
+        <button
+          type="button"
+          onClick={() => setActiveTab('tutorials')}
+          className={`py-1.5 px-1 rounded-lg text-[11px] font-bold transition flex items-center justify-center gap-1 cursor-pointer ${
+            activeTab === 'tutorials'
+              ? 'bg-zinc-800 text-white shadow'
+              : 'text-zinc-400 hover:text-zinc-200'
+          }`}
+        >
+          <GraduationCap className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+          <span>Tutorials</span>
+        </button>
         <button
           type="button"
           onClick={() => setActiveTab('faq')}
-          className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+          className={`py-1.5 px-1 rounded-lg text-[11px] font-bold transition flex items-center justify-center gap-1 cursor-pointer ${
             activeTab === 'faq'
               ? 'bg-zinc-800 text-white shadow'
               : 'text-zinc-400 hover:text-zinc-200'
           }`}
         >
-          <BookOpen className="w-3.5 h-3.5 text-sky-400" />
-          <span>Feature FAQ</span>
+          <BookOpen className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+          <span>FAQ</span>
         </button>
         <button
           type="button"
           onClick={() => setActiveTab('chat')}
-          className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+          className={`py-1.5 px-1 rounded-lg text-[11px] font-bold transition flex items-center justify-center gap-1 cursor-pointer ${
             activeTab === 'chat'
               ? 'bg-zinc-800 text-white shadow'
               : 'text-zinc-400 hover:text-zinc-200'
           }`}
         >
-          <Bot className="w-3.5 h-3.5 text-amber-400" />
-          <span>AI DM Assistant</span>
+          <Bot className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+          <span>AI Guide</span>
         </button>
       </div>
 
-      {/* TAB 1: FAQ & Knowledge Base */}
+      {/* TAB 1: INTERACTIVE TUTORIALS */}
+      {activeTab === 'tutorials' && (
+        <div className="space-y-2.5">
+          {/* Mastery Progress Banner */}
+          <div className="p-2.5 rounded-xl bg-gradient-to-br from-amber-950/40 via-zinc-950 to-zinc-950 border border-amber-500/30 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-[11px] font-mono font-bold text-amber-300">
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                <span>DM Mastery Progress</span>
+              </div>
+              <span className="text-[10px] font-mono text-zinc-300 font-bold">
+                {completedTutorialTracks.length}/{TUTORIAL_TRACKS.length} ({completionPct}%)
+              </span>
+            </div>
+
+            <div className="w-full h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-amber-500 to-emerald-400 transition-all duration-300"
+                style={{ width: `${completionPct}%` }}
+              />
+            </div>
+
+            <div className="flex items-center gap-1.5 pt-0.5">
+              <button
+                type="button"
+                onClick={() => handleLaunchTrack(nextUnfinishedTrack.id)}
+                className="flex-1 py-2 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-mono font-bold text-[11px] flex items-center justify-center gap-1.5 transition cursor-pointer shadow-md shadow-amber-950/40"
+              >
+                <Play className="w-3.5 h-3.5 fill-current shrink-0" />
+                <span className="truncate">
+                  {completedTutorialTracks.length === 0
+                    ? 'Start Full DM Walkthrough'
+                    : completedTutorialTracks.length >= TUTORIAL_TRACKS.length
+                    ? 'Replay Full Walkthrough'
+                    : `Continue: ${nextUnfinishedTrack.shortTitle}`}
+                </span>
+              </button>
+
+              {completedTutorialTracks.length > 0 && onResetTutorialProgress && (
+                <button
+                  type="button"
+                  onClick={onResetTutorialProgress}
+                  className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-zinc-200 transition cursor-pointer"
+                  title="Reset tutorial progress"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* 9 Interactive Track Cards */}
+          <div className="space-y-1.5 max-h-[330px] overflow-y-auto sidebar-scrollbar pr-1">
+            {TUTORIAL_TRACKS.map((track) => {
+              const isCompleted = completedTutorialTracks.includes(track.id);
+              return (
+                <div
+                  key={track.id}
+                  className={`p-2.5 rounded-xl border transition flex items-start justify-between gap-2 ${
+                    isCompleted
+                      ? 'bg-emerald-950/15 border-emerald-500/30 hover:border-emerald-500/50'
+                      : 'bg-zinc-950/70 border-zinc-800/90 hover:border-amber-500/40'
+                  }`}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`w-4 h-4 rounded-md text-[10px] font-mono font-bold flex items-center justify-center shrink-0 ${
+                          isCompleted
+                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                            : 'bg-zinc-800 text-zinc-300 border border-zinc-700'
+                        }`}
+                      >
+                        {isCompleted ? '✓' : track.order}
+                      </span>
+                      <span className="text-xs font-bold text-zinc-100 truncate">
+                        {track.title}
+                      </span>
+                    </div>
+                    <p className="text-[10.5px] text-zinc-400 leading-snug mt-1">
+                      {track.subtitle}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1.5 text-[9.5px] font-mono text-zinc-500">
+                      <span>{track.steps.length} steps</span>
+                      <span>•</span>
+                      <span className="flex items-center gap-0.5">
+                        <Clock className="w-2.5 h-2.5" />
+                        ~{track.estimatedMinutes}m
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleLaunchTrack(track.id)}
+                    className={`px-2.5 py-1.5 rounded-lg text-[10px] font-mono font-bold shrink-0 transition cursor-pointer mt-0.5 ${
+                      isCompleted
+                        ? 'bg-zinc-900 hover:bg-zinc-800 text-emerald-300 border border-emerald-500/30'
+                        : 'bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-zinc-950 border border-amber-500/40'
+                    }`}
+                  >
+                    {isCompleted ? 'Replay' : 'Start'}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2: FAQ & Knowledge Base */}
       {activeTab === 'faq' && (
         <div className="space-y-3">
           {/* Search Box */}
@@ -290,7 +447,7 @@ export const HelpDrawer: React.FC<HelpDrawerProps> = ({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search features (e.g. walls, doors, fog, zones)..."
+              placeholder="Search (e.g. PDF, walls, doors, zones, UVTT)..."
               className="w-full pl-8 pr-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-sky-500/60 transition"
             />
           </div>
@@ -303,8 +460,8 @@ export const HelpDrawer: React.FC<HelpDrawerProps> = ({
               { id: 'walls_doors', label: 'Walls & Doors' },
               { id: 'zones_pdf', label: 'Zones & PDF' },
               { id: 'vision_fog', label: 'Fog & Vision' },
-              { id: 'tokens', label: 'Tokens' }
-            ].map(cat => (
+              { id: 'ddb', label: 'D&D Beyond' }
+            ].map((cat) => (
               <button
                 key={cat.id}
                 type="button"
@@ -324,10 +481,10 @@ export const HelpDrawer: React.FC<HelpDrawerProps> = ({
           <div className="space-y-1.5 max-h-[380px] overflow-y-auto sidebar-scrollbar pr-1">
             {filteredFaqs.length === 0 ? (
               <div className="p-4 text-center text-xs text-zinc-500">
-                No matching guide topics found. Try typing a query in the AI Assistant tab!
+                No matching guide topics found. Try typing a query in the AI Guide tab!
               </div>
             ) : (
-              filteredFaqs.map(faq => {
+              filteredFaqs.map((faq) => {
                 const isExpanded = expandedFaqId === faq.id;
                 return (
                   <div
@@ -358,6 +515,16 @@ export const HelpDrawer: React.FC<HelpDrawerProps> = ({
                             <span>{faq.actionHint}</span>
                           </div>
                         )}
+                        {faq.tutorialTrackId && onStartTutorialTrack && (
+                          <button
+                            type="button"
+                            onClick={() => handleLaunchTrack(faq.tutorialTrackId!)}
+                            className="w-full py-1.5 px-2.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 font-mono text-[11px] font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                          >
+                            <GraduationCap className="w-3.5 h-3.5" />
+                            <span>Launch Interactive Walkthrough</span>
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -368,16 +535,16 @@ export const HelpDrawer: React.FC<HelpDrawerProps> = ({
         </div>
       )}
 
-      {/* TAB 2: AI DM Assistant */}
+      {/* TAB 3: AI DM Assistant */}
       {activeTab === 'chat' && (
         <div className="flex flex-col h-[400px]">
           {/* Quick Prompts */}
           <div className="flex flex-wrap gap-1 pb-2 border-b border-zinc-800">
             {[
+              'How do I upload & ingest a PDF?',
               'How do I draw walls & doors?',
-              'How to right-click room zones?',
-              'How does player vision work?'
-            ].map(prompt => (
+              'How do I link room zones to a PDF?'
+            ].map((prompt) => (
               <button
                 key={prompt}
                 type="button"
@@ -435,7 +602,7 @@ export const HelpDrawer: React.FC<HelpDrawerProps> = ({
               type="text"
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
-              placeholder="Ask about walls, fog, doors, or 5e rules..."
+              placeholder="Ask about PDFs, walls, doors, zones, or 5e..."
               className="flex-1 px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-amber-500/60 transition"
             />
             <button

@@ -13,3 +13,8 @@ export const Dungeon3DSandbox: React.FC<any> = () => null;
 
 export const BUILTIN_MINIS_3D: any[] = [];
 export const resolveModel3DForToken = (_token: any): undefined => undefined;
+
+export const CAMPAIGN_MAP_SPECS: any[] = [];
+export const getCampaignBlueprintById = (_id: string, _cellPx?: number): null => null;
+export const compileCampaignMapToBlueprint = (_spec: any, _cellPx?: number): null => null;
+export const compileRoomsAndPortalsToWalls = (_rooms: any[], _portals: any[], _cellPx?: number): any[] => [];

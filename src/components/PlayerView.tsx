@@ -87,6 +87,7 @@ import { getAuraVideoUrl } from '../effects/db/tokenFxMap';
 import homeBackgroundImage from '../assets/images/home_background.jpg';
 import sceneBackdropImage from '../assets/images/scene_backdrop.jpg';
 import { base64AudioToBlob, getNarrationVoice } from '../services/audioNarrationService';
+import { isMistwalker3DEnabled, Mistwalker3DModeToggle, Mistwalker3DViewportHost } from '../integrations/mistwalker3d/Mistwalker3DBridge';
 import {
   DEFAULT_CHARACTERS,
   resolveTokenCharacterStats,
@@ -1856,7 +1857,7 @@ export default function PlayerView() {
     if (
       performanceMode !== 'ultra' &&
       hasTrueDims &&
-      imageFile.startsWith('/uploads/') &&
+      (imageFile.startsWith('/uploads/') || imageFile.startsWith('/assets/dungeon3d/campaigns/')) &&
       /\.(jpe?g|png|webp|jfif)(\?.*)?$/i.test(imageFile)
     ) {
       const maxDim = performanceMode === 'performance' ? 2048 : 2560;
@@ -1885,6 +1886,8 @@ export default function PlayerView() {
   const [mapShaderEnabled, setMapShaderEnabled] = useState<boolean>(() => initialBackup?.mapShaderEnabled !== undefined ? initialBackup.mapShaderEnabled : true);
   const [boardWeatherEffect, setBoardWeatherEffect] = useState<WeatherEffectType>(() => initialBackup?.boardWeatherEffect || 'none');
   const [roomAnnotations, setRoomAnnotations] = useState<RoomAnnotation[]>(() => Array.isArray(initialBackup?.roomAnnotations) ? normalizeRoomAnnotations(initialBackup.roomAnnotations) : []);
+  const [renderMode, setRenderMode] = useState<'2d' | '3d'>('2d');
+  const [scene3d, setScene3d] = useState<any>(() => (initialBackup as any)?.scene3d || undefined);
 
   // Dynamic JB2A Animated Spell & Visual Effects State
   const [effects, setEffects] = useState<VttEffectInstance[]>([]);
@@ -2952,6 +2955,7 @@ export default function PlayerView() {
       if (state.fogResetKey !== undefined) setFogResetKey(state.fogResetKey);
       if (state.mapRotation !== undefined) setMapRotation(state.mapRotation);
       if (state.roomAnnotations && Array.isArray(state.roomAnnotations)) setRoomAnnotations(normalizeRoomAnnotations(state.roomAnnotations));
+      if ((state as any).scene3d !== undefined) setScene3d((state as any).scene3d);
       if (state.effects && Array.isArray(state.effects)) setEffects(state.effects);
       if (state.activeSceneInfo) {
         setActiveSceneInfo(prev => {
@@ -3675,6 +3679,7 @@ export default function PlayerView() {
       }
       if (sess.boardAnimatedEnabled !== undefined) setBoardAnimatedEnabled(sess.boardAnimatedEnabled);
       if (sess.boardWeatherEffect) setBoardWeatherEffect(sess.boardWeatherEffect);
+      if ((sess as any).scene3d !== undefined) setScene3d((sess as any).scene3d);
       if (sess.visionConfig) setVisionConfig(sess.visionConfig);
       if (sess.sceneId || sess.sceneTitle || validUrl) {
         setActiveSceneInfo(prev => (sceneChanged || isNewerForceSync || !prev) ? {
@@ -4005,15 +4010,23 @@ export default function PlayerView() {
     }
   }, []);
 
-  // Smooth 280ms camera glide to center on the player's claimed token
+  const [cameraFocusTarget, setCameraFocusTarget] = useState<{ x: number; y: number; tick: number } | null>(null);
+
+  // Smooth 280ms camera glide to center on the player's claimed token (both 2D Stage & 3D CameraDirector)
   const centerOnClaimedToken = useCallback(() => {
     if (!claimedTokenId) return;
     const token = tokensRef.current.find(t => t.id === claimedTokenId);
+    if (!token) return;
+    const halfPx = ((token.size || 1) * gridSize) / 2;
+    setCameraFocusTarget({
+      x: token.x + halfPx,
+      y: token.y + halfPx,
+      tick: Date.now()
+    });
     const stage = stageRef.current;
-    if (!token || !stage) return;
+    if (!stage) return;
 
     const scale = stage.scaleX() || stageScaleRef.current || 1;
-    const halfPx = ((token.size || 1) * gridSize) / 2;
     const targetX = dimensions.width / 2 - (token.x + halfPx) * scale;
     const targetY = dimensions.height / 2 - (token.y + halfPx) * scale;
 
@@ -4167,6 +4180,44 @@ export default function PlayerView() {
         }
         return w;
       });
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('SYNC_STATE', { walls: next });
+      }
+      return next;
+    });
+  }, []);
+
+  const setTokensFor3D = useCallback<React.Dispatch<React.SetStateAction<any[]>>>((updater) => {
+    setTokens(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      if (socketRef.current?.connected) {
+        for (const nt of next) {
+          const ot = prev.find(p => p.id === nt.id);
+          if (!ot) continue;
+          if (ot.x !== nt.x || ot.y !== nt.y) {
+            locallyMovedTokensRef.current.set(nt.id, { x: nt.x, y: nt.y, timestamp: Date.now() });
+            socketRef.current.emit('PLAYER_MOVE_TOKEN', {
+              tokenId: nt.id,
+              x: nt.x,
+              y: nt.y,
+              distanceMovedFt: 0,
+            });
+          } else if ((ot as any).rotationY !== (nt as any).rotationY) {
+            socketRef.current.emit('UPDATE_TOKEN', {
+              id: nt.id,
+              updates: { rotationY: (nt as any).rotationY },
+            });
+          }
+        }
+      }
+      tokensRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const setWallsFor3D = useCallback<React.Dispatch<React.SetStateAction<any[]>>>((updater) => {
+    setWalls(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
       if (socketRef.current?.connected) {
         socketRef.current.emit('SYNC_STATE', { walls: next });
       }
@@ -9249,6 +9300,87 @@ export default function PlayerView() {
         <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[45] pointer-events-none flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-900/90 border border-emerald-500/50 backdrop-blur shadow-xl text-xs font-mono text-emerald-300 animate-in fade-in">
           <Hand className="w-3.5 h-3.5 text-emerald-400" />
           <span>Pan / Move Map (Spacebar Held)</span>
+        </div>
+      )}
+
+      {isMistwalker3DEnabled && !isUiMinimized && (
+        <Mistwalker3DModeToggle
+          renderMode={renderMode}
+          onRenderModeChange={setRenderMode}
+          compact
+          className={`fixed top-3 z-[60] pointer-events-auto ${
+            combatState.showCombatTracker && combatState.combatants.length > 0
+              ? 'right-[15.5rem]'
+              : 'right-3'
+          }`}
+        />
+      )}
+
+      {isMistwalker3DEnabled && renderMode === '3d' && (
+        <div className="absolute inset-0 z-[25] bg-zinc-950 flex">
+          <Mistwalker3DViewportHost
+            sceneId={activeSceneInfo?.sceneId || 'player_scene'}
+            sceneTitle={activeSceneInfo?.sceneTitle || 'MistWalker 3D'}
+            mapUrl={imageFile || activeSceneInfo?.mapUrl || undefined}
+            mapWidth={targetMapW || baseMapW || undefined}
+            mapHeight={targetMapH || baseMapH || undefined}
+            gridSize={gridSize}
+            gridOffsetX={gridOffsetX}
+            gridOffsetY={gridOffsetY}
+            walls={walls}
+            tokens={tokens}
+            roomAnnotations={roomAnnotations}
+            boardAnimatedFeatures={boardAnimatedFeatures}
+            scene3d={scene3d}
+            activeCombatantId={
+              visibleCombatants.find((vc) => vc.isCurrentTurn)?.token?.id ||
+              combatState.combatants[combatState.turnIndex]?.tokenId ||
+              combatState.combatants[combatState.turnIndex]?.id ||
+              null
+            }
+            selectedTokenId={claimedTokenId || null}
+            claimedTokenId={claimedTokenId || null}
+            panToolActive={isSpacePressed}
+            isDm={false}
+            campaignMode="run"
+            activeEquippedAsset={activeEquippedAsset}
+            effects={effects}
+            isFogVisible={isFogVisible}
+            reveals={reveals}
+            polygonReveals={polygonReveals}
+            visionConfig={visionConfig}
+            fogResetKey={fogResetKey}
+            setTokens={setTokensFor3D}
+            setWalls={setWallsFor3D}
+            onMoveToken={(id, px, py) => handleMoveToken(id, px, py)}
+            onDragMoveToken={handleDragMoveToken}
+            onSelectToken={handleClaimToken}
+            onCastSpell={castSpellAt}
+            activeTargetingAction={activeTargetingAction}
+            multiTargetTokens={multiTargetTokens}
+            onTargetToken={(id) => {
+              const t = tokens.find((tk) => tk.id === id);
+              if (t) handleTargetToken(t);
+            }}
+            onCancelTargeting={() => {
+              setActiveTargetingAction(null);
+              setMultiTargetTokens([]);
+              setActiveEquippedAsset(null);
+              setAimOrigin(null);
+              setAimCurrent(null);
+            }}
+            onOpenTokenContextMenu={handleOpenTokenContextMenu}
+            mapPings={mapPings}
+            onTriggerPing={(wx, wy, pull) =>
+              startHoldPing(wx, wy, window.innerWidth / 2, window.innerHeight / 2, pull)
+            }
+            cameraFocusTarget={cameraFocusTarget}
+            performanceMode={performanceMode}
+            showHpDisplay={showHpDisplay}
+            boardWeatherEffect={boardWeatherEffect}
+            mapRotation={mapRotation}
+            isShaking={isShaking}
+          />
         </div>
       )}
 

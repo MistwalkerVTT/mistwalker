@@ -261,7 +261,7 @@ Please respond in the following EXACT JSON format (and nothing else, no markdown
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
           {/* Room Number & Room Name Inputs */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="space-y-1.5 sm:col-span-1 relative">
+            <div data-tour="room-pdf-link-select" className="space-y-1.5 sm:col-span-1 relative">
               <label className="text-xs font-mono font-bold text-zinc-300 flex items-center justify-between">
                 <span className="flex items-center gap-1.5">
                   <Tag className="w-3.5 h-3.5 text-amber-400" />

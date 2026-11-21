@@ -69,6 +69,7 @@ import { digestChapterPdf, digestChapterFlow } from '../services/aiService';
 import { ArenaManagerPanel } from './ArenaManagerPanel';
 import { isUniversalVttFile, parseUniversalVtt } from '../services/universalVttService';
 import { DEMO_GV_CAMPAIGN, DEMO_GV_CHAPTER, DEMO_GV_SCENE, DEMO_GV_ROOM_ZONES, DEMO_GV_TOKENS, DEMO_GV_PDF_DIGEST } from '../data/demoCampaignGv';
+import { mergePrebuiltCampaigns } from '../data/prebuilt3dCampaigns';
 
 interface CampaignBuilderModalProps {
   isOpen: boolean;
@@ -322,29 +323,7 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
         setExpandedCampaigns({});
         setExpandedChapters({});
       } else {
-        const enriched = list.some(c => c.campaignId === DEMO_GV_CAMPAIGN.campaignId)
-          ? list.map(c => {
-              if (c.campaignId !== DEMO_GV_CAMPAIGN.campaignId) return c;
-              return {
-                ...c,
-                chapters: c.chapters.map(ch => {
-                  if (ch.chapterId !== DEMO_GV_CHAPTER.chapterId) return ch;
-                  return {
-                    ...ch,
-                    pdfDigest: ch.pdfDigest || DEMO_GV_PDF_DIGEST,
-                    scenes: ch.scenes.map(sc => {
-                      if (sc.sceneId !== DEMO_GV_SCENE.sceneId) return sc;
-                      return {
-                        ...sc,
-                        roomAnnotations: (sc.roomAnnotations && sc.roomAnnotations.length > 0) ? sc.roomAnnotations : DEMO_GV_ROOM_ZONES,
-                        tokens: Array.isArray(sc.tokens) ? sc.tokens : DEMO_GV_TOKENS
-                      };
-                    })
-                  };
-                })
-              };
-            })
-          : [DEMO_GV_CAMPAIGN, ...list];
+        const enriched = mergePrebuiltCampaigns(list);
         setCampaigns(enriched);
         if (!selectedCampaignId && enriched.length > 0) {
           setSelectedCampaignId(enriched[0].campaignId);
@@ -2265,6 +2244,7 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
                             <Download className="w-3 h-3" />
                           </button>
                           <button
+                            data-tour="btn-add-chapter"
                             onClick={(e) => {
                               e.stopPropagation();
                               setSelectedCampaignId(camp.campaignId);
@@ -2368,6 +2348,7 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
 
                                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                       <button
+                                        data-tour="btn-add-scene"
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           setSelectedCampaignId(camp.campaignId);
@@ -2860,7 +2841,7 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
                     </div>
 
 {/* Map Asset & Storage Section */}
-                <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-5 space-y-4">
+                <div data-tour="scene-map-media-section" className="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-5 space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <Layers className="w-4 h-4 text-emerald-400" />
@@ -2869,6 +2850,7 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
                     <div className="flex items-center gap-2 text-[11px] font-mono">
                       <button
                         type="button"
+                        data-tour="btn-choose-preset-map"
                         onClick={() => setShowPresetMapsModal(true)}
                         className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-lg flex items-center gap-1 transition-all"
                       >
@@ -3382,7 +3364,7 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
                 </div>
 
                 {/* Chapter PDF Upload & Document Intelligence Card */}
-                <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5 space-y-4 shadow-xl">
+                <div data-tour="chapter-pdf-section" className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5 space-y-4 shadow-xl">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800/80 pb-3">
                     <div className="flex items-center gap-2.5">
                       <div className="w-8 h-8 rounded-lg bg-blue-500/20 border border-blue-500/40 flex items-center justify-center text-blue-400">
@@ -3414,6 +3396,7 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
+                            data-tour="btn-upload-chapter-pdf"
                             onClick={() => pdfInputRef.current?.click()}
                             disabled={isDigestingPdf}
                             className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-md shadow-blue-950/40 border border-blue-400/40 text-xs font-mono font-bold flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50 whitespace-nowrap cursor-pointer"
@@ -3435,6 +3418,7 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
+                            data-tour="btn-upload-chapter-pdf"
                             onClick={() => pdfInputRef.current?.click()}
                             disabled={isDigestingPdf}
                             className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-bold font-mono flex items-center gap-2 transition-all shadow-md shadow-blue-950/50 active:scale-95 cursor-pointer"
@@ -3460,7 +3444,7 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
 
                   {/* Digested Adventure Content Display */}
                   {selectedChapter.pdfDigest && (
-                    <div className="space-y-5 pt-2">
+                    <div data-tour="pdf-digest-results" className="space-y-5 pt-2">
                       {/* Document Overview Header */}
                       <div className="p-4 rounded-xl bg-zinc-950/80 border border-zinc-800/90 space-y-2">
                         <div className="flex items-center justify-between text-xs font-mono">

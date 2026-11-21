@@ -65,6 +65,7 @@ interface SaveToCampaignModalProps {
   currentBoardAnimatedFeatures?: AnimatedFeature[];
   currentBoardAnimatedEnabled?: boolean;
   currentBoardWeatherEffect?: WeatherEffectType;
+  currentScene3d?: any;
   activeSceneInfo: {
     campaignId: string;
     chapterId: string;
@@ -104,6 +105,7 @@ export const SaveToCampaignModal: React.FC<SaveToCampaignModalProps> = ({
   currentBoardAnimatedFeatures = [],
   currentBoardAnimatedEnabled = true,
   currentBoardWeatherEffect = 'none',
+  currentScene3d,
   activeSceneInfo,
   activeDmNotes = '',
   onSceneSaved
@@ -230,6 +232,7 @@ export const SaveToCampaignModal: React.FC<SaveToCampaignModalProps> = ({
         boardAnimatedFeatures: currentBoardAnimatedFeatures || existingScene?.boardAnimatedFeatures || [],
         boardAnimatedEnabled: currentBoardAnimatedEnabled !== undefined ? currentBoardAnimatedEnabled : (existingScene?.boardAnimatedEnabled ?? true),
         boardWeatherEffect: currentBoardWeatherEffect || existingScene?.boardWeatherEffect || 'none',
+        ...(currentScene3d !== undefined ? { scene3d: currentScene3d } : ((existingScene as any)?.scene3d ? { scene3d: (existingScene as any).scene3d } : {})),
         pdfUrl: existingScene?.pdfUrl,
         pdfFilename: existingScene?.pdfFilename,
         pdfSection: existingScene?.pdfSection,

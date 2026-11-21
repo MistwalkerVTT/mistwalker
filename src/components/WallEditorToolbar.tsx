@@ -234,6 +234,7 @@ export const WallEditorToolbar: React.FC<WallEditorToolbarProps> = ({
               </span>
             </div>
             <button
+              data-tour="wall-fov-toggle"
               onClick={() =>
                 setVisionConfig((prev) => ({ ...prev, enabled: !prev.enabled }))
               }
@@ -298,6 +299,7 @@ export const WallEditorToolbar: React.FC<WallEditorToolbarProps> = ({
               <span>Grid Snapping</span>
             </span>
             <button
+              data-tour="wall-snap-toggle"
               onClick={() => setSnapToGrid(!snapToGrid)}
               className={`px-2 py-0.5 rounded text-[9px] font-bold border transition-all ${
                 snapToGrid
@@ -318,6 +320,7 @@ export const WallEditorToolbar: React.FC<WallEditorToolbarProps> = ({
           <span className="text-[10px] font-mono text-zinc-400 uppercase">Segment Type</span>
           <div className="grid grid-cols-4 gap-1">
             <button
+              data-tour="wall-type-normal"
               onClick={() => setActiveWallType('normal')}
               className={`py-1.5 px-1 rounded-lg font-mono text-[10px] font-bold border transition-all ${
                 activeWallType === 'normal'
@@ -328,6 +331,7 @@ export const WallEditorToolbar: React.FC<WallEditorToolbarProps> = ({
               Solid
             </button>
             <button
+              data-tour="wall-type-door"
               onClick={() => setActiveWallType('door')}
               className={`py-1.5 px-1 rounded-lg font-mono text-[10px] font-bold border transition-all flex items-center justify-center gap-0.5 ${
                 activeWallType === 'door'
@@ -338,6 +342,7 @@ export const WallEditorToolbar: React.FC<WallEditorToolbarProps> = ({
               <DoorClosed className="w-3 h-3" /> Door
             </button>
             <button
+              data-tour="wall-type-secret"
               onClick={() => setActiveWallType('secret_door')}
               className={`py-1.5 px-1 rounded-lg font-mono text-[10px] font-bold border transition-all flex items-center justify-center gap-0.5 ${
                 activeWallType === 'secret_door'
@@ -349,6 +354,7 @@ export const WallEditorToolbar: React.FC<WallEditorToolbarProps> = ({
               <EyeOff className="w-3 h-3 text-purple-400" /> Secret
             </button>
             <button
+              data-tour="wall-type-window"
               onClick={() => setActiveWallType('window')}
               className={`py-1.5 px-1 rounded-lg font-mono text-[10px] font-bold border transition-all ${
                 activeWallType === 'window'

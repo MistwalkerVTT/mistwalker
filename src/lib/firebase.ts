@@ -195,6 +195,7 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 import { WallSegment, VisionConfig, RoomAnnotation, ChapterPdfDigest, RevealPoint, TokenMonsterState, normalizeRoomAnnotation, normalizeRoomAnnotations, isDescriptiveBadge } from '../types';
 import type { HandoutItem } from '../types/handout';
 import { DEMO_GV_CAMPAIGN } from '../data/demoCampaignGv';
+import { getPrebuiltGoldenVaultCampaign, getPrebuiltVecnaCampaign } from '../data/prebuilt3dCampaigns';
 
 // Data Interfaces as specified in User Requirements
 export interface SceneToken {
@@ -236,6 +237,8 @@ export interface SceneToken {
   monsterId?: string;
   customMonsterData?: any;
   monsterState?: TokenMonsterState;
+  model3d?: any;
+  rotationY?: number;
 }
 
 /**
@@ -284,6 +287,8 @@ export function serializeTokenForScene(t: any): SceneToken {
   if (t.monsterId) tok.monsterId = t.monsterId;
   if (t.customMonsterData) tok.customMonsterData = t.customMonsterData;
   if (t.monsterState) tok.monsterState = t.monsterState;
+  if (t.model3d) tok.model3d = t.model3d;
+  if (typeof t.rotationY === 'number' && !isNaN(t.rotationY)) tok.rotationY = t.rotationY;
   return tok;
 }
 
@@ -319,6 +324,7 @@ export interface Scene {
   pdfFilename?: string;
   pdfSection?: string;
   pdfPage?: number;
+  scene3d?: any;
   updatedAt?: number;
 }
 
@@ -1127,10 +1133,14 @@ export async function saveSceneToCampaign(
   try {
     const docRef = doc(db, 'campaigns', campaignId);
     const snap = await getDoc(docRef);
+    const veorPrebuilt = getPrebuiltVecnaCampaign();
+    const gvPrebuilt = getPrebuiltGoldenVaultCampaign();
     const camp: Campaign = snap.exists()
       ? (snap.data() as Campaign)
       : campaignId === DEMO_GV_CAMPAIGN.campaignId
-      ? { ...DEMO_GV_CAMPAIGN }
+      ? { ...gvPrebuilt }
+      : veorPrebuilt && campaignId === veorPrebuilt.campaignId
+      ? { ...veorPrebuilt }
       : {
           campaignId,
           campaignTitle: 'Saved Campaign',
@@ -1469,6 +1479,12 @@ export async function resolveMapSource(
   uploadedAssetsList: UploadedAsset[] = []
 ): Promise<string> {
   if (!scene) return '';
+
+  // 0a. Built-in static /assets/ battlemaps (e.g. /assets/dungeon3d/campaigns/* or /assets/maps/*)
+  // are always authoritative on disk — return immediately without fuzzy-matching uploadedAssets
+  if (scene.mapUrl && scene.mapUrl.startsWith('/assets/')) {
+    return scene.mapUrl;
+  }
 
   const isVideo = isVideoAsset(scene.mapUrl) || 
     (scene.mapUrl && (scene.mapUrl.endsWith('.mp4') || scene.mapUrl.endsWith('.webm') || scene.mapUrl.endsWith('.m4v'))) ||

@@ -126,6 +126,7 @@ import { AiFlyoutPanel } from './sidebar/AiFlyoutPanel';
 import { ParsedUniversalVtt } from '../services/universalVttService';
 import { toast } from 'sonner';
 import { HelpDrawer } from './HelpDrawer';
+import { TutorialTrackId } from '../types/tutorial';
 import { EffectsDrawer, Jb2aAssetDefinition } from '../effects';
 
 interface LeftSidebarProps {
@@ -295,6 +296,9 @@ interface LeftSidebarProps {
   onRedo?: () => void;
   canUndo?: boolean;
   canRedo?: boolean;
+  onStartTutorialTrack?: (trackId: TutorialTrackId) => void;
+  completedTutorialTracks?: TutorialTrackId[];
+  onResetTutorialProgress?: () => void;
 }
 
 type GroupMenuId = 'maps' | 'zones' | 'fog-grid' | 'lighting' | 'combat' | 'fx' | 'spells' | 'tokens' | 'dice' | 'ai' | 'help';
@@ -462,7 +466,10 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
   onLoadParsedCommunityMap,
   onOpenBugReport,
   onOpenBugManager,
-  onOpenSettings
+  onOpenSettings,
+  onStartTutorialTrack,
+  completedTutorialTracks = [],
+  onResetTutorialProgress
 }) => {
   const mapFileInputRef = useRef<HTMLInputElement>(null);
   const uvttFileInputRef = useRef<HTMLInputElement>(null);
@@ -4650,6 +4657,9 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = React.memo(({
               handleDragStart={handleDragStart}
               onClose={closeFlyout}
               onOpenBugReport={onOpenBugReport}
+              onStartTutorialTrack={onStartTutorialTrack}
+              completedTutorialTracks={completedTutorialTracks}
+              onResetTutorialProgress={onResetTutorialProgress}
             />
           )}
         </div>

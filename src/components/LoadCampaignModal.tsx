@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { Campaign, Scene } from '../lib/firebase';
 import { isVideoAsset } from '../lib/storageCache';
-import { DEMO_GV_CAMPAIGN, DEMO_GV_CHAPTER, DEMO_GV_SCENE, DEMO_GV_ROOM_ZONES, DEMO_GV_TOKENS, DEMO_GV_PDF_DIGEST } from '../data/demoCampaignGv';
+import { mergePrebuiltCampaigns } from '../data/prebuilt3dCampaigns';
 
 interface LoadCampaignModalProps {
   isOpen: boolean;
@@ -84,32 +84,9 @@ export const LoadCampaignModal: React.FC<LoadCampaignModalProps> = ({
     setExpandedCampaigns(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  // Prepend Demo Campaign if not already present in database, preserving saved rooms & tokens when present
+  // Merge prebuilt campaigns (Keys from the Golden Vault + Vecna: Eve of Ruin) with Firestore campaigns
   const allCampaigns = useMemo(() => {
-    if (campaigns.some(c => c.campaignId === DEMO_GV_CAMPAIGN.campaignId)) {
-      return campaigns.map(c => {
-        if (c.campaignId !== DEMO_GV_CAMPAIGN.campaignId) return c;
-        return {
-          ...c,
-          chapters: c.chapters.map(ch => {
-            if (ch.chapterId !== DEMO_GV_CHAPTER.chapterId) return ch;
-            return {
-              ...ch,
-              pdfDigest: ch.pdfDigest || DEMO_GV_PDF_DIGEST,
-              scenes: ch.scenes.map(sc => {
-                if (sc.sceneId !== DEMO_GV_SCENE.sceneId) return sc;
-                return {
-                  ...sc,
-                  roomAnnotations: (sc.roomAnnotations && sc.roomAnnotations.length > 0) ? sc.roomAnnotations : DEMO_GV_ROOM_ZONES,
-                  tokens: Array.isArray(sc.tokens) ? sc.tokens : DEMO_GV_TOKENS
-                };
-              })
-            };
-          })
-        };
-      });
-    }
-    return [DEMO_GV_CAMPAIGN, ...campaigns];
+    return mergePrebuiltCampaigns(campaigns);
   }, [campaigns]);
 
   // Filtered campaigns
