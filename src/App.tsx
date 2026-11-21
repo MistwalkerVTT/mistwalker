@@ -137,6 +137,7 @@ import {
   subscribeToActiveSession,
   subscribeToCampaigns,
   saveCampaignDoc,
+  deleteCampaignDoc,
   saveSceneToCampaign,
   saveHandoutsToChapter,
   UploadedAsset,
@@ -775,6 +776,8 @@ export default function App() {
   const [activeTutorialTrackId, setActiveTutorialTrackId] = useState<TutorialTrackId | null>(null);
   const [activeTutorialStepIndex, setActiveTutorialStepIndex] = useState<number>(0);
   const [isTutorialMinimized, setIsTutorialMinimized] = useState<boolean>(false);
+  const [tutorialCampaignId, setTutorialCampaignId] = useState<string | null>(null);
+  const [tutorialPdfUploadSignal, setTutorialPdfUploadSignal] = useState<number>(0);
   const [completedTutorialTracks, setCompletedTutorialTracks] = useState<TutorialTrackId[]>(() => {
     try {
       const saved = localStorage.getItem('mistwalker_tutorial_progress_v1');
@@ -13406,6 +13409,9 @@ export default function App() {
             currentShowCombatTracker={showCombatTracker}
             onLoadPlayInstance={handleLoadPlayInstance}
             activeDmSlot={activeMapId}
+            isTutorialActive={Boolean(activeTutorialTrackId)}
+            onTutorialCampaignCreated={(campId) => setTutorialCampaignId(campId)}
+            tutorialPdfUploadSignal={tutorialPdfUploadSignal}
           />
         </React.Suspense>
       )}
@@ -14047,6 +14053,31 @@ export default function App() {
         const activeTrack = getTutorialTrackById(activeTutorialTrackId);
         if (!activeTrack) return null;
 
+        const matchedTutorialCampaign =
+          campaignsList.find((c) => c.campaignId === tutorialCampaignId) ||
+          campaignsList.find((c) => c.campaignTitle.trim().toLowerCase() === 'test campaign for tutorial') ||
+          null;
+
+        const handleDeleteTutorialCampaign = async () => {
+          const targetId = matchedTutorialCampaign?.campaignId || tutorialCampaignId;
+          if (!targetId) return;
+          try {
+            await deleteCampaignDoc(targetId);
+            setCampaignsList((prev) => prev.filter((c) => c.campaignId !== targetId));
+            if (activeSceneInfo?.campaignId === targetId) {
+              setActiveSceneInfo(null);
+              setImageFile(null);
+              setWalls([]);
+              setRoomAnnotations([]);
+            }
+            setTutorialCampaignId(null);
+            toast.success('Removed "Test Campaign for Tutorial".');
+          } catch (err) {
+            console.error('Failed to delete tutorial campaign:', err);
+            toast.error('Could not delete tutorial campaign — you can delete it anytime from Campaign Manager.');
+          }
+        };
+
         const doorCount = walls.filter((w) => w.type === 'door' || w.type === 'secret_door').length;
         const handleExecuteTutorialAction = (action: TutorialActionKey) => {
           switch (action) {
@@ -14059,7 +14090,7 @@ export default function App() {
               break;
             case 'load_practice_map': {
               const practicePreset =
-                PRESET_BATTLEMAPS.find((m) => m.id === 'subterranean-maze') || PRESET_BATTLEMAPS[0];
+                PRESET_BATTLEMAPS.find((m) => m.id === 'tutorial-dungeon-prison') || PRESET_BATTLEMAPS[0];
               if (practicePreset) {
                 setShowCampaignBuilder(false);
                 handleSelectPresetMap(practicePreset);
@@ -14067,6 +14098,23 @@ export default function App() {
               }
               break;
             }
+            case 'download_tutorial_pdf': {
+              const link = document.createElement('a');
+              link.href = '/assets/tutorial/ironbound_cellblock_adventure.pdf';
+              link.download = 'ironbound_cellblock_adventure.pdf';
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              toast.success('Downloaded "ironbound_cellblock_adventure.pdf" — now click Upload PDF in Test Chapter!');
+              break;
+            }
+            case 'auto_upload_tutorial_pdf':
+              setCampaignBuilderInitialTab('campaigns');
+              setShowCampaignBuilder(true);
+              setTimeout(() => {
+                setTutorialPdfUploadSignal((prev) => prev + 1);
+              }, 150);
+              break;
             case 'switch_creator_mode':
               setShowCampaignBuilder(false);
               handleModeChange('creator');
@@ -14112,6 +14160,7 @@ export default function App() {
             stepIndex={activeTutorialStepIndex}
             isMinimized={isTutorialMinimized}
             completedTracks={completedTutorialTracks}
+            hasTutorialCampaign={Boolean(matchedTutorialCampaign || tutorialCampaignId)}
             liveState={{
               isCampaignManagerOpen: showCampaignBuilder,
               hasActiveMap: Boolean(imageFile),
@@ -14135,6 +14184,7 @@ export default function App() {
               setIsTutorialMinimized(false);
             }}
             onExecuteAction={handleExecuteTutorialAction}
+            onDeleteTutorialCampaign={handleDeleteTutorialCampaign}
           />
         );
       })()}

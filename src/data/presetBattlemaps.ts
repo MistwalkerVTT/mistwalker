@@ -1,3 +1,4 @@
+const tutorialDungeonPrisonImg = '/assets/maps/tutorial_dungeon_prison.jpg';
 const forestRuinsImg = '/assets/maps/forest_ruins_map_1788900106491.jpg';
 const subterraneanMazeImg = '/assets/maps/subterranean_maze_map_1788900151367.jpg';
 const skeletonCryptImg = '/assets/maps/skeleton_crypt_map_1788900167836.jpg';
@@ -20,6 +21,19 @@ export interface PresetBattlemap {
 }
 
 export const PRESET_BATTLEMAPS: PresetBattlemap[] = [
+  {
+    id: 'tutorial-dungeon-prison',
+    name: 'The Ironbound Cellblock (Tutorial)',
+    url: tutorialDungeonPrisonImg,
+    thumbnailUrl: tutorialDungeonPrisonImg,
+    type: 'Dungeon / Cellblock',
+    desc: 'Subterranean stone prison cellblock with 12 iron-barred cells, descending wooden stairs, and a glowing crimson brazier altar — ideal for walls, doors, and room zones',
+    mapWidth: 1024,
+    mapHeight: 576,
+    gridSize: 45,
+    gridCols: 22,
+    gridRows: 13
+  },
   {
     id: 'forest-ruins',
     name: 'Forest Ruins',

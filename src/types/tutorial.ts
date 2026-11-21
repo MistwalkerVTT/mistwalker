@@ -19,7 +19,9 @@ export type TutorialActionKey =
   | 'select_solid_wall_type'
   | 'select_zone_tool'
   | 'load_practice_map'
-  | 'open_chapter_guide';
+  | 'open_chapter_guide'
+  | 'download_tutorial_pdf'
+  | 'auto_upload_tutorial_pdf';
 
 export type TutorialCompletionCheck =
   | 'campaign_manager_open'
@@ -43,7 +45,7 @@ export interface TutorialStep {
   /** CSS selector (#id or [data-tour="..."]) to spotlight */
   targetSelector?: string;
   /** Preferred card placement relative to spotlight */
-  placement?: 'top' | 'bottom' | 'left' | 'right' | 'center' | 'dock-bottom-right';
+  placement?: 'top' | 'bottom' | 'left' | 'right' | 'center' | 'dock-top-center' | 'dock-bottom-right';
   /** When true, removes dimming backdrop so the user can freely click/draw on the Konva canvas */
   canvasInteractive?: boolean;
   /** Optional one-click helper button when a panel/mode isn't active yet */

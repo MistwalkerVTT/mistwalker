@@ -1,0 +1,240 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [7 0 R 9 0 R 11 0 R 13 0 R] /Count 4 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Oblique >>
+endobj
+6 0 obj
+<< /Length 5052 >>
+stream
+BT /F2 18 Tf 0.12 0.12 0.15 rg 52 740 Td (THE IRONBOUND CELLBLOCK) Tj ET
+BT /F3 10.5 Tf 0.35 0.35 0.40 rg 52 716 Td (A Level 3-5 Tutorial Dungeon Module for MistWalker VTT) Tj ET
+0.75 0.55 0.15 RG 1.2 w 52 704 m 560 704 l S
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 688 Td (Adventure Overview: Beneath the ruined watchtower of Blackfen lies the Ironbound) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 675 Td (Cellblock, a subterranean prison recently seized by the Crimson Ash cult. Their warden,) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 662 Td (Vaelis the Pale, has imprisoned Lyra Thorne, a scholar carrying the cipher to the Sunken) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 649 Td (Vault. The party descends the central wooden stairs to rescue Lyra, disrupt the) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 636 Td (blood-brazier ritual, and escape before the cultist patrol returns.) Tj ET
+BT /F2 13 Tf 0.55 0.18 0.10 rg 52 611 Td (Chapter Flow, Dungeon Rules & Key NPCs) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 593 Td (Story Hook: A frantic courier from the Silver Quill Guild offers 300 gp to rescue Lyra) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 580 Td (Thorne before midnight, when the Crimson Ash plans to ignite the Crimson Brazier \(Area) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 567 Td (D14\).) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 550 Td (Lighting & Vision: The central cellblock \(Area D13\) and eastern wing \(Areas D8, D14\) are) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 537 Td (bathed in dim flickering torchlight. The northern, western, and southern cells are) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 524 Td (plunged in total darkness unless doors are opened or torches are carried inside.) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 507 Td (Iron Cell Doors: Most cell doors are barred iron grates or heavy oak slabs. Closed doors) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 494 Td (are locked \(DC 13 Dexterity check with Thieves Tools, or DC 15 Strength check to force) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 481 Td (open\). Warden Vaelis \(Area D8\) carries the master iron keyring.) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 464 Td (Patrol Schedule: Every 10 minutes \(or whenever loud combat erupts in Area D13\), 2) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 451 Td (Cultists emerge from Area D8 to inspect the cellblock.) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 434 Td (Key NPC - Lyra Thorne \(Captive Scholar, Neutral Good\): Held in Area D4 inside the) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 421 Td (hanging iron cage. Knows the ritual weakness of the Crimson Brazier \(dousing it with) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 408 Td (holy water or toppling the basin ends the ward\).) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 391 Td (Key NPC - Warden Vaelis \(Cult Fanatic, Lawful Evil\): Oversees the blood ritual at Area) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 378 Td (D14 and keeps his ledger and master keys in Area D8.) Tj ET
+BT /F2 13 Tf 0.55 0.18 0.10 rg 52 353 Td (Keyed Dungeon Locations \(Areas D1 - D14\)) Tj ET
+BT /F2 11 Tf 0.10 0.25 0.45 rg 52 329 Td (Area D1: Northwest Collapsed Cell) Tj ET
+0.96 0.94 0.89 rg 52 273 508 51 re f
+0.72 0.48 0.12 RG 2 w 52 273 m 52 324 l S
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 312 Td (READ ALOUD: Cold dampness clings to the flagstones of this cramped northwestern) Tj ET
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 299 Td (cell. A rotting wooden bench leans against the eastern stone partition, while) Tj ET
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 286 Td (iron shackles dangle above a scatter of ancient bones in the dark corner.) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 257 Td (DM Notes: Two restless Skeletons lie among the bones and animate as soon as any creature) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 244 Td (steps past the threshold or shines bright light inside. A DC 13 Investigation check) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 231 Td (beneath the wooden bench uncovers a loose flagstone hiding a Potion of Healing and 25) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 218 Td (gp.) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 201 Td (Creatures: 2 Skeletons.) Tj ET
+BT /F2 11 Tf 0.10 0.25 0.45 rg 52 178 Td (Area D2: North-West Iron-Barred Cell) Tj ET
+0.96 0.94 0.89 rg 52 122 508 51 re f
+0.72 0.48 0.12 RG 2 w 52 122 m 52 173 l S
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 161 Td (READ ALOUD: Through heavy iron bars, a foul stench of rot rolls into the) Tj ET
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 148 Td (corridor. A grotesque mound of gnawed remains and torn rags lies heaped in the) Tj ET
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 135 Td (northwest corner beneath a flickering outer wall torch.) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 106 Td (DM Notes: A ravenous Ghoul hides behind the debris pile \(Stealth DC 14\). If the cell) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 93 Td (door is opened, it lunges at the nearest creature. Among the rags is a tarnished silver) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 80 Td (signet ring worth 40 gp.) Tj ET
+BT /F1 8 Tf 0.5 0.5 0.5 rg 517 28 Td (Page 1 of 4) Tj ET
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 6 0 R >>
+endobj
+8 0 obj
+<< /Length 4680 >>
+stream
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 740 Td (Creatures: 1 Ghoul.) Tj ET
+BT /F2 11 Tf 0.10 0.25 0.45 rg 52 717 Td (Area D3: North-Center Holding Cell) Tj ET
+0.96 0.94 0.89 rg 52 661 508 51 re f
+0.72 0.48 0.12 RG 2 w 52 661 m 52 712 l S
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 700 Td (READ ALOUD: A crimson threshold marks the doorway to this stark northern) Tj ET
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 687 Td (chamber. Heavy chains hang from iron wall rings along the north wall, and) Tj ET
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 674 Td (scratch marks score the stone floor near the rusted lock.) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 645 Td (DM Notes: Trap - Poisoned Needle Lock. The cell door lock is rigged with a spring-loaded) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 632 Td (needle \(DC 14 Investigation to spot, DC 13 Thieves Tools to disarm\). Triggering it deals) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 619 Td (1d4 piercing + 2d6 poison damage \(DC 13 Constitution save for half\). Inside, a scratched) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 606 Td (message on the wall reads: "The scholar hangs in D4. Topple the red basin.") Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 589 Td (Creatures: None.) Tj ET
+BT /F2 11 Tf 0.10 0.25 0.45 rg 52 566 Td (Area D4: North-East Hanging Cage Cell) Tj ET
+0.96 0.94 0.89 rg 52 510 508 51 re f
+0.72 0.48 0.12 RG 2 w 52 510 m 52 561 l S
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 549 Td (READ ALOUD: A suspended iron cage creaks softly in the corner of this dim cell) Tj ET
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 536 Td (beside a stack of supply crates. Faint whispering echoes from inside the bars as) Tj ET
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 523 Td (a bruised figure peers anxiously toward the doorway.) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 494 Td (DM Notes: Lyra Thorne is locked inside the hanging iron cage \(DC 12 Thieves Tools or the) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 481 Td (Warden key from Area D8\). A lurking Shadow clings to the ceiling rafters above the) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 468 Td (crates and attacks the moment someone tries to unlock the cage.) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 451 Td (Creatures: 1 Shadow.) Tj ET
+BT /F2 11 Tf 0.10 0.25 0.45 rg 52 428 Td (Area D5: Northeast Guard Cell) Tj ET
+0.96 0.94 0.89 rg 52 372 508 51 re f
+0.72 0.48 0.12 RG 2 w 52 372 m 52 423 l S
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 411 Td (READ ALOUD: Warm amber torchlight spills through the eastern arch of this corner) Tj ET
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 398 Td (cell, glinting off a slumped skeleton clad in rusted chainmail. Iron manacles) Tj ET
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 385 Td (rattle faintly in the draft.) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 356 Td (DM Notes: The skeleton belonged to a former town watch captain. Searching the body \(DC) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 343 Td (11 Perception\) yields a Shortsword +1 and a folded map showing the secret breach in Area) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 330 Td (D9. Disturbing the armor awakens 2 Skeletons.) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 313 Td (Creatures: 2 Skeletons.) Tj ET
+BT /F2 11 Tf 0.10 0.25 0.45 rg 52 290 Td (Area D6: West Grated Cell) Tj ET
+0.96 0.94 0.89 rg 52 234 508 51 re f
+0.72 0.48 0.12 RG 2 w 52 234 m 52 285 l S
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 273 Td (READ ALOUD: An eerie crimson glow rises through a heavy iron grate set into the) Tj ET
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 260 Td (western wall, casting long barred shadows across a scarred wooden bench and a) Tj ET
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 247 Td (carved stone relief pillar.) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 218 Td (DM Notes: The grate vents heat from a subterranean forge channel far below. A DC 14) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 205 Td (Perception check spots a small leather pouch wedged behind the stone relief containing 3) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 192 Td (Spell Scrolls \(Bless, Shield, Cure Wounds\).) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 175 Td (Creatures: 1 Cultist \(sleeping on the bench, Passive Perception 9\).) Tj ET
+BT /F2 11 Tf 0.10 0.25 0.45 rg 52 152 Td (Area D7: Southwest Rubble Cell) Tj ET
+0.96 0.94 0.89 rg 52 96 508 51 re f
+0.72 0.48 0.12 RG 2 w 52 96 m 52 147 l S
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 135 Td (READ ALOUD: Splintered timber beams and a mound of collapsed masonry choke this) Tj ET
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 122 Td (southwest cell. Skulls peek out from the gravel, and a sturdy ironbound chest) Tj ET
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 109 Td (sits half-buried near the broken floorboards.) Tj ET
+BT /F1 8 Tf 0.5 0.5 0.5 rg 517 28 Td (Page 2 of 4) Tj ET
+endstream
+endobj
+9 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 8 0 R >>
+endobj
+10 0 obj
+<< /Length 4540 >>
+stream
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 740 Td (DM Notes: The ironbound chest is actually a Mimic waiting for greedy dungeon delvers!) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 727 Td (Behind the rubble mound, a genuine wooden coffer holds 85 gp and two onyx gemstones \(50) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 714 Td (gp each\).) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 697 Td (Creatures: 1 Mimic.) Tj ET
+BT /F2 11 Tf 0.10 0.25 0.45 rg 52 674 Td (Area D8: East Torch-Lit Warden Alcove) Tj ET
+0.96 0.94 0.89 rg 52 618 508 51 re f
+0.72 0.48 0.12 RG 2 w 52 618 m 52 669 l S
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 657 Td (READ ALOUD: Bright orange torchlight illuminates this eastern alcove,) Tj ET
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 644 Td (highlighting a carved stone relief flanked by iron shackles. A heavy iron) Tj ET
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 631 Td (keyring hangs from a wall peg beside a blood-inked ledger.) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 602 Td (DM Notes: This is Warden Vaelis's command post. Two alert Guards loyal to the Crimson) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 589 Td (Ash stand watch here. The keyring opens every iron cell door in the prison \(Areas) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 576 Td (D1-D12\). The ledger details the midnight ritual at Area D14.) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 559 Td (Creatures: 2 Guards.) Tj ET
+BT /F2 11 Tf 0.10 0.25 0.45 rg 52 536 Td (Area D9: Southeast Breached Cell) Tj ET
+0.96 0.94 0.89 rg 52 480 508 51 re f
+0.72 0.48 0.12 RG 2 w 52 480 m 52 531 l S
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 519 Td (READ ALOUD: Damp moss and creeping roots spill through a jagged breach in the) Tj ET
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 506 Td (southeastern masonry. Cool night air drifts in from a narrow natural fissure) Tj ET
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 493 Td (hidden behind the fallen stones.) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 464 Td (DM Notes: Secret Escape Route! A DC 13 Athletics or Acrobatics check allows Medium) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 451 Td (creatures to squeeze through the fissure and escape directly to the forest outside) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 438 Td (Blackfen Watchtower. Two Giant Rats nest among the roots.) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 421 Td (Creatures: 2 Giant Rats.) Tj ET
+BT /F2 11 Tf 0.10 0.25 0.45 rg 52 398 Td (Area D10: South-West Guarded Cell) Tj ET
+0.96 0.94 0.89 rg 52 342 508 51 re f
+0.72 0.48 0.12 RG 2 w 52 342 m 52 393 l S
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 381 Td (READ ALOUD: Iron bars and piles of damp straw fill this dimly lit southern cell.) Tj ET
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 368 Td (A lone torch mounted on the corridor pillar outside throws dancing shadows) Tj ET
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 355 Td (across the mossy flagstones.) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 326 Td (DM Notes: An abandoned holding cell. A DC 12 Survival check reveals fresh bootprints) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 313 Td (leading from this cell straight toward the Crimson Brazier \(Area D14\).) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 296 Td (Creatures: 1 Bandit.) Tj ET
+BT /F2 11 Tf 0.10 0.25 0.45 rg 52 273 Td (Area D11: South-Center Bloodstained Cell) Tj ET
+0.96 0.94 0.89 rg 52 217 508 51 re f
+0.72 0.48 0.12 RG 2 w 52 217 m 52 268 l S
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 256 Td (READ ALOUD: Dark crimson streaks drag across the cracked flagstones toward the) Tj ET
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 243 Td (central hall, tangled with creeping subterranean vines. The air tastes sharply) Tj ET
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 230 Td (of copper and burnt incense.) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 201 Td (DM Notes: A Cultist prepares ritual reagents here. If combat breaks out in Area D13 or) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 188 Td (D14, the cultist rushes out on round 2 to reinforce Warden Vaelis.) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 171 Td (Creatures: 1 Cultist.) Tj ET
+BT /F2 11 Tf 0.10 0.25 0.45 rg 52 148 Td (Area D12: South-East Execution Cell) Tj ET
+0.96 0.94 0.89 rg 52 92 508 51 re f
+0.72 0.48 0.12 RG 2 w 52 92 m 52 143 l S
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 131 Td (READ ALOUD: A heavy double-bladed executioner axe leans against the damp) Tj ET
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 118 Td (partition wall beside scattered bones and rusted shackles. The silence inside) Tj ET
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 105 Td (this chamber feels unnaturally heavy.) Tj ET
+BT /F1 8 Tf 0.5 0.5 0.5 rg 517 28 Td (Page 3 of 4) Tj ET
+endstream
+endobj
+11 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 10 0 R >>
+endobj
+12 0 obj
+<< /Length 2640 >>
+stream
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 740 Td (DM Notes: A suit of Animated Armor stands dormant in the shadowed corner and springs to) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 727 Td (life if anyone touches the axe or enters without speaking the cult passphrase \("Ash to) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 714 Td (Ember"\).) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 697 Td (Creatures: 1 Animated Armor.) Tj ET
+BT /F2 11 Tf 0.10 0.25 0.45 rg 52 674 Td (Area D13: The Central Cellblock & Descending Stairs) Tj ET
+0.96 0.94 0.89 rg 52 605 508 64 re f
+0.72 0.48 0.12 RG 2 w 52 605 m 52 669 l S
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 657 Td (READ ALOUD: Wide wooden steps descend into the heart of the Ironbound Cellblock.) Tj ET
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 644 Td (Worn stone tiles stretch between rows of dark iron cells to the north and south.) Tj ET
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 631 Td (Provision crates line the northern wall, wine barrels cluster to the south, and) Tj ET
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 618 Td (a sinister crimson glow pulses from an altar to the east.) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 589 Td (DM Notes: The main tactical hub of the dungeon. Crates and barrels provide half cover) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 576 Td (\(+2 AC\). Two Cultists patrol this floor, keeping watch over the stairs and cell rows.) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 559 Td (Creatures: 2 Cultists.) Tj ET
+BT /F2 11 Tf 0.10 0.25 0.45 rg 52 536 Td (Area D14: The Crimson Brazier Altar) Tj ET
+0.96 0.94 0.89 rg 52 480 508 51 re f
+0.72 0.48 0.12 RG 2 w 52 480 m 52 531 l S
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 519 Td (READ ALOUD: Mounted against the eastern stone pillar, a massive circular stone) Tj ET
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 506 Td (basin brims with glowing crimson liquid. Twin sconces cast fierce amber light) Tj ET
+BT /F3 9.5 Tf 0.15 0.15 0.15 rg 62 493 Td (across the flagstones as chanting echoes off the vaulted ceiling.) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 464 Td (DM Notes: Boss Encounter! Warden Vaelis \(Cult Fanatic\) channels the midnight ritual) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 451 Td (here, protected by 2 Cultists. Tipping the brazier \(DC 15 Strength check\) or splashing) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 438 Td (holy water into the basin disrupts the ritual, dealing 2d8 radiant damage to all) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 425 Td (cultists within 15 feet and extinguishing the crimson ward.) Tj ET
+BT /F1 9.5 Tf 0.15 0.15 0.18 rg 52 408 Td (Creatures: 1 Cult Fanatic, 2 Cultists.) Tj ET
+BT /F1 8 Tf 0.5 0.5 0.5 rg 517 28 Td (Page 4 of 4) Tj ET
+endstream
+endobj
+13 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 12 0 R >>
+endobj
+xref
+0 14
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000135 00000 n 
+0000000205 00000 n 
+0000000280 00000 n 
+0000000358 00000 n 
+0000005462 00000 n 
+0000005608 00000 n 
+0000010340 00000 n 
+0000010486 00000 n 
+0000015079 00000 n 
+0000015227 00000 n 
+0000017920 00000 n 
+trailer
+<< /Size 14 /Root 1 0 R >>
+startxref
+18068
+%%EOF
