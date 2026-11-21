@@ -98,6 +98,9 @@ interface CampaignBuilderModalProps {
   currentShowCombatTracker?: boolean;
   onLoadPlayInstance?: (instance: ScenePlayInstance, baseScene: Scene, campaignId: string, chapterId: string) => void;
   activeDmSlot?: string;
+  isTutorialActive?: boolean;
+  onTutorialCampaignCreated?: (campaignId: string) => void;
+  tutorialPdfUploadSignal?: number;
 }
 
 export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
@@ -125,7 +128,10 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
   currentCombatTurnIndex = 0,
   currentShowCombatTracker = false,
   onLoadPlayInstance,
-  activeDmSlot = 'DM1'
+  activeDmSlot = 'DM1',
+  isTutorialActive = false,
+  onTutorialCampaignCreated,
+  tutorialPdfUploadSignal = 0
 }) => {
   const [activeManagerTab, setActiveManagerTab] = useState<'campaigns' | 'arena'>(initialTab);
   useEffect(() => {
@@ -214,6 +220,31 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
   const [showAddSceneModal, setShowAddSceneModal] = useState<boolean>(false);
   const [newSceneTitle, setNewSceneTitle] = useState<string>('');
   const [insertAfterSceneId, setInsertAfterSceneId] = useState<string | null>(null);
+
+  // Auto-fill tutorial titles whenever creation modals open during an active tutorial
+  useEffect(() => {
+    if (!isTutorialActive) return;
+    if (showCreateCampaignModal && !newCampaignTitle.trim()) {
+      setNewCampaignTitle('Test Campaign for Tutorial');
+      if (!newCampaignDesc.trim()) {
+        setNewCampaignDesc('Tutorial campaign workspace');
+      }
+    }
+  }, [isTutorialActive, showCreateCampaignModal]);
+
+  useEffect(() => {
+    if (!isTutorialActive) return;
+    if (showAddChapterModal && !newChapterTitle.trim()) {
+      setNewChapterTitle('Test Chapter');
+    }
+  }, [isTutorialActive, showAddChapterModal]);
+
+  useEffect(() => {
+    if (!isTutorialActive) return;
+    if (showAddSceneModal && !newSceneTitle.trim()) {
+      setNewSceneTitle('Test Scene');
+    }
+  }, [isTutorialActive, showAddSceneModal]);
 
   // Deletion modals state for scenes, chapters, and campaigns
   const [sceneToDelete, setSceneToDelete] = useState<{
@@ -565,6 +596,9 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
       setCampaigns(prev => [newCamp, ...prev]);
       setSelectedCampaignId(newCamp.campaignId);
       setExpandedCampaigns(prev => ({ ...prev, [newCamp.campaignId]: true }));
+      if (isTutorialActive || newCamp.campaignTitle.toLowerCase() === 'test campaign for tutorial') {
+        onTutorialCampaignCreated?.(newCamp.campaignId);
+      }
       setShowCreateCampaignModal(false);
       setNewCampaignTitle('');
       setNewCampaignDesc('');
@@ -612,10 +646,14 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
     const newScene: Scene = {
       sceneId: 'scene-' + Date.now().toString(36),
       sceneTitle: newSceneTitle.trim(),
-      mapUrl: (currentMapUrl && !currentMapUrl.startsWith('blob:')) ? currentMapUrl : 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1920&q=80',
+      mapUrl: isTutorialActive
+        ? '/assets/maps/tutorial_dungeon_prison.jpg'
+        : (currentMapUrl && !currentMapUrl.startsWith('blob:'))
+          ? currentMapUrl
+          : 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1920&q=80',
       dmNotes: '',
       tokens: [],
-      gridSize: currentGridSize || 50,
+      gridSize: isTutorialActive ? 45 : (currentGridSize || 50),
       gridOpacity: currentGridOpacity ?? 0.25,
       isFogVisible: currentIsFogVisible ?? true
     };
@@ -1464,11 +1502,33 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
     }
   };
 
-  // 5b. Chapter Adventure PDF Upload & Ingestion
-  const handleUploadAndDigestPdf = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !selectedCampaign || !selectedChapter) return;
+  // Auto-fill Campaign / Chapter / Scene prompts during Interactive Tutorial
+  useEffect(() => {
+    if (!isTutorialActive) return;
+    if (showCreateCampaignModal && !newCampaignTitle.trim()) {
+      setNewCampaignTitle('Test Campaign for Tutorial');
+      if (!newCampaignDesc.trim()) {
+        setNewCampaignDesc('Interactive MistWalker tutorial sandbox campaign.');
+      }
+    }
+  }, [isTutorialActive, showCreateCampaignModal]);
 
+  useEffect(() => {
+    if (!isTutorialActive) return;
+    if (showAddChapterModal && !newChapterTitle.trim()) {
+      setNewChapterTitle('Test Chapter');
+    }
+  }, [isTutorialActive, showAddChapterModal]);
+
+  useEffect(() => {
+    if (!isTutorialActive) return;
+    if (showAddSceneModal && !newSceneTitle.trim()) {
+      setNewSceneTitle('Test Scene');
+    }
+  }, [isTutorialActive, showAddSceneModal]);
+
+  // 5b. Chapter Adventure PDF Upload & Ingestion
+  const processPdfFileForChapter = async (file: File, targetCampaign: Campaign, targetChapter: Chapter) => {
     setIsDigestingPdf(true);
     setDigestProgressText('Uploading adventure PDF to server...');
 
@@ -1492,9 +1552,9 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
       const digest = await digestChapterPdf({
         pdfPath: pdfUrl,
         pdfFilename: file.name,
-        chapterTitle: selectedChapter.chapterTitle,
-        campaignTitle: selectedCampaign.campaignTitle,
-        existingScenes: selectedChapter.scenes.map(s => ({
+        chapterTitle: targetChapter.chapterTitle,
+        campaignTitle: targetCampaign.campaignTitle,
+        existingScenes: targetChapter.scenes.map(s => ({
           sceneId: s.sceneId,
           sceneTitle: s.sceneTitle,
           dmNotes: s.dmNotes
@@ -1505,7 +1565,7 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
       try {
         setDigestProgressText('Extracting non-room story hooks, dungeon rules, patrols & NPCs...');
         const flowResult = await digestChapterFlow({
-          chapterTitle: digest.chapterTitle || selectedChapter.chapterTitle,
+          chapterTitle: digest.chapterTitle || targetChapter.chapterTitle,
           digestSummary: digest.digestSummary,
           scenes: digest.scenes,
           rooms: digest.rooms
@@ -1523,8 +1583,8 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
 
       setDigestProgressText('Saving chapter digest and room mappings...');
 
-      const updatedChapters = selectedCampaign.chapters.map(ch => {
-        if (ch.chapterId === selectedChapter.chapterId) {
+      const updatedChapters = targetCampaign.chapters.map(ch => {
+        if (ch.chapterId === targetChapter.chapterId) {
           return {
             ...ch,
             pdfUrl,
@@ -1536,7 +1596,7 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
       });
 
       const updatedCampaign: Campaign = {
-        ...selectedCampaign,
+        ...targetCampaign,
         chapters: updatedChapters
       };
 
@@ -1552,6 +1612,52 @@ export const CampaignBuilderModal: React.FC<CampaignBuilderModalProps> = ({
       if (pdfInputRef.current) pdfInputRef.current.value = '';
     }
   };
+
+  const handleUploadAndDigestPdf = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedCampaign || !selectedChapter) return;
+    await processPdfFileForChapter(file, selectedCampaign, selectedChapter);
+  };
+
+  // Triggered by Tutorial "Auto-Upload Tutorial PDF" button
+  const lastTutorialPdfSignalRef = useRef<number>(tutorialPdfUploadSignal);
+  useEffect(() => {
+    if (!isOpen || tutorialPdfUploadSignal === lastTutorialPdfSignalRef.current) return;
+    lastTutorialPdfSignalRef.current = tutorialPdfUploadSignal;
+
+    const runAutoUpload = async () => {
+      let camp = selectedCampaign;
+      let chap = selectedChapter;
+      if (!camp || !chap) {
+        const tutCamp =
+          campaigns.find(c => c.campaignTitle.toLowerCase() === 'test campaign for tutorial') ||
+          campaigns[0];
+        if (tutCamp && tutCamp.chapters.length > 0) {
+          camp = tutCamp;
+          chap = tutCamp.chapters[0];
+          setSelectedCampaignId(camp.campaignId);
+          setSelectedChapterId(chap.chapterId);
+          setSelectedSceneId(null);
+          setExpandedCampaigns(prev => ({ ...prev, [camp!.campaignId]: true }));
+        }
+      }
+      if (!camp || !chap) {
+        toast.warning('Please create a Campaign and Chapter first before uploading the tutorial PDF.');
+        return;
+      }
+      try {
+        const res = await fetch('/assets/tutorial/ironbound_cellblock_adventure.pdf');
+        if (!res.ok) throw new Error('Could not load bundled tutorial PDF');
+        const blob = await res.blob();
+        const pdfFile = new File([blob], 'ironbound_cellblock_adventure.pdf', { type: 'application/pdf' });
+        await processPdfFileForChapter(pdfFile, camp, chap);
+      } catch (err: any) {
+        toast.error(err?.message || 'Failed to auto-upload tutorial PDF');
+      }
+    };
+
+    runAutoUpload();
+  }, [tutorialPdfUploadSignal, isOpen]);
 
   const handleRemoveChapterPdf = async () => {
     if (!selectedCampaign || !selectedChapter) return;
