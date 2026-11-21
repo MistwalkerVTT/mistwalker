@@ -6,10 +6,10 @@
   "scripts": {
     "dev": "tsx watch server.ts",
     "dev:3d": "node -e \"process.env.VITE_ENABLE_3D='true'; require('child_process').spawn('npx', ['tsx', 'watch', 'server.ts'], { stdio: 'inherit', shell: true });\"",
-    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
-    "start": "node dist/server.cjs",
+    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist-server/server.cjs",
+    "start": "node dist-server/server.cjs",
     "preview": "vite preview",
-    "clean": "rm -rf dist",
+    "clean": "rm -rf dist dist-server",
     "lint": "tsc --noEmit",
     "test:stress": "tsx scripts/stressTest.ts",
     "deploy": "node scripts/deploy.js"

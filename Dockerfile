@@ -9,7 +9,7 @@ RUN npm install --include=dev
 # Copy full application source and static/upload assets
 COPY . .
 
-# Build frontend (Vite) and backend (esbuild -> dist/server.cjs)
+# Build frontend (Vite) and backend (esbuild -> dist-server/server.cjs)
 RUN npm run build
 
 ENV NODE_ENV=production
