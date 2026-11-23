@@ -155,8 +155,8 @@ async function startServer() {
     });
   });
 
-  // Delete uploaded file from server disk
-  apiRouter.delete("/upload", (req, res) => {
+  // Delete uploaded file from server disk (non-blocking async I/O)
+  apiRouter.delete("/upload", async (req, res) => {
     try {
       const fileUrl = (req.query.url as string) || (req.body?.url as string);
       if (!fileUrl || typeof fileUrl !== 'string' || !fileUrl.startsWith('/uploads/')) {
@@ -164,9 +164,11 @@ async function startServer() {
       }
       const filename = path.basename(fileUrl.split('?')[0]);
       const filePath = path.join(uploadsDir, filename);
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
+      try {
+        await fs.promises.unlink(filePath);
         console.log(`[Server] Deleted file from disk: ${filePath}`);
+      } catch (unlinkErr: any) {
+        if (unlinkErr?.code !== 'ENOENT') throw unlinkErr;
       }
       res.json({ success: true });
     } catch (err: any) {
@@ -175,8 +177,8 @@ async function startServer() {
     }
   });
 
-  // Fallback endpoint for base64 uploads (converts base64 data to server-hosted file)
-  apiRouter.post("/upload-base64", (req, res) => {
+  // Fallback endpoint for base64 uploads (converts base64 data to server-hosted file via async I/O)
+  apiRouter.post("/upload-base64", async (req, res) => {
     try {
       const { base64, filename, type = 'map' } = req.body || {};
       if (!base64 || typeof base64 !== 'string') {
@@ -208,7 +210,7 @@ async function startServer() {
       const uniqueName = `${cleanName}-${Date.now()}-${Math.round(Math.random() * 1E6)}${ext}`;
       const destPath = path.join(activeUploadsWriteDir, uniqueName);
 
-      fs.writeFileSync(destPath, dataBuffer);
+      await fs.promises.writeFile(destPath, dataBuffer);
       const fileUrl = `/uploads/${uniqueName}`;
       console.log(`[Server] Base64 upload converted to static file: ${fileUrl} (${dataBuffer.length} bytes)`);
       res.json({ url: fileUrl, size: dataBuffer.length });
@@ -784,9 +786,11 @@ async function startServer() {
   // Socket.io connection & synchronization handlers
   io.on("connection", (socket) => {
     console.log(`[Server] User connected: ${socket.id}`);
+    let lastInitialStatePushAt = 0;
 
     // If active state or map already exists in memory, immediately push to newly connected client
     if (activeVttState.imageFile || activeVttState.tokens.length > 0 || activeVttState.activeSceneInfo) {
+      lastInitialStatePushAt = Date.now();
       socket.emit("SYNC_STATE", activeVttState);
       if (activeVttState.imageFile) {
         socket.emit("SYNC_IMAGE", activeVttState.imageFile);
@@ -795,13 +799,16 @@ async function startServer() {
 
     // Explicit request for initial state from connecting Player View or DM view
     socket.on("REQUEST_INITIAL_STATE", () => {
-      console.log(`[Server] Socket ${socket.id} requested initial state. Sending in-memory map: ${activeVttState.imageFile || 'none'}`);
-      socket.emit("SYNC_STATE", activeVttState);
-      if (activeVttState.imageFile) {
-        socket.emit("SYNC_IMAGE", activeVttState.imageFile);
+      const now = Date.now();
+      // Skip duplicate full-state payload if we just pushed it on connect within the last 1.5s
+      if (now - lastInitialStatePushAt > 1500) {
+        lastInitialStatePushAt = now;
+        socket.emit("SYNC_STATE", activeVttState);
+        if (activeVttState.imageFile) {
+          socket.emit("SYNC_IMAGE", activeVttState.imageFile);
+        }
       }
       // Only ask DM to re-push full state if server has no map yet, or at most once every 5s
-      const now = Date.now();
       if (!activeVttState.imageFile || (now - lastDmInitialStateRequestAt > 5000)) {
         lastDmInitialStateRequestAt = now;
         socket.broadcast.emit("REQUEST_INITIAL_STATE");
@@ -992,11 +999,11 @@ async function startServer() {
     });
 
     socket.on("MOVE_TOKEN", (data: any) => {
-      console.log(`[Server Socket] MOVE_TOKEN: id=${data?.id}, x=${data?.x}, y=${data?.y}`);
       if (data?.id && Array.isArray(activeVttState.tokens)) {
-        activeVttState.tokens = activeVttState.tokens.map((t: any) =>
-          t.id === data.id ? { ...t, x: data.x, y: data.y } : t
-        );
+        const idx = activeVttState.tokens.findIndex((t: any) => t.id === data.id);
+        if (idx !== -1) {
+          activeVttState.tokens[idx] = { ...activeVttState.tokens[idx], x: data.x, y: data.y };
+        }
       }
       socket.broadcast.emit("MOVE_TOKEN", data);
     });
@@ -1005,11 +1012,11 @@ async function startServer() {
       const id = data?.tokenId || data?.id;
       const x = data?.x;
       const y = data?.y;
-      console.log(`[Server Socket] PLAYER_MOVE_TOKEN: id=${id}, x=${x}, y=${y}, dist=${data?.distanceMovedFt}ft`);
       if (id && Array.isArray(activeVttState.tokens)) {
-        activeVttState.tokens = activeVttState.tokens.map((t: any) =>
-          t.id === id ? { ...t, x, y } : t
-        );
+        const idx = activeVttState.tokens.findIndex((t: any) => t.id === id);
+        if (idx !== -1) {
+          activeVttState.tokens[idx] = { ...activeVttState.tokens[idx], x, y };
+        }
       }
       socket.broadcast.emit("MOVE_TOKEN", { id, x, y, distanceMovedFt: data?.distanceMovedFt });
       socket.broadcast.emit("PLAYER_MOVE_TOKEN", data);
@@ -1192,7 +1199,8 @@ async function startServer() {
   const jb2aLocalDir = path.join(process.cwd(), 'public', 'jb2a');
   if (fs.existsSync(jb2aLocalDir)) {
     app.use('/jb2a', express.static(jb2aLocalDir, {
-      maxAge: '7d',
+      maxAge: '30d',
+      immutable: true,
       setHeaders: (res, filePath) => {
         if (filePath.endsWith('.webm')) {
           res.setHeader('Content-Type', 'video/webm');
@@ -1212,7 +1220,8 @@ async function startServer() {
   const models3dAssetsDir = path.join(addon3DRoot, 'public', 'assets', 'models3d');
   if (fs.existsSync(dungeon3dAssetsDir)) {
     app.use('/assets/dungeon3d', express.static(dungeon3dAssetsDir, {
-      maxAge: '7d',
+      maxAge: '30d',
+      immutable: true,
       setHeaders: (res) => {
         res.setHeader('Access-Control-Allow-Origin', '*');
       }
@@ -1220,7 +1229,8 @@ async function startServer() {
   }
   if (fs.existsSync(models3dAssetsDir)) {
     app.use('/assets/models3d', express.static(models3dAssetsDir, {
-      maxAge: '7d',
+      maxAge: '30d',
+      immutable: true,
       setHeaders: (res) => {
         res.setHeader('Access-Control-Allow-Origin', '*');
       }

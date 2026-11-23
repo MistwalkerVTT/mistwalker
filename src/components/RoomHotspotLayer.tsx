@@ -238,9 +238,11 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
                 stroke={isHovered ? '#ffffff' : baseColor}
                 strokeWidth={strokeWidth}
                 cornerRadius={pillRadius}
-                shadowColor={isHovered ? baseColor : 'black'}
-                shadowBlur={shadowBlur}
-                shadowOpacity={0.85}
+                shadowColor={isHovered ? baseColor : undefined}
+                shadowBlur={isHovered ? shadowBlur : 0}
+                shadowOpacity={isHovered ? 0.85 : 0}
+                shadowForStrokeEnabled={false}
+                perfectDrawEnabled={false}
               />
 
               {/* Label Text with Icon */}
@@ -256,6 +258,8 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
                 y={-(pillH / 2)}
                 width={pillW}
                 height={pillH}
+                listening={false}
+                perfectDrawEnabled={false}
               />
 
               {/* Status Indicator Dot for DM View (Green = Visible to players, Gray = DM only) */}
@@ -267,6 +271,8 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
                   fill={anno.visibleToPlayers ? '#10b981' : '#71717a'}
                   stroke="#000000"
                   strokeWidth={0.5}
+                  listening={false}
+                  perfectDrawEnabled={false}
                 />
               )}
             </Group>
@@ -308,9 +314,11 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
                       : 'rgba(245, 158, 11, 0.28)'}
                     stroke={anno.color || (anno.isHazard || anno.type === 'hazard' ? '#ef4444' : '#fbbf24')}
                     strokeWidth={isHovered ? 3 : 1.5}
-                    shadowColor={anno.color || '#ef4444'}
-                    shadowBlur={isHovered ? 10 : 4}
-                    shadowOpacity={0.9}
+                    shadowColor={isHovered ? (anno.color || '#ef4444') : undefined}
+                    shadowBlur={isHovered ? 8 : 0}
+                    shadowOpacity={isHovered ? 0.9 : 0}
+                    shadowForStrokeEnabled={false}
+                    perfectDrawEnabled={false}
                     dash={[8, 4]}
                     listening={false}
                   />
@@ -321,6 +329,7 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
                     stroke="#ffffff"
                     strokeWidth={1.5}
                     opacity={isHovered ? 0.9 : 0.4}
+                    perfectDrawEnabled={false}
                     listening={false}
                   />
                 </Group>
@@ -336,9 +345,11 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
                       : 'rgba(245, 158, 11, 0.28)'}
                     stroke={anno.color || (anno.isHazard || anno.type === 'hazard' ? '#ef4444' : '#fbbf24')}
                     strokeWidth={isHovered ? 3 : 1.5}
-                    shadowColor={anno.color || '#ef4444'}
-                    shadowBlur={isHovered ? 10 : 4}
-                    shadowOpacity={0.9}
+                    shadowColor={isHovered ? (anno.color || '#ef4444') : undefined}
+                    shadowBlur={isHovered ? 8 : 0}
+                    shadowOpacity={isHovered ? 0.9 : 0}
+                    shadowForStrokeEnabled={false}
+                    perfectDrawEnabled={false}
                     dash={[8, 4]}
                     cornerRadius={roomCornerR}
                     listening={false}
@@ -353,6 +364,7 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
                     strokeWidth={1.5}
                     opacity={isHovered ? 0.9 : 0.4}
                     cornerRadius={roomCornerR}
+                    perfectDrawEnabled={false}
                     listening={false}
                   />
                 </Group>
@@ -390,9 +402,11 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
                 stroke={isHovered ? '#ffffff' : (isHazardAnno ? '#ef4444' : baseColor)}
                 strokeWidth={roomStrokeW}
                 cornerRadius={roomCornerR}
-                shadowColor={isHovered ? '#f59e0b' : 'black'}
-                shadowBlur={roomShadowBlur}
-                shadowOpacity={isHovered ? 0.95 : 0.85}
+                shadowColor={isHovered ? '#f59e0b' : undefined}
+                shadowBlur={isHovered ? roomShadowBlur : 0}
+                shadowOpacity={isHovered ? 0.95 : 0}
+                shadowForStrokeEnabled={false}
+                perfectDrawEnabled={false}
               />
               <Text
                 text={badgeText}
@@ -406,6 +420,8 @@ export const RoomHotspotLayer: React.FC<RoomHotspotLayerProps> = React.memo(({
                 y={-(badgeH / 2)}
                 width={badgeW}
                 height={badgeH}
+                listening={false}
+                perfectDrawEnabled={false}
               />
             </Group>
           </Group>

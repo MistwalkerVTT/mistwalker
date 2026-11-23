@@ -1081,7 +1081,11 @@ class EffectsSoundEngine {
    */
   private async loadBuffer(url: string): Promise<AudioBuffer | null> {
     if (this.audioBufferCache.has(url)) {
-      return this.audioBufferCache.get(url)!;
+      const hit = this.audioBufferCache.get(url)!;
+      // Refresh LRU position
+      this.audioBufferCache.delete(url);
+      this.audioBufferCache.set(url, hit);
+      return hit;
     }
 
     if (this.loadingPromises.has(url)) {
@@ -1097,6 +1101,11 @@ class EffectsSoundEngine {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const arrayBuffer = await res.arrayBuffer();
         const decodedBuffer = await ctx.decodeAudioData(arrayBuffer);
+        // Cap decoded PCM cache at 64 entries (LRU eviction) to prevent unbounded memory growth
+        if (this.audioBufferCache.size >= 64) {
+          const oldestKey = this.audioBufferCache.keys().next().value;
+          if (oldestKey) this.audioBufferCache.delete(oldestKey);
+        }
         this.audioBufferCache.set(url, decodedBuffer);
         return decodedBuffer;
       } catch {

@@ -178,18 +178,31 @@ export class ThreeDiceEngine {
     clearDiceTextureCache();
     this.buildMaterials(theme);
 
-    // If dice are currently rolling or resting on table, update their materials immediately
+    // If dice are currently rolling or resting on table, update their materials immediately (disposing old ones)
     for (const die of this.activeDice) {
+      const oldMat = die.mesh.material;
+      const disposeOld = () => {
+        if (Array.isArray(oldMat)) {
+          oldMat.forEach(m => {
+            if ((m as THREE.MeshStandardMaterial).map) (m as THREE.MeshStandardMaterial).map!.dispose();
+            m.dispose();
+          });
+        } else if (oldMat) {
+          oldMat.dispose();
+        }
+      };
       const parts = die.id.split('-');
       const key = this.resolveDieKey(parts[1] || 'd20');
       if (key === 'd6') {
         const d6Mats = createD6Materials(this.currentTheme);
         d6Mats.forEach(m => { m.transparent = true; m.opacity = this.fadeOpacity; });
         die.mesh.material = d6Mats;
+        disposeOld();
       } else if (this.materials[key]) {
         const mat = this.materials[key].clone();
         mat.opacity = this.fadeOpacity;
         die.mesh.material = mat;
+        disposeOld();
       }
     }
   }
@@ -555,9 +568,35 @@ export class ThreeDiceEngine {
     window.removeEventListener('resize', this.handleResize);
     if (this.animFrameId) {
       cancelAnimationFrame(this.animFrameId);
+      this.animFrameId = null;
     }
+    this.isRunning = false;
     this.clearDice();
+    // Dispose shared polyhedral geometries and procedural canvas textures/materials
+    if (this.bundles) {
+      Object.values(this.bundles).forEach(bundle => {
+        bundle?.geometry?.dispose();
+      });
+    }
+    if (this.materials) {
+      Object.values(this.materials).forEach(mat => {
+        if (mat.map) mat.map.dispose();
+        mat.dispose();
+      });
+    }
+    this.scene.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (mesh.geometry) mesh.geometry.dispose();
+      if (mesh.material) {
+        if (Array.isArray(mesh.material)) {
+          mesh.material.forEach(m => m.dispose());
+        } else {
+          mesh.material.dispose();
+        }
+      }
+    });
     this.renderer.dispose();
+    this.renderer.forceContextLoss();
     if (this.canvas.parentElement) {
       this.canvas.parentElement.removeChild(this.canvas);
     }

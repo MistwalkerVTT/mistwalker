@@ -428,6 +428,7 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
   const [, setFogCanvasVersion] = useState<number>(0);
   const ambientCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const [, setAmbientCanvasVersion] = useState<number>(0);
+  const lastWallDragUpdateRef = useRef<number>(0);
 
   useEffect(() => {
     if (!shouldRenderFog || mapDimensions.width <= 0 || mapDimensions.height <= 0) {
@@ -546,16 +547,21 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
         const boxH = maxY - minY;
         if (boxW <= 0 || boxH <= 0) continue;
 
-        if (scratchCanvas.width < boxW || scratchCanvas.height < boxH) {
-          scratchCanvas.width = Math.max(scratchCanvas.width, boxW);
-          scratchCanvas.height = Math.max(scratchCanvas.height, boxH);
+        // Rasterize scratch FOV at fogScale (0.5x) to match fog canvas & cut fill rate 4x
+        const scratchW = Math.max(1, Math.ceil(boxW * fogScale));
+        const scratchH = Math.max(1, Math.ceil(boxH * fogScale));
+
+        if (scratchCanvas.width < scratchW || scratchCanvas.height < scratchH) {
+          scratchCanvas.width = Math.max(scratchCanvas.width, scratchW);
+          scratchCanvas.height = Math.max(scratchCanvas.height, scratchH);
         }
 
         const scratchCtx = scratchCanvas.getContext('2d');
         if (!scratchCtx) continue;
 
-        scratchCtx.clearRect(0, 0, boxW, boxH);
+        scratchCtx.clearRect(0, 0, scratchW, scratchH);
         scratchCtx.save();
+        scratchCtx.scale(fogScale, fogScale);
         scratchCtx.translate(-minX, -minY);
 
         scratchCtx.beginPath();
@@ -583,7 +589,7 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
 
         scratchCtx.restore();
 
-        ctx.drawImage(scratchCanvas, 0, 0, boxW, boxH, minX, minY, boxW, boxH);
+        ctx.drawImage(scratchCanvas, 0, 0, scratchW, scratchH, minX, minY, boxW, boxH);
       }
     }
 
@@ -1104,6 +1110,17 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
                       draggable={true}
                       onDragMove={(e) => {
                         if (onUpdateWall) {
+                          const now = performance.now();
+                          if (now - lastWallDragUpdateRef.current < 40) return;
+                          lastWallDragUpdateRef.current = now;
+                          const newPos = snapToGridEnabled
+                            ? snapPointToGrid(e.target.x(), e.target.y(), gridSize, gridOffsetX, gridOffsetY)
+                            : { x: e.target.x(), y: e.target.y() };
+                          onUpdateWall({ ...wall, p1: newPos });
+                        }
+                      }}
+                      onDragEnd={(e) => {
+                        if (onUpdateWall) {
                           const newPos = snapToGridEnabled
                             ? snapPointToGrid(e.target.x(), e.target.y(), gridSize, gridOffsetX, gridOffsetY)
                             : { x: e.target.x(), y: e.target.y() };
@@ -1120,6 +1137,17 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
                       strokeWidth={2 / stageScale}
                       draggable={true}
                       onDragMove={(e) => {
+                        if (onUpdateWall) {
+                          const now = performance.now();
+                          if (now - lastWallDragUpdateRef.current < 40) return;
+                          lastWallDragUpdateRef.current = now;
+                          const newPos = snapToGridEnabled
+                            ? snapPointToGrid(e.target.x(), e.target.y(), gridSize, gridOffsetX, gridOffsetY)
+                            : { x: e.target.x(), y: e.target.y() };
+                          onUpdateWall({ ...wall, p2: newPos });
+                        }
+                      }}
+                      onDragEnd={(e) => {
                         if (onUpdateWall) {
                           const newPos = snapToGridEnabled
                             ? snapPointToGrid(e.target.x(), e.target.y(), gridSize, gridOffsetX, gridOffsetY)
@@ -1254,9 +1282,11 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
                 lineCap="round"
                 lineJoin="round"
                 dash={dashPattern}
-                shadowColor={strokeColor}
-                shadowBlur={isSelected ? 10 / stageScale : 4 / stageScale}
-                shadowOpacity={0.75}
+                shadowColor={isSelected ? strokeColor : undefined}
+                shadowBlur={isSelected ? 8 / stageScale : 0}
+                shadowOpacity={isSelected ? 0.75 : 0}
+                shadowForStrokeEnabled={false}
+                perfectDrawEnabled={false}
                 listening={false}
               />
 
@@ -1272,6 +1302,17 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
                     strokeWidth={2 / stageScale}
                     draggable={true}
                     onDragMove={(e) => {
+                      if (onUpdateWall) {
+                        const now = performance.now();
+                        if (now - lastWallDragUpdateRef.current < 40) return;
+                        lastWallDragUpdateRef.current = now;
+                        const newPos = snapToGridEnabled
+                          ? snapPointToGrid(e.target.x(), e.target.y(), gridSize, gridOffsetX, gridOffsetY)
+                          : { x: e.target.x(), y: e.target.y() };
+                        onUpdateWall({ ...wall, p1: newPos });
+                      }
+                    }}
+                    onDragEnd={(e) => {
                       if (onUpdateWall) {
                         const newPos = snapToGridEnabled
                           ? snapPointToGrid(e.target.x(), e.target.y(), gridSize, gridOffsetX, gridOffsetY)
@@ -1289,6 +1330,17 @@ export const DynamicLightingLayer: React.FC<DynamicLightingLayerProps> = React.m
                     strokeWidth={2 / stageScale}
                     draggable={true}
                     onDragMove={(e) => {
+                      if (onUpdateWall) {
+                        const now = performance.now();
+                        if (now - lastWallDragUpdateRef.current < 40) return;
+                        lastWallDragUpdateRef.current = now;
+                        const newPos = snapToGridEnabled
+                          ? snapPointToGrid(e.target.x(), e.target.y(), gridSize, gridOffsetX, gridOffsetY)
+                          : { x: e.target.x(), y: e.target.y() };
+                        onUpdateWall({ ...wall, p2: newPos });
+                      }
+                    }}
+                    onDragEnd={(e) => {
                       if (onUpdateWall) {
                         const newPos = snapToGridEnabled
                           ? snapPointToGrid(e.target.x(), e.target.y(), gridSize, gridOffsetX, gridOffsetY)

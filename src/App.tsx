@@ -40,7 +40,8 @@ import Konva from 'konva';
 // High-performance canvas and drag defaults
 Konva.hitOnDragEnabled = false;
 if (typeof window !== 'undefined') {
-  Konva.pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+  // Cap DPR at 1.5x to keep high-DPI GPU fill rate smooth across multi-layer VTT stages
+  Konva.pixelRatio = Math.min(window.devicePixelRatio || 1, 1.5);
 }
 import useImage from 'use-image';
 import 'gifler';
@@ -535,12 +536,16 @@ export default function App() {
   useEffect(() => {
     if (videoElement) {
       let animId: number;
-      const update = () => {
-        if (dmVideoLayerRef.current) {
-          dmVideoLayerRef.current.batchDraw();
-        }
-        if (playerVideoLayerRef.current) {
-          playerVideoLayerRef.current.batchDraw();
+      let lastDraw = 0;
+      const update = (now: number) => {
+        if (!document.hidden && !videoElement.paused && !videoElement.ended && now - lastDraw >= 32) {
+          lastDraw = now;
+          if (dmVideoLayerRef.current) {
+            dmVideoLayerRef.current.batchDraw();
+          }
+          if (playerVideoLayerRef.current) {
+            playerVideoLayerRef.current.batchDraw();
+          }
         }
         animId = requestAnimationFrame(update);
       };
@@ -745,6 +750,7 @@ export default function App() {
   }, [stagePos]);
   const stageDragRafIdRef = useRef<number | null>(null);
   const wheelRafIdRef = useRef<number | null>(null);
+  const lastMouseMoveTsRef = useRef<number>(0);
   const pendingWheelStateRef = useRef<{ scale: number; pos: { x: number; y: number } } | null>(null);
   const [mapRotation, setMapRotation] = useState<number>(0);
 
@@ -2356,7 +2362,7 @@ export default function App() {
     }, 2000);
     return () => clearTimeout(timer);
   }, [
-    imageFile, mapType, videoSize, mapRotation, stageScale, stagePos, tokens, walls,
+    imageFile, mapType, videoSize, mapRotation, tokens, walls,
     reveals, polygonReveals, isFogVisible, fogResetKey, visionConfig, gridVisible,
     gridOpacity, gridSize, gridOffsetX, gridOffsetY, roomAnnotations, activeSceneInfo,
     activeDmNotes, boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect,
@@ -2578,8 +2584,13 @@ export default function App() {
     if (isSwitchingMapSlotRef.current || (Date.now() - lastSlotSwitchTimeRef.current < 1500)) return;
     if (currentSlot !== liveMapIdRef.current) return;
     if (socketRef.current?.connected) {
-      const syncedTokens = prepareTokensForSync(tokens, compendiumMonsters, combatTrackerCombatants);
-      socketRef.current.emit('SYNC_TOKENS', syncedTokens);
+      const timer = window.setTimeout(() => {
+        if (!socketRef.current?.connected || isDraggingTokenRef.current) return;
+        if (activeMapIdRef.current !== liveMapIdRef.current) return;
+        const syncedTokens = prepareTokensForSync(tokens, compendiumMonsters, combatTrackerCombatants);
+        socketRef.current.emit('SYNC_TOKENS', syncedTokens);
+      }, 60);
+      return () => window.clearTimeout(timer);
     }
   }, [tokens, compendiumMonsters, combatTrackerCombatants, prepareTokensForSync]);
 
@@ -7976,6 +7987,11 @@ export default function App() {
     const stage = e.target.getStage();
     if (stage?.isDragging?.()) return;
     if ((!image && !videoElement) && tool !== 'draw' && tool !== 'erase') return;
+
+    // Throttle high-frequency pointermove updates (~30fps) so 120-240Hz mice don't saturate React renders
+    const now = performance.now();
+    if (now - lastMouseMoveTsRef.current < 30) return;
+    lastMouseMoveTsRef.current = now;
     
     const pointer = stage.getPointerPosition();
     if (!pointer) return;
@@ -9250,17 +9266,18 @@ export default function App() {
     }
 
     pendingWheelStateRef.current = { scale: clampedScale, pos: newPos };
-    if (!wheelRafIdRef.current) {
-      wheelRafIdRef.current = requestAnimationFrame(() => {
-        wheelRafIdRef.current = null;
-        if (pendingWheelStateRef.current) {
-          const { scale, pos } = pendingWheelStateRef.current;
-          pendingWheelStateRef.current = null;
-          setStageScale(scale);
-          setStagePos(pos);
-        }
-      });
+    if (wheelRafIdRef.current !== null) {
+      window.clearTimeout(wheelRafIdRef.current);
     }
+    wheelRafIdRef.current = window.setTimeout(() => {
+      wheelRafIdRef.current = null;
+      if (pendingWheelStateRef.current) {
+        const { scale, pos } = pendingWheelStateRef.current;
+        pendingWheelStateRef.current = null;
+        setStageScale(scale);
+        setStagePos(pos);
+      }
+    }, 120);
   };
 
 
@@ -10528,7 +10545,7 @@ export default function App() {
 
               {/* Measurement Overlay */}
               {measureStart && measureEnd && (
-                <Layer>
+                <Layer listening={false}>
                   {(() => {
                     const dx = measureEnd.x - measureStart.x;
                     const dy = measureEnd.y - measureStart.y;
@@ -10729,7 +10746,7 @@ export default function App() {
               )}
 
               {(currentPolygonPoints.length > 0 || aiDescribeRect || gridCalibrateRect) && (
-                <Layer>
+                <Layer listening={false}>
                   {/* Current Polygon Preview */}
                   {currentPolygonPoints.length > 0 && (
                     <Group>
@@ -10887,7 +10904,7 @@ export default function App() {
               )}
 
               {/* Campaign Map Zones & Interactive Hotspots Layer */}
-              <Layer>
+              <Layer listening={roomAnnotations.length > 0}>
                 <RoomHotspotLayer
                   annotations={roomAnnotations}
                   mapDimensions={mapDimensions}
@@ -11519,17 +11536,18 @@ export default function App() {
                       }
 
                       pendingWheelStateRef.current = { scale: clampedScale, pos: newPos };
-                      if (!wheelRafIdRef.current) {
-                        wheelRafIdRef.current = requestAnimationFrame(() => {
-                          wheelRafIdRef.current = null;
-                          if (pendingWheelStateRef.current) {
-                            const { scale, pos } = pendingWheelStateRef.current;
-                            pendingWheelStateRef.current = null;
-                            setStageScale(scale);
-                            setStagePos(pos);
-                          }
-                        });
+                      if (wheelRafIdRef.current !== null) {
+                        window.clearTimeout(wheelRafIdRef.current);
                       }
+                      wheelRafIdRef.current = window.setTimeout(() => {
+                        wheelRafIdRef.current = null;
+                        if (pendingWheelStateRef.current) {
+                          const { scale, pos } = pendingWheelStateRef.current;
+                          pendingWheelStateRef.current = null;
+                          setStageScale(scale);
+                          setStagePos(pos);
+                        }
+                      }, 120);
                     }}
                     onAddFeature={(newFeat) => {
                       setBoardAnimatedFeatures(prev => [...prev, newFeat]);

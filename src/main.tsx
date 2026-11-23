@@ -75,14 +75,17 @@ function Root() {
   const [appRevealed, setAppRevealed] = useState<boolean>(!initialIntro);
   const [currentMode, setCurrentMode] = useState<'dm' | 'player'>(() => isPlayerView ? 'player' : 'dm');
 
-  // Warm up both app bundles during idle time while the intro plays so the reveal is instant without competing with IntroScreen's first frame
+  // Warm up only the active mode's bundle during idle time (avoids downloading both DM + Player bundles on startup)
   useEffect(() => {
     if (!initialIntro) return;
     let timerId: number | null = null;
     let idleId: number | null = null;
     const warmUp = () => {
-      import('./App.tsx').catch(() => undefined);
-      import('./components/PlayerView.tsx').catch(() => undefined);
+      if (currentMode === 'player') {
+        import('./components/PlayerView.tsx').catch(() => undefined);
+      } else {
+        import('./App.tsx').catch(() => undefined);
+      }
     };
     const win = typeof window !== 'undefined' ? (window as any) : null;
     if (win && typeof win.requestIdleCallback === 'function') {
@@ -98,7 +101,7 @@ function Root() {
         clearTimeout(timerId);
       }
     };
-  }, [initialIntro]);
+  }, [initialIntro, currentMode]);
 
   return (
     <CrashRecoveryBoundary fallbackTitle={currentMode === 'player' ? "MistWalker Player View Interrupted" : "MistWalker DM View Interrupted"}>

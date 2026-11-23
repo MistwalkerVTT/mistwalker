@@ -136,10 +136,10 @@ export const TokenGroundFootprint: React.FC<{
         y={radius + radius * 0.18}
         radiusX={radius * 0.82 * shadowScale}
         radiusY={radius * 0.46 * shadowScale}
-        fill="rgba(0, 0, 0, 0.58)"
-        shadowColor="#000000"
-        shadowBlur={10}
-        shadowOpacity={0.8}
+        fill="rgba(0, 0, 0, 0.52)"
+        stroke="rgba(0, 0, 0, 0.22)"
+        strokeWidth={4}
+        shadowForStrokeEnabled={false}
         perfectDrawEnabled={false}
       />
 
@@ -240,9 +240,8 @@ export const TokenAerialOverlay: React.FC<{
           stroke={tierGlow}
           strokeWidth={2}
           dash={[12, 8, 4, 8]}
-          opacity={0.8}
-          shadowColor={tierColor}
-          shadowBlur={8}
+          opacity={0.85}
+          shadowForStrokeEnabled={false}
           perfectDrawEnabled={false}
         />
       )}
@@ -262,8 +261,7 @@ export const TokenAerialOverlay: React.FC<{
               stroke={wingGlow}
               strokeWidth={1.5}
               opacity={0.85}
-              shadowColor={wingColor}
-              shadowBlur={8}
+              shadowForStrokeEnabled={false}
               perfectDrawEnabled={false}
             />
           </Group>
@@ -280,8 +278,7 @@ export const TokenAerialOverlay: React.FC<{
               stroke={wingGlow}
               strokeWidth={1.5}
               opacity={0.85}
-              shadowColor={wingColor}
-              shadowBlur={8}
+              shadowForStrokeEnabled={false}
               perfectDrawEnabled={false}
             />
           </Group>
@@ -317,9 +314,7 @@ export const TokenAerialOverlay: React.FC<{
           fill={tierBg}
           stroke={tierGlow}
           strokeWidth={1.5}
-          shadowColor="#000000"
-          shadowBlur={4}
-          shadowOpacity={0.85}
+          shadowForStrokeEnabled={false}
           perfectDrawEnabled={false}
         />
         <Text
@@ -443,8 +438,13 @@ export function useTokenFlightAnimation({
       return;
     }
 
+    let lastFrameTime = 0;
     const anim = new Konva.Animation((frame) => {
-      if (!frame) return;
+      if (!frame) return false;
+      if (typeof document !== 'undefined' && document.hidden) return false;
+      // Throttle flight bob/wing animation to ~30fps to cut full-layer redraw overhead in half
+      if (frame.time - lastFrameTime < 32) return false;
+      lastFrameTime = frame.time;
       const t = frame.time / 1000;
 
       // Smooth 2.2Hz sine-wave hover bob (+/- 4.5px)

@@ -90,7 +90,7 @@ interface PlayerHeroDockProps {
   onRemoveMultiTarget?: (tokenId: string) => void;
 }
 
-export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
+export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = React.memo(({
   characterData,
   claimedToken,
   onSelectAction,
@@ -3804,4 +3804,4 @@ export const PlayerHeroDock: React.FC<PlayerHeroDockProps> = ({
       )}
     </div>
   );
-};
+});

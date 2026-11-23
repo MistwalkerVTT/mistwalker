@@ -28,23 +28,29 @@ export const ArenaDynamicVisionLayer: React.FC<ArenaDynamicVisionLayerProps> = (
 }) => {
   const fogCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
+  // Downscale off-screen fog canvas (0.5x, capped at 1600px) for 4x faster fill rate
+  const maxDim = Math.max(arenaWidth, arenaHeight, 1);
+  const fogScale = Math.min(0.5, 1600 / maxDim);
+  const fogCanvasW = Math.max(1, Math.round(arenaWidth * fogScale));
+  const fogCanvasH = Math.max(1, Math.round(arenaHeight * fogScale));
+
   // Initialize off-screen 2D canvas for fast GPU fog masking
   if (!fogCanvasRef.current && typeof document !== 'undefined') {
     const canvas = document.createElement('canvas');
-    canvas.width = arenaWidth;
-    canvas.height = arenaHeight;
+    canvas.width = fogCanvasW;
+    canvas.height = fogCanvasH;
     fogCanvasRef.current = canvas;
   }
 
   // Update canvas dimensions when map size changes
   useEffect(() => {
     if (fogCanvasRef.current) {
-      if (fogCanvasRef.current.width !== arenaWidth || fogCanvasRef.current.height !== arenaHeight) {
-        fogCanvasRef.current.width = arenaWidth;
-        fogCanvasRef.current.height = arenaHeight;
+      if (fogCanvasRef.current.width !== fogCanvasW || fogCanvasRef.current.height !== fogCanvasH) {
+        fogCanvasRef.current.width = fogCanvasW;
+        fogCanvasRef.current.height = fogCanvasH;
       }
     }
-  }, [arenaWidth, arenaHeight]);
+  }, [fogCanvasW, fogCanvasH]);
 
   // Compute visibility polygon for the currently selected combatant
   const fovPolygon = useMemo(() => {
@@ -103,8 +109,9 @@ export const ArenaDynamicVisionLayer: React.FC<ArenaDynamicVisionLayerProps> = (
     ctx.fillStyle = 'rgba(10, 10, 12, 0.92)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // 2. Cut out the visible FOV polygon using destination-out compositing
+    // 2. Cut out the visible FOV polygon using destination-out compositing (in downscaled space)
     ctx.save();
+    ctx.scale(fogScale, fogScale);
     ctx.globalCompositeOperation = 'destination-out';
     ctx.beginPath();
     ctx.moveTo(points[0], points[1]);
@@ -129,7 +136,7 @@ export const ArenaDynamicVisionLayer: React.FC<ArenaDynamicVisionLayerProps> = (
     ctx.fill();
 
     ctx.restore();
-  }, [enabled, selectedToken, fovPolygon]);
+  }, [enabled, selectedToken, fovPolygon, fogScale]);
 
   if (!enabled || !selectedToken) return null;
 
@@ -142,6 +149,7 @@ export const ArenaDynamicVisionLayer: React.FC<ArenaDynamicVisionLayerProps> = (
           y={0}
           width={arenaWidth}
           height={arenaHeight}
+          perfectDrawEnabled={false}
         />
       )}
     </Layer>

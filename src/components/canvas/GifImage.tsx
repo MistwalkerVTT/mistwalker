@@ -89,6 +89,7 @@ export const GifImage: React.FC<GifImageProps> = ({ src, ...props }) => {
 
               animator.animateInCanvas(canvas, false);
               animator.onDraw = () => {
+                if (typeof document !== 'undefined' && document.hidden) return;
                 if (imageRef.current && isMounted) {
                   const layer = imageRef.current.getLayer();
                   if (layer) layer.batchDraw();
@@ -133,6 +134,6 @@ export const GifImage: React.FC<GifImageProps> = ({ src, ...props }) => {
   if (props.width !== undefined && props.width <= 0) return null;
   if (props.height !== undefined && props.height <= 0) return null;
 
-  return <KonvaImage ref={imageRef} image={image} {...props} />;
+  return <KonvaImage ref={imageRef} image={image} perfectDrawEnabled={false} {...props} />;
 };
 export default GifImage;

@@ -38,36 +38,20 @@ export const DiceTableOverlay: React.FC<Props> = ({
     return engineRef.current;
   }, [enabled]);
 
-  // Initialize Three.js + Cannon-es 3D physics dice engine during browser idle time so initial page mount never stalls
+  // Defer Three.js + Cannon-es WebGL context & texture allocation until the first dice roll;
+  // always tear down cleanly when disabled or unmounted.
   useEffect(() => {
-    if (!enabled || !containerRef.current) return;
-
-    let timerId: number | null = null;
-    let idleId: number | null = null;
-    const initWhenIdle = () => {
-      ensureEngine();
-    };
-
-    const win = typeof window !== 'undefined' ? (window as any) : null;
-    if (win && typeof win.requestIdleCallback === 'function') {
-      idleId = win.requestIdleCallback(initWhenIdle, { timeout: 1000 });
-    } else if (win) {
-      timerId = win.setTimeout(initWhenIdle, 500);
+    if (!enabled && engineRef.current) {
+      engineRef.current.destroy();
+      engineRef.current = null;
     }
-
     return () => {
-      if (idleId !== null && win && typeof win.cancelIdleCallback === 'function') {
-        win.cancelIdleCallback(idleId);
-      }
-      if (timerId !== null) {
-        clearTimeout(timerId);
-      }
       if (engineRef.current) {
         engineRef.current.destroy();
         engineRef.current = null;
       }
     };
-  }, [enabled, ensureEngine]);
+  }, [enabled]);
 
   // Dynamically update materials only when theme color values actually change
   useEffect(() => {

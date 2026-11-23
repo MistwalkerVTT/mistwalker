@@ -358,14 +358,15 @@ function drawLavaEffect(
   const poly = getFeaturePolygonPoints(feat, cx, cy, r);
 
   if (poly.length >= 3) {
-    // Ambient Thermal Radiance radiating from chasm
+    // Ambient Thermal Radiance radiating from chasm (soft multi-stroke replaces expensive per-frame shadowBlur)
     ctx.save();
     createPolygonPath(ctx, poly);
-    ctx.shadowColor = 'rgba(239, 68, 68, 0.7)';
-    ctx.shadowBlur = 30 * intensity;
-    ctx.strokeStyle = `rgba(249, 115, 22, ${0.65 * intensity})`;
-    ctx.lineWidth = 14;
     ctx.lineJoin = 'round';
+    ctx.strokeStyle = `rgba(239, 68, 68, ${0.22 * intensity})`;
+    ctx.lineWidth = 28;
+    ctx.stroke();
+    ctx.strokeStyle = `rgba(249, 115, 22, ${0.55 * intensity})`;
+    ctx.lineWidth = 14;
     ctx.stroke();
     ctx.restore();
 
@@ -1547,7 +1548,9 @@ export const AnimatedMapOverlay: React.FC<AnimatedMapOverlayProps> = ({
   const mapDimensionsRef = useRef(mapDimensions);
   mapDimensionsRef.current = mapDimensions;
 
-  // Canvas resize with ResizeObserver and DPR handling
+  const containerSizeRef = useRef<{ width: number; height: number; dpr: number }>({ width: 0, height: 0, dpr: 1 });
+
+  // Canvas resize with ResizeObserver and capped DPR handling (avoids per-frame getBoundingClientRect reflows)
   useEffect(() => {
     if (!renderCanvas) return;
     const canvas = canvasRef.current;
@@ -1556,9 +1559,10 @@ export const AnimatedMapOverlay: React.FC<AnimatedMapOverlayProps> = ({
 
     const resize = () => {
       const rect = container.getBoundingClientRect();
-      const dpr = window.devicePixelRatio || 1;
-      canvas.width = rect.width * dpr;
-      canvas.height = rect.height * dpr;
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+      containerSizeRef.current = { width: rect.width, height: rect.height, dpr };
+      canvas.width = Math.max(1, Math.round(rect.width * dpr));
+      canvas.height = Math.max(1, Math.round(rect.height * dpr));
       canvas.style.width = `${rect.width}px`;
       canvas.style.height = `${rect.height}px`;
     };
@@ -1776,9 +1780,19 @@ export const AnimatedMapOverlay: React.FC<AnimatedMapOverlayProps> = ({
     const render = (currentTime: number) => {
       if (!isMounted) return;
 
+      if (typeof document !== 'undefined' && document.hidden) {
+        animFrameIdRef.current = requestAnimationFrame(render);
+        return;
+      }
+
+      // Cap DOM animated overlay to ~30fps to preserve GPU headroom for Konva stage
+      if (currentTime - lastTimeRef.current < 32) {
+        animFrameIdRef.current = requestAnimationFrame(render);
+        return;
+      }
+
       const canvas = canvasRef.current;
-      const container = containerRef.current;
-      if (!canvas || !container) {
+      if (!canvas) {
         animFrameIdRef.current = requestAnimationFrame(render);
         return;
       }
@@ -1789,10 +1803,11 @@ export const AnimatedMapOverlay: React.FC<AnimatedMapOverlayProps> = ({
         return;
       }
 
-      const rect = container.getBoundingClientRect();
-      const width = rect.width;
-      const height = rect.height;
-      const dpr = window.devicePixelRatio || 1;
+      const { width, height, dpr } = containerSizeRef.current;
+      if (width <= 0 || height <= 0) {
+        animFrameIdRef.current = requestAnimationFrame(render);
+        return;
+      }
 
       const dt = Math.min((currentTime - lastTimeRef.current) / 1000, 0.1);
       lastTimeRef.current = currentTime;
@@ -2472,13 +2487,19 @@ export const AnimatedFeaturesKonvaImage: React.FC<AnimatedFeaturesKonvaImageProp
         return;
       }
 
-      if (canvas.width !== width || canvas.height !== height) {
-        canvas.width = width;
-        canvas.height = height;
+      // Downscale offscreen animated feature buffer (0.5x, max 1600px) to cut 30fps GPU upload cost by 4-6x
+      const renderScale = Math.min(0.5, 1600 / Math.max(1, width, height));
+      const targetW = Math.max(1, Math.round(width * renderScale));
+      const targetH = Math.max(1, Math.round(height * renderScale));
+
+      if (canvas.width !== targetW || canvas.height !== targetH) {
+        canvas.width = targetW;
+        canvas.height = targetH;
       }
 
       if (currentFeatures.length === 0 && currentWeather === 'none') {
-        ctx.clearRect(0, 0, width, height);
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, targetW, targetH);
         imageRef.current?.getLayer()?.batchDraw();
         animFrameIdRef.current = null;
         return;
@@ -2488,6 +2509,7 @@ export const AnimatedFeaturesKonvaImage: React.FC<AnimatedFeaturesKonvaImageProp
       lastTimeRef.current = currentTime;
       const t = currentTime / 1000;
 
+      ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0);
       ctx.clearRect(0, 0, width, height);
 
       particlesRef.current = renderAnimatedFeaturesToCanvas(
@@ -2531,6 +2553,7 @@ export const AnimatedFeaturesKonvaImage: React.FC<AnimatedFeaturesKonvaImageProp
       width={mapDimensions.width}
       height={mapDimensions.height}
       listening={false}
+      perfectDrawEnabled={false}
     />
   );
 };

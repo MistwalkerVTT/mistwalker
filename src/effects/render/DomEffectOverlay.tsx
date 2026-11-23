@@ -748,7 +748,6 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                   transformOrigin: `${projAnchorX} 50%`,
                   objectFit: 'fill',
                   opacity: effect.opacity ?? 1.0,
-                  filter: 'drop-shadow(0 0 4px rgba(255, 255, 255, 0.25))',
                   pointerEvents: 'none'
                 }}
               />
@@ -787,7 +786,6 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                   transformOrigin: `${coneAnchorX} 50%`,
                   objectFit: 'fill',
                   opacity: effect.opacity ?? 1.0,
-                  filter: 'drop-shadow(0 0 4px rgba(255, 255, 255, 0.25))',
                   pointerEvents: 'none'
                 }}
               />
@@ -801,8 +799,8 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
             const isSunbeam = effect.assetKey === 'sunbeam' || effect.name?.toLowerCase().includes('sunbeam');
             const isLightningBolt = effect.assetKey === 'lightning_bolt' || effect.name?.toLowerCase().includes('lightning bolt');
             const beamFilter = isSunbeam
-              ? 'hue-rotate(-150deg) saturate(2.4) brightness(1.6) drop-shadow(0 0 16px rgba(253, 224, 71, 0.8))'
-              : 'drop-shadow(0 0 4px rgba(255, 255, 255, 0.25))';
+              ? 'hue-rotate(-150deg) saturate(2.4) brightness(1.6)'
+              : undefined;
             return (
               <video
                 key={effect.id}
@@ -956,7 +954,7 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                 transform: 'translate(-50%, -100%)',
               }}
             >
-              <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-950/90 hover:bg-zinc-900 border border-purple-500/50 hover:border-purple-400 shadow-lg backdrop-blur-md transition-all select-none">
+              <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-950/95 hover:bg-zinc-900 border border-purple-500/50 hover:border-purple-400 shadow-lg transition-colors select-none">
                 <button
                   type="button"
                   onClick={(e) => {
@@ -1070,7 +1068,7 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                   transform: 'translate(-50%, -100%)',
                 }}
               >
-                <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-950/90 hover:bg-zinc-900 border border-indigo-500/50 hover:border-indigo-400 shadow-lg backdrop-blur-md transition-all select-none">
+                <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-950/95 hover:bg-zinc-900 border border-indigo-500/50 hover:border-indigo-400 shadow-lg transition-colors select-none">
                   <button
                     type="button"
                     onClick={(e) => {
@@ -1152,8 +1150,7 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                   transformOrigin: '50% 50%',
                   objectFit: 'contain',
                   opacity: fx.opacity ?? 0.9,
-                  pointerEvents: 'none',
-                  filter: 'drop-shadow(0 0 10px rgba(0, 0, 0, 0.5))'
+                  pointerEvents: 'none'
                 }}
               />
             );
@@ -1234,7 +1231,6 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                   transformOrigin: '50% 50%',
                   objectFit: 'fill',
                   opacity: 0.8,
-                  filter: 'drop-shadow(0 0 4px rgba(255, 255, 255, 0.3))',
                   pointerEvents: 'none'
                 }}
               />
@@ -1285,7 +1281,6 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                   transformOrigin: `${projAnchorX} 50%`,
                   objectFit: 'fill',
                   opacity: 0.8,
-                  filter: 'drop-shadow(0 0 4px rgba(255, 255, 255, 0.3))',
                   pointerEvents: 'none'
                 }}
               />
@@ -1325,7 +1320,6 @@ export const DomEffectOverlay: React.FC<DomEffectOverlayProps> = React.memo(({
                   transformOrigin: `${projAnchorX} 50%`,
                   objectFit: 'fill',
                   opacity: 0.8,
-                  filter: 'drop-shadow(0 0 4px rgba(255, 255, 255, 0.3))',
                   pointerEvents: 'none'
                 }}
               />

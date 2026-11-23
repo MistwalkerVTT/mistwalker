@@ -1934,7 +1934,7 @@ export default function PlayerView() {
 
   // Connection & Active Scene
   const [isConnected, setIsConnected] = useState(false);
-  const [pingMs, setPingMs] = useState<number | null>(null);
+  const pingTextRef = useRef<HTMLSpanElement | null>(null);
   const lastMoveUndoRef = useRef<{ tokenId: string; x: number; y: number } | null>(null);
   const activeMapShaderPreset = useMemo(
     () => getMapShaderPreset(imageFile, activeSceneInfo),
@@ -2738,9 +2738,13 @@ export default function PlayerView() {
     return /\.(mp4|webm|m4v|mov|ogv)$/i.test(imageFile);
   }, [imageFile]);
 
-  // Video Element for Animated Video Battlemaps
-  const videoElement = useMemo(() => {
-    if (!isVideo || !imageFile) return null;
+  // Video Element for Animated Video Battlemaps (properly torn down on map switch / unmount)
+  const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null);
+  useEffect(() => {
+    if (!isVideo || !imageFile) {
+      setVideoElement(null);
+      return;
+    }
     const video = document.createElement('video');
     video.muted = true;
     video.defaultMuted = true;
@@ -2752,15 +2756,26 @@ export default function PlayerView() {
     video.src = imageFile;
     video.load();
     video.play().catch(e => console.warn('[PlayerView Video] Play notice:', e));
-    return video;
+    setVideoElement(video);
+    return () => {
+      try {
+        video.pause();
+        video.removeAttribute('src');
+        video.load();
+      } catch {
+        // ignore cleanup errors
+      }
+    };
   }, [imageFile, isVideo]);
 
-  // Redraw video frames on Konva Stage (pauses automatically when tab is hidden)
+  // Redraw video frames on Konva Stage (~30fps cap, pauses automatically when tab is hidden)
   useEffect(() => {
     if (!videoElement) return;
     let animId: number;
-    const render = () => {
-      if (!document.hidden && bgLayerRef.current && !videoElement.paused && !videoElement.ended) {
+    let lastDraw = 0;
+    const render = (now: number) => {
+      if (!document.hidden && bgLayerRef.current && !videoElement.paused && !videoElement.ended && now - lastDraw >= 32) {
+        lastDraw = now;
         bgLayerRef.current.batchDraw();
       }
       animId = requestAnimationFrame(render);
@@ -3090,12 +3105,17 @@ export default function PlayerView() {
         if (!isAudioMutedRef.current && data.audioBase64) {
           try {
             if (activeNarrationAudioRef.current) {
-              activeNarrationAudioRef.current.pause();
+              const prevAudio = activeNarrationAudioRef.current as HTMLAudioElement & { _blobUrl?: string };
+              prevAudio.pause();
+              if (prevAudio._blobUrl) {
+                URL.revokeObjectURL(prevAudio._blobUrl);
+              }
               activeNarrationAudioRef.current = null;
             }
             const blob = base64AudioToBlob(data.audioBase64, 24000);
             const audioUrl = URL.createObjectURL(blob);
-            const audio = new Audio(audioUrl);
+            const audio = new Audio(audioUrl) as HTMLAudioElement & { _blobUrl?: string };
+            audio._blobUrl = audioUrl;
             activeNarrationAudioRef.current = audio;
             audio.volume = 1.0;
             const voice = getNarrationVoice(data.voiceId);
@@ -3104,14 +3124,21 @@ export default function PlayerView() {
             } else {
               audio.playbackRate = voice.playbackRate || 1.0;
             }
-            audio.play().catch(e => {
-              console.warn('[PlayerView] Narration playback note (autoplay policy or codec):', e);
-            });
-            audio.onended = () => {
+            const cleanupAudioBlob = () => {
+              if (audio._blobUrl) {
+                URL.revokeObjectURL(audio._blobUrl);
+                audio._blobUrl = undefined;
+              }
               if (activeNarrationAudioRef.current === audio) {
                 activeNarrationAudioRef.current = null;
               }
             };
+            audio.onended = cleanupAudioBlob;
+            audio.onerror = cleanupAudioBlob;
+            audio.play().catch(e => {
+              console.warn('[PlayerView] Narration playback note (autoplay policy or codec):', e);
+              cleanupAudioBlob();
+            });
           } catch (e) {
             console.warn('[PlayerView] Failed to decode or play broadcast narration audio:', e);
           }
@@ -3982,17 +4009,18 @@ export default function PlayerView() {
 
 
 
-  // Live WebSocket ping probe (every 15s while tab is visible) + 1-click Re-Sync helper
+  // Live WebSocket ping probe (every 15s while tab is visible, updates DOM ref directly to avoid 11k-line re-renders)
   useEffect(() => {
     if (!isConnected) {
-      setPingMs(null);
+      if (pingTextRef.current) pingTextRef.current.textContent = 'v3.1';
       return;
     }
     const measurePing = () => {
       if (document.hidden || !socketRef.current?.connected) return;
       const start = performance.now();
       socketRef.current.emit('PING_CHECK', () => {
-        setPingMs(Math.round(performance.now() - start));
+        const ms = Math.round(performance.now() - start);
+        if (pingTextRef.current) pingTextRef.current.textContent = `v3.1 · ${ms}ms`;
       });
     };
     measurePing();
@@ -7957,7 +7985,7 @@ export default function PlayerView() {
   }, [
     imageFile, mapRotation, tokens, walls, reveals, polygonReveals, isFogVisible, fogResetKey,
     boardAnimatedFeatures, boardAnimatedEnabled, boardWeatherEffect, gridVisible,
-    gridOpacity, gridSize, gridOffsetX, gridOffsetY, visionConfig, stageScale, stagePos,
+    gridOpacity, gridSize, gridOffsetX, gridOffsetY, visionConfig,
     activeSceneInfo, combatState, claimedTokenId, targetMapW, targetMapH
   ]);
 
@@ -8366,8 +8394,8 @@ export default function PlayerView() {
                 <div className="flex flex-col min-w-0">
                   <span className="text-[11px] font-mono font-bold tracking-wider text-zinc-200 uppercase truncate">
                     {isConnected ? 'LIVE SESSION' : 'CONNECTING...'}{' '}
-                    <span className="text-[9px] text-emerald-400/90 font-normal">
-                      v3.1{pingMs !== null ? ` · ${pingMs}ms` : ''}
+                    <span ref={pingTextRef} className="text-[9px] text-emerald-400/90 font-normal">
+                      v3.1
                     </span>
                   </span>
                   {activeSceneInfo?.sceneTitle && (
@@ -9579,7 +9607,7 @@ export default function PlayerView() {
 
         {/* Tactical Map Labels (Player Visible Navigation Points: Stairs, Ladders, Portals) */}
         {targetMapW > 0 && targetMapH > 0 && roomAnnotations && roomAnnotations.length > 0 && (
-          <Layer>
+          <Layer listening={false}>
             <RoomHotspotLayer
               annotations={roomAnnotations}
               mapDimensions={mapDimensions}

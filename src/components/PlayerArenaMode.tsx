@@ -1735,6 +1735,8 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
   const [stageScale, setStageScale] = useState<number>(0.85);
   const [stagePos, setStagePos] = useState<{ x: number; y: number }>({ x: 120, y: 60 });
   const pinchDistRef = useRef<number | null>(null);
+  const arenaWheelTimerRef = useRef<number | null>(null);
+  const lastArenaAimTsRef = useRef<number>(0);
 
   const [bgImage] = useImage(selectedMap.url);
 
@@ -6542,8 +6544,19 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                 const dy = touches[0].clientY - touches[1].clientY;
                 const dist = Math.hypot(dx, dy);
                 if (pinchDistRef.current !== null && pinchDistRef.current > 0) {
+                  const stage = e.target.getStage();
                   const ratio = dist / pinchDistRef.current;
-                  setStageScale((prev) => Math.max(0.22, Math.min(2.2, prev * ratio)));
+                  const oldScale = stage ? stage.scaleX() : stageScale;
+                  const nextScale = Math.max(0.22, Math.min(2.2, oldScale * ratio));
+                  if (stage) {
+                    stage.scale({ x: nextScale, y: nextScale });
+                    stage.batchDraw();
+                  }
+                  if (arenaWheelTimerRef.current !== null) window.clearTimeout(arenaWheelTimerRef.current);
+                  arenaWheelTimerRef.current = window.setTimeout(() => {
+                    arenaWheelTimerRef.current = null;
+                    setStageScale(nextScale);
+                  }, 120);
                 }
                 pinchDistRef.current = dist;
               }
@@ -6554,20 +6567,35 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
             onWheel={(e) => {
               e.evt.preventDefault();
               const scaleBy = 1.08;
-              const oldScale = stageScale;
+              const stage = e.target.getStage();
+              const oldScale = stage ? stage.scaleX() : stageScale;
               const nextScale = Math.max(
                 0.22,
                 Math.min(2.2, e.evt.deltaY < 0 ? oldScale * scaleBy : oldScale / scaleBy)
               );
-              setStageScale(nextScale);
+              if (stage) {
+                stage.scale({ x: nextScale, y: nextScale });
+                stage.batchDraw();
+              }
+              if (arenaWheelTimerRef.current !== null) window.clearTimeout(arenaWheelTimerRef.current);
+              arenaWheelTimerRef.current = window.setTimeout(() => {
+                arenaWheelTimerRef.current = null;
+                setStageScale(nextScale);
+              }, 120);
             }}
             onMouseMove={(e) => {
               if (!activeTargetingAction) return;
+              const now = performance.now();
+              if (now - lastArenaAimTsRef.current < 30) return;
+              lastArenaAimTsRef.current = now;
               const stage = e.target.getStage();
               const ptr = stage?.getPointerPosition();
               if (!ptr) return;
-              const worldX = (ptr.x - stagePos.x) / stageScale;
-              const worldY = (ptr.y - stagePos.y) / stageScale;
+              const currentScale = stage ? stage.scaleX() : stageScale;
+              const currentX = stage ? stage.x() : stagePos.x;
+              const currentY = stage ? stage.y() : stagePos.y;
+              const worldX = (ptr.x - currentX) / currentScale;
+              const worldY = (ptr.y - currentY) / currentScale;
               setAimCurrent({ x: worldX, y: worldY });
             }}
           >
@@ -6910,6 +6938,8 @@ export const PlayerArenaMode: React.FC<PlayerArenaModeProps> = ({
                   fill="rgba(160, 185, 129, 0.14)"
                   stroke="rgba(52, 211, 153, 0.45)"
                   strokeWidth={1.5}
+                  perfectDrawEnabled={false}
+                  shadowForStrokeEnabled={false}
                   onClick={(e) => {
                     e.cancelBubble = true;
                     handleMoveArenaToken(
