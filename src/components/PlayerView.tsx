@@ -167,6 +167,7 @@ import {
   useAudioMixerJukebox,
   MapAudioSourcesLayer
 } from './AudioMixerJukebox';
+import { PlayerVolumeDial } from './PlayerVolumeDial';
 
 const PlayerStationModal = React.lazy(() => import('./PlayerStationModal').then(m => ({ default: m.PlayerStationModal })));
 const PlayerCharacterSelectModal = React.lazy(() => import('./PlayerCharacterSelectModal').then(m => ({ default: m.PlayerCharacterSelectModal })));
@@ -2668,17 +2669,53 @@ export default function PlayerView() {
   const [roomBroadcast, setRoomBroadcast] = useState<BroadcastRoomText | null>(null);
 
   // Audio Player State
-  const [isAudioMuted, setIsAudioMuted] = useState(false);
+  const [isAudioMuted, setIsAudioMuted] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('mistwalker_player_muted') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [playerVolume, setPlayerVolume] = useState<number>(() => {
+    try {
+      const raw = localStorage.getItem('mistwalker_player_volume');
+      if (raw !== null) {
+        const parsed = parseFloat(raw);
+        if (!Number.isNaN(parsed)) return Math.max(0, Math.min(1, parsed));
+      }
+    } catch {}
+    return 0.85;
+  });
   const isAudioMutedRef = useRef(isAudioMuted);
+  const playerVolumeRef = useRef(playerVolume);
   const activeNarrationAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const handlePlayerVolumeChange = useCallback((nextVolume: number) => {
+    const clamped = Math.max(0, Math.min(1, nextVolume));
+    setPlayerVolume(clamped);
+    if (clamped > 0 && isAudioMutedRef.current) {
+      setIsAudioMuted(false);
+    }
+  }, []);
 
   useEffect(() => {
     isAudioMutedRef.current = isAudioMuted;
-    if (isAudioMuted && activeNarrationAudioRef.current) {
-      activeNarrationAudioRef.current.pause();
-      activeNarrationAudioRef.current = null;
+    playerVolumeRef.current = playerVolume;
+    const effectiveMuted = isAudioMuted || playerVolume <= 0.001;
+    try {
+      localStorage.setItem('mistwalker_player_muted', String(isAudioMuted));
+      localStorage.setItem('mistwalker_player_volume', String(playerVolume));
+    } catch {}
+    soundCatalog.setVolume(playerVolume);
+    soundCatalog.setMuted(effectiveMuted);
+    if (activeNarrationAudioRef.current) {
+      if (effectiveMuted) {
+        activeNarrationAudioRef.current.volume = 0;
+      } else {
+        activeNarrationAudioRef.current.volume = playerVolume;
+      }
     }
-  }, [isAudioMuted]);
+  }, [isAudioMuted, playerVolume]);
 
   // Minimize All Display Menus State (Cinematic / Fullscreen Map View)
   const [isUiMinimized, setIsUiMinimized] = useState(false);
@@ -2864,8 +2901,8 @@ export default function PlayerView() {
     listenerPointsWorldPx: playerListenerPoints,
     gridSize,
     walls,
-    localMuted: isAudioMuted,
-    localVolume: 0.9
+    localMuted: isAudioMuted || playerVolume <= 0.001,
+    localVolume: playerVolume
   });
 
   // ==========================================
@@ -3076,12 +3113,13 @@ export default function PlayerView() {
 
     // 4. SYNC_AUDIO
     socket.on('SYNC_AUDIO', (data: any) => {
-      if (isAudioMutedRef.current || !data) return;
+      if (isAudioMutedRef.current || playerVolumeRef.current <= 0.001 || !data) return;
       const soundUrl = data.soundUrl || data.url;
       if (soundUrl) {
         try {
           const audio = new Audio(soundUrl);
-          audio.volume = data.volume !== undefined ? data.volume : 0.7;
+          const baseVol = data.volume !== undefined ? data.volume : 0.7;
+          audio.volume = Math.max(0, Math.min(1, baseVol * playerVolumeRef.current));
           audio.play().catch(e => console.warn('[PlayerView] Audio playback note:', e));
         } catch (e) {
           console.warn('[PlayerView] Audio error:', e);
@@ -3117,7 +3155,7 @@ export default function PlayerView() {
             const audio = new Audio(audioUrl) as HTMLAudioElement & { _blobUrl?: string };
             audio._blobUrl = audioUrl;
             activeNarrationAudioRef.current = audio;
-            audio.volume = 1.0;
+            audio.volume = isAudioMutedRef.current ? 0 : Math.max(0, Math.min(1, playerVolumeRef.current));
             const voice = getNarrationVoice(data.voiceId);
             if (blob.type === 'audio/mpeg') {
               audio.playbackRate = 1.0;
@@ -8785,23 +8823,14 @@ export default function PlayerView() {
                       {isFull && <span>Battle Arena</span>}
                     </button>
 
-                    {/* Audio Mute/Unmute */}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setIsAudioMuted(prev => !prev);
-                      }}
-                      className={`w-full flex items-center rounded-xl transition-all cursor-pointer border ${
-                        isAudioMuted
-                          ? 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-zinc-300'
-                          : 'bg-emerald-950/30 border-emerald-800/40 text-emerald-400 hover:text-emerald-300'
-                      } ${isFull ? 'px-2.5 py-2 gap-2 text-xs font-medium' : 'p-2.5 justify-center'}`}
-                      title={isAudioMuted ? 'Unmute Audio Narration' : 'Mute Audio Narration'}
-                    >
-                      {isAudioMuted ? <VolumeX className="w-4 h-4 shrink-0" /> : <Volume2 className="w-4 h-4 shrink-0" />}
-                      {isFull && <span>{isAudioMuted ? 'Audio Muted' : 'Audio Active'}</span>}
-                    </button>
+                    {/* Audio Volume Dial & Mute */}
+                    <PlayerVolumeDial
+                      volume={playerVolume}
+                      isMuted={isAudioMuted}
+                      onChangeVolume={handlePlayerVolumeChange}
+                      onToggleMute={() => setIsAudioMuted(prev => !prev)}
+                      compact={!isFull}
+                    />
                   </div>
 
                   {/* 4. Map & Viewport Controls */}
